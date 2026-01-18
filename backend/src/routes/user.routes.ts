@@ -1,10 +1,10 @@
-import { Router } from "express";
-import { authenticate } from "../middlewares/auth.middleware";
+import { Router, Request, Response } from "express";
 
 const router = Router();
 
-router.get("/profile", authenticate, (req, res) => {
-  res.json({ message: "User profile" });
+// Test users API
+router.get("/", (req: Request, res: Response) => {
+  res.status(200).json([]);
 });
 
 export default router;
