@@ -1,13 +1,16 @@
 import { Router } from "express";
+import { authMiddleware } from "../middlewares/auth.middleware";
+import {
+  createPartner,
+  getMyPartnerProfile,
+} from "../controllers/partner.controller";
 
 const router = Router();
 
-router.post("/register", (req, res) => {
-  res.json({ message: "Partner registered (mock)" });
-});
+// Partner creates shop
+router.post("/register", authMiddleware, createPartner);
 
-router.get("/orders", (req, res) => {
-  res.json({ message: "Partner orders list" });
-});
+// Partner views own shop
+router.get("/me", authMiddleware, getMyPartnerProfile);
 
 export default router;
