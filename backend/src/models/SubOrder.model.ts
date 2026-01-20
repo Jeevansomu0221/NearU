@@ -23,20 +23,22 @@ const SubOrderSchema = new Schema(
     ],
 
     status: {
-      type: String,
-      enum: [
-        "ASSIGNED",
-        "ACCEPTED",
-        "REJECTED",
-        "PREPARING",
-        "READY",
-      ],
-      default: "ASSIGNED",
-    },
+  type: String,
+  enum: [
+    "CREATED",
+    "ACCEPTED",
+    "REJECTED",
+    "PREPARING",
+    "READY",
+    "PICKED_UP",
+    "DELIVERED"
+  ],
+  default: "CREATED"
+},
 
     price: {
       type: Number,
-      required: true,
+      required: false,
     },
   },
   { timestamps: true }

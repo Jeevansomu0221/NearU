@@ -1,33 +1,19 @@
-// src/models/Delivery.model.ts
 import { Schema, model, Types } from "mongoose";
 
-const DeliverySchema = new Schema(
+const DeliveryPartnerSchema = new Schema(
   {
-    orderId: {
-      type: Types.ObjectId,
-      ref: "Order",
-      required: true,
-    },
-
-    deliveryPartnerId: {
+    userId: {
       type: Types.ObjectId,
       ref: "User",
+      required: true,
+      unique: true
     },
-
-    pickupPartners: [
-      {
-        type: Types.ObjectId,
-        ref: "Partner",
-      },
-    ],
-
-    status: {
-      type: String,
-      enum: ["ASSIGNED", "PICKING", "DELIVERED"],
-      default: "ASSIGNED",
-    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
   },
   { timestamps: true }
 );
 
-export default model("Delivery", DeliverySchema);
+export default model("DeliveryPartner", DeliveryPartnerSchema);

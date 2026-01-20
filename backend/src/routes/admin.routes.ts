@@ -1,64 +1,79 @@
 import { Router, Request, Response } from "express";
 import Order from "../models/Order.model";
 import SubOrder from "../models/SubOrder.model";
+import DeliveryJob from "../models/DeliveryJob.model";
 
 const router = Router();
 
 /**
- * ADMIN DASHBOARD (test)
+ * Admin assigns partner to an order (creates sub-order)
  */
-router.get("/dashboard", (req: Request, res: Response) => {
-  res.json({ message: "Admin dashboard working" });
-});
+router.post("/assign-partner", async (req: Request, res: Response) => {
+  try {
+    const { orderId, partnerId, items } = req.body;
 
-/**
- * 1️⃣ ADMIN CREATES PARENT ORDER
- */
-router.post("/orders", async (req: Request, res: Response) => {
-  const { customerId, deliveryAddress, totalAmount } = req.body;
+    if (!orderId || !partnerId || !items) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
 
-  const order = await Order.create({
-    customerId,
-    deliveryAddress,
-    totalAmount,
-  });
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
 
-  res.status(201).json(order);
-});
+    const subOrder = await SubOrder.create({
+      orderId,
+      partnerId,
+      items,
+      status: "CREATED"
+    });
 
-/**
- * 2️⃣ ADMIN SPLITS ORDER INTO SUBORDERS
- */
-router.post(
-  "/orders/:orderId/suborders",
-  async (req: Request, res: Response) => {
-    const { orderId } = req.params;
-    const { subOrders } = req.body;
-
-    /*
-      subOrders = [
-        {
-          partnerId,
-          items,
-          price
-        }
-      ]
-    */
-
-    const createdSubOrders = await Promise.all(
-      subOrders.map((sub: any) =>
-        SubOrder.create({
-          orderId,
-          partnerId: sub.partnerId,
-          items: sub.items,
-          price: sub.price,
-          status: "PENDING",
-        })
-      )
-    );
-
-    res.status(201).json(createdSubOrders);
+    res.status(201).json({
+      message: "Partner assigned successfully",
+      subOrder
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
   }
-);
+});
+
+/**
+ * ✅ Admin assigns delivery partner to an order
+ */
+router.post("/assign-delivery", async (req: Request, res: Response) => {
+  try {
+    const { orderId, deliveryPartnerId } = req.body;
+
+    if (!orderId || !deliveryPartnerId) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // ✅ STEP 1: Check if delivery already assigned for this order
+    const existingJob = await DeliveryJob.findOne({ orderId });
+
+    if (existingJob) {
+      return res
+        .status(400)
+        .json({ message: "Delivery already assigned for this order" });
+    }
+
+    // ✅ STEP 2: Create delivery job
+    const job = await DeliveryJob.create({
+      orderId,
+      deliveryPartnerId,
+      status: "ASSIGNED"
+    });
+
+    res.status(201).json({
+      message: "Delivery partner assigned",
+      job
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 
 export default router;
