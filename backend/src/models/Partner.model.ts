@@ -1,49 +1,36 @@
-import { Schema, model, Document, Types } from "mongoose";
+import { Schema, model, Types } from "mongoose";
 
-export interface IPartner extends Document {
+export interface IPartner {
   userId: Types.ObjectId;
   shopName: string;
-  categories: string[];
+  category: string;   // ✅ ADD THIS
   address: string;
   isActive: boolean;
-  createdAt: Date;
 }
 
 const PartnerSchema = new Schema<IPartner>(
   {
     userId: {
-      type: Schema.Types.ObjectId,
+      type: Types.ObjectId,
       ref: "User",
-      required: true,
-      unique: true, // one user → one shop
+      required: true
     },
-
     shopName: {
       type: String,
-      required: true,
+      required: true
     },
-
-    categories: {
-      type: [String],
-      required: true,
-      enum: [
-        "tiffin",
-        "bakery",
-        "fast_food",
-        "sweet_shop",
-        "mini_restaurant",
-      ],
+    category: {
+      type: String,
+      required: true   // Tiffin, Bakery, etc.
     },
-
     address: {
       type: String,
-      required: true,
+      required: true
     },
-
     isActive: {
       type: Boolean,
-      default: true,
-    },
+      default: true
+    }
   },
   { timestamps: true }
 );
