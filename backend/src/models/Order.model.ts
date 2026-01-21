@@ -1,4 +1,3 @@
-// src/models/Order.model.ts
 import { Schema, model, Types } from "mongoose";
 
 const OrderSchema = new Schema(
@@ -6,24 +5,30 @@ const OrderSchema = new Schema(
     customerId: {
       type: Types.ObjectId,
       ref: "User",
-      required: true,
+      required: true
     },
 
     deliveryAddress: {
       type: String,
-      required: true,
+      required: true
+    },
+
+    note: {
+      type: String,
+      required: true   // ✅ custom order text
     },
 
     status: {
       type: String,
-      enum: ["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
-      default: "PENDING",
-    },
-
-    totalAmount: {
-      type: Number,
-      required: true,
-    },
+      enum: [
+        "CREATED",
+        "CONFIRMED",
+        "DELIVERING",
+        "DELIVERED",
+        "CANCELLED"
+      ],
+      default: "CREATED"
+    }
   },
   { timestamps: true }
 );

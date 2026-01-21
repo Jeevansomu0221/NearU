@@ -2,7 +2,7 @@ import axios from "axios";
 import { getToken } from "../utils/storage";
 
 const api = axios.create({
-  baseURL: "http://10.9.72.39:5000/api", // 👈 YOUR PC IP
+  baseURL: "http://10.9.72.39:5000/api",
   timeout: 10000
 });
 
