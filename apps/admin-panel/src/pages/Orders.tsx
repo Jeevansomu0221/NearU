@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
 import api from "../api/client";
+import AssignPartnerModal from "../components/AssignModal";
+import AssignDeliveryModal from "../components/AssignDeliveryModal";
 import "../styles/orders.css";
 
 export default function Orders() {
   const [orders, setOrders] = useState<any[]>([]);
+  const [partnerOrder, setPartnerOrder] = useState<string | null>(null);
+  const [deliveryOrder, setDeliveryOrder] = useState<string | null>(null);
+
+  const loadOrders = async () => {
+    const res = await api.get("/admin/orders");
+    setOrders(res.data);
+  };
 
   useEffect(() => {
-    api.get("/admin/orders").then(res => setOrders(res.data));
+    loadOrders();
   }, []);
 
   return (
@@ -16,21 +25,49 @@ export default function Orders() {
       <table>
         <thead>
           <tr>
-            <th>Order ID</th>
+            <th>ID</th>
             <th>Status</th>
-            <th>Total</th>
+            <th>Partner</th>
+            <th>Delivery</th>
           </tr>
         </thead>
+
         <tbody>
           {orders.map(o => (
             <tr key={o._id}>
-              <td>{o._id}</td>
+              <td>{o._id.slice(-6)}</td>
               <td>{o.status}</td>
-              <td>₹{o.totalAmount}</td>
+
+              <td>
+                <button onClick={() => setPartnerOrder(o._id)}>
+                  Assign Partner
+                </button>
+              </td>
+
+              <td>
+                <button onClick={() => setDeliveryOrder(o._id)}>
+                  Assign Delivery
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {partnerOrder && (
+        <AssignPartnerModal
+          orderId={partnerOrder}
+          onClose={() => setPartnerOrder(null)}
+          onSuccess={loadOrders}
+        />
+      )}
+
+      {deliveryOrder && (
+        <AssignDeliveryModal
+          orderId={deliveryOrder}
+          onClose={() => setDeliveryOrder(null)}
+        />
+      )}
     </div>
   );
 }

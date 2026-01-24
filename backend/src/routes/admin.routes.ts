@@ -1,79 +1,68 @@
-import { Router, Request, Response } from "express";
-import Order from "../models/Order.model";
-import SubOrder from "../models/SubOrder.model";
-import DeliveryJob from "../models/DeliveryJob.model";
+import { Router } from "express";
+import { authMiddleware } from "../middlewares/auth.middleware";
+import { roleMiddleware } from "../middlewares/role.middleware";
+import { ROLES } from "../config/roles";
 
 const router = Router();
 
 /**
- * Admin assigns partner to an order (creates sub-order)
+ * Admin dashboard stats
  */
-router.post("/assign-partner", async (req: Request, res: Response) => {
-  try {
-    const { orderId, partnerId, items } = req.body;
-
-    if (!orderId || !partnerId || !items) {
-      return res.status(400).json({ message: "Missing required fields" });
+router.get("/dashboard",
+  authMiddleware,
+  roleMiddleware([ROLES.ADMIN]),
+  async (req, res) => {
+    try {
+      // TODO: Add dashboard logic
+      res.json({
+        totalUsers: 0,
+        totalPartners: 0,
+        totalOrders: 0,
+        revenue: 0,
+        pendingVerifications: 0
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
     }
-
-    const order = await Order.findById(orderId);
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
-
-    const subOrder = await SubOrder.create({
-      orderId,
-      partnerId,
-      items,
-      status: "CREATED"
-    });
-
-    res.status(201).json({
-      message: "Partner assigned successfully",
-      subOrder
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error" });
   }
-});
+);
 
 /**
- * ✅ Admin assigns delivery partner to an order
+ * Get all orders for admin
  */
-router.post("/assign-delivery", async (req: Request, res: Response) => {
-  try {
-    const { orderId, deliveryPartnerId } = req.body;
-
-    if (!orderId || !deliveryPartnerId) {
-      return res.status(400).json({ message: "Missing required fields" });
+router.get("/orders",
+  authMiddleware,
+  roleMiddleware([ROLES.ADMIN]),
+  async (req, res) => {
+    try {
+      // TODO: Get all orders with filters
+      res.json([]);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
     }
-
-    // ✅ STEP 1: Check if delivery already assigned for this order
-    const existingJob = await DeliveryJob.findOne({ orderId });
-
-    if (existingJob) {
-      return res
-        .status(400)
-        .json({ message: "Delivery already assigned for this order" });
-    }
-
-    // ✅ STEP 2: Create delivery job
-    const job = await DeliveryJob.create({
-      orderId,
-      deliveryPartnerId,
-      status: "ASSIGNED"
-    });
-
-    res.status(201).json({
-      message: "Delivery partner assigned",
-      job
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error" });
   }
-});
+);
 
+/**
+ * Verify partner
+ */
+router.put("/partners/:id/verify",
+  authMiddleware,
+  roleMiddleware([ROLES.ADMIN]),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+      
+      // TODO: Update partner verification status
+      res.json({ message: "Partner verification updated" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
 
-export default router;
+export default router; // ✅ This is the default export

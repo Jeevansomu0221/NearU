@@ -1,17 +1,17 @@
-import React from "react";
+import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import LoginScreen from "../screens/LoginScreen";
-import OtpScreen from "../screens/OtpScreen";
 import JobsScreen from "../screens/JobsScreen";
+import JobDetailsScreen from "../screens/JobDetailsScreen";
 
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
   return (
-    <Stack.Navigator>
-      <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="Otp" component={OtpScreen} />
-      <Stack.Screen name="Jobs" component={JobsScreen} />
-    </Stack.Navigator>
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Jobs" component={JobsScreen} />
+        <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }

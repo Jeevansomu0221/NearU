@@ -1,64 +1,62 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, Button, Linking, Alert } from "react-native";
-import { getMyJobs, markPicking, markDelivered } from "../api/delivery.api";
+import { useEffect, useState } from "react";
+import { View, Text, Button, StyleSheet } from "react-native";
+import api from "../api/client";
 
-export default function JobsScreen() {
-  const [job, setJob] = useState<any | null>(null);
+type DeliveryJobResponse = {
+  jobId?: string;
+  status?: string;
+  customer?: {
+    name: string;
+    phone: string;
+    address: string;
+  };
+  pickups?: any[];
+};
 
-  const load = async () => {
-    try {
-      const res = await getMyJobs();
-      setJob((res.data as any) || null);
-    } catch {
-      Alert.alert("Error", "Failed to load jobs");
+export default function JobsScreen({ navigation }: any) {
+  const [job, setJob] = useState<DeliveryJobResponse | null>(null);
+
+  const loadJob = async () => {
+    const res = await api.get<DeliveryJobResponse>("/delivery/jobs");
+
+    if (res.data.jobId) {
+      setJob(res.data);
+    } else {
+      setJob(null);
     }
   };
 
   useEffect(() => {
-    load();
+    loadJob();
   }, []);
 
-  if (!job || job.message === "No active delivery jobs") {
+  if (!job) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <View style={styles.center}>
         <Text>No active delivery jobs</Text>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, padding: 16 }}>
-      <Text style={{ fontWeight: "600" }}>Customer</Text>
-      <Text>{job.customer.name}</Text>
-      <Text>{job.customer.phone}</Text>
-      <Text>{job.customer.address}</Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>Active Delivery</Text>
+
+      <Text>Status: {job.status}</Text>
+      <Text>Customer: {job.customer?.name}</Text>
+      <Text>Phone: {job.customer?.phone}</Text>
+      <Text>Address: {job.customer?.address}</Text>
 
       <Button
-        title="Open Drop Location"
-        onPress={() =>
-          Linking.openURL(
-            `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-              job.customer.address
-            )}`
-          )
-        }
+        title="View Job Details"
+        onPress={() => navigation.navigate("JobDetails", { job })}
       />
-
-      <Text style={{ marginTop: 20, fontWeight: "600" }}>Pickups</Text>
-      {job.pickups.map((p: any, i: number) => (
-        <View key={i} style={{ marginBottom: 10 }}>
-          <Text>{p.shopName}</Text>
-          <Text>{p.address}</Text>
-          <Text>{p.phone}</Text>
-        </View>
-      ))}
-
-      {job.status === "ASSIGNED" && (
-        <Button title="Picked Up" onPress={() => markPicking(job.jobId)} />
-      )}
-      {job.status === "PICKING" && (
-        <Button title="Delivered" onPress={() => markDelivered(job.jobId)} />
-      )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  container: { padding: 20 },
+  title: { fontSize: 20, marginBottom: 10 }
+});

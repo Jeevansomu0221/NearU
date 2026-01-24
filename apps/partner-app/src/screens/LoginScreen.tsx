@@ -12,8 +12,13 @@ export default function LoginScreen({ navigation }: any) {
     }
 
     try {
-      await sendOtp(phone);
-      navigation.navigate("Otp", { phone });
+      // ✅ IMPORTANT: send role explicitly
+      await sendOtp(phone, "partner");
+
+      navigation.navigate("Otp", {
+        phone,
+        role: "partner" // 👈 pass role forward
+      });
     } catch (err) {
       Alert.alert("Error", "Failed to send OTP");
     }
@@ -30,11 +35,13 @@ export default function LoginScreen({ navigation }: any) {
         keyboardType="number-pad"
         value={phone}
         onChangeText={setPhone}
+        maxLength={10}
         style={{
           borderWidth: 1,
           borderColor: "#ccc",
           padding: 12,
-          marginBottom: 20
+          marginBottom: 20,
+          borderRadius: 6
         }}
       />
 

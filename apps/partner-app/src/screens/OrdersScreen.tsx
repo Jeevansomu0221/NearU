@@ -20,9 +20,8 @@ export default function OrdersScreen() {
   const loadOrders = async () => {
     try {
       const res = await getMySubOrders();
-      setOrders((res.data as any[]) ?? []);
-
-    } catch {
+      setOrders(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
       Alert.alert("Error", "Failed to load orders");
     }
   };
@@ -75,13 +74,12 @@ export default function OrdersScreen() {
           style={{
             borderWidth: 1,
             padding: 12,
-            marginBottom: 12
+            marginBottom: 12,
+            borderRadius: 6
           }}
         >
-          <Text style={{ fontWeight: "600" }}>
-            Request:
-          </Text>
-          <Text>{item.note}</Text>
+          <Text style={{ fontWeight: "600" }}>Request:</Text>
+          <Text>{item.note || "Custom food request"}</Text>
 
           <TextInput
             placeholder="Enter price"
@@ -93,7 +91,8 @@ export default function OrdersScreen() {
             style={{
               borderWidth: 1,
               padding: 8,
-              marginVertical: 8
+              marginVertical: 8,
+              borderRadius: 4
             }}
           />
 
