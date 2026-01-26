@@ -1,69 +1,126 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  StyleSheet
-} from "react-native";
-import { getNearbyShops } from "../api/user.api";
+  Alert,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ADD THIS
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation/AppNavigator';
+import apiClient from '../api/client';
 
-export default function HomeScreen({ navigation }: any) {
-  const [shops, setShops] = useState<any[]>([]);
+type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
+
+interface Shop {
+  _id: string;
+  shopName: string;
+  category: string;
+  address: string;
+  isOpen: boolean;
+  rating: number;
+}
+
+interface ApiResponse {
+  success: boolean;
+  data: Shop[];
+}
+
+interface Props {
+  navigation: HomeScreenNavigationProp;
+}
+
+export default function HomeScreen({ navigation }: Props) {
+  const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadShops();
+    loadNearbyShops();
   }, []);
 
-  const loadShops = async () => {
+  const loadNearbyShops = async () => {
     try {
-      const res = await getNearbyShops();
-      setShops((res.data as any[]) ?? []);
-
-    } catch (error) {
-      console.log("Failed to load shops");
+      setLoading(true);
+      console.log('📱 Fetching nearby shops...');
+      
+      // Debug: Check token
+      const token = await AsyncStorage.getItem('token');
+      console.log('🔑 Token exists:', !!token);
+      
+      const response: any = await apiClient.get('/users/nearby-shops');
+      console.log('📦 API Response:', response);
+      
+      let shopsData: Shop[] = [];
+      
+      if (response && Array.isArray(response.data)) {
+        shopsData = response.data;
+      } else if (response && response.success && Array.isArray(response.data)) {
+        shopsData = response.data;
+      }
+      
+      console.log('🛍️ Shops loaded:', shopsData.length);
+      setShops(shopsData);
+      
+    } catch (error: any) {
+      console.error('❌ API Error:', error.message);
+      Alert.alert('Error', error.message || 'Failed to load shops');
+      setShops([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const renderShopItem = ({ item }: { item: Shop }) => (
+    <TouchableOpacity
+      style={styles.shopCard}
+      onPress={() => Alert.alert('Shop Selected', `Shop: ${item.shopName}`)}
+    >
+      <View style={styles.shopHeader}>
+        <Text style={styles.shopName}>{item.shopName}</Text>
+        <View style={[styles.statusDot, item.isOpen ? styles.open : styles.closed]}>
+          <Text style={styles.statusText}>{item.isOpen ? 'Open' : 'Closed'}</Text>
+        </View>
+      </View>
+      <Text style={styles.shopCategory}>{item.category}</Text>
+      <Text style={styles.shopAddress}>{item.address}</Text>
+      <Text style={styles.shopRating}>⭐ {item.rating?.toFixed(1) || '0.0'}</Text>
+    </TouchableOpacity>
+  );
+
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#FF6B35" />
+        <Text>Loading nearby shops...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Nearby Food Shops</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>NearU</Text>
+        <Text style={styles.subtitle}>Local shops near you</Text>
+      </View>
 
-      <FlatList
-        data={shops}
-        keyExtractor={(item) => item._id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() =>
-              navigation.navigate("CreateOrder", { shop: item })
-            }
-          >
-            <Text style={styles.shopName}>{item.shopName}</Text>
-            <Text style={styles.category}>{item.category}</Text>
-            <Text style={styles.status}>
-              {item.isOpen ? "Open" : "Closed"}
-            </Text>
+      {shops.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text>No shops found in your area</Text>
+          <TouchableOpacity onPress={loadNearbyShops} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          <Text style={{ textAlign: "center", marginTop: 20 }}>
-            No shops nearby
-          </Text>
-        }
-      />
+        </View>
+      ) : (
+        <FlatList
+          data={shops}
+          renderItem={renderShopItem}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.list}
+        />
+      )}
     </View>
   );
 }
@@ -71,33 +128,93 @@ export default function HomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16
+    backgroundColor: '#fff',
+  },
+  header: {
+    padding: 20,
+    backgroundColor: '#FF6B35',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   title: {
-    fontSize: 22,
-    marginBottom: 10
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
   },
-  card: {
+  subtitle: {
+    fontSize: 16,
+    color: '#fff',
+    opacity: 0.9,
+  },
+  list: {
     padding: 16,
+  },
+  shopCard: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    marginBottom: 10
+    borderColor: '#eee',
+  },
+  shopHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   shopName: {
     fontSize: 18,
-    fontWeight: "600"
-  },
-  category: {
-    color: "#666"
-  },
-  status: {
-    marginTop: 4,
-    color: "green"
-  },
-  center: {
+    fontWeight: '600',
+    color: '#333',
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center"
-  }
+  },
+  statusDot: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  open: {
+    backgroundColor: '#4CAF50',
+  },
+  closed: {
+    backgroundColor: '#F44336',
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  shopCategory: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  shopAddress: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 8,
+  },
+  shopRating: {
+    fontSize: 14,
+    color: '#FF9800',
+    fontWeight: '600',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  retryButton: {
+    marginTop: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#FF6B35',
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
 });

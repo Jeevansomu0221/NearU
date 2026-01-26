@@ -1,11 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
+export interface JwtPayload {
+  userId: string;
+  role: string;
+  phone: string;
+}
+
 export interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-  };
+  user?: JwtPayload;
 }
 
 export const authMiddleware = (
@@ -13,29 +16,50 @@ export const authMiddleware = (
   res: Response,
   next: NextFunction
 ) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "No token provided" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET as string
-    ) as { id: string; role: string };
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "No authentication token provided"
+      });
+    }
 
-    // 🔑 THIS IS THE KEY LINE
-    req.user = {
-      id: decoded.id,
-      role: decoded.role
-    };
+    const token = authHeader.split(" ")[1];
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "No token found in header"
+      });
+    }
 
+    const JWT_SECRET = process.env.JWT_SECRET || "nearu-secret-key-change-in-production";
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    
+    req.user = decoded;
     next();
-  } catch (error) {
-    return res.status(401).json({ message: "Invalid token" });
+  } catch (error: any) {
+    console.error("Auth middleware error:", error.message);
+    
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({
+        success: false,
+        message: "Token expired"
+      });
+    }
+    
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token"
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Authentication failed"
+    });
   }
 };
-console.log("JWT_SECRET:", process.env.JWT_SECRET);

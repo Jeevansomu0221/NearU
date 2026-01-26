@@ -15,15 +15,21 @@ router.get("/dashboard",
     try {
       // TODO: Add dashboard logic
       res.json({
-        totalUsers: 0,
-        totalPartners: 0,
-        totalOrders: 0,
-        revenue: 0,
-        pendingVerifications: 0
+        success: true,
+        data: {
+          totalUsers: 0,
+          totalPartners: 0,
+          totalOrders: 0,
+          revenue: 0,
+          pendingVerifications: 0
+        }
       });
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: "Internal server error" });
+      res.status(500).json({ 
+        success: false,
+        message: "Internal server error" 
+      });
     }
   }
 );
@@ -36,33 +42,19 @@ router.get("/orders",
   roleMiddleware([ROLES.ADMIN]),
   async (req, res) => {
     try {
-      // TODO: Get all orders with filters
-      res.json([]);
+      // TODO: Get all orders
+      res.json({
+        success: true,
+        data: []
+      });
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: "Internal server error" });
+      res.status(500).json({ 
+        success: false,
+        message: "Internal server error" 
+      });
     }
   }
 );
 
-/**
- * Verify partner
- */
-router.put("/partners/:id/verify",
-  authMiddleware,
-  roleMiddleware([ROLES.ADMIN]),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { isActive } = req.body;
-      
-      // TODO: Update partner verification status
-      res.json({ message: "Partner verification updated" });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  }
-);
-
-export default router; // ✅ This is the default export
+export default router;
