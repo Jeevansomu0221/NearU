@@ -1,4 +1,3 @@
-// backend/src/models/Partner.model.ts
 import { Schema, model } from "mongoose";
 
 const PartnerSchema = new Schema(
@@ -77,6 +76,12 @@ const PartnerSchema = new Schema(
     },
     approvedAt: Date,
     rejectionReason: String,
+    // ADD THIS: Setup completion tracking
+    hasCompletedSetup: {
+      type: Boolean,
+      default: false
+    },
+    setupCompletedAt: Date,
     // ADD THIS: Menu items count
     menuItemsCount: {
       type: Number,
@@ -95,5 +100,9 @@ PartnerSchema.index(
     partialFilterExpression: { userId: { $ne: null } } // Only enforce uniqueness when userId is not null
   }
 );
+
+// Index for faster status queries
+PartnerSchema.index({ status: 1 });
+PartnerSchema.index({ phone: 1 });
 
 export default model("Partner", PartnerSchema);

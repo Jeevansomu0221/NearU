@@ -6,7 +6,7 @@ import {
   addMenuItem,
   updateMenuItem,
   deleteMenuItem,
-  toggleItemAvailability // Corrected name
+  toggleItemAvailability
 } from "../controllers/menu.controller";
 
 const router = Router();
@@ -20,6 +20,6 @@ router.get("/", getPartnerMenu);
 router.post("/", addMenuItem);
 router.put("/:id", updateMenuItem);
 router.delete("/:id", deleteMenuItem);
-router.put("/:id/availability", toggleItemAvailability); // Corrected here too
+router.patch("/:id/availability", toggleItemAvailability);
 
 export default router;

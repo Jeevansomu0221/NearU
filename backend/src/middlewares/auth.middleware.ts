@@ -1,4 +1,3 @@
-// backend/src/middlewares/auth.middleware.ts
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
@@ -18,15 +17,20 @@ export const authMiddleware = async (
   next: NextFunction
 ) => {
   try {
-    const token = req.header("Authorization")?.replace("Bearer ", "");
+    const authHeader = req.header("Authorization");
     
-    if (!token) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log("❌ No auth header or invalid format");
       return res.status(401).json({
         success: false,
         message: "No token provided"
       });
     }
-
+    
+    const token = authHeader.replace("Bearer ", "");
+    
+    console.log("🔐 Verifying token:", token.substring(0, 20) + "...");
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
     
     // Attach user info to request
@@ -37,18 +41,34 @@ export const authMiddleware = async (
       partnerId: decoded.partnerId
     };
     
-    console.log("🔐 Authenticated user:", {
+    console.log("✅ Authenticated user:", {
       id: decoded.id,
+      phone: decoded.phone,
       role: decoded.role,
       hasPartnerId: !!decoded.partnerId
     });
     
     next();
-  } catch (error) {
-    console.error("Auth middleware error:", error);
+  } catch (error: any) {
+    console.error("❌ Auth middleware error:", error.message);
+    
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({
+        success: false,
+        message: "Token expired"
+      });
+    }
+    
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token"
+      });
+    }
+    
     return res.status(401).json({
       success: false,
-      message: "Invalid token"
+      message: "Authentication failed"
     });
   }
 };

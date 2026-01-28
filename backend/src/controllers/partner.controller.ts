@@ -300,7 +300,85 @@ export const getPartnerByUserId = async (req: Request, res: Response) => {
     });
   }
 };
+export const getMyStatus = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+    
+    const partner = await Partner.findOne({ userId })
+      .select("status hasCompletedSetup menuItemsCount _id restaurantName");
+    
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found"
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: partner
+    });
+  } catch (error) {
+    console.error("Get partner status error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+};
+// Add this function to the file, after the getMyStatus function
 
+/**
+ * MARK SETUP AS COMPLETE
+ */
+export const completeSetup = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+    
+    const partner = await Partner.findOneAndUpdate(
+      { userId },
+      { 
+        hasCompletedSetup: true,
+        setupCompletedAt: new Date()
+      },
+      { new: true }
+    ).select("_id restaurantName hasCompletedSetup menuItemsCount");
+    
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found"
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: "Setup marked as complete",
+      data: partner
+    });
+  } catch (error: any) {
+    console.error("Complete setup error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};
 /**
  * UPDATE SHOP STATUS (OPEN/CLOSE)
  */

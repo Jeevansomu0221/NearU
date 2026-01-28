@@ -1,21 +1,16 @@
-﻿// backend/src/routes/partner.routes.ts
-import { Router } from "express";
+﻿import { Router } from "express";
 import {
   submitPartnerProfile,
   getPartnerStatus,
   getPendingPartners,
   updatePartnerStatus,
   getAllPartners,
-  updateShopStatus,    // Now this exists
-  getPartnerStats      // Now this exists
+  updateShopStatus,
+  getPartnerStats,
+  getMyStatus,
+  completeSetup
 } from "../controllers/partner.controller";
-import {
-  getPartnerMenu,
-  addMenuItem,
-  updateMenuItem,
-  deleteMenuItem,
-  toggleItemAvailability
-} from "../controllers/menu.controller";
+import menuRoutes from "./menu.routes"; // Import menu routes
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { roleMiddleware } from "../middlewares/role.middleware";
 
@@ -28,12 +23,12 @@ router.get("/status/:phone", getPartnerStatus);
 // Protected partner routes
 router.use(authMiddleware);
 
-// Menu Management
-router.get("/menu", roleMiddleware(["partner"]), getPartnerMenu);
-router.post("/menu", roleMiddleware(["partner"]), addMenuItem);
-router.put("/menu/:id", roleMiddleware(["partner"]), updateMenuItem);
-router.delete("/menu/:id", roleMiddleware(["partner"]), deleteMenuItem);
-router.put("/menu/:id/availability", roleMiddleware(["partner"]), toggleItemAvailability);
+// Partner status and setup
+router.get("/my-status", roleMiddleware(["partner"]), getMyStatus);
+router.post("/complete-setup", roleMiddleware(["partner"]), completeSetup);
+
+// Menu Management - Mount menu routes under /partners/menu
+router.use("/menu", roleMiddleware(["partner"]), menuRoutes);
 
 // Shop Management
 router.put("/shop-status", roleMiddleware(["partner"]), updateShopStatus);
