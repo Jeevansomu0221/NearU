@@ -1,65 +1,54 @@
+// backend/src/middlewares/auth.middleware.ts
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-export interface JwtPayload {
-  userId: string;
-  role: string;
-  phone: string;
-}
-
+// Define and export the AuthRequest type
 export interface AuthRequest extends Request {
-  user?: JwtPayload;
+  user?: {
+    id: string;
+    phone: string;
+    role: string;
+    partnerId?: string;
+  };
 }
 
-export const authMiddleware = (
-  req: AuthRequest,
+export const authMiddleware = async (
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        success: false,
-        message: "No authentication token provided"
-      });
-    }
-
-    const token = authHeader.split(" ")[1];
+    const token = req.header("Authorization")?.replace("Bearer ", "");
     
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: "No token found in header"
+        message: "No token provided"
       });
     }
 
-    const JWT_SECRET = process.env.JWT_SECRET || "nearu-secret-key-change-in-production";
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
     
-    req.user = decoded;
+    // Attach user info to request
+    (req as AuthRequest).user = {
+      id: decoded.id,
+      phone: decoded.phone,
+      role: decoded.role,
+      partnerId: decoded.partnerId
+    };
+    
+    console.log("🔐 Authenticated user:", {
+      id: decoded.id,
+      role: decoded.role,
+      hasPartnerId: !!decoded.partnerId
+    });
+    
     next();
-  } catch (error: any) {
-    console.error("Auth middleware error:", error.message);
-    
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        success: false,
-        message: "Token expired"
-      });
-    }
-    
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid token"
-      });
-    }
-
-    return res.status(500).json({
+  } catch (error) {
+    console.error("Auth middleware error:", error);
+    return res.status(401).json({
       success: false,
-      message: "Authentication failed"
+      message: "Invalid token"
     });
   }
 };

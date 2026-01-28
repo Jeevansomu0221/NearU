@@ -1,89 +1,99 @@
-import { Schema, model, Types } from "mongoose";
+// backend/src/models/Partner.model.ts
+import { Schema, model } from "mongoose";
 
-const PartnerSchema = new Schema({
-  userId: {
-    type: Types.ObjectId,
-    ref: "User",
-    required: true,
-    unique: true
-  },
-  shopName: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  description: {
-    type: String,
-    trim: true
-  },
-  category: {
-    type: String,
-    enum: ["bakery", "tiffin", "fast-food", "restaurant", "geverage", "other"],
-    required: true
-  },
-  address: {
-    type: String,
-    required: true
-  },
-  location: {
-    type: {
+const PartnerSchema = new Schema(
+  {
+    ownerName: {
       type: String,
-      enum: ["Point"],
-      default: "Point"
+      required: true
     },
-    coordinates: {
-      type: [Number], // [longitude, latitude]
+    restaurantName: {
+      type: String,
+      required: true
+    },
+    // ALIAS FOR CUSTOMER SIDE (FIXES ERROR)
+    shopName: {
+      type: String
+    },
+    phone: {
+      type: String,
       required: true,
-      default: [0, 0]
+      unique: true
+    },
+    address: {
+      type: String,
+      required: true
+    },
+    // ADD THIS: Google Maps link for shop location
+    googleMapsLink: {
+      type: String
+    },
+    category: {
+      type: String,
+      required: true,
+      enum: ["bakery", "mini-restaurant", "tiffin-center", "fast-food", "cafe", "dessert-parlor", "other"]
+    },
+    // ADD THIS: User reference for authentication - REMOVE unique constraint
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      // REMOVED: unique: true - This causes duplicate key error for null values
+      index: { sparse: true } // This allows multiple null values
+    },
+    // SHOP STATUS
+    isOpen: {
+      type: Boolean,
+      default: true
+    },
+    openingTime: {
+      type: String,
+      default: "08:00"
+    },
+    closingTime: {
+      type: String,
+      default: "22:00"
+    },
+    rating: {
+      type: Number,
+      default: 4
+    },
+    documents: {
+      fssaiUrl: String,
+      shopLicenseUrl: String,
+      idProofUrl: String,
+      // ADD THIS: Document submission tracking
+      submittedAt: Date,
+      isComplete: { type: Boolean, default: false }
+    },
+    status: {
+      type: String,
+      enum: ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"],
+      default: "PENDING"
+    },
+    // ADD THIS: Approval tracking
+    approvedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User"
+    },
+    approvedAt: Date,
+    rejectionReason: String,
+    // ADD THIS: Menu items count
+    menuItemsCount: {
+      type: Number,
+      default: 0
     }
   },
-  phone: {
-    type: String,
-    required: true
-  },
-  isActive: {
-    type: Boolean,
-    default: false // Requires admin approval
-  },
-  isOpen: {
-    type: Boolean,
-    default: true
-  },
-  openingTime: {
-    type: String,
-    default: "09:00"
-  },
-  closingTime: {
-    type: String,
-    default: "22:00"
-  },
-  deliveryRadius: {
-    type: Number, // in kilometers
-    default: 5
-  },
-  rating: {
-    type: Number,
-    default: 0,
-    min: 0,
-    max: 5
-  },
-  totalOrders: {
-    type: Number,
-    default: 0
-  },
-  logo: {
-    type: String
-  },
-  documents: {
-    gst: String,
-    fssai: String,
-    tradeLicense: String
-  }
-}, {
-  timestamps: true
-});
+  { timestamps: true }
+);
 
-// Create 2dsphere index for geospatial queries
-PartnerSchema.index({ location: "2dsphere" });
+// Optional: Add a partial index for userId (only enforce uniqueness when userId is not null)
+PartnerSchema.index(
+  { userId: 1 },
+  { 
+    unique: true, 
+    sparse: true,
+    partialFilterExpression: { userId: { $ne: null } } // Only enforce uniqueness when userId is not null
+  }
+);
 
 export default model("Partner", PartnerSchema);

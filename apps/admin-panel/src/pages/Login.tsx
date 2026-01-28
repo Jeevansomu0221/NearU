@@ -1,3 +1,4 @@
+// apps/admin-panel/src/pages/Login.tsx
 import { useState } from "react";
 import api from "../api/client";
 import { setToken } from "../utils/auth";
@@ -21,10 +22,12 @@ export default function Login() {
     try {
       setLoading(true);
       setError("");
+      console.log("Sending OTP to:", phone);
       await api.post("/auth/send-otp", { phone, role: "admin" });
       setStep("OTP");
-    } catch (err) {
-      setError("Failed to send OTP");
+    } catch (err: any) {
+      console.error("Send OTP error:", err);
+      setError(`Failed to send OTP: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -39,11 +42,26 @@ export default function Login() {
     try {
       setLoading(true);
       setError("");
+      console.log("Verifying OTP for:", phone);
       const res = await api.post("/auth/verify-otp", { phone, otp });
+      console.log("Login response:", res.data);
+      
+      // Check if user is admin
+      if (res.data.user?.role !== "admin") {
+        setError("Unauthorized: Admin access required");
+        return;
+      }
+      
+      // Save token and user info
       setToken(res.data.token);
-      navigate("/orders");
-    } catch (err) {
-      setError("Invalid OTP");
+      localStorage.setItem("adminUser", JSON.stringify(res.data.user));
+      localStorage.setItem("adminPhone", phone);
+      
+      // Navigate to partners page instead of orders
+      navigate("/partners");
+    } catch (err: any) {
+      console.error("Verify OTP error:", err);
+      setError(err.response?.data?.message || "Invalid OTP");
     } finally {
       setLoading(false);
     }
@@ -59,23 +77,35 @@ export default function Login() {
         {step === "PHONE" ? (
           <>
             <input
-              placeholder="Admin phone"
+              placeholder="Admin phone number"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              type="tel"
             />
             <button onClick={sendOtp} disabled={loading}>
               {loading ? "Sending..." : "Send OTP"}
             </button>
+            <p className="hint">Enter the phone number registered as admin</p>
           </>
         ) : (
           <>
+            <p className="phone-display">Verifying: {phone}</p>
             <input
-              placeholder="Enter OTP"
+              placeholder="Enter 6-digit OTP"
               value={otp}
-              onChange={(e) => setOtp(e.target.value)}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              type="tel"
+              maxLength={6}
             />
             <button onClick={verifyOtp} disabled={loading}>
               {loading ? "Verifying..." : "Verify OTP"}
+            </button>
+            <button 
+              className="back-btn" 
+              onClick={() => setStep("PHONE")}
+              disabled={loading}
+            >
+              Back
             </button>
           </>
         )}

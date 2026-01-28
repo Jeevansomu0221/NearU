@@ -1,20 +1,10 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+import mongoose from "mongoose";
 import Order from "../models/Order.model";
-import Partner from "../models/Partner.model";
 import { ROLES } from "../config/roles";
 import { successResponse, errorResponse } from "../utils/response";
-import mongoose from "mongoose";
-
-// Define the user type from your JWT payload
-interface AuthUser {
-  id: string;
-  role: string;
-}
-
-// Extend Express Request to include user
-interface AuthRequest extends Request {
-  user?: AuthUser;
-}
+import { AuthRequest } from "../middlewares/auth.middleware";
+import Partner from "../models/Partner.model";
 
 /**
  * ================================
@@ -47,12 +37,13 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     const order = await Order.create({
       orderType,
-      customerId: user.id,  // Changed from user._id to user.id
+      customerId: user.id,
       partnerId: orderType === "SHOP" ? partnerId : undefined,
       deliveryAddress,
       note,
       items,
-      status: "CREATED"
+      status: orderType === "SHOP" ? "CONFIRMED" : "CREATED",
+      paymentStatus: orderType === "SHOP" ? "PAID" : "PENDING"
     });
 
     return successResponse(res, order, "Order created successfully");
@@ -78,7 +69,7 @@ export const priceCustomOrder = async (req: AuthRequest, res: Response) => {
     const { orderId } = req.params;
     const { itemTotal, deliveryFee } = req.body;
 
-    if (!itemTotal || deliveryFee === undefined) {
+    if (itemTotal === undefined || deliveryFee === undefined) {
       return errorResponse(res, "Pricing details required", 400);
     }
 
@@ -126,9 +117,8 @@ export const acceptCustomOrderPrice = async (req: AuthRequest, res: Response) =>
       return errorResponse(res, "Order not found", 404);
     }
 
-    // Convert user.id string to ObjectId for comparison
     const userId = new mongoose.Types.ObjectId(user.id);
-    
+
     if (!order.customerId.equals(userId)) {
       return errorResponse(res, "Unauthorized", 401);
     }
@@ -138,6 +128,8 @@ export const acceptCustomOrderPrice = async (req: AuthRequest, res: Response) =>
     }
 
     order.status = "CONFIRMED";
+    order.paymentStatus = "PAID";
+
     await order.save();
 
     return successResponse(res, order, "Order confirmed");
@@ -208,10 +200,10 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Order not found", 404);
     }
 
-    // Convert user.id to ObjectId for comparison
     const userId = new mongoose.Types.ObjectId(user.id);
-    
-    if (!order.deliveryPartnerId?.equals(userId)) {
+
+    // FIXED: Check if deliveryPartnerId exists before calling equals()
+    if (!order.deliveryPartnerId || !order.deliveryPartnerId.equals(userId)) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
@@ -233,21 +225,28 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 export const getMyOrders = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
-    
+
     if (!user) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    let filter = {};
+    let filter: any = {};
 
     if (user.role === ROLES.CUSTOMER) {
-      filter = { customerId: user.id };
+      filter.customerId = user.id;
     } else if (user.role === ROLES.DELIVERY) {
-      filter = { deliveryPartnerId: user.id };
-    } else if (user.role === ROLES.ADMIN) {
-      filter = {};
+      filter.deliveryPartnerId = user.id;
     } else if (user.role === ROLES.PARTNER) {
-      filter = { partnerId: user.id };
+      if (user.partnerId) {
+        filter.partnerId = user.partnerId;
+      } else {
+        const partner = await Partner.findOne({ userId: user.id });
+        if (partner) {
+          filter.partnerId = partner._id;
+        } else {
+          return successResponse(res, [], "No partner found");
+        }
+      }
     }
 
     const orders = await Order.find(filter)
@@ -258,5 +257,141 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error("getMyOrders error:", err);
     return errorResponse(res, "Failed to fetch orders");
+  }
+};
+
+/**
+ * ================================
+ * GET ORDER DETAILS
+ * ================================
+ */
+export const getOrderDetails = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { orderId } = req.params;
+
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const order = await Order.findById(orderId)
+      .populate("customerId partnerId deliveryPartnerId");
+
+    if (!order) {
+      return errorResponse(res, "Order not found", 404);
+    }
+
+    // Check if user has permission to view this order
+    const userId = new mongoose.Types.ObjectId(user.id);
+    const isCustomer = order.customerId.equals(userId);
+    
+    // FIXED: Check if deliveryPartnerId exists before calling equals()
+    const isDelivery = order.deliveryPartnerId 
+      ? order.deliveryPartnerId.equals(userId) 
+      : false;
+    
+    let isPartner = false;
+
+    if (user.role === ROLES.PARTNER) {
+      if (user.partnerId) {
+        // FIXED: Check if partnerId exists before calling equals()
+        isPartner = order.partnerId 
+          ? order.partnerId.equals(new mongoose.Types.ObjectId(user.partnerId))
+          : false;
+      } else {
+        const partner = await Partner.findOne({ userId: user.id });
+        if (partner) {
+          isPartner = order.partnerId 
+            ? order.partnerId.equals(partner._id)
+            : false;
+        }
+      }
+    }
+
+    const isAdmin = user.role === ROLES.ADMIN;
+
+    if (!isCustomer && !isDelivery && !isPartner && !isAdmin) {
+      return errorResponse(res, "Unauthorized to view this order", 401);
+    }
+
+    return successResponse(res, order, "Order details retrieved");
+  } catch (err) {
+    console.error("getOrderDetails error:", err);
+    return errorResponse(res, "Failed to get order details");
+  }
+};
+
+/**
+ * ================================
+ * CANCEL ORDER
+ * ================================
+ */
+export const cancelOrder = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { orderId } = req.params;
+
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return errorResponse(res, "Order not found", 404);
+    }
+
+    // Only customer who placed the order can cancel
+    const userId = new mongoose.Types.ObjectId(user.id);
+    if (!order.customerId.equals(userId)) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    // Only certain statuses can be cancelled
+    const cancellableStatuses = ["CREATED", "PRICED", "CONFIRMED"];
+    if (!cancellableStatuses.includes(order.status)) {
+      return errorResponse(res, `Order cannot be cancelled in ${order.status} status`, 400);
+    }
+
+    order.status = "CANCELLED";
+    await order.save();
+
+    return successResponse(res, order, "Order cancelled successfully");
+  } catch (err) {
+    console.error("cancelOrder error:", err);
+    return errorResponse(res, "Failed to cancel order");
+  }
+};
+
+/**
+ * ================================
+ * UPDATE ORDER (ADMIN ONLY)
+ * ================================
+ */
+export const updateOrder = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== ROLES.ADMIN) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const { orderId } = req.params;
+    const updateData = req.body;
+
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate("customerId partnerId deliveryPartnerId");
+
+    if (!order) {
+      return errorResponse(res, "Order not found", 404);
+    }
+
+    return successResponse(res, order, "Order updated successfully");
+  } catch (err) {
+    console.error("updateOrder error:", err);
+    return errorResponse(res, "Failed to update order");
   }
 };

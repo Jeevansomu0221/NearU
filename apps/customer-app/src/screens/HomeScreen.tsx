@@ -76,7 +76,7 @@ export default function HomeScreen({ navigation }: Props) {
   const renderShopItem = ({ item }: { item: Shop }) => (
     <TouchableOpacity
       style={styles.shopCard}
-      onPress={() => Alert.alert('Shop Selected', `Shop: ${item.shopName}`)}
+      onPress={() => navigation.navigate('ShopDetail', { shopId: item._id })} // Change th
     >
       <View style={styles.shopHeader}>
         <Text style={styles.shopName}>{item.shopName}</Text>

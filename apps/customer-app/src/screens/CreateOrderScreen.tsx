@@ -7,7 +7,15 @@ import {
   Alert,
   StyleSheet
 } from "react-native";
-import { createOrder } from "../api/order.api";
+import { createCustomOrder } from "../api/order.api";
+
+type CreateOrderResponse = {
+  success: boolean;
+  data: {
+    _id: string;
+  };
+  message: string;
+};
 
 export default function CreateOrderScreen({ route, navigation }: any) {
   const { shop } = route.params;
@@ -25,14 +33,16 @@ export default function CreateOrderScreen({ route, navigation }: any) {
     try {
       setLoading(true);
 
-      const res = await createOrder(address, note);
+      const res = await createCustomOrder(address, note);
+      const response = res.data as CreateOrderResponse;
 
-      const orderId = (res.data as any).orderId;
+      const orderId = response.data._id;
 
-      Alert.alert("Order placed", "Waiting for partner confirmation");
+      Alert.alert("Order placed", "Waiting for price confirmation");
 
       navigation.replace("OrderStatus", { orderId });
     } catch (error) {
+      console.error(error);
       Alert.alert("Error", "Failed to place order");
     } finally {
       setLoading(false);
@@ -69,19 +79,9 @@ export default function CreateOrderScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16
-  },
-  shopName: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 20
-  },
-  label: {
-    marginBottom: 6,
-    fontWeight: "500"
-  },
+  container: { flex: 1, padding: 16 },
+  shopName: { fontSize: 22, fontWeight: "600", marginBottom: 20 },
+  label: { marginBottom: 6, fontWeight: "500" },
   textArea: {
     borderWidth: 1,
     borderColor: "#ccc",

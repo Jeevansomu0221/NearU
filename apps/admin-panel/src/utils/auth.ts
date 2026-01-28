@@ -1,18 +1,23 @@
-let token: string | null = null;
-
-export const setToken = (t: string) => {
-  token = t;
-  localStorage.setItem("admin_token", t);
+// apps/admin-panel/src/utils/auth.ts
+export const setToken = (token: string) => {
+  localStorage.setItem("adminToken", token);
 };
 
 export const getToken = () => {
-  if (!token) {
-    token = localStorage.getItem("admin_token");
-  }
-  return token;
+  return localStorage.getItem("adminToken");
 };
 
-export const logout = () => {
-  token = null;
-  localStorage.removeItem("admin_token");
+export const clearToken = () => {
+  localStorage.removeItem("adminToken");
+  localStorage.removeItem("adminUser");
+  localStorage.removeItem("adminPhone");
+};
+
+export const isAuthenticated = () => {
+  return !!getToken();
+};
+
+export const getAdminUser = () => {
+  const user = localStorage.getItem("adminUser");
+  return user ? JSON.parse(user) : null;
 };

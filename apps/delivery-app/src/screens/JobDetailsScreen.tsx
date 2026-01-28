@@ -1,51 +1,53 @@
-import { View, Text, Button, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, Button, Alert } from "react-native";
 import api from "../api/client";
 
 export default function JobDetailsScreen({ route, navigation }: any) {
-  const { job } = route.params;
+  const { order } = route.params;
+  const [status, setStatus] = useState(order.status);
 
-  const markPicking = async () => {
-    await api.post(`/delivery/jobs/${job.jobId}/picking`);
-    navigation.goBack();
-  };
+  const updateStatus = async (newStatus: string) => {
+    try {
+      await api.post(`/orders/${order._id}/status`, {
+        status: newStatus
+      });
 
-  const markDelivered = async () => {
-    await api.post(`/delivery/jobs/${job.jobId}/delivered`);
-    navigation.goBack();
+      setStatus(newStatus);
+      Alert.alert("Success", `Order ${newStatus}`);
+      navigation.goBack();
+    } catch {
+      Alert.alert("Error", "Failed to update status");
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Pickup Details</Text>
+    <View style={{ flex: 1, padding: 20 }}>
+      <Text style={{ fontSize: 20, fontWeight: "600" }}>
+        Order #{order._id.slice(-6)}
+      </Text>
 
-      {job.pickups?.length > 0 ? (
-        job.pickups.map((p: any, index: number) => (
-          <View key={index} style={styles.card}>
-            <Text>Shop: {p.shopName}</Text>
-            <Text>Address: {p.address}</Text>
-            <Text>Phone: {p.phone}</Text>
-          </View>
-        ))
-      ) : (
-        <View style={styles.card}>
-          <Text>No shop pickup</Text>
-          <Text>Buy items as per order note</Text>
-        </View>
+      <Text style={{ marginTop: 10 }}>
+        Delivery Address:
+      </Text>
+      <Text>{order.deliveryAddress}</Text>
+
+      <Text style={{ marginTop: 10 }}>
+        Current Status: {status}
+      </Text>
+
+      {status === "ASSIGNED" && (
+        <Button
+          title="Mark Picked Up"
+          onPress={() => updateStatus("PICKED_UP")}
+        />
       )}
 
-      <Button title="Picked Up" onPress={markPicking} />
-      <Button title="Delivered" onPress={markDelivered} />
+      {status === "PICKED_UP" && (
+        <Button
+          title="Mark Delivered"
+          onPress={() => updateStatus("DELIVERED")}
+        />
+      )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { padding: 20 },
-  title: { fontSize: 18, marginBottom: 10 },
-  card: {
-    padding: 10,
-    borderWidth: 1,
-    marginBottom: 10,
-    borderRadius: 6
-  }
-});

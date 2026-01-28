@@ -65,7 +65,7 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
     }
 
     // Assign delivery partner
-    order.deliveryPartnerId = new mongoose.Types.ObjectId(user.id);
+    order.deliveryPartnerId = new mongoose.Types.ObjectId(user.userId);
     order.status = "ASSIGNED";
     await order.save();
 

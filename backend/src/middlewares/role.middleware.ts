@@ -1,17 +1,28 @@
 import { Request, Response, NextFunction } from "express";
-import { AuthRequest } from "./auth.middleware";
+
+// Define AuthRequest type here since it's not exported from auth.middleware
+interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    phone: string;
+    role: string;
+    partnerId?: string;
+  };
+}
 
 export const roleMiddleware = (allowedRoles: string[]) => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!req.user) {
+      const authReq = req as AuthRequest;
+      
+      if (!authReq.user) {
         return res.status(401).json({
           success: false,
           message: "Authentication required"
         });
       }
 
-      const userRole = req.user.role;
+      const userRole = authReq.user.role;
       
       if (!allowedRoles.includes(userRole)) {
         return res.status(403).json({
@@ -25,7 +36,7 @@ export const roleMiddleware = (allowedRoles: string[]) => {
       console.error("Role middleware error:", error);
       return res.status(500).json({
         success: false,
-        message: "Internal server error"
+        message: "Server error in role validation"
       });
     }
   };

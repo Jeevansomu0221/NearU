@@ -1,69 +1,47 @@
-﻿import { Router, Response } from "express";
-import { authMiddleware, AuthRequest } from "../middlewares/auth.middleware";
-import User from "../models/User.model";
-import Partner from "../models/Partner.model";
-import MenuItem from "../models/MenuItem.model";
+﻿// backend/src/routes/partner.routes.ts
+import { Router } from "express";
+import {
+  submitPartnerProfile,
+  getPartnerStatus,
+  getPendingPartners,
+  updatePartnerStatus,
+  getAllPartners,
+  updateShopStatus,    // Now this exists
+  getPartnerStats      // Now this exists
+} from "../controllers/partner.controller";
+import {
+  getPartnerMenu,
+  addMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+  toggleItemAvailability
+} from "../controllers/menu.controller";
+import { authMiddleware } from "../middlewares/auth.middleware";
+import { roleMiddleware } from "../middlewares/role.middleware";
 
 const router = Router();
 
-router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const user = await User.findById(req.user?.userId).select("-__v");
-    res.json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error"
-    });
-  }
-});
+// Public routes
+router.post("/onboard", submitPartnerProfile);
+router.get("/status/:phone", getPartnerStatus);
 
-router.get("/shops/:partnerId/menu", async (req, res) => {
-  try {
-    const items = await MenuItem.find({
-      partnerId: req.params.partnerId,
-      isAvailable: true
-    });
+// Protected partner routes
+router.use(authMiddleware);
 
-    res.json({
-      success: true,
-      data: items
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error"
-    });
-  }
-});
+// Menu Management
+router.get("/menu", roleMiddleware(["partner"]), getPartnerMenu);
+router.post("/menu", roleMiddleware(["partner"]), addMenuItem);
+router.put("/menu/:id", roleMiddleware(["partner"]), updateMenuItem);
+router.delete("/menu/:id", roleMiddleware(["partner"]), deleteMenuItem);
+router.put("/menu/:id/availability", roleMiddleware(["partner"]), toggleItemAvailability);
 
-router.get("/nearby-shops", authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const shops = await Partner.find({ isActive: true }).select(
-      "shopName category address"
-    );
+// Shop Management
+router.put("/shop-status", roleMiddleware(["partner"]), updateShopStatus);
+router.get("/stats", roleMiddleware(["partner"]), getPartnerStats);
 
-    res.json({
-      success: true,
-      data: shops.map((shop) => ({
-        _id: shop._id,
-        shopName: shop.shopName,
-        category: shop.category,
-        isOpen: true
-      }))
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error"
-    });
-  }
-});
+// Admin routes
+router.get("/admin/pending", roleMiddleware(["admin"]), getPendingPartners);
+router.get("/admin/all", roleMiddleware(["admin"]), getAllPartners);
+router.put("/admin/:partnerId/status", roleMiddleware(["admin"]), updatePartnerStatus);
 
 export default router;

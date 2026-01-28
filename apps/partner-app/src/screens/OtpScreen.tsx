@@ -20,6 +20,8 @@ export default function OtpScreen({ route, navigation }: any) {
 
       // ✅ SAVE TOKEN
       await AsyncStorage.setItem("token", token);
+      await AsyncStorage.setItem("phone", phone);
+
 
       // ✅ MOVE TO ORDERS SCREEN
       navigation.replace("Orders");

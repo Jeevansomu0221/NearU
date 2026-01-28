@@ -1,41 +1,37 @@
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // CHANGE THIS to your computer's IP
-const API_BASE_URL = 'http://192.168.1.9:5000/api';
+const API_BASE_URL = "http://10.61.129.57:5000/api";
 
-// Create simple axios instance
-const apiClient = axios.create({
+const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 10000
 });
 
-// Add token to all requests
-apiClient.interceptors.request.use(async (config: any) => {
-  try {
-    const token = await AsyncStorage.getItem('token');
-    if (token) {
-      config.headers = {
-        ...config.headers,
-        Authorization: `Bearer ${token}`,
-      };
+// REQUEST INTERCEPTOR (WITH ASYNC/AWAIT)
+api.interceptors.request.use(
+  async (config: any) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error("Error getting token:", error);
     }
-  } catch (error) {
-    console.error('Error getting token:', error);
-  }
-  return config;
-});
-
-// Handle responses
-apiClient.interceptors.response.use(
-  (response: any) => {
-    // Return data directly
-    return response.data;
+    return config;
   },
+  (error: any) => Promise.reject(error)
+);
+
+// RESPONSE INTERCEPTOR
+api.interceptors.response.use(
+  (response: any) => response.data,
   (error: any) => {
-    console.error('API Error:', error.message);
+    // You can handle errors here
     return Promise.reject(error);
   }
 );
 
-export default apiClient;
+export default api;

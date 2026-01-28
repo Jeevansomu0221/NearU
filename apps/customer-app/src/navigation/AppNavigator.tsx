@@ -6,9 +6,8 @@ import { createStackNavigator } from '@react-navigation/stack';
 import LoginScreen from '../screens/LoginScreen';
 import OtpScreen from '../screens/OtpScreen';
 import HomeScreen from '../screens/HomeScreen';
-// import ShopDetailScreen from '../screens/ShopDetailScreen'; // Comment out for now
-// import CartScreen from '../screens/CartScreen'; // Comment out for now
-// import OrderStatusScreen from '../screens/OrderStatusScreen'; // Comment out for now
+import ShopDetailScreen from '../screens/ShopDetailScreen';
+import CartScreen from '../screens/CartScreen';
 
 // Define stack param list
 export type RootStackParamList = {
@@ -16,8 +15,7 @@ export type RootStackParamList = {
   Otp: { phone: string };
   Home: undefined;
   ShopDetail: { shopId: string };
-  Cart: undefined;
-  OrderStatus: { orderId: string };
+  Cart: undefined; // Add this
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -34,10 +32,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Otp" component={OtpScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
-        {/* Comment out missing screens for now */}
-        {/* <Stack.Screen name="ShopDetail" component={ShopDetailScreen} /> */}
-        {/* <Stack.Screen name="Cart" component={CartScreen} /> */}
-        {/* <Stack.Screen name="OrderStatus" component={OrderStatusScreen} /> */}
+        <Stack.Screen name="ShopDetail" component={ShopDetailScreen} />
+        <Stack.Screen name="Cart" component={CartScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

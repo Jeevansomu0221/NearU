@@ -1,14 +1,16 @@
-import { Routes, Route } from "react-router-dom";
-import Login from "./pages/Login";
-import Orders from "./pages/Orders";
-import OrderDetails from "./pages/OrderDetails";
+// App.tsx
+import { Routes, Route, Navigate } from 'react-router-dom'
+import Login from './pages/Login'
+import Partners from './pages/Partners'
 
-export default function App() {
+function App() {
   return (
     <Routes>
-      <Route path="/" element={<Login />} />
-      <Route path="/orders" element={<Orders />} />
-      <Route path="/orders/:id" element={<OrderDetails />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/partners" element={<Partners />} />
+      <Route path="/" element={<Navigate to="/partners" replace />} />
     </Routes>
-  );
+  )
 }
+
+export default App

@@ -1,62 +1,41 @@
-import { useEffect, useState } from "react";
-import { View, Text, Button, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, FlatList, TouchableOpacity } from "react-native";
 import api from "../api/client";
 
-type DeliveryJobResponse = {
-  jobId?: string;
-  status?: string;
-  customer?: {
-    name: string;
-    phone: string;
-    address: string;
-  };
-  pickups?: any[];
-};
-
 export default function JobsScreen({ navigation }: any) {
-  const [job, setJob] = useState<DeliveryJobResponse | null>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
 
-  const loadJob = async () => {
-    const res = await api.get<DeliveryJobResponse>("/delivery/jobs");
-
-    if (res.data.jobId) {
-      setJob(res.data);
-    } else {
-      setJob(null);
-    }
+  const loadJobs = async () => {
+    const res: any = await api.get("/orders/my");
+    setJobs(res.data);
   };
 
   useEffect(() => {
-    loadJob();
+    loadJobs();
   }, []);
 
-  if (!job) {
-    return (
-      <View style={styles.center}>
-        <Text>No active delivery jobs</Text>
-      </View>
-    );
-  }
+  const renderItem = ({ item }: any) => (
+    <TouchableOpacity
+      style={{
+        padding: 16,
+        borderBottomWidth: 1,
+        borderColor: "#ddd"
+      }}
+      onPress={() => navigation.navigate("JobDetails", { order: item })}
+    >
+      <Text style={{ fontWeight: "600" }}>Order #{item._id.slice(-6)}</Text>
+      <Text>Status: {item.status}</Text>
+      <Text>Address: {item.deliveryAddress}</Text>
+    </TouchableOpacity>
+  );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Active Delivery</Text>
-
-      <Text>Status: {job.status}</Text>
-      <Text>Customer: {job.customer?.name}</Text>
-      <Text>Phone: {job.customer?.phone}</Text>
-      <Text>Address: {job.customer?.address}</Text>
-
-      <Button
-        title="View Job Details"
-        onPress={() => navigation.navigate("JobDetails", { job })}
+    <View style={{ flex: 1 }}>
+      <FlatList
+        data={jobs}
+        keyExtractor={item => item._id}
+        renderItem={renderItem}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { padding: 20 },
-  title: { fontSize: 20, marginBottom: 10 }
-});

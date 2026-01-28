@@ -1,36 +1,54 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList } from '../navigation/AppNavigator';
+import React, { useEffect, useState } from "react";
+import { View, Text, Button, FlatList } from "react-native";
+import { getPartnerMenu } from "../api/menu.api";
+import { useCart } from "../context/CartContext";
 
-type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ShopDetail'>;
-type ShopDetailScreenRouteProp = RouteProp<RootStackParamList, 'ShopDetail'>;
+export default function ShopDetailScreen({ route, navigation }: any) {
+  const { shop } = route.params;
+  const [menu, setMenu] = useState<any[]>([]);
+  const { addItem } = useCart();
 
-interface Props {
-  navigation: ShopDetailScreenNavigationProp;
-  route: ShopDetailScreenRouteProp;
-}
+  const loadMenu = async () => {
+    const res: any = await getPartnerMenu(shop._id);
+    setMenu(res.data);
+  };
 
-export default function ShopDetailScreen({ navigation, route }: Props) {
-  const { shopId } = route.params;
+  useEffect(() => {
+    loadMenu();
+  }, []);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Shop Detail Screen</Text>
-      <Text>Shop ID: {shopId}</Text>
+    <View style={{ flex: 1, padding: 16 }}>
+      <Text style={{ fontSize: 22, fontWeight: "600" }}>
+        {shop.restaurantName}
+      </Text>
+
+      <FlatList
+        data={menu.filter(i => i.isAvailable)}
+        keyExtractor={item => item._id}
+        renderItem={({ item }) => (
+          <View style={{ padding: 12, borderBottomWidth: 1 }}>
+            <Text>{item.name}</Text>
+            <Text>₹{item.price}</Text>
+
+            <Button
+              title="Add"
+              onPress={() =>
+                addItem({
+                  name: item.name,
+                  price: item.price,
+                  quantity: 1
+                })
+              }
+            />
+          </View>
+        )}
+      />
+
+      <Button
+        title="Go to Cart"
+        onPress={() => navigation.navigate("Cart", { shop })}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-});
