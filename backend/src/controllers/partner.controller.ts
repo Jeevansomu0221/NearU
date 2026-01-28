@@ -1,7 +1,44 @@
-// backend/src/controllers/partner.controller.ts
 import { Request, Response } from "express";
+import { Types } from "mongoose";
 import Partner from "../models/Partner.model";
 import User from "../models/User.model";
+
+// Define AuthRequest interface
+interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    phone: string;
+    role: string;
+    partnerId?: string;
+  };
+}
+
+// Helper function to safely convert to ObjectId
+const toObjectId = (id: any): Types.ObjectId | null => {
+  try {
+    if (!id) return null;
+    
+    // If it's an array, take the first element
+    if (Array.isArray(id)) {
+      id = id[0];
+    }
+    
+    // Ensure it's a string
+    if (typeof id !== 'string') {
+      id = String(id);
+    }
+    
+    // Check if it's a valid ObjectId
+    if (id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id)) {
+      return new Types.ObjectId(id);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error converting to ObjectId:", error);
+    return null;
+  }
+};
 
 /**
  * CREATE / UPDATE PARTNER PROFILE
@@ -45,12 +82,14 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       openingTime: "08:00",
       closingTime: "22:00",
       rating: 4,
-      menuItemsCount: 0
+      menuItemsCount: 0,
+      hasCompletedSetup: false // Add this field
     };
 
     // IMPORTANT: Only add userId if it's a valid ObjectId string
-    if (userId && typeof userId === 'string' && userId.length === 24 && /^[0-9a-fA-F]{24}$/.test(userId)) {
-      partnerData.userId = userId;
+    const objectId = toObjectId(userId);
+    if (objectId) {
+      partnerData.userId = objectId;
       console.log("✅ Valid userId added:", userId);
     } else {
       console.log("⚠️ Invalid or missing userId:", userId);
@@ -63,8 +102,9 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         console.log("✅ Created new partner:", partner._id);
         
         // Update user role to partner
-        if (userId && /^[0-9a-fA-F]{24}$/.test(userId)) {
-          await User.findByIdAndUpdate(userId, { role: "partner" });
+        const userIdObjectId = toObjectId(userId);
+        if (userIdObjectId) {
+          await User.findByIdAndUpdate(userIdObjectId, { role: "partner" });
           console.log("✅ Updated user role to partner");
         }
       } catch (createError: any) {
@@ -203,7 +243,15 @@ export const updatePartnerStatus = async (req: Request, res: Response) => {
       });
     }
 
-    const partner = await Partner.findById(partnerId);
+    const partnerIdObject = toObjectId(partnerId);
+    if (!partnerIdObject) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid partner ID"
+      });
+    }
+
+    const partner = await Partner.findById(partnerIdObject);
     if (!partner) {
       return res.status(404).json({
         success: false,
@@ -278,7 +326,15 @@ export const getPartnerByUserId = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
 
-    const partner = await Partner.findOne({ userId });
+    const objectId = toObjectId(userId);
+    if (!objectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID"
+      });
+    }
+
+    const partner = await Partner.findOne({ userId: objectId });
 
     if (!partner) {
       return res.status(404).json({
@@ -300,9 +356,11 @@ export const getPartnerByUserId = async (req: Request, res: Response) => {
     });
   }
 };
+
 export const getMyStatus = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id;
     
     if (!userId) {
       return res.status(401).json({
@@ -311,8 +369,16 @@ export const getMyStatus = async (req: Request, res: Response) => {
       });
     }
     
-    const partner = await Partner.findOne({ userId })
-      .select("status hasCompletedSetup menuItemsCount _id restaurantName");
+    const objectId = toObjectId(userId);
+    if (!objectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID format"
+      });
+    }
+    
+    const partner = await Partner.findOne({ userId: objectId })
+      .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone");
     
     if (!partner) {
       return res.status(404).json({
@@ -325,22 +391,23 @@ export const getMyStatus = async (req: Request, res: Response) => {
       success: true,
       data: partner
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Get partner status error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal server error"
+      message: "Internal server error",
+      error: error.message
     });
   }
 };
-// Add this function to the file, after the getMyStatus function
 
 /**
  * MARK SETUP AS COMPLETE
  */
 export const completeSetup = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id;
     
     if (!userId) {
       return res.status(401).json({
@@ -349,8 +416,16 @@ export const completeSetup = async (req: Request, res: Response) => {
       });
     }
     
+    const objectId = toObjectId(userId);
+    if (!objectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID format"
+      });
+    }
+    
     const partner = await Partner.findOneAndUpdate(
-      { userId },
+      { userId: objectId },
       { 
         hasCompletedSetup: true,
         setupCompletedAt: new Date()
@@ -379,12 +454,14 @@ export const completeSetup = async (req: Request, res: Response) => {
     });
   }
 };
+
 /**
  * UPDATE SHOP STATUS (OPEN/CLOSE)
  */
 export const updateShopStatus = async (req: Request, res: Response) => {
   try {
-    const partnerId = (req as any).user.partnerId;
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id;
     const { isOpen } = req.body;
 
     if (typeof isOpen !== 'boolean') {
@@ -394,8 +471,24 @@ export const updateShopStatus = async (req: Request, res: Response) => {
       });
     }
 
-    const partner = await Partner.findByIdAndUpdate(
-      partnerId,
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    const objectId = toObjectId(userId);
+    if (!objectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID format"
+      });
+    }
+
+    // Find partner by userId
+    const partner = await Partner.findOneAndUpdate(
+      { userId: objectId },
       { isOpen },
       { new: true }
     );
@@ -416,7 +509,8 @@ export const updateShopStatus = async (req: Request, res: Response) => {
     console.error("Error updating shop status:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to update shop status"
+      message: "Failed to update shop status",
+      error: error.message
     });
   }
 };
@@ -426,10 +520,27 @@ export const updateShopStatus = async (req: Request, res: Response) => {
  */
 export const getPartnerStats = async (req: Request, res: Response) => {
   try {
-    const partnerId = (req as any).user.partnerId;
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
 
-    // Find the partner
-    const partner = await Partner.findById(partnerId);
+    const objectId = toObjectId(userId);
+    if (!objectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID format"
+      });
+    }
+
+    // Find the partner by userId
+    const partner = await Partner.findOne({ userId: objectId });
+    
     if (!partner) {
       return res.status(404).json({
         success: false,
@@ -450,7 +561,10 @@ export const getPartnerStats = async (req: Request, res: Response) => {
       joinedDate: partner.createdAt,
       ownerName: partner.ownerName,
       restaurantName: partner.restaurantName,
-      phone: partner.phone
+      phone: partner.phone,
+      address: partner.address,
+      category: partner.category,
+      status: partner.status
     };
 
     return res.json({
@@ -461,7 +575,8 @@ export const getPartnerStats = async (req: Request, res: Response) => {
     console.error("Error getting partner stats:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to get stats"
+      message: "Failed to get stats",
+      error: error.message
     });
   }
 };

@@ -1,13 +1,7 @@
-// backend/src/models/MenuItem.model.ts
 import { Schema, model } from "mongoose";
 
 const MenuItemSchema = new Schema(
   {
-    partnerId: {
-      type: Schema.Types.ObjectId,
-      ref: "Partner",
-      required: true
-    },
     name: {
       type: String,
       required: true,
@@ -24,8 +18,9 @@ const MenuItemSchema = new Schema(
     },
     category: {
       type: String,
-      default: "Other",
-      enum: ["Starters", "Main Course", "Desserts", "Beverages", "Breads", "Other"]
+      required: true,
+      enum: ["Restaurant", "Bakery", "Tiffins", "Fast Food", "Unique Foods", "Other"],
+      default: "Other"
     },
     imageUrl: {
       type: String,
@@ -36,18 +31,23 @@ const MenuItemSchema = new Schema(
       default: true
     },
     preparationTime: {
-      type: Number,
-      default: 15, // minutes
+      type: Number, // in minutes
+      default: 15,
       min: 1
     },
     isAvailable: {
       type: Boolean,
       default: true
     },
+    partnerId: {
+      type: Schema.Types.ObjectId,
+      ref: "Partner",
+      required: true
+    },
     rating: {
       type: Number,
-      default: 4.0,
-      min: 0,
+      default: 4,
+      min: 1,
       max: 5
     }
   },

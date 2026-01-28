@@ -29,6 +29,16 @@ interface MenuItem {
   preparationTime?: number;
 }
 
+// Category options for dropdown
+const CATEGORIES = [
+  "Restaurant",
+  "Bakery", 
+  "Tiffins",
+  "Fast Food",
+  "Unique Foods",
+  "Other"
+];
+
 export default function MenuScreen({ navigation }: any) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -36,11 +46,12 @@ export default function MenuScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [form, setForm] = useState({
     name: "",
     description: "",
     price: "",
-    category: "",
+    category: "Other",
     isVegetarian: true,
     preparationTime: "15",
     isAvailable: true
@@ -120,6 +131,11 @@ export default function MenuScreen({ navigation }: any) {
       return;
     }
 
+    if (!form.category) {
+      Alert.alert("Error", "Please select a category");
+      return;
+    }
+
     try {
       setSaving(true);
       
@@ -128,7 +144,7 @@ export default function MenuScreen({ navigation }: any) {
         name: form.name.trim(),
         description: form.description.trim(),
         price: parseFloat(form.price),
-        category: form.category.trim() || "Other",
+        category: form.category,
         isVegetarian: form.isVegetarian,
         preparationTime: parseInt(form.preparationTime) || 15,
         isAvailable: form.isAvailable,
@@ -148,7 +164,7 @@ export default function MenuScreen({ navigation }: any) {
         console.log("Add response:", response.data);
         Alert.alert("Success", "Menu item added successfully");
         
-        // If this was the first item, you might want to mark setup as complete
+        // If this was the first item, mark setup as complete
         if (menuItems.length === 0) {
           try {
             await api.post("/partners/complete-setup");
@@ -175,6 +191,8 @@ export default function MenuScreen({ navigation }: any) {
         errorMessage = error.response.data.message;
       } else if (error.response?.data?.errors) {
         errorMessage = error.response.data.errors.join(", ");
+      } else if (error.message) {
+        errorMessage = error.message;
       }
       
       Alert.alert("Error", errorMessage);
@@ -227,12 +245,13 @@ export default function MenuScreen({ navigation }: any) {
       name: "",
       description: "",
       price: "",
-      category: "",
+      category: "Other",
       isVegetarian: true,
       preparationTime: "15",
       isAvailable: true
     });
     setImageUri(null);
+    setShowCategoryDropdown(false);
   };
 
   const renderItem = ({ item }: { item: MenuItem }) => (
@@ -422,13 +441,37 @@ export default function MenuScreen({ navigation }: any) {
                 editable={!saving}
               />
               
-              <TextInput
-                style={styles.input}
-                placeholder="Category (e.g., Starters, Main Course)"
-                value={form.category}
-                onChangeText={text => setForm({...form, category: text})}
-                editable={!saving}
-              />
+              {/* Category Selector */}
+              <View style={styles.categoryContainer}>
+                <Text style={styles.categoryLabel}>Category *</Text>
+                <TouchableOpacity
+                  style={styles.categorySelector}
+                  onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                  disabled={saving}
+                >
+                  <Text style={styles.categorySelectorText}>
+                    {form.category}
+                  </Text>
+                  <Text style={styles.dropdownArrow}>▼</Text>
+                </TouchableOpacity>
+                
+                {showCategoryDropdown && (
+                  <View style={styles.categoryDropdown}>
+                    {CATEGORIES.map((category) => (
+                      <TouchableOpacity
+                        key={category}
+                        style={styles.categoryOption}
+                        onPress={() => {
+                          setForm({...form, category});
+                          setShowCategoryDropdown(false);
+                        }}
+                      >
+                        <Text style={styles.categoryOptionText}>{category}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
               
               <TextInput
                 style={styles.input}
@@ -761,6 +804,59 @@ const styles = StyleSheet.create({
   textArea: {
     height: 80,
     textAlignVertical: "top"
+  },
+  categoryContainer: {
+    marginBottom: 12,
+    position: "relative"
+  },
+  categoryLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 6,
+    fontWeight: "500"
+  },
+  categorySelector: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: "#fafafa",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  categorySelectorText: {
+    fontSize: 16,
+    color: "#333"
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: "#666"
+  },
+  categoryDropdown: {
+    position: "absolute",
+    top: 70,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3
+  },
+  categoryOption: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0"
+  },
+  categoryOptionText: {
+    fontSize: 16,
+    color: "#333"
   },
   switchContainer: {
     flexDirection: "row",

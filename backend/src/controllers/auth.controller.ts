@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { Types } from "mongoose";
 import User from "../models/User.model";
-import Partner from "../models/Partner.model"; // ADD THIS IMPORT
+import Partner from "../models/Partner.model";
 import { OTPService } from "../services/otp.service";
-import { generateToken } from "../utils/jwt";
 import { successResponse, errorResponse } from "../utils/response";
 
 /**
@@ -85,10 +85,24 @@ export const verifyOTP = async (req: Request, res: Response) => {
     // Find partner if user is a partner
     let partnerId = null;
     if (user.role === "partner") {
-      const partner = await Partner.findOne({ userId: user._id });
+      // Try to find partner by userId first
+      let partner = await Partner.findOne({ userId: user._id });
+      
+      if (!partner) {
+        // If not found by userId, try by phone
+        partner = await Partner.findOne({ phone });
+        
+        // If found by phone, update userId
+        if (partner && !partner.userId) {
+          partner.userId = user._id;
+          await partner.save();
+          console.log("✅ Updated partner userId");
+        }
+      }
+      
       if (partner) {
-        partnerId = partner._id;
-        console.log("✅ Found partner profile:", partner._id);
+        partnerId = partner._id.toString();
+        console.log("✅ Found partner profile:", partnerId);
       } else {
         console.log("📝 No partner profile yet - user needs to onboard");
       }
@@ -96,7 +110,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
     
     // Generate token with partnerId if available
     const tokenPayload: any = {
-      id: user._id,
+      id: user._id.toString(),
       phone: user.phone,
       role: user.role,
       name: user.name
@@ -113,17 +127,17 @@ export const verifyOTP = async (req: Request, res: Response) => {
     );
     
     console.log("✅ OTP Verified Successfully for:", user.role);
-    console.log("✅ Token payload includes partnerId:", !!partnerId);
+    console.log("✅ Token payload includes partnerId:", !!partnerId, partnerId);
     
     return res.json({
       success: true,
       token,
       user: {
-        id: user._id,
+        id: user._id.toString(),
         phone: user.phone,
         name: user.name,
         role: user.role,
-        partnerId: partnerId // Include partnerId in response for frontend
+        partnerId: partnerId
       }
     });
     
