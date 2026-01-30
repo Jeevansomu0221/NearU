@@ -1,5 +1,4 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
 // Import screens
@@ -15,26 +14,24 @@ export type RootStackParamList = {
   Otp: { phone: string };
   Home: undefined;
   ShopDetail: { shopId: string };
-  Cart: undefined; // Add this
+  Cart: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        initialRouteName="Login"
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Otp" component={OtpScreen} />
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="ShopDetail" component={ShopDetailScreen} />
-        <Stack.Screen name="Cart" component={CartScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <Stack.Navigator
+      initialRouteName="Login"
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Otp" component={OtpScreen} />
+      <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="ShopDetail" component={ShopDetailScreen} />
+      <Stack.Screen name="Cart" component={CartScreen} />
+    </Stack.Navigator>
   );
 }
