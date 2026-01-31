@@ -20,61 +20,77 @@ const PartnerSchema = new Schema(
       unique: true
     },
     
-    // DETAILED ADDRESS FIELDS
+    // Detailed address structure as requested
     address: {
-      type: String,
-      required: true
-    },
-    // Detailed address components
-    addressLine1: {
-      type: String,
-      required: true
-    },
-    addressLine2: {
-      type: String,
-      default: ""
-    },
-    areaColony: {
-      type: String,
-      required: true
-    },
-    landmark: {
-      type: String,
-      default: ""
-    },
-    city: {
-      type: String,
-      required: true
-    },
-    state: {
-      type: String,
-      required: true
-    },
-    pincode: {
-      type: String,
-      required: true,
-      validate: {
-        validator: function(v: string) {
-          return /^\d{6}$/.test(v);
+      state: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      city: {  // ADDED: City/Town field
+        type: String,
+        required: true,
+        trim: true
+      },
+      pincode: {
+        type: String,
+        required: true,
+        validate: {
+          validator: function(v: string) {
+            return /^\d{6}$/.test(v);
+          },
+          message: 'Pincode must be 6 digits'
         },
-        message: 'Pincode must be 6 digits'
+        trim: true
+      },
+      area: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      colony: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      roadStreet: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      nearbyPlaces: [{
+        type: String,
+        trim: true
+      }],
+      // Google Maps link is now compulsory
+      googleMapsLink: {
+        type: String,
+        required: true,
+        validate: {
+          validator: function(v: string) {
+            return v.startsWith('https://maps.app.goo.gl/') || 
+                   v.startsWith('https://goo.gl/maps/') ||
+                   v.startsWith('https://www.google.com/maps/') ||
+                   v.startsWith('https://www.google.co.in/maps/');
+          },
+          message: 'Please provide a valid Google Maps link'
+        }
       }
     },
-    roadNo: {
-      type: String,
-      default: ""
-    },
     
-    // Google Maps link is now compulsory
-    googleMapsLink: {
-      type: String,
-      required: true
-    },
-    
+    // UPDATE: Add sweets and ice creams to categories
     category: {
       type: String,
       required: true,
-      enum: ["bakery", "mini-restaurant", "tiffin-center", "fast-food", "cafe", "dessert-parlor", "other"]
+      enum: [
+        "bakery", 
+        "mini-restaurant", 
+        "tiffin-center", 
+        "fast-food", 
+        "sweets",       // ADDED
+        "ice-creams",   // ADDED
+        "other"
+      ]
     },
     // ADD THIS: User reference for authentication - REMOVE unique constraint
     userId: {
@@ -149,7 +165,9 @@ PartnerSchema.index(
 PartnerSchema.index({ status: 1 });
 PartnerSchema.index({ phone: 1 });
 // Index for location-based queries
-PartnerSchema.index({ city: 1, state: 1 });
-PartnerSchema.index({ pincode: 1 });
+PartnerSchema.index({ 'address.pincode': 1 });
+PartnerSchema.index({ 'address.area': 1 });
+PartnerSchema.index({ 'address.city': 1 });  // ADDED index for city
+PartnerSchema.index({ 'address.state': 1 });
 
 export default model("Partner", PartnerSchema);

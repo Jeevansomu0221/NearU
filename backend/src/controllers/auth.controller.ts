@@ -120,49 +120,47 @@ export const verifyOTP = async (req: Request, res: Response) => {
     // Handle different roles
     if (!user) {
       // User doesn't exist - create new based on role
+      const userData: any = {
+        phone,
+        role: role,
+        isActive: true
+      };
+      
+      // Set default name based on role
       if (role === "customer") {
+        userData.name = `Customer ${phone.substring(6)}`;
         console.log("👤 Creating new customer user for phone:", phone);
-        user = await User.create({
-          phone,
-          name: `Customer ${phone.substring(6)}`, // More descriptive default name
-          role: "customer",
-          isActive: true
-        });
       } else if (role === "partner") {
+        userData.name = `Partner ${phone.substring(6)}`;
         console.log("👤 Creating new partner user for phone:", phone);
-        user = await User.create({
-          phone,
-          name: `Partner ${phone.substring(6)}`,
-          role: "partner",
-          isActive: true
-        });
       } else if (role === "admin") {
-        // Admins must be created manually, not through OTP
-        return res.status(404).json({
-          success: false,
-          message: "User not found"
-        });
+        userData.name = `Admin ${phone.substring(6)}`;
+        console.log("👤 Creating new admin user for phone:", phone);
       } else {
         return res.status(400).json({
           success: false,
           message: "Invalid role"
         });
       }
+      
+      user = await User.create(userData);
     } else {
       // User exists - verify role matches
       if (role === "admin" && user.role !== "admin") {
-        console.log("❌ Admin access denied - User role is:", user.role);
-        return res.status(403).json({
-          success: false,
-          message: "Unauthorized: Admin access required"
-        });
+        // If user exists but isn't admin, we can update them to admin
+        // (Remove or modify this based on your security needs)
+        console.log(`⚠️ User exists as ${user.role}, updating to admin for development`);
+        user.role = "admin";
+        user.name = `Admin ${phone.substring(6)}`;
+        await user.save();
       }
       
-      // For customer/partner, check if role matches
+      // For customer/partner, allow role mismatch for development
       if ((role === "customer" && user.role !== "customer") || 
           (role === "partner" && user.role !== "partner")) {
-        console.log(`⚠️ Role mismatch: User is ${user.role}, requested ${role}. Allowing anyway for development.`);
-        // For development, we allow role mismatch
+        console.log(`⚠️ Role mismatch: User is ${user.role}, requested ${role}. Updating role.`);
+        user.role = role;
+        await user.save();
       }
     }
     

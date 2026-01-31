@@ -1,4 +1,5 @@
-﻿import { Router } from "express";
+﻿// FIXED version - backend/src/routes/partner.routes.ts
+import { Router } from "express";
 import {
   submitPartnerProfile,
   getPartnerStatus,
@@ -10,33 +11,57 @@ import {
   getMyStatus,
   completeSetup
 } from "../controllers/partner.controller";
-import menuRoutes from "./menu.routes"; // Import menu routes
+
+import menuRoutes from "./menu.routes";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { roleMiddleware } from "../middlewares/role.middleware";
 
 const router = Router();
 
-// Public routes
+/* ======================================================
+   PUBLIC ROUTES
+====================================================== */
 router.post("/onboard", submitPartnerProfile);
 router.get("/status/:phone", getPartnerStatus);
 
-// Protected partner routes
-router.use(authMiddleware);
+/* ======================================================
+   AUTHENTICATED ROUTES (customer OR partner)
+====================================================== */
 
-// Partner status and setup
-router.get("/my-status", roleMiddleware(["partner"]), getMyStatus);
-router.post("/complete-setup", roleMiddleware(["partner"]), completeSetup);
+// IMPORTANT: Don't apply authMiddleware globally here
+// Apply it individually to routes that need it
 
-// Menu Management - Mount menu routes under /partners/menu
-router.use("/menu", roleMiddleware(["partner"]), menuRoutes);
+router.get("/my-status", authMiddleware, getMyStatus);
+router.post("/complete-setup", authMiddleware, completeSetup);
 
-// Shop Management
-router.put("/shop-status", roleMiddleware(["partner"]), updateShopStatus);
-router.get("/stats", roleMiddleware(["partner"]), getPartnerStats);
+/* ======================================================
+   PARTNER-ONLY ROUTES (approved partners)
+====================================================== */
+router.put("/shop-status", authMiddleware, roleMiddleware(["partner"]), updateShopStatus);
+router.get("/stats", authMiddleware, roleMiddleware(["partner"]), getPartnerStats);
 
-// Admin routes
-router.get("/admin/pending", roleMiddleware(["admin"]), getPendingPartners);
-router.get("/admin/all", roleMiddleware(["admin"]), getAllPartners);
-router.put("/admin/:partnerId/status", roleMiddleware(["admin"]), updatePartnerStatus);
+// Menu Management
+router.use("/menu", authMiddleware, roleMiddleware(["partner"]), menuRoutes);
+
+/* ======================================================
+   ADMIN ROUTES
+====================================================== */
+router.get("/admin/pending", 
+  authMiddleware,
+  roleMiddleware(["admin"]), 
+  getPendingPartners
+);
+
+router.get("/admin/all", 
+  authMiddleware,
+  roleMiddleware(["admin"]), 
+  getAllPartners
+);
+
+router.put("/admin/:partnerId/status", 
+  authMiddleware,
+  roleMiddleware(["admin"]), 
+  updatePartnerStatus
+);
 
 export default router;

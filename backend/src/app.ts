@@ -10,11 +10,12 @@ import deliveryRoutes from "./routes/delivery.routes";
 
 const app = express();
 
-// Configure CORS to allow your Expo app
+// Configure CORS to allow your Expo app AND admin panel
 app.use(cors({
   origin: [
     'http://localhost:8081', // For Expo web
     'http://localhost:19006', // For Expo dev server
+    'http://localhost:5173', // For Vite dev server (admin panel) - ADD THIS
     'exp://10.3.128.220:8081', // For Expo on your network
     /\.exp\.direct$/, // For Expo direct connections
   ],

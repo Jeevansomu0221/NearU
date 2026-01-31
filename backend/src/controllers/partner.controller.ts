@@ -43,21 +43,74 @@ const toObjectId = (id: any): Types.ObjectId | null => {
 /**
  * CREATE / UPDATE PARTNER PROFILE
  */
+/**
+ * CREATE / UPDATE PARTNER PROFILE
+ */
 export const submitPartnerProfile = async (req: Request, res: Response) => {
   try {
     const {
       ownerName,
       restaurantName,
       phone,
-      address,
-      googleMapsLink,
+    } = req.body;
+
+    // NEW: Extract address details from new structure
+    const {
+      address: addressData,
       category,
       documents,
-      userId // Get userId from auth
+      userId
     } = req.body;
 
     console.log("📝 Submitting partner profile for phone:", phone);
     console.log("📝 UserId received:", userId);
+    console.log("📝 Address data received:", addressData);
+
+    // Validate required address fields
+    if (!addressData) {
+      return res.status(400).json({
+        success: false,
+        message: "Address details are required"
+      });
+    }
+
+    const { 
+      state, 
+      city,     // ADDED
+      pincode, 
+      area, 
+      colony, 
+      roadStreet, 
+      nearbyPlaces, 
+      googleMapsLink 
+    } = addressData;
+
+    // Validate required fields
+    if (!state || !city || !pincode || !area || !colony || !roadStreet || !googleMapsLink) {
+      return res.status(400).json({
+        success: false,
+        message: "All address fields (state, city, pincode, area, colony, roadStreet, googleMapsLink) are required"
+      });
+    }
+
+    // Validate pincode format
+    if (!/^\d{6}$/.test(pincode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Pincode must be 6 digits"
+      });
+    }
+
+    // Validate Google Maps link
+    if (!googleMapsLink.startsWith('https://maps.app.goo.gl/') && 
+        !googleMapsLink.startsWith('https://goo.gl/maps/') &&
+        !googleMapsLink.startsWith('https://www.google.com/maps/') &&
+        !googleMapsLink.startsWith('https://www.google.co.in/maps/')) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid Google Maps link"
+      });
+    }
 
     let partner = await Partner.findOne({ phone });
 
@@ -67,8 +120,17 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       restaurantName,
       shopName: restaurantName,
       phone,
-      address,
-      googleMapsLink: googleMapsLink || "",
+      // NEW: Address structure
+      address: {
+        state: state.trim(),
+        city: city.trim(),  // ADDED
+        pincode: pincode.trim(),
+        area: area.trim(),
+        colony: colony.trim(),
+        roadStreet: roadStreet.trim(),
+        nearbyPlaces: Array.isArray(nearbyPlaces) ? nearbyPlaces.map(p => p.trim()) : [],
+        googleMapsLink: googleMapsLink.trim()
+      },
       category: category || "other",
       documents: {
         fssaiUrl: documents?.fssaiUrl || "",
@@ -83,7 +145,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       closingTime: "22:00",
       rating: 4,
       menuItemsCount: 0,
-      hasCompletedSetup: false // Add this field
+      hasCompletedSetup: false
     };
 
     // IMPORTANT: Only add userId if it's a valid ObjectId string
@@ -164,6 +226,8 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     });
   }
 };
+
+// ... rest of the controller functions remain the same ...
 
 /**
  * GET PARTNER STATUS

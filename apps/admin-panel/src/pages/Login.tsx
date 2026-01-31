@@ -14,61 +14,120 @@ export default function Login() {
   const navigate = useNavigate();
 
   const sendOtp = async () => {
-    if (!phone) {
-      setError("Phone number required");
+  if (!phone) {
+    setError("Phone number required");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setError("");
+    console.log("Sending OTP to:", phone);
+    
+    const payload = {
+      phone: phone,
+      role: "admin"  // Make sure this is included
+    };
+    
+    console.log("Sending OTP payload:", payload);
+    
+    await api.post("/auth/send-otp", payload);
+    setStep("OTP");
+  } catch (err: any) {
+    console.error("Send OTP error details:", {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status
+    });
+    setError(`Failed to send OTP: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// apps/admin-panel/src/pages/Login.tsx
+// ... existing code ...
+
+// In verifyOtp function in Login.tsx
+const verifyOtp = async () => {
+  if (!otp) {
+    setError("OTP required");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setError("");
+    console.log("Verifying OTP for:", phone);
+    
+    // Add role parameter
+    const payload = {
+      phone: phone,
+      otp: otp,
+      role: "admin"  // Explicitly send admin role
+    };
+    
+    console.log("Sending payload:", payload);
+    
+    const res = await api.post("/auth/verify-otp", payload);
+    console.log("Login response:", res.data);
+    
+    // Check if user is admin
+    if (res.data.user?.role !== "admin") {
+      console.error("User is not admin, role is:", res.data.user?.role);
+      setError("Unauthorized: Admin access required");
       return;
     }
-
+    
+    // Debug: Before saving
+    console.log("🔍 Before saving token:", {
+      token: res.data.token,
+      tokenLength: res.data.token?.length,
+      userRole: res.data.user?.role
+    });
+    
+    // Save token and user info
+    setToken(res.data.token);
+    localStorage.setItem("adminUser", JSON.stringify(res.data.user));
+    localStorage.setItem("adminPhone", phone);
+    
+    // Debug: After saving
+    console.log("🔍 After saving - localStorage:", {
+      adminToken: localStorage.getItem('adminToken'),
+      adminUser: localStorage.getItem('adminUser'),
+      adminPhone: localStorage.getItem('adminPhone')
+    });
+    
+    // Decode and check JWT token
     try {
-      setLoading(true);
-      setError("");
-      console.log("Sending OTP to:", phone);
-      await api.post("/auth/send-otp", { phone, role: "admin" });
-      setStep("OTP");
-    } catch (err: any) {
-      console.error("Send OTP error:", err);
-      setError(`Failed to send OTP: ${err.message}`);
-    } finally {
-      setLoading(false);
+      const tokenParts = res.data.token.split('.');
+      const payload = JSON.parse(atob(tokenParts[1]));
+      console.log("🔍 Decoded JWT payload:", payload);
+      console.log("🔍 Token role:", payload.role);
+    } catch (e) {
+      console.error("Failed to decode JWT:", e);
     }
-  };
+    
+    // Navigate to partners page
+    navigate("/partners");
+  } catch (err: any) {
+    console.error("Verify OTP error details:", {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status
+    });
+    setError(err.response?.data?.message || "Invalid OTP");
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const verifyOtp = async () => {
-    if (!otp) {
-      setError("OTP required");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError("");
-      console.log("Verifying OTP for:", phone);
-      const res = await api.post("/auth/verify-otp", { phone, otp });
-      console.log("Login response:", res.data);
-      
-      // Check if user is admin
-      if (res.data.user?.role !== "admin") {
-        setError("Unauthorized: Admin access required");
-        return;
-      }
-      
-      // Save token and user info
-      setToken(res.data.token);
-      localStorage.setItem("adminUser", JSON.stringify(res.data.user));
-      localStorage.setItem("adminPhone", phone);
-      
-      // Navigate to partners page instead of orders
-      navigate("/partners");
-    } catch (err: any) {
-      console.error("Verify OTP error:", err);
-      setError(err.response?.data?.message || "Invalid OTP");
-    } finally {
-      setLoading(false);
-    }
-  };
+// ... rest of the code ...
 
   return (
     <div className="login-container">
+      // In Login.tsx, add a debug button
+
       <div className="login-box">
         <h2>Admin Login</h2>
 
