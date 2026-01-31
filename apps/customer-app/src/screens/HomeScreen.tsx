@@ -8,25 +8,32 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // ADD THIS
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import apiClient from '../api/client';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
+interface AddressObject {
+  state: string;
+  city: string;
+  pincode: string;
+  area: string;
+  colony: string;
+  roadStreet: string;
+  nearbyPlaces: string[];
+  googleMapsLink: string;
+}
+
 interface Shop {
   _id: string;
   shopName: string;
+  restaurantName?: string;
   category: string;
-  address: string;
+  address: string | AddressObject; // Can be string OR object
   isOpen: boolean;
   rating: number;
-}
-
-interface ApiResponse {
-  success: boolean;
-  data: Shop[];
 }
 
 interface Props {
@@ -46,11 +53,10 @@ export default function HomeScreen({ navigation }: Props) {
       setLoading(true);
       console.log('📱 Fetching nearby shops...');
       
-      // Debug: Check token
       const token = await AsyncStorage.getItem('token');
       console.log('🔑 Token exists:', !!token);
       
-      const response: any = await apiClient.get('/users/nearby-shops');
+      const response: any = await apiClient.get('/users/shops');
       console.log('📦 API Response:', response);
       
       let shopsData: Shop[] = [];
@@ -73,19 +79,51 @@ export default function HomeScreen({ navigation }: Props) {
     }
   };
 
+  // Helper function to format address whether it's string or object
+  const formatAddress = (address: string | AddressObject): string => {
+    if (!address) return "Address not available";
+    
+    if (typeof address === 'string') {
+      return address;
+    }
+    
+    if (typeof address === 'object') {
+      // Handle the object address structure
+      const addr = address as AddressObject;
+      const parts = [
+        addr.roadStreet,
+        addr.colony,
+        addr.area,
+        addr.city
+      ].filter(Boolean);
+      
+      return parts.join(', ');
+    }
+    
+    return "Address not available";
+  };
+
   const renderShopItem = ({ item }: { item: Shop }) => (
     <TouchableOpacity
       style={styles.shopCard}
-      onPress={() => navigation.navigate('ShopDetail', { shopId: item._id })} // Change th
+      onPress={() => navigation.navigate('ShopDetail', { 
+        shopId: item._id,
+        shop: item 
+      })}
     >
       <View style={styles.shopHeader}>
-        <Text style={styles.shopName}>{item.shopName}</Text>
+        <Text style={styles.shopName}>{item.shopName || item.restaurantName}</Text>
         <View style={[styles.statusDot, item.isOpen ? styles.open : styles.closed]}>
           <Text style={styles.statusText}>{item.isOpen ? 'Open' : 'Closed'}</Text>
         </View>
       </View>
       <Text style={styles.shopCategory}>{item.category}</Text>
-      <Text style={styles.shopAddress}>{item.address}</Text>
+      
+      {/* Fixed: Use formatAddress helper */}
+      <Text style={styles.shopAddress}>
+        {formatAddress(item.address)}
+      </Text>
+      
       <Text style={styles.shopRating}>⭐ {item.rating?.toFixed(1) || '0.0'}</Text>
     </TouchableOpacity>
   );

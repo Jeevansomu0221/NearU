@@ -8,12 +8,40 @@ import HomeScreen from '../screens/HomeScreen';
 import ShopDetailScreen from '../screens/ShopDetailScreen';
 import CartScreen from '../screens/CartScreen';
 
+// Define Address interface
+export interface Address {
+  state?: string;
+  city?: string;
+  pincode?: string;
+  area?: string;
+  colony?: string;
+  roadStreet?: string;
+  nearbyPlaces?: string[];
+  googleMapsLink?: string;
+}
+
+// Define Shop interface based on actual API response
+export interface Shop {
+  _id: string;
+  shopName: string;
+  restaurantName?: string; // Make optional
+  category: string;
+  address: string | Address; // Can be string or object
+  isOpen: boolean;
+  rating: number;
+  closingTime?: string;
+  openingTime?: string;
+}
+
 // Define stack param list
 export type RootStackParamList = {
   Login: undefined;
   Otp: { phone: string };
   Home: undefined;
-  ShopDetail: { shopId: string };
+  ShopDetail: { 
+    shopId: string;
+    shop?: Shop; // Add optional shop parameter
+  };
   Cart: undefined;
 };
 
