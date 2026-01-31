@@ -361,30 +361,42 @@ export const getMyStatus = async (req: Request, res: Response) => {
   try {
     const authReq = req as AuthRequest;
     const userId = authReq.user?.id;
+    const userPhone = authReq.user?.phone;
     
-    if (!userId) {
+    if (!userId || !userPhone) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized"
+        message: "Unauthorized - missing user info"
       });
     }
+    
+    // Try to find partner by userId first
+    let partner = null;
     
     const objectId = toObjectId(userId);
-    if (!objectId) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user ID format"
-      });
+    if (objectId) {
+      partner = await Partner.findOne({ userId: objectId })
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen");
     }
     
-    const partner = await Partner.findOne({ userId: objectId })
-      .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone");
+    // If not found by userId, try to find by phone number
+    if (!partner && userPhone) {
+      partner = await Partner.findOne({ phone: userPhone })
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen");
+    }
     
     if (!partner) {
       return res.status(404).json({
         success: false,
         message: "Partner not found"
       });
+    }
+    
+    // If partner exists but doesn't have userId set, update it
+    if (objectId && !partner.userId) {
+      partner.userId = objectId;
+      await partner.save();
+      console.log(`✅ Updated partner ${partner._id} with userId ${userId}`);
     }
     
     res.json({

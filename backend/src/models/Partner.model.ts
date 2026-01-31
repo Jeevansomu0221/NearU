@@ -19,14 +19,58 @@ const PartnerSchema = new Schema(
       required: true,
       unique: true
     },
+    
+    // DETAILED ADDRESS FIELDS
     address: {
       type: String,
       required: true
     },
-    // ADD THIS: Google Maps link for shop location
-    googleMapsLink: {
-      type: String
+    // Detailed address components
+    addressLine1: {
+      type: String,
+      required: true
     },
+    addressLine2: {
+      type: String,
+      default: ""
+    },
+    areaColony: {
+      type: String,
+      required: true
+    },
+    landmark: {
+      type: String,
+      default: ""
+    },
+    city: {
+      type: String,
+      required: true
+    },
+    state: {
+      type: String,
+      required: true
+    },
+    pincode: {
+      type: String,
+      required: true,
+      validate: {
+        validator: function(v: string) {
+          return /^\d{6}$/.test(v);
+        },
+        message: 'Pincode must be 6 digits'
+      }
+    },
+    roadNo: {
+      type: String,
+      default: ""
+    },
+    
+    // Google Maps link is now compulsory
+    googleMapsLink: {
+      type: String,
+      required: true
+    },
+    
     category: {
       type: String,
       required: true,
@@ -104,5 +148,8 @@ PartnerSchema.index(
 // Index for faster status queries
 PartnerSchema.index({ status: 1 });
 PartnerSchema.index({ phone: 1 });
+// Index for location-based queries
+PartnerSchema.index({ city: 1, state: 1 });
+PartnerSchema.index({ pincode: 1 });
 
 export default model("Partner", PartnerSchema);

@@ -30,11 +30,17 @@ interface PartnerStatusData {
   phone?: string;
 }
 
-interface PartnerStatusResponse {
-  success: boolean;
+interface PartnerStatusSuccessResponse {
+  success: true;
   data: PartnerStatusData;
-  message?: string;
 }
+
+interface PartnerStatusErrorResponse {
+  success: false;
+  message: string;
+}
+
+type PartnerStatusResponse = PartnerStatusSuccessResponse | PartnerStatusErrorResponse;
 
 export default function AppNavigator() {
   const [initialRoute, setInitialRoute] = useState<string>("Loading");
@@ -74,30 +80,35 @@ export default function AppNavigator() {
       console.log("🔍 Checking partner status...");
       
       const response = await api.get<PartnerStatusResponse>("/partners/my-status");
-      const { success, data, message } = response.data;
+      const responseData = response.data;
       
-      console.log("✅ Partner status response:", { success, status: data?.status });
+      console.log("✅ Partner status response:", responseData);
       
-      if (!success || !data) {
-        console.log("❌ Invalid response, redirecting to Login");
-        await clearAuthData();
-        setInitialRoute("Login");
+      // Check if the response indicates no partner found
+      if (!responseData.success) {
+        console.log("📝 Partner not found - message:", responseData.message);
+        // If partner not found, go to onboarding
+        setInitialRoute("Onboarding");
+        setLoading(false);
         return;
       }
       
+      // At this point, we know responseData has the 'data' property
+      const partnerData = responseData.data;
+      
       // Determine initial route based on partner status
-      switch (data.status) {
+      switch (partnerData.status) {
         case "PENDING":
           console.log("📝 Status: PENDING");
           setInitialRoute("PendingApproval");
           break;
         case "APPROVED":
           console.log("✅ Status: APPROVED", { 
-            hasCompletedSetup: data.hasCompletedSetup, 
-            menuItemsCount: data.menuItemsCount 
+            hasCompletedSetup: partnerData.hasCompletedSetup, 
+            menuItemsCount: partnerData.menuItemsCount 
           });
           // Check if they've completed setup or have menu items
-          if (data.hasCompletedSetup || (data.menuItemsCount && data.menuItemsCount > 0)) {
+          if (partnerData.hasCompletedSetup || (partnerData.menuItemsCount && partnerData.menuItemsCount > 0)) {
             setInitialRoute("Dashboard");
           } else {
             setInitialRoute("WelcomeApproved");
@@ -112,8 +123,8 @@ export default function AppNavigator() {
           setInitialRoute("Login");
           break;
         default:
-          console.log("❓ Unknown status:", data.status);
-          setInitialRoute("Login");
+          console.log("❓ Unknown status:", partnerData.status);
+          setInitialRoute("Onboarding");
       }
     } catch (error: any) {
       console.error("❌ Partner status check failed:", {
@@ -130,13 +141,14 @@ export default function AppNavigator() {
         setInitialRoute("Login");
       } else if (error.response?.status === 404) {
         console.log("📝 Partner not found - needs onboarding");
+        // If partner not found (404), go to onboarding
         setInitialRoute("Onboarding");
       } else if (!error.response) {
         console.log("🌐 Network error - check backend connection");
         setInitialRoute("Login");
       } else {
-        console.log("⚠️ Other error, redirecting to Login");
-        setInitialRoute("Login");
+        console.log("⚠️ Other error, redirecting to Onboarding");
+        setInitialRoute("Onboarding");
       }
     } finally {
       setLoading(false);
