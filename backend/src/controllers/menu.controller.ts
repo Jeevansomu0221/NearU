@@ -14,11 +14,73 @@ interface AuthRequest extends Request {
 }
 
 /**
- * GET PARTNER MENU ITEMS
+ * GET PUBLIC PARTNER MENU (for customers)
+ * No authentication required
+ */
+/**
+ * GET PARTNER'S OWN MENU (for authenticated partners)
+ * Requires authentication and partner role
+ */
+/**
+ * GET PUBLIC PARTNER MENU (for customers)
+ * No authentication required
+ */
+export const getPublicPartnerMenu = async (req: Request, res: Response) => {
+  try {
+    console.log("📋 getPublicPartnerMenu called");
+    const { partnerId } = req.params;
+    
+    if (!partnerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Partner ID is required"
+      });
+    }
+
+    // Find the partner to ensure they exist
+    const partner = await Partner.findById(partnerId);
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found"
+      });
+    }
+
+    // Get only available menu items
+    const menuItems = await MenuItem.find({ 
+      partnerId: partnerId,
+      isAvailable: true 
+    }).sort({ createdAt: -1 });
+
+    console.log(`✅ Found ${menuItems.length} menu items for partner: ${partnerId}`);
+
+    return res.json({
+      success: true,
+      data: menuItems,
+      count: menuItems.length,
+      partner: {
+        name: partner.restaurantName || partner.shopName,
+        isOpen: partner.isOpen,
+        rating: partner.rating
+      }
+    });
+  } catch (error: any) {
+    console.error("❌ Error getting public partner menu:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get menu items",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * GET PARTNER'S OWN MENU (for authenticated partners)
+ * Requires authentication and partner role
  */
 export const getPartnerMenu = async (req: Request, res: Response) => {
   try {
-    console.log("📋 getPartnerMenu called");
+    console.log("📋 getPartnerMenu called (for partners)");
     const authReq = req as AuthRequest;
     const userId = authReq.user?.id;
     const userPhone = authReq.user?.phone;

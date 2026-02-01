@@ -2,7 +2,8 @@ import { Router } from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { roleMiddleware } from "../middlewares/role.middleware";
 import {
-  getPartnerMenu,
+  getPartnerMenu,           // Add this back
+  getPublicPartnerMenu,     // Keep this
   addMenuItem,
   updateMenuItem,
   deleteMenuItem,
@@ -11,11 +12,15 @@ import {
 
 const router = Router();
 
-// All menu routes require partner authentication
+// PUBLIC ROUTE: Get partner's menu (for customers)
+// This doesn't require authentication
+router.get("/partner/:partnerId", getPublicPartnerMenu);
+
+// PROTECTED ROUTES: All other menu routes require partner authentication
 router.use(authMiddleware);
 router.use(roleMiddleware(["partner"]));
 
-// Menu management routes
+// Menu management routes (partner only)
 router.get("/", getPartnerMenu);
 router.post("/", addMenuItem);
 router.put("/:id", updateMenuItem);
