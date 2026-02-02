@@ -18,17 +18,14 @@ const toObjectId = (id: any): Types.ObjectId | null => {
   try {
     if (!id) return null;
     
-    // If it's an array, take the first element
     if (Array.isArray(id)) {
       id = id[0];
     }
     
-    // Ensure it's a string
     if (typeof id !== 'string') {
       id = String(id);
     }
     
-    // Check if it's a valid ObjectId
     if (id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id)) {
       return new Types.ObjectId(id);
     }
@@ -43,9 +40,6 @@ const toObjectId = (id: any): Types.ObjectId | null => {
 /**
  * CREATE / UPDATE PARTNER PROFILE
  */
-/**
- * CREATE / UPDATE PARTNER PROFILE
- */
 export const submitPartnerProfile = async (req: Request, res: Response) => {
   try {
     const {
@@ -54,7 +48,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       phone,
     } = req.body;
 
-    // NEW: Extract address details from new structure
     const {
       address: addressData,
       category,
@@ -63,8 +56,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     } = req.body;
 
     console.log("📝 Submitting partner profile for phone:", phone);
-    console.log("📝 UserId received:", userId);
-    console.log("📝 Address data received:", addressData);
 
     // Validate required address fields
     if (!addressData) {
@@ -76,7 +67,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
 
     const { 
       state, 
-      city,     // ADDED
+      city,
       pincode, 
       area, 
       colony, 
@@ -114,16 +105,15 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
 
     let partner = await Partner.findOne({ phone });
 
-    // Prepare partner data - CAREFULLY handle userId
+    // Prepare partner data
     const partnerData: any = {
       ownerName,
       restaurantName,
       shopName: restaurantName,
       phone,
-      // NEW: Address structure
       address: {
         state: state.trim(),
-        city: city.trim(),  // ADDED
+        city: city.trim(),
         pincode: pincode.trim(),
         area: area.trim(),
         colony: colony.trim(),
@@ -145,17 +135,14 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       closingTime: "22:00",
       rating: 4,
       menuItemsCount: 0,
-      hasCompletedSetup: false
+      hasCompletedSetup: false,
+      shopImageUrl: "" // Initialize empty
     };
 
-    // IMPORTANT: Only add userId if it's a valid ObjectId string
+    // Only add userId if it's valid
     const objectId = toObjectId(userId);
     if (objectId) {
       partnerData.userId = objectId;
-      console.log("✅ Valid userId added:", userId);
-    } else {
-      console.log("⚠️ Invalid or missing userId:", userId);
-      // Don't set userId at all if it's invalid
     }
 
     if (!partner) {
@@ -164,20 +151,13 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         console.log("✅ Created new partner:", partner._id);
         
         // Update user role to partner
-        const userIdObjectId = toObjectId(userId);
-        if (userIdObjectId) {
-          await User.findByIdAndUpdate(userIdObjectId, { role: "partner" });
-          console.log("✅ Updated user role to partner");
+        if (objectId) {
+          await User.findByIdAndUpdate(objectId, { role: "partner" });
         }
       } catch (createError: any) {
-        console.error("❌ Error creating partner:", createError);
-        
-        // If it's a duplicate key error, try to find and update
         if (createError.code === 11000) {
-          console.log("🔄 Duplicate key error, trying to find existing partner");
           partner = await Partner.findOne({ phone });
           if (partner) {
-            console.log("🔄 Found existing partner, updating...");
             Object.assign(partner, partnerData);
             await partner.save();
           } else {
@@ -188,8 +168,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         }
       }
     } else {
-      // Update existing partner
-      console.log("🔄 Updating existing partner:", partner._id);
       Object.assign(partner, partnerData);
       await partner.save();
     }
@@ -227,28 +205,22 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
   }
 };
 
-// ... rest of the controller functions remain the same ...
-
 /**
  * GET PARTNER STATUS
  */
 export const getPartnerStatus = async (req: Request, res: Response) => {
   try {
     const { phone } = req.params;
-
     console.log("🔍 Checking partner status for phone:", phone);
 
     const partner = await Partner.findOne({ phone });
 
     if (!partner) {
-      console.log("📝 No partner profile found - user needs to onboard");
       return res.json({
         success: false,
         message: "No partner profile found"
       });
     }
-
-    console.log("✅ Partner found:", partner.status);
     
     return res.json({
       success: true,
@@ -269,14 +241,10 @@ export const getPartnerStatus = async (req: Request, res: Response) => {
  */
 export const getPendingPartners = async (req: Request, res: Response) => {
   try {
-    console.log("getPendingPartners called");
-    
     const partners = await Partner.find({ status: "PENDING" })
       .sort({ createdAt: -1 })
       .select("ownerName restaurantName phone address category createdAt documents");
 
-    console.log(`Found ${partners.length} pending partners`);
-    
     return res.json({
       success: true,
       data: partners
@@ -328,7 +296,6 @@ export const updatePartnerStatus = async (req: Request, res: Response) => {
       partner.approvedBy = adminId;
       partner.approvedAt = new Date();
       
-      // Update user role if userId exists
       if (partner.userId) {
         await User.findByIdAndUpdate(partner.userId, { role: "partner" });
       }
@@ -434,7 +401,6 @@ export const getMyStatus = async (req: Request, res: Response) => {
       });
     }
     
-    // Try to find partner by userId first
     let partner = null;
     
     const objectId = toObjectId(userId);
@@ -443,7 +409,6 @@ export const getMyStatus = async (req: Request, res: Response) => {
         .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen");
     }
     
-    // If not found by userId, try to find by phone number
     if (!partner && userPhone) {
       partner = await Partner.findOne({ phone: userPhone })
         .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen");
@@ -456,11 +421,9 @@ export const getMyStatus = async (req: Request, res: Response) => {
       });
     }
     
-    // If partner exists but doesn't have userId set, update it
     if (objectId && !partner.userId) {
       partner.userId = objectId;
       await partner.save();
-      console.log(`✅ Updated partner ${partner._id} with userId ${userId}`);
     }
     
     res.json({
@@ -562,7 +525,6 @@ export const updateShopStatus = async (req: Request, res: Response) => {
       });
     }
 
-    // Find partner by userId
     const partner = await Partner.findOneAndUpdate(
       { userId: objectId },
       { isOpen },
@@ -614,7 +576,6 @@ export const getPartnerStats = async (req: Request, res: Response) => {
       });
     }
 
-    // Find the partner by userId
     const partner = await Partner.findOne({ userId: objectId });
     
     if (!partner) {
@@ -624,7 +585,6 @@ export const getPartnerStats = async (req: Request, res: Response) => {
       });
     }
 
-    // For now, return basic stats
     const stats = {
       todayOrders: 0,
       totalOrders: 0,
@@ -652,6 +612,146 @@ export const getPartnerStats = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to get stats",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * GET PARTNER PROFILE (for partner app)
+ */
+export const getPartnerProfile = async (req: Request, res: Response) => {
+  try {
+    console.log("📋 Getting partner profile");
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    const objectId = toObjectId(userId);
+    if (!objectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID format"
+      });
+    }
+
+    const partner = await Partner.findOne({ userId: objectId })
+      .select('-documents')
+      .lean();
+    
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: "Partner profile not found"
+      });
+    }
+    
+    console.log("✅ Found partner profile:", partner._id);
+    
+    return res.json({
+      success: true,
+      data: partner
+    });
+  } catch (error: any) {
+    console.error("❌ Error getting partner profile:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get profile",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * UPDATE PARTNER PROFILE (for shop image, etc.)
+ */
+/**
+ * UPDATE PARTNER PROFILE (for shop image, etc.)
+ * RESTRICTION: Cannot change restaurant name after registration
+ */
+export const updatePartnerProfile = async (req: Request, res: Response) => {
+  try {
+    console.log("📝 Updating partner profile");
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    const objectId = toObjectId(userId);
+    if (!objectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID format"
+      });
+    }
+
+    const { shopImageUrl, restaurantName, openingTime, closingTime, isOpen } = req.body;
+    
+    // Find partner by userId
+    const partner = await Partner.findOne({ userId: objectId });
+    
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: "Partner profile not found"
+      });
+    }
+
+    const updates: any = {};
+    
+    // Update shop image if provided
+    if (shopImageUrl !== undefined) {
+      updates.shopImageUrl = shopImageUrl;
+    }
+    
+    // DO NOT ALLOW restaurant name change - remove this
+    // if (restaurantName !== undefined) {
+    //   updates.restaurantName = restaurantName;
+    //   updates.shopName = restaurantName;
+    // }
+    
+    // Allow timing changes
+    if (openingTime !== undefined) {
+      updates.openingTime = openingTime;
+    }
+    
+    if (closingTime !== undefined) {
+      updates.closingTime = closingTime;
+    }
+    
+    if (isOpen !== undefined) {
+      updates.isOpen = isOpen;
+    }
+
+    Object.assign(partner, updates);
+    await partner.save();
+    
+    console.log("✅ Partner profile updated:", {
+      id: partner._id,
+      shopImageUrl: partner.shopImageUrl ? "Has image" : "No image"
+    });
+    
+    return res.json({
+      success: true,
+      data: partner,
+      message: "Profile updated successfully"
+    });
+  } catch (error: any) {
+    console.error("❌ Error updating partner profile:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update profile",
       error: error.message
     });
   }

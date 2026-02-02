@@ -20,6 +20,12 @@ const PartnerSchema = new Schema(
       unique: true
     },
     
+    // ADD THIS: Shop profile image
+    shopImageUrl: {
+      type: String,
+      default: ""
+    },
+    
     // Detailed address structure as requested
     address: {
       state: {

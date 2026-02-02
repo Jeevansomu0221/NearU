@@ -14,7 +14,6 @@ import {
   ScrollView
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 
 interface MenuItem {
@@ -27,6 +26,26 @@ interface MenuItem {
   isAvailable: boolean;
   isVegetarian?: boolean;
   preparationTime?: number;
+}
+
+// Define API response type
+interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  [key: string]: any;
+}
+
+// Define upload response type
+interface UploadResponse {
+  success: boolean;
+  data: {
+    url: string;
+    publicId: string;
+    format: string;
+    size: number;
+  };
+  message: string;
 }
 
 // Category options for dropdown
@@ -66,10 +85,10 @@ export default function MenuScreen({ navigation }: any) {
       setLoading(true);
       console.log("📋 Loading menu items...");
       
-      const res = await api.get("/partners/menu");
-      console.log("✅ Menu response:", res.data);
+      const response = await api.get("/partners/menu");
+      console.log("✅ Menu response:", response.data);
       
-      const responseData = res.data as { success: boolean; data: MenuItem[]; message?: string };
+      const responseData = response.data as ApiResponse<MenuItem[]>;
       
       if (responseData.success) {
         setMenuItems(responseData.data || []);
@@ -93,6 +112,48 @@ export default function MenuScreen({ navigation }: any) {
       Alert.alert("Error", errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Function to handle image upload
+  const uploadImageToCloudinary = async (imageUri: string): Promise<string> => {
+    try {
+      console.log("📤 Uploading image to Cloudinary...");
+      
+      // Convert image to FormData
+      const formData = new FormData();
+      
+      // Get file name and type
+      const filename = imageUri.split('/').pop() || 'image.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+      
+      // @ts-ignore - React Native FormData type issue
+      formData.append('image', {
+        uri: imageUri,
+        type: type,
+        name: filename
+      });
+
+      // Upload to your backend
+      const response = await api.post('/upload/image', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const uploadData = response.data as UploadResponse;
+      
+      if (uploadData.success) {
+        console.log("✅ Image uploaded:", uploadData.data.url);
+        return uploadData.data.url; // Cloudinary URL
+      } else {
+        throw new Error(uploadData.message || "Upload failed");
+      }
+      
+    } catch (error) {
+      console.error("❌ Image upload failed:", error);
+      throw error;
     }
   };
 
@@ -139,6 +200,18 @@ export default function MenuScreen({ navigation }: any) {
     try {
       setSaving(true);
       
+      let imageUrl = editingItem?.imageUrl || "";
+      
+      // Upload new image if selected and not already a Cloudinary URL
+      if (imageUri && imageUri !== editingItem?.imageUrl) {
+        // Check if it's already a Cloudinary URL
+        if (!imageUri.startsWith('https://res.cloudinary.com')) {
+          imageUrl = await uploadImageToCloudinary(imageUri);
+        } else {
+          imageUrl = imageUri; // Already a Cloudinary URL
+        }
+      }
+
       // Prepare data
       const menuData = {
         name: form.name.trim(),
@@ -148,19 +221,20 @@ export default function MenuScreen({ navigation }: any) {
         isVegetarian: form.isVegetarian,
         preparationTime: parseInt(form.preparationTime) || 15,
         isAvailable: form.isAvailable,
-        imageUrl: imageUri || editingItem?.imageUrl || ""
+        imageUrl: imageUrl
       };
 
+      let response;
       if (editingItem) {
         // Update item
         console.log("Updating menu item:", editingItem._id);
-        const response = await api.put(`/partners/menu/${editingItem._id}`, menuData);
+        response = await api.put(`/partners/menu/${editingItem._id}`, menuData);
         console.log("Update response:", response.data);
         Alert.alert("Success", "Menu item updated successfully");
       } else {
         // Add new item
         console.log("Adding new menu item:", menuData);
-        const response = await api.post("/partners/menu", menuData);
+        response = await api.post("/partners/menu", menuData);
         console.log("Add response:", response.data);
         Alert.alert("Success", "Menu item added successfully");
         

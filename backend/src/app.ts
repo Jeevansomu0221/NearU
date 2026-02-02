@@ -7,17 +7,18 @@ import partnerRoutes from "./routes/partner.routes";
 import orderRoutes from "./routes/order.routes";
 import adminRoutes from "./routes/admin.routes";
 import deliveryRoutes from "./routes/delivery.routes";
+import uploadRoutes from "./routes/upload.routes"; // ADD THIS
 
 const app = express();
 
-// Configure CORS to allow your Expo app AND admin panel
+// Configure CORS...
 app.use(cors({
   origin: [
-    'http://localhost:8081', // For Expo web
-    'http://localhost:19006', // For Expo dev server
-    'http://localhost:5173', // For Vite dev server (admin panel) - ADD THIS
-    'exp://10.3.128.220:8081', // For Expo on your network
-    /\.exp\.direct$/, // For Expo direct connections
+    'http://localhost:8081',
+    'http://localhost:19006',
+    'http://localhost:5173',
+    'exp://10.3.128.220:8081',
+    /\.exp\.direct$/,
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -34,6 +35,7 @@ app.use("/api/partners", partnerRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/delivery", deliveryRoutes);
+app.use("/api/upload", uploadRoutes); // ADD THIS
 
 // Health check endpoint
 app.get("/health", (req, res) => {

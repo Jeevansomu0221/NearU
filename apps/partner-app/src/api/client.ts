@@ -1,6 +1,14 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// Define generic API response type
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  [key: string]: any;
+}
+
 const api = axios.create({
   baseURL: "http://10.3.128.220:5000/api",
   timeout: 15000,
@@ -30,20 +38,17 @@ api.interceptors.request.use(
 
 // Response interceptor
 api.interceptors.response.use(
-  (response) => {
+  (response: any) => {
     console.log(`✅ ${response.status} ${response.config.url}`);
     return response;
   },
-  (error) => {
+  (error: any) => {
     if (error.response) {
-      // For 404 responses on /partners/my-status, we want to treat them as normal responses
-      // because they just mean "partner not found" which is a valid application state
       const url = error.config?.url || '';
       const method = error.config?.method?.toUpperCase() || 'GET';
       
       if (url.includes('/partners/my-status') && error.response.status === 404) {
         console.log(`📝 ${method} ${url}: Partner not found (404) - This is expected for new users`);
-        // Return the error response as a successful response so it can be handled in the component
         return Promise.resolve(error.response);
       }
       
@@ -51,15 +56,10 @@ api.interceptors.response.use(
         status: error.response.status,
         statusText: error.response.statusText,
         data: error.response.data,
-        headers: error.response.headers,
       });
-      
-      console.error("Full error response:", JSON.stringify(error.response.data, null, 2));
     } else if (error.request) {
-      // The request was made but no response was received
-      console.error("🌐 Network error - No response received:", error.request);
+      console.error("🌐 Network error - No response received");
     } else {
-      // Something happened in setting up the request
       console.error("🚫 Request setup error:", error.message);
     }
     

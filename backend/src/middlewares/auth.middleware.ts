@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-// Define and export the AuthRequest type
+// Use the UploadedFile type from express-fileupload
+import { UploadedFile } from "express-fileupload";
+
+// Define and export the AuthRequest type with files
 export interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -9,6 +12,9 @@ export interface AuthRequest extends Request {
     role: string;
     partnerId?: string;
   };
+  files?: {
+    [fieldname: string]: UploadedFile | UploadedFile[];
+  } | null;
 }
 
 export const authMiddleware = async (

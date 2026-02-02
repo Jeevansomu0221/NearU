@@ -6,7 +6,8 @@ import {
   FlatList, 
   StyleSheet,
   ScrollView,
-  Alert 
+  Alert,
+  Image // ADD THIS
 } from "react-native";
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, Shop } from '../navigation/AppNavigator';
@@ -22,7 +23,7 @@ interface MenuItem {
   description?: string;
   category?: string;
   isAvailable: boolean;
-  imageUrl?: string;
+  imageUrl?: string; // Cloudinary URL will be here
 }
 
 interface Props {
@@ -46,6 +47,11 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       const res: any = await getPartnerMenu(shopId);
       if (res.data && Array.isArray(res.data)) {
         setMenu(res.data);
+        // Debug: Check if images are in the response
+        console.log("📱 Menu loaded with items:", res.data.length);
+        res.data.forEach((item: MenuItem, index: number) => {
+          console.log(`Item ${index}: ${item.name}, Image URL: ${item.imageUrl || 'No image'}`);
+        });
       }
     } catch (error: any) {
       console.error("Error loading menu:", error);
@@ -101,9 +107,43 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       shopName: shop.restaurantName || shop.shopName
     };
     
-    addItem(cartItem as any); // Use 'as any' temporarily
+    addItem(cartItem as any);
     Alert.alert("Added", `${item.name} added to cart`);
   };
+
+  // Render menu item with image
+  const renderMenuItem = ({ item }: { item: MenuItem }) => (
+    <View style={styles.menuItem}>
+      {/* Display menu item image if available */}
+      {item.imageUrl ? (
+        <Image 
+          source={{ uri: item.imageUrl }} 
+          style={styles.menuItemImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.menuItemImage, styles.placeholderImage]}>
+          <Text style={styles.placeholderText}>No Image</Text>
+        </View>
+      )}
+      
+      <View style={styles.menuItemInfo}>
+        <Text style={styles.itemName}>{item.name}</Text>
+        {item.description && (
+          <Text style={styles.itemDescription}>{item.description}</Text>
+        )}
+        <Text style={styles.itemPrice}>₹{item.price}</Text>
+      </View>
+      
+      <View style={styles.addButtonContainer}>
+        <Button
+          title="Add"
+          onPress={() => handleAddToCart(item)}
+          color="#FF6B35"
+        />
+      </View>
+    </View>
+  );
 
   if (!shop) {
     return (
@@ -148,21 +188,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
             data={menu.filter(item => item.isAvailable)}
             keyExtractor={item => item._id}
             scrollEnabled={false}
-            renderItem={({ item }) => (
-              <View style={styles.menuItem}>
-                <View style={styles.menuItemInfo}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  {item.description && (
-                    <Text style={styles.itemDescription}>{item.description}</Text>
-                  )}
-                  <Text style={styles.itemPrice}>₹{item.price}</Text>
-                </View>
-                <Button
-                  title="Add"
-                  onPress={() => handleAddToCart(item)}
-                />
-              </View>
-            )}
+            renderItem={renderMenuItem}
           />
         )}
       </View>
@@ -171,6 +197,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
         <Button
           title="View Cart"
           onPress={() => navigation.navigate("Cart")}
+          color="#FF6B35"
         />
       </View>
     </ScrollView>
@@ -260,11 +287,25 @@ const styles = StyleSheet.create({
   },
   menuItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  menuItemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  placeholderImage: {
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    color: '#888',
+    fontSize: 10,
   },
   menuItemInfo: {
     flex: 1,
@@ -283,6 +324,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FF6B35',
+  },
+  addButtonContainer: {
+    width: 70,
   },
   buttonContainer: {
     padding: 16,

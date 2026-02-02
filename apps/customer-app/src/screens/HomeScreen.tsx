@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image, // ADD THIS
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -31,9 +32,10 @@ interface Shop {
   shopName: string;
   restaurantName?: string;
   category: string;
-  address: string | AddressObject; // Can be string OR object
+  address: string | AddressObject;
   isOpen: boolean;
   rating: number;
+  shopImageUrl?: string; // ADD THIS
 }
 
 interface Props {
@@ -49,37 +51,37 @@ export default function HomeScreen({ navigation }: Props) {
   }, []);
 
   const loadNearbyShops = async () => {
-    try {
-      setLoading(true);
-      console.log('📱 Fetching nearby shops...');
-      
-      const token = await AsyncStorage.getItem('token');
-      console.log('🔑 Token exists:', !!token);
-      
-      const response: any = await apiClient.get('/users/shops');
-      console.log('📦 API Response:', response);
-      
-      let shopsData: Shop[] = [];
-      
-      if (response && Array.isArray(response.data)) {
-        shopsData = response.data;
-      } else if (response && response.success && Array.isArray(response.data)) {
-        shopsData = response.data;
-      }
-      
-      console.log('🛍️ Shops loaded:', shopsData.length);
-      setShops(shopsData);
-      
-    } catch (error: any) {
-      console.error('❌ API Error:', error.message);
-      Alert.alert('Error', error.message || 'Failed to load shops');
-      setShops([]);
-    } finally {
-      setLoading(false);
+  try {
+    setLoading(true);
+    console.log('📱 Fetching nearby shops...');
+    
+    const response: any = await apiClient.get('/users/shops');
+    console.log('📦 FULL API Response:', JSON.stringify(response, null, 2)); // ADD THIS
+    
+    let shopsData: Shop[] = [];
+    
+    if (response && Array.isArray(response.data)) {
+      shopsData = response.data;
+    } else if (response && response.success && Array.isArray(response.data)) {
+      shopsData = response.data;
     }
-  };
+    
+    console.log('🛍️ Shops loaded:', shopsData.length);
+    // Debug each shop
+    shopsData.forEach((shop: any, index: number) => {
+      console.log(`Shop ${index}:`, JSON.stringify(shop, null, 2)); // ADD THIS
+    });
+    setShops(shopsData);
+    
+  } catch (error: any) {
+    console.error('❌ API Error:', error);
+    Alert.alert('Error', error.message || 'Failed to load shops');
+    setShops([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  // Helper function to format address whether it's string or object
   const formatAddress = (address: string | AddressObject): string => {
     if (!address) return "Address not available";
     
@@ -88,7 +90,6 @@ export default function HomeScreen({ navigation }: Props) {
     }
     
     if (typeof address === 'object') {
-      // Handle the object address structure
       const addr = address as AddressObject;
       const parts = [
         addr.roadStreet,
@@ -111,20 +112,41 @@ export default function HomeScreen({ navigation }: Props) {
         shop: item 
       })}
     >
-      <View style={styles.shopHeader}>
-        <Text style={styles.shopName}>{item.shopName || item.restaurantName}</Text>
-        <View style={[styles.statusDot, item.isOpen ? styles.open : styles.closed]}>
-          <Text style={styles.statusText}>{item.isOpen ? 'Open' : 'Closed'}</Text>
+      <View style={styles.shopCardContent}>
+        {/* Shop Image */}
+        {item.shopImageUrl ? (
+          <Image 
+            source={{ uri: item.shopImageUrl }} 
+            style={styles.shopImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.shopImage, styles.placeholderImage]}>
+            <Text style={styles.placeholderText}>No Image</Text>
+          </View>
+        )}
+        
+        <View style={styles.shopInfo}>
+          <View style={styles.shopHeader}>
+            <Text style={styles.shopName} numberOfLines={1}>
+              {item.shopName || item.restaurantName}
+            </Text>
+            <View style={[styles.statusDot, item.isOpen ? styles.open : styles.closed]}>
+              <Text style={styles.statusText}>{item.isOpen ? 'Open' : 'Closed'}</Text>
+            </View>
+          </View>
+          
+          <Text style={styles.shopCategory}>{item.category}</Text>
+          
+          <Text style={styles.shopAddress} numberOfLines={1}>
+            {formatAddress(item.address)}
+          </Text>
+          
+          <View style={styles.ratingContainer}>
+            <Text style={styles.shopRating}>⭐ {item.rating?.toFixed(1) || '0.0'}</Text>
+          </View>
         </View>
       </View>
-      <Text style={styles.shopCategory}>{item.category}</Text>
-      
-      {/* Fixed: Use formatAddress helper */}
-      <Text style={styles.shopAddress}>
-        {formatAddress(item.address)}
-      </Text>
-      
-      <Text style={styles.shopRating}>⭐ {item.rating?.toFixed(1) || '0.0'}</Text>
     </TouchableOpacity>
   );
 
@@ -190,27 +212,53 @@ const styles = StyleSheet.create({
   shopCard: {
     backgroundColor: '#f8f8f8',
     borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#eee',
+    overflow: 'hidden',
+  },
+  shopCardContent: {
+    flexDirection: 'row',
+    padding: 12,
+  },
+  shopImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  placeholderImage: {
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    color: '#888',
+    fontSize: 11,
+  },
+  shopInfo: {
+    flex: 1,
+    justifyContent: 'space-between',
   },
   shopHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 4,
   },
   shopName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#333',
     flex: 1,
+    marginRight: 8,
   },
   statusDot: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    minWidth: 60,
+    alignItems: 'center',
   },
   open: {
     backgroundColor: '#4CAF50',
@@ -220,7 +268,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   shopCategory: {
@@ -231,7 +279,11 @@ const styles = StyleSheet.create({
   shopAddress: {
     fontSize: 13,
     color: '#888',
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   shopRating: {
     fontSize: 14,

@@ -1,5 +1,4 @@
-﻿// FIXED version - backend/src/routes/partner.routes.ts
-import { Router } from "express";
+﻿import { Router } from "express";
 import {
   submitPartnerProfile,
   getPartnerStatus,
@@ -9,7 +8,9 @@ import {
   updateShopStatus,
   getPartnerStats,
   getMyStatus,
-  completeSetup
+  completeSetup,
+  getPartnerProfile,    // ADD THIS
+  updatePartnerProfile  // ADD THIS
 } from "../controllers/partner.controller";
 
 import menuRoutes from "./menu.routes";
@@ -27,10 +28,6 @@ router.get("/status/:phone", getPartnerStatus);
 /* ======================================================
    AUTHENTICATED ROUTES (customer OR partner)
 ====================================================== */
-
-// IMPORTANT: Don't apply authMiddleware globally here
-// Apply it individually to routes that need it
-
 router.get("/my-status", authMiddleware, getMyStatus);
 router.post("/complete-setup", authMiddleware, completeSetup);
 
@@ -39,6 +36,10 @@ router.post("/complete-setup", authMiddleware, completeSetup);
 ====================================================== */
 router.put("/shop-status", authMiddleware, roleMiddleware(["partner"]), updateShopStatus);
 router.get("/stats", authMiddleware, roleMiddleware(["partner"]), getPartnerStats);
+
+// Profile Management - ADD THESE LINES
+router.get("/profile", authMiddleware, roleMiddleware(["partner"]), getPartnerProfile);
+router.put("/profile", authMiddleware, roleMiddleware(["partner"]), updatePartnerProfile);
 
 // Menu Management
 router.use("/menu", authMiddleware, roleMiddleware(["partner"]), menuRoutes);
