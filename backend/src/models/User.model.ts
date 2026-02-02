@@ -22,6 +22,33 @@ const UserSchema = new Schema({
     enum: Object.values(ROLES),
     default: ROLES.CUSTOMER
   },
+  // ADD THIS ADDRESS FIELD
+  address: {
+    street: {
+      type: String,
+      default: ""
+    },
+    city: {
+      type: String,
+      default: ""
+    },
+    state: {
+      type: String,
+      default: ""
+    },
+    pincode: {
+      type: String,
+      default: ""
+    },
+    area: {
+      type: String,
+      default: ""
+    },
+    landmark: {
+      type: String,
+      default: ""
+    }
+  },
   fcmToken: {
     type: String
   },

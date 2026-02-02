@@ -1,5 +1,5 @@
 // apps/customer-app/src/screens/CartScreen.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { 
   View, 
   Text, 
@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import { useCart } from "../context/CartContext";
 import { createShopOrder } from "../api/order.api";
-import { getUserProfile } from "../api/user.api";
+import { getUserProfile, type UserProfile } from "../api/user.api";
+import type { ApiResponse } from "../api/client";
 
 // Define proper types
 interface CartItem {
@@ -25,61 +26,69 @@ interface CartItem {
   menuItemId?: string;
 }
 
-interface OrderResponse {
-  success: boolean;
-  data: {
-    _id: string;
-    status: string;
-    grandTotal: number;
-  };
-  message: string;
-}
-
-interface UserProfileResponse {
-  success: boolean;
-  data: {
-    _id: string;
-    name: string;
-    phone: string;
-    email?: string;
-    address?: {
-      street: string;
-      city: string;
-      state: string;
-      pincode: string;
-      area: string;
-      landmark?: string;
-    };
-  };
-  message: string;
+interface Order {
+  _id: string;
+  status: string;
+  grandTotal: number;
+  // Add other order properties as needed
 }
 
 export default function CartScreen({ route, navigation }: any) {
   const { shop } = route.params;
   const { items, clear, removeItem, updateQuantity, getCartTotal } = useCart();
   const [loading, setLoading] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  // Load user profile to check address
-  useEffect(() => {
-    const loadUserProfile = async () => {
-      try {
-        const response = await getUserProfile();
-        const profileData = response.data as UserProfileResponse;
-        
-        if (profileData.success) {
-          setUserProfile(profileData.data);
-        }
-      } catch (error) {
-        console.error("Error loading profile:", error);
-      } finally {
-        setLoadingProfile(false);
+  // Load user profile function
+  const loadUserProfile = useCallback(async () => {
+    try {
+      setLoadingProfile(true);
+      const response = await getUserProfile();
+      
+      // No type casting needed - response is already ApiResponse<UserProfile>
+      if (response.success && response.data) {
+        setUserProfile(response.data);
+        console.log("CartScreen: Profile loaded with address:", response.data.address);
+      } else {
+        console.log("CartScreen: Failed to load profile:", response.message);
       }
-    };
-
-    loadUserProfile();
+    } catch (error) {
+      console.error("CartScreen: Error loading profile:", error);
+    } finally {
+      setLoadingProfile(false);
+    }
   }, []);
+
+  // Load profile when component mounts
+  useEffect(() => {
+    loadUserProfile();
+  }, [loadUserProfile]);
+
+  // Add focus listener to refresh profile when screen comes into focus
+  useEffect(() => {
+    // This will refresh the profile when screen comes into focus
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log("CartScreen: Screen focused, refreshing profile...");
+      loadUserProfile();
+    });
+
+    // Cleanup the listener when component unmounts
+    return unsubscribe;
+  }, [navigation, loadUserProfile]);
+
+  // Also refresh when navigating back from Profile screen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('state', () => {
+      console.log("CartScreen: Navigation state changed, refreshing profile...");
+      // Small delay to ensure Profile screen has saved data
+      setTimeout(() => {
+        loadUserProfile();
+      }, 500);
+    });
+
+    return unsubscribe;
+  }, [navigation, loadUserProfile]);
 
   const calculateSubtotal = () => {
     return items.reduce((sum: number, item: CartItem) => sum + (item.price * item.quantity), 0);
@@ -107,110 +116,111 @@ export default function CartScreen({ route, navigation }: any) {
     return parts.join(', ');
   };
 
-  const placeOrder = async () => {
-    if (items.length === 0) {
-      Alert.alert("Cart Empty", "Please add items to cart first");
-      return;
-    }
+  // Update the placeOrder function starting around line 179
+const placeOrder = async () => {
+  if (items.length === 0) {
+    Alert.alert("Cart Empty", "Please add items to cart first");
+    return;
+  }
 
-    // Check if user has address
-    if (!userProfile?.address) {
+  // Check if user has address
+  if (!userProfile?.address) {
+    Alert.alert(
+      "📍 Address Required",
+      "Please add your delivery address in Profile before placing order.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Add Address Now", 
+          onPress: () => {
+            navigation.navigate("Profile");
+          }
+        }
+      ]
+    );
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    // Prepare order items for backend
+    const orderItems = items.map((item: CartItem) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      menuItemId: item.menuItemId || item._id || "temp-id"
+    }));
+
+    // Format delivery address from user profile
+    const deliveryAddress = formatAddress();
+    
+    console.log("Placing order with items:", orderItems);
+    console.log("Shop ID:", shop._id);
+    console.log("Delivery Address:", deliveryAddress);
+
+    const response = await createShopOrder(
+      shop._id,
+      deliveryAddress,
+      orderItems,
+      "" // Optional note
+    );
+
+    // Check if response is successful and has data
+    if (response.success && response.data) {
+      const orderData = response.data;
       Alert.alert(
-        "📍 Address Required",
-        "Please add your delivery address in Profile before placing order.",
+        "🎉 Order Placed!", 
+        `Your order #${orderData._id.slice(-6)} has been placed successfully.\n\nTotal: ₹${orderData.grandTotal}\nStatus: ${orderData.status}`,
         [
-          { text: "Cancel", style: "cancel" },
-          { 
-            text: "Add Address Now", 
+          {
+            text: "View Order Status",
             onPress: () => {
-              navigation.navigate("Profile");
+              clear();
+              navigation.replace("OrderStatus", { 
+                orderId: orderData._id 
+              });
+            }
+          },
+          {
+            text: "Continue Shopping",
+            onPress: () => {
+              clear();
+              navigation.goBack();
             }
           }
         ]
       );
-      return;
+    } else {
+      Alert.alert("Order Failed", response.message || "Failed to place order");
     }
-
-    try {
-      setLoading(true);
-      
-      // Prepare order items for backend
-      const orderItems = items.map((item: CartItem) => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        menuItemId: item.menuItemId || item._id || "temp-id"
-      }));
-
-      // Format delivery address from user profile
-      const deliveryAddress = formatAddress();
-      
-      console.log("Placing order with items:", orderItems);
-      console.log("Shop ID:", shop._id);
-      console.log("Delivery Address:", deliveryAddress);
-
-      const response = await createShopOrder(
-        shop._id,
-        deliveryAddress,
-        orderItems,
-        "" // Optional note
-      );
-
-      const orderData = response.data as OrderResponse;
-      
-      if (orderData.success) {
-        Alert.alert(
-          "🎉 Order Placed!", 
-          `Your order #${orderData.data._id.slice(-6)} has been placed successfully.\n\nTotal: ₹${orderData.data.grandTotal}\nStatus: ${orderData.data.status}`,
-          [
-            {
-              text: "View Order Status",
-              onPress: () => {
-                clear();
-                navigation.replace("OrderStatus", { 
-                  orderId: orderData.data._id 
-                });
-              }
-            },
-            {
-              text: "Continue Shopping",
-              onPress: () => {
-                clear();
-                navigation.goBack();
-              }
-            }
-          ]
-        );
-      } else {
-        Alert.alert("Order Failed", orderData.message || "Failed to place order");
+  } catch (error: any) {
+    console.error("Order error:", error);
+    
+    let errorMessage = "Failed to place order. Please try again.";
+    
+    if (error.response) {
+      // Server responded with error
+      if (error.response.data && error.response.data.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response.status === 400) {
+        errorMessage = "Invalid request. Please check your cart items.";
+      } else if (error.response.status === 401) {
+        errorMessage = "Please login again to place order.";
+        navigation.navigate("Login");
+      } else if (error.response.status === 404) {
+        errorMessage = "Restaurant not found or closed.";
       }
-    } catch (error: any) {
-      console.error("Order error:", error);
-      
-      let errorMessage = "Failed to place order. Please try again.";
-      
-      if (error.response) {
-        // Server responded with error
-        if (error.response.data && error.response.data.message) {
-          errorMessage = error.response.data.message;
-        } else if (error.response.status === 400) {
-          errorMessage = "Invalid request. Please check your cart items.";
-        } else if (error.response.status === 401) {
-          errorMessage = "Please login again to place order.";
-          navigation.navigate("Login");
-        } else if (error.response.status === 404) {
-          errorMessage = "Restaurant not found or closed.";
-        }
-      } else if (error.request) {
-        // Request made but no response
-        errorMessage = "Network error. Please check your internet connection.";
-      }
-      
-      Alert.alert("Order Failed", errorMessage);
-    } finally {
-      setLoading(false);
+    } else if (error.request) {
+      // Request made but no response
+      errorMessage = "Network error. Please check your internet connection.";
     }
-  };
+    
+    Alert.alert("Order Failed", errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleRemoveItem = (itemName: string) => {
     Alert.alert(

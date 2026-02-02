@@ -10,24 +10,14 @@ import {
   TextInput,
   ActivityIndicator
 } from "react-native";
-import { getUserProfile, updateUserProfile, updateUserAddress } from "../api/user.api";
+import { 
+  getUserProfile, 
+  updateUserProfile, 
+  updateUserAddress,
+  type UserProfile  // Import the type from user.api
+} from "../api/user.api";
 import { getMyOrders } from "../api/order.api";
-
-interface UserProfile {
-  _id: string;
-  name: string;
-  phone: string;
-  email?: string;
-  address?: {
-    street: string;
-    city: string;
-    state: string;
-    pincode: string;
-    area: string;
-    landmark?: string;
-  };
-  createdAt: string;
-}
+import type { ApiResponse } from "../api/client"; // Import ApiResponse from client
 
 interface Order {
   _id: string;
@@ -37,24 +27,6 @@ interface Order {
   partnerId: {
     restaurantName: string;
   };
-}
-
-interface ProfileResponse {
-  success: boolean;
-  data: UserProfile;
-  message: string;
-}
-
-interface OrdersResponse {
-  success: boolean;
-  data: Order[];
-  message: string;
-}
-
-interface UpdateResponse {
-  success: boolean;
-  data: any;
-  message: string;
 }
 
 export default function ProfileScreen({ navigation }: any) {
@@ -75,42 +47,51 @@ export default function ProfileScreen({ navigation }: any) {
   const [landmark, setLandmark] = useState("");
 
   const loadProfile = async () => {
-    try {
-      setLoading(true);
-      const response = await getUserProfile();
-      const profileData = response.data as ProfileResponse;
+  try {
+    setLoading(true);
+    const profileResponse = await getUserProfile();
+    
+    // No need for type casting - it's already typed
+    if (profileResponse.success) {
+      const userData = profileResponse.data!; // Using non-null assertion since we checked success
+      setProfile(userData);
       
-      if (profileData.success) {
-        const userData = profileData.data;
-        setProfile(userData);
-        
-        // Set form values
-        setName(userData.name || "");
-        setEmail(userData.email || "");
-        
-        if (userData.address) {
-          setStreet(userData.address.street || "");
-          setCity(userData.address.city || "");
-          setState(userData.address.state || "");
-          setPincode(userData.address.pincode || "");
-          setArea(userData.address.area || "");
-          setLandmark(userData.address.landmark || "");
-        }
-        
-        // Load orders
-        const ordersResponse = await getMyOrders();
-        const ordersData = ordersResponse.data as OrdersResponse;
-        if (ordersData.success) {
-          setOrders(ordersData.data.slice(0, 5)); // Last 5 orders
-        }
+      // Set form values
+      setName(userData.name || "");
+      setEmail(userData.email || "");
+      
+      if (userData.address) {
+        setStreet(userData.address.street || "");
+        setCity(userData.address.city || "");
+        setState(userData.address.state || "");
+        setPincode(userData.address.pincode || "");
+        setArea(userData.address.area || "");
+        setLandmark(userData.address.landmark || "");
+      } else {
+        // Reset address fields if no address exists
+        setStreet("");
+        setCity("");
+        setState("");
+        setPincode("");
+        setArea("");
+        setLandmark("");
       }
-    } catch (error) {
-      console.error("Error loading profile:", error);
-      Alert.alert("Error", "Failed to load profile");
-    } finally {
-      setLoading(false);
+      
+      // Load orders
+      const ordersResponse = await getMyOrders();
+      if (ordersResponse.success) {
+        setOrders(ordersResponse.data!.slice(0, 5)); // Last 5 orders
+      }
+    } else {
+      Alert.alert("Error", profileResponse.message || "Failed to load profile");
     }
-  };
+  } catch (error: any) {
+    console.error("Error loading profile:", error);
+    Alert.alert("Error", error.message || "Failed to load profile");
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     loadProfile();
@@ -120,47 +101,85 @@ export default function ProfileScreen({ navigation }: any) {
     try {
       setSaving(true);
       
+      console.log("=== STARTING PROFILE UPDATE ===");
+      console.log("Profile data:", { name, email });
+      console.log("Address data:", { street, city, state, pincode, area, landmark });
+      
+      // Validate required fields
+      if (!name.trim()) {
+        Alert.alert("Error", "Name is required");
+        setSaving(false);
+        return;
+      }
+      
+      // Validate pincode if provided
+      if (pincode && !/^\d{6}$/.test(pincode)) {
+        Alert.alert("Error", "Pincode must be exactly 6 digits");
+        setSaving(false);
+        return;
+      }
+      
       // Update basic profile
-      const profileResponse = await updateUserProfile({
-        name,
-        email
+      const profileResult = await updateUserProfile({
+        name: name.trim(),
+        email: email.trim() || undefined
       });
-
-      const profileResult = profileResponse.data as UpdateResponse;
-
+      
+      console.log("Profile update response:", profileResult);
+      
       // Update address
-      const addressResponse = await updateUserAddress({
-        street,
-        city,
-        state,
-        pincode,
-        area,
-        landmark
+      const addressResult = await updateUserAddress({
+        street: street.trim(),
+        city: city.trim(),
+        state: state.trim(),
+        pincode: pincode.trim(),
+        area: area.trim(),
+        landmark: landmark.trim() || undefined
       });
-
-      const addressResult = addressResponse.data as UpdateResponse;
-
+      
+      console.log("Address update response:", addressResult);
+      
+      // Check if both updates were successful
       if (profileResult.success && addressResult.success) {
         Alert.alert("Success", "Profile updated successfully");
         setEditing(false);
         loadProfile(); // Reload updated data
       } else {
-        Alert.alert("Error", "Failed to update profile");
+        Alert.alert(
+          "Error", 
+          profileResult.message || addressResult.message || "Failed to update profile"
+        );
       }
-    } catch (error) {
-      console.error("Error updating profile:", error);
-      Alert.alert("Error", "Failed to update profile");
+    } catch (error: any) {
+      console.error("=== PROFILE UPDATE ERROR ===");
+      console.error("Error:", error);
+      console.error("Error message:", error.message);
+      console.error("Error response:", error.response?.data);
+      
+      // Show user-friendly error message
+      let errorMessage = "Failed to update profile";
+      if (error.message?.includes("Network Error")) {
+        errorMessage = "Cannot connect to server. Please check your connection.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert("Error", errorMessage);
     } finally {
       setSaving(false);
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
+    try {
+      return new Date(dateString).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch (error) {
+      return "Invalid date";
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -172,6 +191,28 @@ export default function ProfileScreen({ navigation }: any) {
       case 'CANCELLED': return '#F44336';
       default: return '#666';
     }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Logout",
+          onPress: () => {
+            // Add your logout logic here
+            // e.g., clear token, navigate to login
+            navigation.navigate("Login");
+          },
+          style: "destructive"
+        }
+      ]
+    );
   };
 
   if (loading) {
@@ -262,6 +303,7 @@ export default function ProfileScreen({ navigation }: any) {
               value={name}
               onChangeText={setName}
               placeholder="Enter your name"
+              editable={!saving}
             />
           ) : (
             <Text style={styles.infoValue}>{profile?.name || "Not set"}</Text>
@@ -277,6 +319,8 @@ export default function ProfileScreen({ navigation }: any) {
               onChangeText={setEmail}
               placeholder="Enter your email"
               keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!saving}
             />
           ) : (
             <Text style={styles.infoValue}>{profile?.email || "Not set"}</Text>
@@ -309,6 +353,7 @@ export default function ProfileScreen({ navigation }: any) {
                 value={street}
                 onChangeText={setStreet}
                 placeholder="Enter street address"
+                editable={!saving}
               />
             </View>
 
@@ -319,6 +364,7 @@ export default function ProfileScreen({ navigation }: any) {
                 value={area}
                 onChangeText={setArea}
                 placeholder="Enter area/locality"
+                editable={!saving}
               />
             </View>
 
@@ -329,6 +375,7 @@ export default function ProfileScreen({ navigation }: any) {
                 value={landmark}
                 onChangeText={setLandmark}
                 placeholder="Nearby landmark"
+                editable={!saving}
               />
             </View>
 
@@ -340,6 +387,7 @@ export default function ProfileScreen({ navigation }: any) {
                   value={city}
                   onChangeText={setCity}
                   placeholder="City"
+                  editable={!saving}
                 />
               </View>
 
@@ -350,6 +398,7 @@ export default function ProfileScreen({ navigation }: any) {
                   value={state}
                   onChangeText={setState}
                   placeholder="State"
+                  editable={!saving}
                 />
               </View>
             </View>
@@ -363,23 +412,37 @@ export default function ProfileScreen({ navigation }: any) {
                 placeholder="6-digit pincode"
                 keyboardType="number-pad"
                 maxLength={6}
+                editable={!saving}
               />
             </View>
           </>
         ) : (
           <View style={styles.addressContainer}>
-            {profile?.address ? (
+            {profile?.address && 
+             (profile.address.street || 
+              profile.address.city || 
+              profile.address.pincode) ? (
               <>
-                <Text style={styles.addressText}>{profile.address.street}</Text>
-                <Text style={styles.addressText}>{profile.address.area}</Text>
-                {profile.address.landmark && (
+                {profile.address.street ? (
+                  <Text style={styles.addressText}>{profile.address.street}</Text>
+                ) : null}
+                {profile.address.area ? (
+                  <Text style={styles.addressText}>{profile.address.area}</Text>
+                ) : null}
+                {profile.address.landmark ? (
                   <Text style={styles.addressText}>
                     Near {profile.address.landmark}
                   </Text>
+                ) : null}
+                {(profile.address.city || profile.address.state || profile.address.pincode) && (
+                  <Text style={styles.addressText}>
+                    {profile.address.city || ""}
+                    {profile.address.city && profile.address.state ? ", " : ""}
+                    {profile.address.state || ""}
+                    {(profile.address.city || profile.address.state) && profile.address.pincode ? " - " : ""}
+                    {profile.address.pincode || ""}
+                  </Text>
                 )}
-                <Text style={styles.addressText}>
-                  {profile.address.city}, {profile.address.state} - {profile.address.pincode}
-                </Text>
               </>
             ) : (
               <Text style={styles.noAddressText}>
@@ -394,9 +457,11 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Orders</Text>
-          <TouchableOpacity onPress={() => navigation.navigate("Orders")}>
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
+          {orders.length > 0 && (
+            <TouchableOpacity onPress={() => navigation.navigate("Orders")}>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {orders.length === 0 ? (
@@ -452,7 +517,10 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.menuText}>⭐ Rate Us</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={[styles.menuItem, styles.logoutItem]}>
+        <TouchableOpacity 
+          style={[styles.menuItem, styles.logoutItem]}
+          onPress={handleLogout}
+        >
           <Text style={styles.logoutText}>🚪 Logout</Text>
         </TouchableOpacity>
       </View>
@@ -626,6 +694,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FF6B35',
     fontStyle: 'italic',
+    textAlign: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',

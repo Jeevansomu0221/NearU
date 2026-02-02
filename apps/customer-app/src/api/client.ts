@@ -1,3 +1,4 @@
+// apps/customer-app/src/api/client.ts
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -39,11 +40,11 @@ api.interceptors.request.use(
   (error: any) => Promise.reject(error)
 );
 
-// RESPONSE INTERCEPTOR - Return only the data
+// RESPONSE INTERCEPTOR
 api.interceptors.response.use(
   (response: any) => {
-    // Return the data directly as a Promise
-    return Promise.resolve(response.data);
+    // Return the full response
+    return response;
   },
   (error: any) => {
     console.error("API Error:", {
@@ -53,14 +54,52 @@ api.interceptors.response.use(
       data: error.response?.data
     });
     
-    // Return a more specific error message for network errors
     if (error.message === "Network Error") {
       return Promise.reject(new Error("Cannot connect to server. Please check your connection."));
     }
     
-    // Return the error response data if available
     return Promise.reject(error.response?.data || error);
   }
 );
 
-export default api;
+// Helper function to extract data from response
+const extractData = <T>(response: any): ApiResponse<T> => {
+  return response.data;
+};
+
+// Create typed API functions
+export const apiGet = async <T = any>(url: string, config?: any): Promise<ApiResponse<T>> => {
+  const response = await api.get(url, config);
+  return extractData<T>(response);
+};
+
+export const apiPost = async <T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>> => {
+  const response = await api.post(url, data, config);
+  return extractData<T>(response);
+};
+
+export const apiPut = async <T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>> => {
+  const response = await api.put(url, data, config);
+  return extractData<T>(response);
+};
+
+export const apiDelete = async <T = any>(url: string, config?: any): Promise<ApiResponse<T>> => {
+  const response = await api.delete(url, config);
+  return extractData<T>(response);
+};
+
+export const apiPatch = async <T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>> => {
+  const response = await api.patch(url, data, config);
+  return extractData<T>(response);
+};
+
+// Export default for backward compatibility
+const typedApi = {
+  get: apiGet,
+  post: apiPost,
+  put: apiPut,
+  delete: apiDelete,
+  patch: apiPatch,
+};
+
+export default typedApi;

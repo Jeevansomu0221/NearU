@@ -1,5 +1,5 @@
 // apps/customer-app/src/api/order.api.ts
-import api from "./client";
+import { apiGet, apiPost, ApiResponse } from "./client";
 
 interface OrderItem {
   name: string;
@@ -15,6 +15,17 @@ interface CreateOrderRequest {
   note?: string;
 }
 
+// Define Order type
+export interface Order {
+  _id: string;
+  status: string;
+  grandTotal: number;
+  createdAt: string;
+  partnerId: {
+    restaurantName: string;
+  };
+}
+
 /**
  * CREATE SHOP ORDER
  */
@@ -23,7 +34,7 @@ export const createShopOrder = (
   deliveryAddress: string,
   items: OrderItem[],
   note?: string
-) => {
+): Promise<ApiResponse<Order>> => {
   const requestData: CreateOrderRequest = {
     partnerId,
     deliveryAddress,
@@ -33,26 +44,26 @@ export const createShopOrder = (
 
   console.log("Creating order with data:", requestData);
   
-  return api.post("/orders", requestData);
+  return apiPost<Order>("/orders", requestData);
 };
 
 /**
  * GET MY ORDERS
  */
-export const getMyOrders = () => {
-  return api.get("/orders/my");
+export const getMyOrders = (): Promise<ApiResponse<Order[]>> => {
+  return apiGet<Order[]>("/orders/my");
 };
 
 /**
  * GET ORDER DETAILS
  */
-export const getOrderDetails = (orderId: string) => {
-  return api.get(`/orders/${orderId}`);
+export const getOrderDetails = (orderId: string): Promise<ApiResponse<Order>> => {
+  return apiGet<Order>(`/orders/${orderId}`);
 };
 
 /**
  * CANCEL ORDER
  */
-export const cancelOrder = (orderId: string) => {
-  return api.post(`/orders/${orderId}/cancel`);
+export const cancelOrder = (orderId: string): Promise<ApiResponse<any>> => {
+  return apiPost<any>(`/orders/${orderId}/cancel`);
 };
