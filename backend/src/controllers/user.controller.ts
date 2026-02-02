@@ -1,83 +1,152 @@
-import { Request, Response } from "express";
-import Partner from "../models/Partner.model";
-
-// Define AuthRequest interface
-interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    phone: string;
-    role: string;
-    partnerId?: string;
-  };
-}
+// NEARU/backend/src/controllers/user.controller.ts
+import { Response } from "express";
+import User from "../models/User.model";
+import Order from "../models/Order.model";
+import { AuthRequest } from "../middlewares/auth.middleware";
+import { successResponse, errorResponse } from "../utils/response";
 
 /**
- * GET ALL SHOPS (for customers)
+ * GET USER PROFILE
  */
-export const getAllShops = async (req: Request, res: Response) => {
+export const getUserProfile = async (req: AuthRequest, res: Response) => {
   try {
-    console.log("🛍️ Fetching all shops...");
-    
-    // Get all approved partners who have completed setup
-    const shops = await Partner.find({ 
-      status: "APPROVED",
-      hasCompletedSetup: true 
-    })
-    .select('_id restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime')
-    .lean();
+    const user = req.user;
 
-    console.log(`✅ Found ${shops.length} shops`);
-    
-    // Debug: Log first few shops to check images
-    shops.slice(0, 3).forEach((shop, index) => {
-      console.log(`Shop ${index}: ${shop.shopName}, Image URL: ${shop.shopImageUrl || 'No image'}`);
-    });
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
 
-    return res.json({
-      success: true,
-      data: shops
-    });
-  } catch (error: any) {
-    console.error("❌ Error getting shops:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch shops",
-      error: error.message
-    });
+    // Find user by ID
+    const userData = await User.findById(user.id)
+      .select("-__v -createdAt -updatedAt")
+      .lean();
+
+    if (!userData) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    return successResponse(res, userData, "Profile retrieved successfully");
+  } catch (err: any) {
+    console.error("getUserProfile error:", err);
+    return errorResponse(res, "Failed to get profile");
   }
 };
 
 /**
- * GET SINGLE SHOP DETAILS
+ * UPDATE USER PROFILE
  */
-export const getShopDetails = async (req: Request, res: Response) => {
+export const updateUserProfile = async (req: AuthRequest, res: Response) => {
   try {
-    const { shopId } = req.params;
-    console.log("🔍 Getting shop details for:", shopId);
-    
-    const shop = await Partner.findById(shopId)
-      .select('_id restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime phone ownerName')
-      .lean();
+    const user = req.user;
+    const { name, email } = req.body;
 
-    if (!shop) {
-      return res.status(404).json({
-        success: false,
-        message: "Shop not found"
-      });
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
     }
 
-    console.log(`✅ Found shop: ${shop.shopName}, Image URL: ${shop.shopImageUrl || 'No image'}`);
+    // Build update object
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
 
-    return res.json({
-      success: true,
-      data: shop
-    });
-  } catch (error: any) {
-    console.error("❌ Error getting shop details:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch shop details",
-      error: error.message
-    });
+    // Update user
+    const updatedUser = await User.findByIdAndUpdate(
+      user.id,
+      updateData,
+      { new: true, runValidators: true }
+    ).select("-__v -createdAt -updatedAt");
+
+    if (!updatedUser) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    return successResponse(res, updatedUser, "Profile updated successfully");
+  } catch (err: any) {
+    console.error("updateUserProfile error:", err);
+    
+    if (err.code === 11000) {
+      return errorResponse(res, "Email already exists", 400);
+    }
+    
+    if (err.name === 'ValidationError') {
+      return errorResponse(res, err.message, 400);
+    }
+    
+    return errorResponse(res, "Failed to update profile");
+  }
+};
+
+/**
+ * UPDATE USER ADDRESS
+ */
+export const updateUserAddress = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { street, city, state, pincode, area, landmark } = req.body;
+
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    // Validate pincode if provided
+    if (pincode && !/^\d{6}$/.test(pincode)) {
+      return errorResponse(res, "Pincode must be 6 digits", 400);
+    }
+
+    // Build address object
+    const address = {
+      street: street || "",
+      city: city || "",
+      state: state || "",
+      pincode: pincode || "",
+      area: area || "",
+      landmark: landmark || ""
+    };
+
+    // Update user address
+    const updatedUser = await User.findByIdAndUpdate(
+      user.id,
+      { address },
+      { new: true, runValidators: true }
+    ).select("-__v -createdAt -updatedAt");
+
+    if (!updatedUser) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    return successResponse(res, updatedUser, "Address updated successfully");
+  } catch (err: any) {
+    console.error("updateUserAddress error:", err);
+    
+    if (err.name === 'ValidationError') {
+      return errorResponse(res, err.message, 400);
+    }
+    
+    return errorResponse(res, "Failed to update address");
+  }
+};
+
+/**
+ * GET USER'S ORDERS
+ */
+export const getMyOrders = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    // Find all orders for this customer
+    const orders = await Order.find({ customerId: user.id })
+      .populate("partnerId", "restaurantName shopName phone")
+      .populate("deliveryPartnerId", "name phone")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return successResponse(res, orders, "Orders retrieved successfully");
+  } catch (err: any) {
+    console.error("getMyOrders error:", err);
+    return errorResponse(res, "Failed to get orders");
   }
 };

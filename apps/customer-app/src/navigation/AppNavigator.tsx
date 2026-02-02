@@ -7,6 +7,9 @@ import OtpScreen from '../screens/OtpScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ShopDetailScreen from '../screens/ShopDetailScreen';
 import CartScreen from '../screens/CartScreen';
+import ProfileScreen from "../screens/ProfileScreen";
+import OrderStatusScreen from "../screens/OrderStatusScreen";
+import OrdersScreen from "../screens/OrdersScreen";
 
 // Define Address interface
 export interface Address {
@@ -31,6 +34,7 @@ export interface Shop {
   rating: number;
   closingTime?: string;
   openingTime?: string;
+  phone?: string;
 }
 
 // Define stack param list
@@ -45,6 +49,11 @@ export type RootStackParamList = {
   Cart: {
     shop: Shop;
   };
+  Profile: undefined; // Add this line - Profile doesn't need params
+  OrderStatus: {
+    orderId: string;
+  };
+  Orders: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -54,14 +63,62 @@ export default function AppNavigator() {
     <Stack.Navigator
       initialRouteName="Login"
       screenOptions={{
-        headerShown: false,
+        headerShown: true,
+        headerStyle: {
+          backgroundColor: '#FF6B35',
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: '600',
+        },
       }}
     >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Otp" component={OtpScreen} />
-      <Stack.Screen name="Home" component={HomeScreen} />
-      <Stack.Screen name="ShopDetail" component={ShopDetailScreen} />
-      <Stack.Screen name="Cart" component={CartScreen} />
+      <Stack.Screen 
+        name="Login" 
+        component={LoginScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Otp" 
+        component={OtpScreen}
+        options={{ 
+          headerShown: false,
+          title: 'Verify OTP'
+        }}
+      />
+      <Stack.Screen 
+        name="Home" 
+        component={HomeScreen}
+        options={{ 
+          title: 'NearU Food',
+          headerRight: undefined // Will be set in HomeScreen
+        }}
+      />
+      <Stack.Screen 
+        name="ShopDetail" 
+        component={ShopDetailScreen}
+        options={{ title: 'Restaurant Details' }}
+      />
+      <Stack.Screen 
+        name="Cart" 
+        component={CartScreen}
+        options={{ title: 'Your Cart' }}
+      />
+      <Stack.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{ title: 'My Profile' }}
+      />
+      <Stack.Screen 
+        name="OrderStatus" 
+        component={OrderStatusScreen}
+        options={{ title: 'Order Status' }}
+      />
+      <Stack.Screen 
+        name="Orders" 
+        component={OrdersScreen}
+        options={{ title: 'My Orders' }}
+      />
     </Stack.Navigator>
   );
 }

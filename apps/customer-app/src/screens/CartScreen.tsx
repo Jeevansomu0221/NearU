@@ -1,5 +1,5 @@
 // apps/customer-app/src/screens/CartScreen.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   View, 
   Text, 
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useCart } from "../context/CartContext";
 import { createShopOrder } from "../api/order.api";
+import { getUserProfile } from "../api/user.api";
 
 // Define proper types
 interface CartItem {
@@ -34,10 +35,51 @@ interface OrderResponse {
   message: string;
 }
 
+interface UserProfileResponse {
+  success: boolean;
+  data: {
+    _id: string;
+    name: string;
+    phone: string;
+    email?: string;
+    address?: {
+      street: string;
+      city: string;
+      state: string;
+      pincode: string;
+      area: string;
+      landmark?: string;
+    };
+  };
+  message: string;
+}
+
 export default function CartScreen({ route, navigation }: any) {
   const { shop } = route.params;
   const { items, clear, removeItem, updateQuantity, getCartTotal } = useCart();
   const [loading, setLoading] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Load user profile to check address
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      try {
+        const response = await getUserProfile();
+        const profileData = response.data as UserProfileResponse;
+        
+        if (profileData.success) {
+          setUserProfile(profileData.data);
+        }
+      } catch (error) {
+        console.error("Error loading profile:", error);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    loadUserProfile();
+  }, []);
 
   const calculateSubtotal = () => {
     return items.reduce((sum: number, item: CartItem) => sum + (item.price * item.quantity), 0);
@@ -49,9 +91,43 @@ export default function CartScreen({ route, navigation }: any) {
     return subtotal + deliveryFee;
   };
 
+  const formatAddress = () => {
+    if (!userProfile?.address) {
+      return "No address saved. Please add delivery address in Profile.";
+    }
+    
+    const addr = userProfile.address;
+    const parts = [
+      addr.street,
+      addr.area,
+      addr.landmark ? `Near ${addr.landmark}` : null,
+      `${addr.city}, ${addr.state} - ${addr.pincode}`
+    ].filter(Boolean);
+    
+    return parts.join(', ');
+  };
+
   const placeOrder = async () => {
     if (items.length === 0) {
       Alert.alert("Cart Empty", "Please add items to cart first");
+      return;
+    }
+
+    // Check if user has address
+    if (!userProfile?.address) {
+      Alert.alert(
+        "📍 Address Required",
+        "Please add your delivery address in Profile before placing order.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Add Address Now", 
+            onPress: () => {
+              navigation.navigate("Profile");
+            }
+          }
+        ]
+      );
       return;
     }
 
@@ -63,20 +139,22 @@ export default function CartScreen({ route, navigation }: any) {
         name: item.name,
         quantity: item.quantity,
         price: item.price,
-        menuItemId: item.menuItemId || item._id || "temp-id" // Send menuItemId for validation
+        menuItemId: item.menuItemId || item._id || "temp-id"
       }));
 
+      // Format delivery address from user profile
+      const deliveryAddress = formatAddress();
+      
       console.log("Placing order with items:", orderItems);
       console.log("Shop ID:", shop._id);
+      console.log("Delivery Address:", deliveryAddress);
 
       const response = await createShopOrder(
         shop._id,
-        "My Home Address, Hyderabad", // TODO: Get actual address from user profile
+        deliveryAddress,
         orderItems,
         "" // Optional note
       );
-
-      console.log("Order response:", response.data);
 
       const orderData = response.data as OrderResponse;
       
@@ -157,6 +235,10 @@ export default function CartScreen({ route, navigation }: any) {
     }
   };
 
+  const handleChangeAddress = () => {
+    navigation.navigate("Profile");
+  };
+
   const renderEmptyCart = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyText}>🛒 Your cart is empty</Text>
@@ -171,6 +253,66 @@ export default function CartScreen({ route, navigation }: any) {
       </TouchableOpacity>
     </View>
   );
+
+  const renderAddressSection = () => {
+    if (loadingProfile) {
+      return (
+        <View style={styles.deliveryInfo}>
+          <ActivityIndicator size="small" color="#FF6B35" />
+          <Text style={styles.loadingAddressText}>Loading address...</Text>
+        </View>
+      );
+    }
+
+    const hasAddress = !!userProfile?.address;
+    const addressColor = hasAddress ? '#666' : '#FF6B35';
+    const addressTextStyle = hasAddress ? styles.deliveryAddress : styles.noAddressText;
+
+    return (
+      <View style={styles.deliveryInfo}>
+        <View style={styles.deliveryHeader}>
+          <Text style={styles.deliveryTitle}>📦 Delivery Address</Text>
+          <TouchableOpacity onPress={handleChangeAddress}>
+            <Text style={styles.changeAddressText}>
+              {hasAddress ? "Change" : "Add Address"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {hasAddress ? (
+          <>
+            <Text style={addressTextStyle}>
+              {userProfile?.name || "Customer"}
+            </Text>
+            <Text style={[styles.deliveryPhone, { color: addressColor }]}>
+              📱 {userProfile?.phone}
+            </Text>
+            <Text style={addressTextStyle}>
+              {formatAddress()}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={addressTextStyle}>
+              No delivery address saved
+            </Text>
+            <Text style={styles.addressWarning}>
+              Please add your address to place order
+            </Text>
+          </>
+        )}
+        
+        <TouchableOpacity 
+          style={styles.addressButton}
+          onPress={handleChangeAddress}
+        >
+          <Text style={styles.addressButtonText}>
+            {hasAddress ? "Change Address" : "Add Address Now"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   const renderCartItems = () => (
     <>
@@ -248,14 +390,13 @@ export default function CartScreen({ route, navigation }: any) {
           </View>
         </View>
         
-        <View style={styles.deliveryInfo}>
-          <Text style={styles.deliveryTitle}>Delivery Address</Text>
-          <Text style={styles.deliveryAddress}>
-            My Home Address, Hyderabad
+        {renderAddressSection()}
+        
+        <View style={styles.noteContainer}>
+          <Text style={styles.noteTitle}>📝 Special Instructions (Optional)</Text>
+          <Text style={styles.noteText}>
+            Add cooking instructions, allergies, or delivery preferences
           </Text>
-          <TouchableOpacity>
-            <Text style={styles.changeAddressText}>Change</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
       
@@ -266,21 +407,42 @@ export default function CartScreen({ route, navigation }: any) {
         </View>
         
         <TouchableOpacity
-          style={[styles.placeOrderButton, loading && styles.placeOrderButtonDisabled]}
+          style={[
+            styles.placeOrderButton, 
+            loading && styles.placeOrderButtonDisabled,
+            (!userProfile?.address || items.length === 0) && styles.placeOrderButtonDisabled
+          ]}
           onPress={placeOrder}
-          disabled={loading || items.length === 0}
+          disabled={loading || items.length === 0 || !userProfile?.address}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.placeOrderButtonText}>
-              {items.length === 0 ? "Cart Empty" : `Place Order • ₹${calculateTotal()}`}
+              {!userProfile?.address ? "Add Address First" : 
+               items.length === 0 ? "Cart Empty" : 
+               `Place Order • ₹${calculateTotal()}`}
             </Text>
           )}
         </TouchableOpacity>
+        
+        {!userProfile?.address && (
+          <Text style={styles.addressWarningFooter}>
+            Please add delivery address in Profile to place order
+          </Text>
+        )}
       </View>
     </>
   );
+
+  if (loadingProfile) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6B35" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -315,6 +477,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
   header: {
     flexDirection: 'row',
@@ -506,22 +678,78 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 8,
   },
+  deliveryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   deliveryTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
   },
   deliveryAddress: {
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+    marginBottom: 4,
+  },
+  deliveryPhone: {
+    fontSize: 14,
+    color: '#666',
     marginBottom: 8,
+  },
+  noAddressText: {
+    fontSize: 14,
+    color: '#FF6B35',
+    lineHeight: 20,
+    marginBottom: 4,
+    fontStyle: 'italic',
+  },
+  addressWarning: {
+    fontSize: 12,
+    color: '#F44336',
+    marginTop: 4,
+  },
+  loadingAddressText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8,
   },
   changeAddressText: {
     fontSize: 14,
     color: '#2196F3',
     fontWeight: '500',
+  },
+  addressButton: {
+    backgroundColor: '#E3F2FD',
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  addressButtonText: {
+    color: '#2196F3',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  noteContainer: {
+    padding: 16,
+    backgroundColor: '#FFF8E1',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+  },
+  noteTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  noteText: {
+    fontSize: 13,
+    color: '#666',
   },
   footer: {
     padding: 16,
@@ -557,5 +785,12 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '700',
+  },
+  addressWarningFooter: {
+    fontSize: 12,
+    color: '#F44336',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
 });

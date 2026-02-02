@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Image, // ADD THIS
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -35,7 +35,7 @@ interface Shop {
   address: string | AddressObject;
   isOpen: boolean;
   rating: number;
-  shopImageUrl?: string; // ADD THIS
+  shopImageUrl?: string;
 }
 
 interface Props {
@@ -51,36 +51,35 @@ export default function HomeScreen({ navigation }: Props) {
   }, []);
 
   const loadNearbyShops = async () => {
-  try {
-    setLoading(true);
-    console.log('📱 Fetching nearby shops...');
-    
-    const response: any = await apiClient.get('/users/shops');
-    console.log('📦 FULL API Response:', JSON.stringify(response, null, 2)); // ADD THIS
-    
-    let shopsData: Shop[] = [];
-    
-    if (response && Array.isArray(response.data)) {
-      shopsData = response.data;
-    } else if (response && response.success && Array.isArray(response.data)) {
-      shopsData = response.data;
+    try {
+      setLoading(true);
+      console.log('📱 Fetching nearby shops...');
+      
+      const response: any = await apiClient.get('/partners/shops');
+      console.log('📦 FULL API Response:', JSON.stringify(response, null, 2));
+      
+      let shopsData: Shop[] = [];
+      
+      if (response && Array.isArray(response.data)) {
+        shopsData = response.data;
+      } else if (response && response.success && Array.isArray(response.data)) {
+        shopsData = response.data;
+      }
+      
+      console.log('🛍️ Shops loaded:', shopsData.length);
+      shopsData.forEach((shop: any, index: number) => {
+        console.log(`Shop ${index}:`, JSON.stringify(shop, null, 2));
+      });
+      setShops(shopsData);
+      
+    } catch (error: any) {
+      console.error('❌ API Error:', error);
+      Alert.alert('Error', error.message || 'Failed to load shops');
+      setShops([]);
+    } finally {
+      setLoading(false);
     }
-    
-    console.log('🛍️ Shops loaded:', shopsData.length);
-    // Debug each shop
-    shopsData.forEach((shop: any, index: number) => {
-      console.log(`Shop ${index}:`, JSON.stringify(shop, null, 2)); // ADD THIS
-    });
-    setShops(shopsData);
-    
-  } catch (error: any) {
-    console.error('❌ API Error:', error);
-    Alert.alert('Error', error.message || 'Failed to load shops');
-    setShops([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const formatAddress = (address: string | AddressObject): string => {
     if (!address) return "Address not available";
@@ -113,15 +112,22 @@ export default function HomeScreen({ navigation }: Props) {
       })}
     >
       <View style={styles.shopCardContent}>
-        {/* Shop Image */}
+        {/* Shop Image - FIXED: No require() needed since we only use URI or placeholder */}
         {item.shopImageUrl ? (
           <Image 
             source={{ uri: item.shopImageUrl }} 
             style={styles.shopImage}
             resizeMode="cover"
+            onError={(e) => {
+              console.log('Image load error:', e.nativeEvent.error);
+              // If image fails to load, it will show the placeholder
+            }}
           />
         ) : (
           <View style={[styles.shopImage, styles.placeholderImage]}>
+            <Text style={styles.placeholderEmoji}>
+              {getCategoryEmoji(item.category)}
+            </Text>
             <Text style={styles.placeholderText}>No Image</Text>
           </View>
         )}
@@ -149,6 +155,20 @@ export default function HomeScreen({ navigation }: Props) {
       </View>
     </TouchableOpacity>
   );
+
+  // Helper function to get emoji based on category
+  const getCategoryEmoji = (category: string) => {
+    if (!category) return '🏪';
+    const lowerCategory = category.toLowerCase();
+    if (lowerCategory.includes('pizza') || lowerCategory.includes('italian')) return '🍕';
+    if (lowerCategory.includes('burger') || lowerCategory.includes('fast')) return '🍔';
+    if (lowerCategory.includes('chinese') || lowerCategory.includes('asian')) return '🥡';
+    if (lowerCategory.includes('indian')) return '🥘';
+    if (lowerCategory.includes('coffee') || lowerCategory.includes('cafe')) return '☕';
+    if (lowerCategory.includes('dessert') || lowerCategory.includes('sweet')) return '🍰';
+    if (lowerCategory.includes('beverage') || lowerCategory.includes('drink')) return '🥤';
+    return '🏪';
+  };
 
   if (loading) {
     return (
@@ -228,13 +248,18 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   placeholderImage: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#FF6B35',
     justifyContent: 'center',
     alignItems: 'center',
   },
+  placeholderEmoji: {
+    fontSize: 32,
+    marginBottom: 4,
+  },
   placeholderText: {
-    color: '#888',
+    color: '#fff',
     fontSize: 11,
+    fontWeight: '500',
   },
   shopInfo: {
     flex: 1,
