@@ -7,7 +7,8 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  Image // ADD THIS
+  Image,
+  TouchableOpacity
 } from "react-native";
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, Shop } from '../navigation/AppNavigator';
@@ -23,7 +24,7 @@ interface MenuItem {
   description?: string;
   category?: string;
   isAvailable: boolean;
-  imageUrl?: string; // Cloudinary URL will be here
+  imageUrl?: string;
 }
 
 interface Props {
@@ -40,14 +41,15 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const { shopId, shop: passedShop } = route.params;
   const [shop, setShop] = useState<Shop | null>(passedShop || null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
-  const { addItem } = useCart();
+  
+  // Use cart context
+  const { addItem, currentShopId, clearCartForNewShop } = useCart();
 
   const loadMenu = async () => {
     try {
       const res: any = await getPartnerMenu(shopId);
       if (res.data && Array.isArray(res.data)) {
         setMenu(res.data);
-        // Debug: Check if images are in the response
         console.log("📱 Menu loaded with items:", res.data.length);
         res.data.forEach((item: MenuItem, index: number) => {
           console.log(`Item ${index}: ${item.name}, Image URL: ${item.imageUrl || 'No image'}`);
@@ -60,9 +62,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   };
 
   useEffect(() => {
-    // If shop wasn't passed, fetch it
     if (!shop && shopId) {
-      // You might want to implement a fetchShopDetails API call here
       console.log("Need to fetch shop details for:", shopId);
     }
     loadMenu();
@@ -71,7 +71,6 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const formatAddress = (address: any) => {
     if (!address) return "Address not available";
     
-    // Handle both string and object addresses
     if (typeof address === 'string') {
       return address;
     }
@@ -98,16 +97,54 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       return;
     }
     
-    // Create cart item without id if CartContext doesn't expect it
+    // Get shop name safely
+    const shopName = shop.shopName || shop.restaurantName || "Restaurant";
+    
+    // Check if we're switching shops
+    if (currentShopId && currentShopId !== shop._id) {
+      Alert.alert(
+        "Switch Restaurant?",
+        `Your cart contains items from another restaurant. Adding items from "${shopName}" will clear your current cart.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Clear & Add", 
+            onPress: () => {
+              // Clear cart for new shop
+              clearCartForNewShop(shop._id, shopName);
+              
+              // Add the new item
+              const cartItem = {
+                _id: item._id,
+                name: item.name,
+                price: item.price,
+                quantity: 1,
+                shopId: shop._id,
+                shopName: shopName,
+                menuItemId: item._id
+              };
+              
+              addItem(cartItem);
+              Alert.alert("Added", `${item.name} added to cart`);
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Add item to cart (same shop)
     const cartItem = {
+      _id: item._id,
       name: item.name,
       price: item.price,
       quantity: 1,
       shopId: shop._id,
-      shopName: shop.restaurantName || shop.shopName
+      shopName: shopName,
+      menuItemId: item._id
     };
     
-    addItem(cartItem as any);
+    addItem(cartItem);
     Alert.alert("Added", `${item.name} added to cart`);
   };
 
@@ -136,11 +173,12 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       </View>
       
       <View style={styles.addButtonContainer}>
-        <Button
-          title="Add"
+        <TouchableOpacity
+          style={styles.addButton}
           onPress={() => handleAddToCart(item)}
-          color="#FF6B35"
-        />
+        >
+          <Text style={styles.addButtonText}>Add</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -153,11 +191,14 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     );
   }
 
+  const shopName = shop.restaurantName || shop.shopName || "Restaurant";
+  const shopCategory = shop.category || "Food";
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.shopHeader}>
-        <Text style={styles.shopName}>{shop.restaurantName || shop.shopName}</Text>
-        <Text style={styles.category}>{shop.category}</Text>
+        <Text style={styles.shopName}>{shopName}</Text>
+        <Text style={styles.category}>{shopCategory}</Text>
         
         <View style={styles.statusContainer}>
           <View style={[styles.statusDot, shop.isOpen ? styles.open : styles.closed]} />
@@ -194,12 +235,21 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.buttonContainer}>
-        <Button
-          title="View Cart"
-          onPress={() => navigation.navigate("Cart")}
-          color="#FF6B35"
-        />
-      </View>
+  <Button
+    title="View Cart"
+    onPress={() => {
+      if (shop) {
+        navigation.navigate("Cart", { 
+          shop: shop // Make sure this matches what CartScreen expects
+        });
+      } else {
+        Alert.alert("Error", "Shop information not available");
+      }
+    }}
+    color="#FF6B35"
+  />
+</View>
+
     </ScrollView>
   );
 }
@@ -327,6 +377,17 @@ const styles = StyleSheet.create({
   },
   addButtonContainer: {
     width: 70,
+  },
+  addButton: {
+    backgroundColor: '#FF6B35',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  addButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
   },
   buttonContainer: {
     padding: 16,

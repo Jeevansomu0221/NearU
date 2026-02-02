@@ -1,9 +1,12 @@
+// NEARU/backend/src/models/Order.model.ts
 import { Schema, model, Types } from "mongoose";
 
 const OrderSchema = new Schema({
+  // Order type is always "SHOP" now
   orderType: {
     type: String,
-    enum: ["SHOP", "CUSTOM"],
+    enum: ["SHOP"],
+    default: "SHOP",
     required: true
   },
 
@@ -15,7 +18,8 @@ const OrderSchema = new Schema({
 
   partnerId: {
     type: Types.ObjectId,
-    ref: "Partner"
+    ref: "Partner",
+    required: true
   },
 
   deliveryPartnerId: {
@@ -28,40 +32,82 @@ const OrderSchema = new Schema({
     required: true
   },
 
-  note: String, // custom order text OR instructions
+  note: {
+    type: String,
+    default: ""
+  },
 
   items: [
     {
-      name: String,
-      quantity: Number,
-      price: Number
+      name: {
+        type: String,
+        required: true
+      },
+      quantity: {
+        type: Number,
+        required: true,
+        min: 1
+      },
+      price: {
+        type: Number,
+        required: true,
+        min: 0
+      },
+      menuItemId: {
+        type: Types.ObjectId,
+        ref: "MenuItem",
+        required: true
+      }
     }
   ],
 
-  itemTotal: Number,
-  deliveryFee: Number,
-  grandTotal: Number,
+  itemTotal: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+
+  deliveryFee: {
+    type: Number,
+    required: true,
+    default: 49
+  },
+
+  grandTotal: {
+    type: Number,
+    required: true,
+    min: 0
+  },
 
   paymentStatus: {
     type: String,
-    enum: ["PENDING", "PAID", "FAILED"],
-    default: "PENDING"
+    enum: ["PAID", "FAILED", "REFUNDED"],
+    default: "PAID"
   },
 
   status: {
     type: String,
     enum: [
-      "CREATED",          // customer placed
-      "PRICED",           // admin priced (CUSTOM)
-      "CONFIRMED",        // customer accepted
-      "ASSIGNED",         // delivery assigned
-      "PICKED_UP",
-      "DELIVERED",
-      "CANCELLED"
+      "CONFIRMED",        // Order placed by customer
+      "ACCEPTED",         // Partner accepted order
+      "PREPARING",        // Partner preparing food
+      "READY",           // Food ready for pickup
+      "ASSIGNED",        // Delivery partner assigned
+      "PICKED_UP",       // Delivery picked up order
+      "DELIVERED",       // Order delivered to customer
+      "CANCELLED",       // Order cancelled
+      "REJECTED"         // Partner rejected order
     ],
-    default: "CREATED"
+    default: "CONFIRMED"
   }
-}, { timestamps: true });
+}, { 
+  timestamps: true 
+});
 
+// Indexes for better query performance
+OrderSchema.index({ customerId: 1, createdAt: -1 });
+OrderSchema.index({ partnerId: 1, createdAt: -1 });
+OrderSchema.index({ deliveryPartnerId: 1, createdAt: -1 });
+OrderSchema.index({ status: 1, createdAt: -1 });
 
 export default model("Order", OrderSchema);

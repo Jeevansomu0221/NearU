@@ -42,7 +42,9 @@ export type RootStackParamList = {
     shopId: string;
     shop?: Shop; // Add optional shop parameter
   };
-  Cart: undefined;
+  Cart: {
+    shop: Shop;
+  };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
