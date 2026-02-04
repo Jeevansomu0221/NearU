@@ -36,25 +36,23 @@ export default function PaymentScreen({ route, navigation }: any) {
     });
   };
 
-  // In PaymentScreen.tsx, update the formatAddress function:
-
-const formatAddress = (address: any) => {
-  if (!address) return "No address";
-  
-  // Check if address is string
-  if (typeof address === 'string') return address;
-  
-  // Format object address - use 'street' instead of 'roadStreet'
-  const addr = address;
-  const parts = [
-    addr.street,  // Changed from addr.roadStreet to addr.street
-    addr.area,
-    addr.landmark ? `Near ${addr.landmark}` : null,
-    `${addr.city}, ${addr.state} - ${addr.pincode}`
-  ].filter(Boolean);
-  
-  return parts.join(', ');
-};
+  const formatAddress = (address: any) => {
+    if (!address) return "No address";
+    
+    // Check if address is string
+    if (typeof address === 'string') return address;
+    
+    // Format object address
+    const addr = address;
+    const parts = [
+      addr.street,
+      addr.area,
+      addr.landmark ? `Near ${addr.landmark}` : null,
+      `${addr.city}, ${addr.state} - ${addr.pincode}`
+    ].filter(Boolean);
+    
+    return parts.join(', ');
+  };
 
   const handlePayment = async () => {
     if (paymentMethod === "CASH_ON_DELIVERY") {
@@ -67,6 +65,7 @@ const formatAddress = (address: any) => {
   const createOrderWithCOD = async () => {
     try {
       setLoading(true);
+      console.log("🛒 Creating COD order with items:", items);
       
       const orderItems = items.map((item: any) => ({
         name: item.name,
@@ -75,6 +74,10 @@ const formatAddress = (address: any) => {
         menuItemId: item.menuItemId || item._id || "temp-id"
       }));
 
+      console.log("📝 Order items formatted:", orderItems);
+      console.log("🏪 Shop ID:", shop._id);
+      console.log("📍 Delivery address:", orderSummary.address);
+      
       const response = await createShopOrder(
         shop._id,
         orderSummary.address,
@@ -83,17 +86,55 @@ const formatAddress = (address: any) => {
         "CASH_ON_DELIVERY"
       );
 
+      console.log("📦 Order API Response:", response);
+
       if (response.success && response.data) {
+        console.log("✅ Order created successfully:", response.data._id);
         clear();
         navigation.replace("OrderStatus", { 
           orderId: response.data._id 
         });
       } else {
-        Alert.alert("Order Failed", response.message || "Failed to place order");
+        console.error("❌ Order creation failed:", response.message);
+        Alert.alert(
+          "Order Failed", 
+          response.message || "Failed to place order",
+          [{ text: "OK", style: "default" }]
+        );
       }
     } catch (error: any) {
-      console.error("COD Order error:", error);
-      Alert.alert("Order Failed", "Failed to place COD order");
+      console.error("❌ COD Order error:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url
+      });
+      
+      let errorMessage = "Failed to place COD order";
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message.includes("Network Error")) {
+        errorMessage = "Cannot connect to server. Please check your internet connection.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert(
+        "Order Failed", 
+        errorMessage,
+        [
+          { 
+            text: "Try Again", 
+            onPress: () => createOrderWithCOD(),
+            style: "default"
+          },
+          { 
+            text: "Cancel", 
+            style: "cancel" 
+          }
+        ]
+      );
     } finally {
       setLoading(false);
     }

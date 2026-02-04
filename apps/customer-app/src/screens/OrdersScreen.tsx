@@ -20,6 +20,7 @@ export default function OrdersScreen({ navigation }: any) {
 
   const loadOrders = async () => {
     try {
+      setLoading(true);
       const response = await getMyOrders();
       
       if (response.success && response.data) {
@@ -27,7 +28,7 @@ export default function OrdersScreen({ navigation }: any) {
       } else {
         Alert.alert("Error", response.message || "Failed to load orders");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading orders:", error);
       Alert.alert("Error", "Failed to load orders");
     } finally {

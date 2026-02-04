@@ -1,28 +1,35 @@
-import { Router } from "express";
+import express from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
-import { roleMiddleware } from "../middlewares/role.middleware";
-import { ROLES } from "../config/roles";
+import { 
+  getAvailableDeliveryJobs, 
+  acceptDeliveryJob, 
+  updateDeliveryStatus,
+  getMyOrders,
+  getOrderDetails,
+  updateDeliveryStatus as updateOrderDeliveryStatus
+} from "../controllers/order.controller";
 
-const router = Router();
+const router = express.Router();
 
-router.get("/",
-  authMiddleware,
-  roleMiddleware([ROLES.DELIVERY]),
-  async (req, res) => {
-    try {
-      res.json({
-        success: true,
-        message: "Delivery routes working",
-        data: null
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ 
-        success: false,
-        message: "Internal server error" 
-      });
-    }
-  }
-);
+// Apply auth middleware to all delivery routes
+router.use(authMiddleware);
+
+// =================== DELIVERY JOBS ===================
+// Get available delivery jobs (READY orders not assigned)
+router.get("/available-jobs", getAvailableDeliveryJobs);
+
+// Accept a delivery job
+router.post("/:orderId/accept", acceptDeliveryJob);
+
+// =================== MY ORDERS ===================
+// Get my assigned delivery orders
+router.get("/my-orders", getMyOrders);
+
+// Get order details
+router.get("/orders/:orderId", getOrderDetails);
+
+// =================== ORDER STATUS UPDATES ===================
+// Update delivery status (PICKED_UP, DELIVERED)
+router.patch("/:orderId/status", updateDeliveryStatus);
 
 export default router;

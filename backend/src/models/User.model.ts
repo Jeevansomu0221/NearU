@@ -19,7 +19,7 @@ const UserSchema = new Schema({
   },
   role: {
     type: String,
-    enum: Object.values(ROLES),
+    enum: Object.values(ROLES), // This will be ["customer", "partner", "admin", "delivery"]
     default: ROLES.CUSTOMER
   },
   // ADD THIS ADDRESS FIELD

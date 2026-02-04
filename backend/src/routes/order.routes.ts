@@ -11,7 +11,9 @@ import {
   getMyOrders,
   getOrderDetails,
   cancelOrder,
-  updateOrderPayment
+  updateOrderPayment,
+  getAvailableDeliveryJobs,
+  acceptDeliveryJob
 } from "../controllers/order.controller";
 
 const router = Router();
@@ -97,6 +99,22 @@ router.post(
  * DELIVERY ROUTES
  * ================================
  */
+
+// Delivery gets available jobs (READY orders not assigned)
+router.get(
+  "/delivery/available-jobs", 
+  authMiddleware, 
+  roleMiddleware([ROLES.DELIVERY]), 
+  getAvailableDeliveryJobs
+);
+
+// Delivery accepts a job (assigns self to order)
+router.post(
+  "/delivery/:orderId/accept", 
+  authMiddleware, 
+  roleMiddleware([ROLES.DELIVERY]), 
+  acceptDeliveryJob
+);
 
 // Delivery gets assigned orders
 router.get(

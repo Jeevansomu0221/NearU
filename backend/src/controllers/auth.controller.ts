@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { Types } from "mongoose";
 import User from "../models/User.model";
 import Partner from "../models/Partner.model";
+import DeliveryPartner from "../models/DeliveryPartner.model"; // Make sure this model exists
 import { OTPService } from "../services/otp.service";
 import { successResponse, errorResponse } from "../utils/response";
 
@@ -34,12 +35,12 @@ export const sendOTP = async (req: Request, res: Response) => {
       });
     }
 
-    // Validate role
-    const validRoles = ['customer', 'partner', 'admin'];
+    // ✅ UPDATED: Add "delivery" role to valid roles
+    const validRoles = ['customer', 'partner', 'admin', 'delivery'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid role. Must be: customer, partner, or admin"
+        message: `Invalid role. Must be: ${validRoles.join(", ")}`
       });
     }
 
@@ -95,6 +96,15 @@ export const verifyOTP = async (req: Request, res: Response) => {
       });
     }
     
+    // ✅ UPDATED: Validate role
+    const validRoles = ['customer', 'partner', 'admin', 'delivery'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid role. Must be: ${validRoles.join(", ")}`
+      });
+    }
+    
     // DEVELOPMENT/TEST MODE: Check against stored test OTP
     if (testOtps.has(phone)) {
       const storedOtp = testOtps.get(phone);
@@ -127,20 +137,28 @@ export const verifyOTP = async (req: Request, res: Response) => {
       };
       
       // Set default name based on role
-      if (role === "customer") {
-        userData.name = `Customer ${phone.substring(6)}`;
-        console.log("👤 Creating new customer user for phone:", phone);
-      } else if (role === "partner") {
-        userData.name = `Partner ${phone.substring(6)}`;
-        console.log("👤 Creating new partner user for phone:", phone);
-      } else if (role === "admin") {
-        userData.name = `Admin ${phone.substring(6)}`;
-        console.log("👤 Creating new admin user for phone:", phone);
-      } else {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid role"
-        });
+      switch (role) {
+        case "customer":
+          userData.name = `Customer ${phone.substring(6)}`;
+          console.log("👤 Creating new customer user for phone:", phone);
+          break;
+        case "partner":
+          userData.name = `Partner ${phone.substring(6)}`;
+          console.log("👤 Creating new partner user for phone:", phone);
+          break;
+        case "admin":
+          userData.name = `Admin ${phone.substring(6)}`;
+          console.log("👤 Creating new admin user for phone:", phone);
+          break;
+        case "delivery":
+          userData.name = `Delivery ${phone.substring(6)}`;
+          console.log("🚚 Creating new delivery user for phone:", phone);
+          break;
+        default:
+          return res.status(400).json({
+            success: false,
+            message: "Invalid role"
+          });
       }
       
       user = await User.create(userData);
@@ -155,17 +173,34 @@ export const verifyOTP = async (req: Request, res: Response) => {
         await user.save();
       }
       
-      // For customer/partner, allow role mismatch for development
+      // For other roles, allow role mismatch for development
       if ((role === "customer" && user.role !== "customer") || 
-          (role === "partner" && user.role !== "partner")) {
+          (role === "partner" && user.role !== "partner") ||
+          (role === "delivery" && user.role !== "delivery")) {
         console.log(`⚠️ Role mismatch: User is ${user.role}, requested ${role}. Updating role.`);
         user.role = role;
+        
+        // Update name based on new role
+        switch (role) {
+          case "customer":
+            user.name = `Customer ${phone.substring(6)}`;
+            break;
+          case "partner":
+            user.name = `Partner ${phone.substring(6)}`;
+            break;
+          case "delivery":
+            user.name = `Delivery ${phone.substring(6)}`;
+            break;
+        }
+        
         await user.save();
       }
     }
     
     // Find partner if user is a partner
     let partnerId = null;
+    let deliveryPartnerId = null;
+    
     if (user.role === "partner") {
       let partner = await Partner.findOne({ userId: user._id });
       
@@ -185,6 +220,37 @@ export const verifyOTP = async (req: Request, res: Response) => {
       }
     }
     
+    // ✅ NEW: Find delivery partner if user is a delivery partner
+    if (user.role === "delivery") {
+      let deliveryPartner = await DeliveryPartner.findOne({ userId: user._id });
+      
+      if (!deliveryPartner) {
+        deliveryPartner = await DeliveryPartner.findOne({ phone });
+        
+        if (deliveryPartner && !deliveryPartner.userId) {
+          deliveryPartner.userId = user._id;
+          await deliveryPartner.save();
+          console.log("✅ Updated delivery partner userId");
+        } else if (!deliveryPartner) {
+          // Create a new delivery partner profile if doesn't exist
+          deliveryPartner = await DeliveryPartner.create({
+            userId: user._id,
+            phone: user.phone,
+            name: user.name,
+            isAvailable: true,
+            vehicleType: "Bike", // Default
+            status: "ACTIVE"
+          });
+          console.log("✅ Created new delivery partner profile");
+        }
+      }
+      
+      if (deliveryPartner) {
+        deliveryPartnerId = deliveryPartner._id.toString();
+        console.log("✅ Found delivery partner profile:", deliveryPartnerId);
+      }
+    }
+    
     // Generate token
     const tokenPayload: any = {
       id: user._id.toString(),
@@ -195,6 +261,11 @@ export const verifyOTP = async (req: Request, res: Response) => {
     
     if (partnerId) {
       tokenPayload.partnerId = partnerId;
+    }
+    
+    // ✅ NEW: Add deliveryPartnerId to token payload
+    if (deliveryPartnerId) {
+      tokenPayload.deliveryPartnerId = deliveryPartnerId;
     }
     
     const token = jwt.sign(
@@ -219,7 +290,8 @@ export const verifyOTP = async (req: Request, res: Response) => {
         phone: user.phone,
         name: user.name,
         role: user.role,
-        partnerId: partnerId
+        partnerId: partnerId,
+        deliveryPartnerId: deliveryPartnerId // ✅ NEW: Include deliveryPartnerId
       },
       message: "Login successful"
     });

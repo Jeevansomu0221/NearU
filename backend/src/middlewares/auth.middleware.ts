@@ -1,69 +1,61 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-// Use the UploadedFile type from express-fileupload
-import { UploadedFile } from "express-fileupload";
-
-// Define and export the AuthRequest type with files
 export interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    phone: string;
-    role: string;
-    partnerId?: string;
-  };
-  files?: {
-    [fieldname: string]: UploadedFile | UploadedFile[];
-  } | null;
+  user?: any;
 }
 
 export const authMiddleware = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.header("Authorization");
+    // Get token from header
+    const authHeader = req.headers.authorization;
+    
+    console.log("🔐 Auth Middleware - Checking token");
+    console.log("Authorization header:", authHeader);
     
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log("❌ No auth header or invalid format");
+      console.log("❌ No Bearer token found");
       return res.status(401).json({
         success: false,
         message: "No token provided"
       });
     }
     
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.split(" ")[1];
+    console.log("Token received:", token.substring(0, 20) + "...");
     
-    console.log("🔐 Verifying token:", token.substring(0, 20) + "...");
+    // Verify token
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || 'your-secret-key'
+    ) as any;
     
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-    
-    // Attach user info to request
-    (req as AuthRequest).user = {
+    console.log("✅ Token verified successfully");
+    console.log("Decoded user:", {
       id: decoded.id,
       phone: decoded.phone,
       role: decoded.role,
-      partnerId: decoded.partnerId
-    };
-    
-    console.log("✅ Authenticated user:", {
-      id: decoded.id,
-      phone: decoded.phone,
-      role: decoded.role,
-      hasPartnerId: !!decoded.partnerId
+      name: decoded.name
     });
     
+    // Add user to request
+    req.user = {
+      id: decoded.id,
+      phone: decoded.phone,
+      role: decoded.role,
+      name: decoded.name,
+      partnerId: decoded.partnerId,
+      deliveryPartnerId: decoded.deliveryPartnerId
+    };
+    
+    console.log("🔒 User authenticated:", req.user.role);
     next();
   } catch (error: any) {
-    console.error("❌ Auth middleware error:", error.message);
-    
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        success: false,
-        message: "Token expired"
-      });
-    }
+    console.error("❌ Auth Middleware Error:", error.message);
     
     if (error.name === "JsonWebTokenError") {
       return res.status(401).json({
@@ -72,7 +64,14 @@ export const authMiddleware = async (
       });
     }
     
-    return res.status(401).json({
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({
+        success: false,
+        message: "Token expired"
+      });
+    }
+    
+    return res.status(500).json({
       success: false,
       message: "Authentication failed"
     });
