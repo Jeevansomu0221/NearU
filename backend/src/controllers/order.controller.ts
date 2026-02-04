@@ -11,7 +11,7 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 
 /**
  * ================================
- * CREATE SHOP ORDER
+ * CREATE SHOP ORDER (UPDATED WITH PAYMENT)
  * ================================
  */
 export const createOrder = async (req: AuthRequest, res: Response) => {
@@ -25,7 +25,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const { partnerId, deliveryAddress, items, note } = req.body;
+    const { partnerId, deliveryAddress, items, note, paymentMethod = "RAZORPAY" } = req.body;
 
     // Validate required fields
     if (!partnerId || !deliveryAddress) {
@@ -34,6 +34,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     if (!items || items.length === 0) {
       return errorResponse(res, "Items are required for orders", 400);
+    }
+
+    // Validate payment method
+    const validPaymentMethods = ["RAZORPAY", "CASH_ON_DELIVERY", "CARD", "UPI", "WALLET"];
+    if (!validPaymentMethods.includes(paymentMethod)) {
+      return errorResponse(res, `Invalid payment method. Valid methods: ${validPaymentMethods.join(", ")}`, 400);
     }
 
     // Validate partner exists and is open
@@ -88,6 +94,13 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     const deliveryFee = 49; // Fixed delivery fee for now
     const grandTotal = itemTotal + deliveryFee;
 
+    // Determine payment status based on payment method
+    const paymentStatus = "PENDING";
+
+    // Determine initial order status
+    // COD orders start as CONFIRMED, online payments start as PENDING
+    const initialStatus = paymentMethod === "CASH_ON_DELIVERY" ? "CONFIRMED" : "PENDING";
+
     // Create the main order
     const order = new Order({
       orderType: "SHOP",
@@ -99,8 +112,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       itemTotal,
       deliveryFee,
       grandTotal,
-      status: "CONFIRMED",
-      paymentStatus: "PAID"
+      paymentMethod,
+      paymentStatus,
+      status: initialStatus
     });
 
     await order.save({ session });
@@ -134,6 +148,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       .populate("customerId", "name phone");
 
     console.log(`📱 Order ${order._id} created for partner ${partnerId}`);
+    console.log(`💰 Payment Method: ${paymentMethod}, Status: ${paymentStatus}, Order Status: ${initialStatus}`);
 
     return successResponse(res, populatedOrder, "Order created successfully");
 
@@ -141,6 +156,91 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     await session.abortTransaction();
     console.error("createOrder error:", err);
     return errorResponse(res, "Failed to create order");
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * ================================
+ * UPDATE ORDER PAYMENT STATUS
+ * ================================
+ */
+export const updateOrderPayment = async (req: AuthRequest, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const user = req.user;
+    const { orderId } = req.params;
+    const { 
+      paymentId, 
+      razorpayOrderId, 
+      razorpayPaymentId, 
+      razorpaySignature,
+      paymentMethod,
+      paymentStatus 
+    } = req.body;
+
+    if (!user || user.role !== ROLES.CUSTOMER) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const order = await Order.findById(orderId).session(session);
+    
+    if (!order) {
+      await session.abortTransaction();
+      return errorResponse(res, "Order not found", 404);
+    }
+
+    // Check if user is the customer who placed this order
+    const userId = new mongoose.Types.ObjectId(user.id);
+    if (!order.customerId.equals(userId)) {
+      await session.abortTransaction();
+      return errorResponse(res, "Unauthorized to update this order", 401);
+    }
+
+    // Validate payment status
+    const validPaymentStatuses = ["PENDING", "PAID", "FAILED", "REFUNDED", "CANCELLED"];
+    if (paymentStatus && !validPaymentStatuses.includes(paymentStatus)) {
+      await session.abortTransaction();
+      return errorResponse(res, `Invalid payment status. Valid statuses: ${validPaymentStatuses.join(", ")}`, 400);
+    }
+
+    // Update payment details
+    if (paymentId) order.paymentId = paymentId;
+    if (razorpayOrderId) order.razorpayOrderId = razorpayOrderId;
+    if (razorpayPaymentId) order.razorpayPaymentId = razorpayPaymentId;
+    if (razorpaySignature) order.razorpaySignature = razorpaySignature;
+    if (paymentMethod) order.paymentMethod = paymentMethod;
+    if (paymentStatus) order.paymentStatus = paymentStatus;
+    
+    // If payment is successful and order was PENDING, update to CONFIRMED
+    if (paymentStatus === "PAID" && order.status === "PENDING") {
+      order.status = "CONFIRMED";
+      
+      // Update sub-order status
+      await SubOrder.findOneAndUpdate(
+        { orderId: order._id },
+        { status: "CONFIRMED" },
+        { session }
+      );
+    }
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    // Get updated order with populated fields
+    const updatedOrder = await Order.findById(orderId)
+      .populate("partnerId", "restaurantName phone shopName")
+      .populate("customerId", "name phone");
+
+    return successResponse(res, updatedOrder, "Payment status updated successfully");
+
+  } catch (err: any) {
+    await session.abortTransaction();
+    console.error("Update payment error:", err);
+    return errorResponse(res, "Failed to update payment status");
   } finally {
     session.endSession();
   }
@@ -171,6 +271,15 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     const order = await Order.findById(orderId);
     if (!order) {
       return errorResponse(res, "Order not found", 404);
+    }
+
+    // Check payment status before allowing partner to accept
+    // For COD orders, paymentStatus will be PENDING but that's allowed
+    // For online payments, need PAID status
+    if (status === "ACCEPTED") {
+      if (order.paymentMethod !== "CASH_ON_DELIVERY" && order.paymentStatus !== "PAID") {
+        return errorResponse(res, "Cannot accept order with pending payment", 400);
+      }
     }
 
     // Check if user is the partner for this order
@@ -230,6 +339,11 @@ export const assignDelivery = async (req: AuthRequest, res: Response) => {
 
     if (!order) {
       return errorResponse(res, "Order not found", 404);
+    }
+
+    // Check payment status before assigning delivery
+    if (order.paymentMethod !== "CASH_ON_DELIVERY" && order.paymentStatus !== "PAID") {
+      return errorResponse(res, "Cannot assign delivery for order with pending payment", 400);
     }
 
     // Only assign delivery if order is READY
@@ -293,6 +407,12 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     }
 
     order.status = status;
+    
+    // If delivered, update payment status for COD orders
+    if (status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "PENDING") {
+      order.paymentStatus = "PAID";
+    }
+
     await order.save();
 
     // Also update sub-order status
@@ -419,6 +539,9 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
  * ================================
  */
 export const cancelOrder = async (req: AuthRequest, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const user = req.user;
     const { orderId } = req.params;
@@ -427,36 +550,53 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).session(session);
 
     if (!order) {
+      await session.abortTransaction();
       return errorResponse(res, "Order not found", 404);
     }
 
     const userId = new mongoose.Types.ObjectId(user.id);
     if (!order.customerId.equals(userId)) {
+      await session.abortTransaction();
       return errorResponse(res, "Unauthorized", 401);
     }
 
     // Only allow cancellation if order hasn't been accepted by partner
-    const cancellableStatuses = ["CONFIRMED"];
+    // Include PENDING status in cancellable statuses
+    const cancellableStatuses = ["CONFIRMED", "PENDING"];
     if (!cancellableStatuses.includes(order.status)) {
       return errorResponse(res, `Order cannot be cancelled in ${order.status} status`, 400);
     }
 
+    // Update order status
     order.status = "CANCELLED";
-    await order.save();
+    
+    // Update payment status if payment was made
+    if (order.paymentStatus === "PAID") {
+      order.paymentStatus = "REFUNDED";
+    } else {
+      order.paymentStatus = "CANCELLED";
+    }
+
+    await order.save({ session });
 
     // Also cancel the sub-order
     await SubOrder.findOneAndUpdate(
       { orderId: order._id },
       { status: "CANCELLED" },
-      { new: true }
+      { session }
     );
+
+    await session.commitTransaction();
 
     return successResponse(res, order, "Order cancelled successfully");
   } catch (err: any) {
+    await session.abortTransaction();
     console.error("cancelOrder error:", err);
     return errorResponse(res, "Failed to cancel order");
+  } finally {
+    session.endSession();
   }
 };

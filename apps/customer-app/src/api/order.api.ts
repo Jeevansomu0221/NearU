@@ -13,27 +13,39 @@ interface CreateOrderRequest {
   deliveryAddress: string;
   items: OrderItem[];
   note?: string;
+  paymentMethod?: string;
 }
 
-// Define Order type
+// Define complete Order type with all fields
 export interface Order {
   _id: string;
   status: string;
   grandTotal: number;
   createdAt: string;
-  partnerId: {
-    restaurantName: string;
-  };
+  partnerId: any; // Can be populated object or string ID
+  customerId?: any;
+  deliveryPartnerId?: any;
+  deliveryAddress?: string;
+  note?: string;
+  items: OrderItem[];
+  itemTotal?: number;
+  deliveryFee?: number;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  paymentId?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
 }
 
 /**
- * CREATE SHOP ORDER
+ * CREATE SHOP ORDER (with payment method)
  */
 export const createShopOrder = (
   partnerId: string,
   deliveryAddress: string,
   items: OrderItem[],
-  note?: string
+  note?: string,
+  paymentMethod?: string
 ): Promise<ApiResponse<Order>> => {
   const requestData: CreateOrderRequest = {
     partnerId,
@@ -41,6 +53,11 @@ export const createShopOrder = (
     items,
     note: note || ""
   };
+
+  // Add payment method if provided
+  if (paymentMethod) {
+    requestData.paymentMethod = paymentMethod;
+  }
 
   console.log("Creating order with data:", requestData);
   
@@ -66,4 +83,21 @@ export const getOrderDetails = (orderId: string): Promise<ApiResponse<Order>> =>
  */
 export const cancelOrder = (orderId: string): Promise<ApiResponse<any>> => {
   return apiPost<any>(`/orders/${orderId}/cancel`);
+};
+
+/**
+ * UPDATE ORDER PAYMENT STATUS
+ */
+export const updateOrderPaymentStatus = (
+  orderId: string,
+  paymentData: {
+    paymentId?: string;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    razorpaySignature?: string;
+    paymentMethod?: string;
+    paymentStatus?: string;
+  }
+): Promise<ApiResponse<Order>> => {
+  return apiPost<Order>(`/orders/${orderId}/update-payment`, paymentData);
 };

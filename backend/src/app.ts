@@ -8,7 +8,7 @@ import orderRoutes from "./routes/order.routes";
 import adminRoutes from "./routes/admin.routes";
 import deliveryRoutes from "./routes/delivery.routes";
 import uploadRoutes from "./routes/upload.routes"; // ADD THIS
-
+import paymentRoutes from "./routes/payment.routes";
 const app = express();
 
 // Configure CORS...
@@ -36,7 +36,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/api/upload", uploadRoutes); // ADD THIS
-
+app.use("/api/payment", paymentRoutes);
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "NearU backend is running" });

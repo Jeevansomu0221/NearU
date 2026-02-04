@@ -11,28 +11,7 @@ import {
   RefreshControl
 } from "react-native";
 import { getMyOrders } from "../api/order.api";
-
-interface Order {
-  _id: string;
-  status: string;
-  grandTotal: number;
-  createdAt: string;
-  partnerId: {
-    restaurantName: string;
-    shopName: string;
-  };
-  items: Array<{
-    name: string;
-    quantity: number;
-    price: number;
-  }>;
-}
-
-interface OrdersResponse {
-  success: boolean;
-  data: Order[];
-  message: string;
-}
+import type { Order } from "../api/order.api";
 
 export default function OrdersScreen({ navigation }: any) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -42,12 +21,11 @@ export default function OrdersScreen({ navigation }: any) {
   const loadOrders = async () => {
     try {
       const response = await getMyOrders();
-      const ordersData = response.data as OrdersResponse;
       
-      if (ordersData.success) {
-        setOrders(ordersData.data);
+      if (response.success && response.data) {
+        setOrders(response.data);
       } else {
-        Alert.alert("Error", ordersData.message || "Failed to load orders");
+        Alert.alert("Error", response.message || "Failed to load orders");
       }
     } catch (error) {
       console.error("Error loading orders:", error);
@@ -88,12 +66,14 @@ export default function OrdersScreen({ navigation }: any) {
       case 'PICKED_UP': return '#3F51B5';
       case 'CANCELLED': return '#F44336';
       case 'REJECTED': return '#795548';
+      case 'PENDING': return '#FF9800';
       default: return '#666';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
+      case 'PENDING': return 'Payment Pending';
       case 'CONFIRMED': return 'Order Placed';
       case 'ACCEPTED': return 'Restaurant Accepted';
       case 'PREPARING': return 'Preparing Food';
@@ -123,15 +103,15 @@ export default function OrdersScreen({ navigation }: any) {
       </View>
 
       <Text style={styles.restaurantName}>
-        {item.partnerId?.restaurantName || item.partnerId?.shopName || "Restaurant"}
+        {(item.partnerId as any)?.restaurantName || (item.partnerId as any)?.shopName || "Restaurant"}
       </Text>
 
-      {item.items && item.items.length > 0 && (
+      {item.items && Array.isArray(item.items) && item.items.length > 0 && (
         <View style={styles.itemsContainer}>
           <Text style={styles.itemsTitle}>Items:</Text>
-          {item.items.slice(0, 2).map((item, idx) => (
+          {item.items.slice(0, 2).map((orderItem: any, idx: number) => (
             <Text key={idx} style={styles.itemText}>
-              {item.quantity} × {item.name}
+              {orderItem.quantity} × {orderItem.name}
             </Text>
           ))}
           {item.items.length > 2 && (

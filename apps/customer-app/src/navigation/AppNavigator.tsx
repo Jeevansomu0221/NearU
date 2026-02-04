@@ -1,3 +1,4 @@
+// apps/customer-app/src/navigation/AppNavigator.tsx
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 
@@ -10,6 +11,7 @@ import CartScreen from '../screens/CartScreen';
 import ProfileScreen from "../screens/ProfileScreen";
 import OrderStatusScreen from "../screens/OrderStatusScreen";
 import OrdersScreen from "../screens/OrdersScreen";
+import PaymentScreen from '../screens/PaymentScreen'; // Keep PaymentScreen
 
 // Define Address interface
 export interface Address {
@@ -37,23 +39,46 @@ export interface Shop {
   phone?: string;
 }
 
-// Define stack param list
+// Define UserProfile for Payment screen
+export interface UserProfile {
+  _id?: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: Address;
+}
+
+// Define OrderSummary for Payment screen
+export interface OrderSummary {
+  items: any[];
+  subtotal: number;
+  deliveryFee: number;
+  total: number;
+  address: string;
+}
+
+// Define stack param list - UPDATED (removed OrderSummary)
 export type RootStackParamList = {
   Login: undefined;
   Otp: { phone: string };
   Home: undefined;
   ShopDetail: { 
     shopId: string;
-    shop?: Shop; // Add optional shop parameter
+    shop?: Shop;
   };
   Cart: {
     shop: Shop;
   };
-  Profile: undefined; // Add this line - Profile doesn't need params
+  Profile: undefined;
   OrderStatus: {
     orderId: string;
   };
   Orders: undefined;
+  Payment: { // Only Payment screen remains
+    shop: Shop;
+    userProfile: UserProfile;
+    orderSummary: OrderSummary;
+  };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -91,7 +116,7 @@ export default function AppNavigator() {
         component={HomeScreen}
         options={{ 
           title: 'NearU Food',
-          headerRight: undefined // Will be set in HomeScreen
+          headerRight: undefined
         }}
       />
       <Stack.Screen 
@@ -118,6 +143,12 @@ export default function AppNavigator() {
         name="Orders" 
         component={OrdersScreen}
         options={{ title: 'My Orders' }}
+      />
+      {/* Only Payment screen remains */}
+      <Stack.Screen 
+        name="Payment" 
+        component={PaymentScreen}
+        options={{ title: 'Payment' }}
       />
     </Stack.Navigator>
   );

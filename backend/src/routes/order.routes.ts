@@ -10,7 +10,8 @@ import {
   updateDeliveryStatus,
   getMyOrders,
   getOrderDetails,
-  cancelOrder
+  cancelOrder,
+  updateOrderPayment
 } from "../controllers/order.controller";
 
 const router = Router();
@@ -51,6 +52,14 @@ router.post(
   authMiddleware, 
   roleMiddleware([ROLES.CUSTOMER]), 
   cancelOrder
+);
+
+// Update order payment status (customer only)
+router.post(
+  "/:orderId/update-payment", 
+  authMiddleware, 
+  roleMiddleware([ROLES.CUSTOMER]), 
+  updateOrderPayment
 );
 
 /**
@@ -124,12 +133,7 @@ router.get(
   "/admin/all", 
   authMiddleware, 
   roleMiddleware([ROLES.ADMIN]), 
-  async (req, res) => {
-    // This will be handled by getMyOrders with admin filter
-    // You might want to create a separate controller for admin to get ALL orders
-    const controller = require("../controllers/order.controller");
-    return controller.getMyOrders(req, res);
-  }
+  getMyOrders
 );
 
 // Admin gets order details

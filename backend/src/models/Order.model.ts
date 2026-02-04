@@ -79,26 +79,51 @@ const OrderSchema = new Schema({
     min: 0
   },
 
-  paymentStatus: {
-    type: String,
-    enum: ["PAID", "FAILED", "REFUNDED"],
-    default: "PAID"
+  // Payment Information
+  paymentId: {
+    type: String,  // Payment gateway transaction ID
   },
 
+  paymentMethod: {
+    type: String,
+    enum: ["RAZORPAY", "CASH_ON_DELIVERY", "CARD", "UPI", "WALLET"],
+    default: "RAZORPAY"
+  },
+
+  paymentStatus: {
+    type: String,
+    enum: ["PENDING", "PAID", "FAILED", "REFUNDED", "CANCELLED"],
+    default: "PENDING"
+  },
+
+  razorpayOrderId: {
+    type: String,  // Razorpay order ID
+  },
+
+  razorpayPaymentId: {
+    type: String,  // Razorpay payment ID
+  },
+
+  razorpaySignature: {
+    type: String,  // Razorpay signature for verification
+  },
+
+  // Order Status - UPDATED TO INCLUDE "PENDING"
   status: {
     type: String,
     enum: [
-      "CONFIRMED",        // Order placed by customer
-      "ACCEPTED",         // Partner accepted order
-      "PREPARING",        // Partner preparing food
-      "READY",           // Food ready for pickup
-      "ASSIGNED",        // Delivery partner assigned
-      "PICKED_UP",       // Delivery picked up order
-      "DELIVERED",       // Order delivered to customer
-      "CANCELLED",       // Order cancelled
-      "REJECTED"         // Partner rejected order
+      "PENDING",         // Payment pending for online payments
+      "CONFIRMED",       // Order placed by customer (payment successful or COD)
+      "ACCEPTED",        // Partner accepted order
+      "PREPARING",       // Partner preparing food
+      "READY",          // Food ready for pickup
+      "ASSIGNED",       // Delivery partner assigned
+      "PICKED_UP",      // Delivery picked up order
+      "DELIVERED",      // Order delivered to customer
+      "CANCELLED",      // Order cancelled
+      "REJECTED"        // Partner rejected order
     ],
-    default: "CONFIRMED"
+    default: "PENDING"
   }
 }, { 
   timestamps: true 
@@ -109,5 +134,7 @@ OrderSchema.index({ customerId: 1, createdAt: -1 });
 OrderSchema.index({ partnerId: 1, createdAt: -1 });
 OrderSchema.index({ deliveryPartnerId: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
+OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
+OrderSchema.index({ razorpayOrderId: 1 });
 
 export default model("Order", OrderSchema);

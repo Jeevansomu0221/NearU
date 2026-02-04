@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { 
   View, 
   Text, 
-  Button, 
   Alert, 
   StyleSheet,
   ScrollView,
@@ -11,9 +10,7 @@ import {
   ActivityIndicator
 } from "react-native";
 import { useCart } from "../context/CartContext";
-import { createShopOrder } from "../api/order.api";
 import { getUserProfile, type UserProfile } from "../api/user.api";
-import type { ApiResponse } from "../api/client";
 
 // Define proper types
 interface CartItem {
@@ -26,16 +23,9 @@ interface CartItem {
   menuItemId?: string;
 }
 
-interface Order {
-  _id: string;
-  status: string;
-  grandTotal: number;
-  // Add other order properties as needed
-}
-
 export default function CartScreen({ route, navigation }: any) {
   const { shop } = route.params;
-  const { items, clear, removeItem, updateQuantity, getCartTotal } = useCart();
+  const { items, clear, removeItem, updateQuantity } = useCart();
   const [loading, setLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -46,7 +36,6 @@ export default function CartScreen({ route, navigation }: any) {
       setLoadingProfile(true);
       const response = await getUserProfile();
       
-      // No type casting needed - response is already ApiResponse<UserProfile>
       if (response.success && response.data) {
         setUserProfile(response.data);
         console.log("CartScreen: Profile loaded with address:", response.data.address);
@@ -67,13 +56,11 @@ export default function CartScreen({ route, navigation }: any) {
 
   // Add focus listener to refresh profile when screen comes into focus
   useEffect(() => {
-    // This will refresh the profile when screen comes into focus
     const unsubscribe = navigation.addListener('focus', () => {
       console.log("CartScreen: Screen focused, refreshing profile...");
       loadUserProfile();
     });
 
-    // Cleanup the listener when component unmounts
     return unsubscribe;
   }, [navigation, loadUserProfile]);
 
@@ -81,7 +68,6 @@ export default function CartScreen({ route, navigation }: any) {
   useEffect(() => {
     const unsubscribe = navigation.addListener('state', () => {
       console.log("CartScreen: Navigation state changed, refreshing profile...");
-      // Small delay to ensure Profile screen has saved data
       setTimeout(() => {
         loadUserProfile();
       }, 500);
@@ -96,131 +82,71 @@ export default function CartScreen({ route, navigation }: any) {
 
   const calculateTotal = () => {
     const subtotal = calculateSubtotal();
-    const deliveryFee = 49; // Fixed delivery fee
+    const deliveryFee = 49;
     return subtotal + deliveryFee;
   };
 
-  const formatAddress = () => {
-    if (!userProfile?.address) {
-      return "No address saved. Please add delivery address in Profile.";
-    }
-    
-    const addr = userProfile.address;
-    const parts = [
-      addr.street,
-      addr.area,
-      addr.landmark ? `Near ${addr.landmark}` : null,
-      `${addr.city}, ${addr.state} - ${addr.pincode}`
-    ].filter(Boolean);
-    
-    return parts.join(', ');
-  };
+  // In CartScreen.tsx, update the formatAddress function:
 
-  // Update the placeOrder function starting around line 179
-const placeOrder = async () => {
-  if (items.length === 0) {
-    Alert.alert("Cart Empty", "Please add items to cart first");
-    return;
-  }
-
-  // Check if user has address
+const formatAddress = () => {
   if (!userProfile?.address) {
-    Alert.alert(
-      "📍 Address Required",
-      "Please add your delivery address in Profile before placing order.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Add Address Now", 
-          onPress: () => {
-            navigation.navigate("Profile");
-          }
-        }
-      ]
-    );
-    return;
+    return "No address saved. Please add delivery address in Profile.";
   }
+  
+  // Check if address is string or object
+  if (typeof userProfile.address === 'string') {
+    return userProfile.address;
+  }
+  
+  // Handle address object - use 'street' instead of 'roadStreet'
+  const addr = userProfile.address;
+  const parts = [
+    addr.street,  // Changed from addr.roadStreet to addr.street
+    addr.area,
+    addr.landmark ? `Near ${addr.landmark}` : null,
+    `${addr.city}, ${addr.state} - ${addr.pincode}`
+  ].filter(Boolean);
+  
+  return parts.join(', ');
+};
 
-  try {
-    setLoading(true);
-    
-    // Prepare order items for backend
-    const orderItems = items.map((item: CartItem) => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      menuItemId: item.menuItemId || item._id || "temp-id"
-    }));
+  const proceedToPayment = async () => {
+    if (items.length === 0) {
+      Alert.alert("Cart Empty", "Please add items to cart first");
+      return;
+    }
 
-    // Format delivery address from user profile
-    const deliveryAddress = formatAddress();
-    
-    console.log("Placing order with items:", orderItems);
-    console.log("Shop ID:", shop._id);
-    console.log("Delivery Address:", deliveryAddress);
-
-    const response = await createShopOrder(
-      shop._id,
-      deliveryAddress,
-      orderItems,
-      "" // Optional note
-    );
-
-    // Check if response is successful and has data
-    if (response.success && response.data) {
-      const orderData = response.data;
+    // Check if user has address
+    if (!userProfile?.address) {
       Alert.alert(
-        "🎉 Order Placed!", 
-        `Your order #${orderData._id.slice(-6)} has been placed successfully.\n\nTotal: ₹${orderData.grandTotal}\nStatus: ${orderData.status}`,
+        "📍 Address Required",
+        "Please add your delivery address in Profile before placing order.",
         [
-          {
-            text: "View Order Status",
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Add Address Now", 
             onPress: () => {
-              clear();
-              navigation.replace("OrderStatus", { 
-                orderId: orderData._id 
-              });
-            }
-          },
-          {
-            text: "Continue Shopping",
-            onPress: () => {
-              clear();
-              navigation.goBack();
+              navigation.navigate("Profile");
             }
           }
         ]
       );
-    } else {
-      Alert.alert("Order Failed", response.message || "Failed to place order");
+      return;
     }
-  } catch (error: any) {
-    console.error("Order error:", error);
-    
-    let errorMessage = "Failed to place order. Please try again.";
-    
-    if (error.response) {
-      // Server responded with error
-      if (error.response.data && error.response.data.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response.status === 400) {
-        errorMessage = "Invalid request. Please check your cart items.";
-      } else if (error.response.status === 401) {
-        errorMessage = "Please login again to place order.";
-        navigation.navigate("Login");
-      } else if (error.response.status === 404) {
-        errorMessage = "Restaurant not found or closed.";
+
+    // Navigate directly to Payment Screen
+    navigation.navigate("Payment", {
+      shop,
+      userProfile,
+      orderSummary: {
+        items,
+        subtotal: calculateSubtotal(),
+        deliveryFee: 49,
+        total: calculateTotal(),
+        address: formatAddress()
       }
-    } else if (error.request) {
-      // Request made but no response
-      errorMessage = "Network error. Please check your internet connection.";
-    }
-    
-    Alert.alert("Order Failed", errorMessage);
-  } finally {
-    setLoading(false);
-  }
-};
+    });
+  };
 
   const handleRemoveItem = (itemName: string) => {
     Alert.alert(
@@ -422,7 +348,7 @@ const placeOrder = async () => {
             loading && styles.placeOrderButtonDisabled,
             (!userProfile?.address || items.length === 0) && styles.placeOrderButtonDisabled
           ]}
-          onPress={placeOrder}
+          onPress={proceedToPayment}
           disabled={loading || items.length === 0 || !userProfile?.address}
         >
           {loading ? (
@@ -431,7 +357,7 @@ const placeOrder = async () => {
             <Text style={styles.placeOrderButtonText}>
               {!userProfile?.address ? "Add Address First" : 
                items.length === 0 ? "Cart Empty" : 
-               `Place Order • ₹${calculateTotal()}`}
+               `Proceed to Payment • ₹${calculateTotal()}`}
             </Text>
           )}
         </TouchableOpacity>
