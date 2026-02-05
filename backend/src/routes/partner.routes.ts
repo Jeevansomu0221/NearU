@@ -35,7 +35,9 @@ router.post("/complete-setup", authMiddleware, completeSetup);
 
 /* ======================================================
    PARTNER-ONLY ROUTES (approved partners)
+   router.put("/profile", updatePartnerProfile);
 ====================================================== */
+router.put("/profile", updatePartnerProfile);
 router.put("/shop-status", authMiddleware, roleMiddleware(["partner"]), updateShopStatus);
 router.get("/stats", authMiddleware, roleMiddleware(["partner"]), getPartnerStats);
 

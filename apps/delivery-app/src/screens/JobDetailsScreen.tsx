@@ -66,13 +66,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
-  const handleOpenMaps = (address: string) => {
-    const url = Platform.select({
-      ios: `maps:0,0?q=${encodeURIComponent(address)}`,
-      android: `geo:0,0?q=${encodeURIComponent(address)}`,
-    });
-    if (url) {
-      Linking.openURL(url);
+  const handleOpenMaps = (address: string, googleMapsLink?: string) => {
+    // Prefer Google Maps link if available
+    if (googleMapsLink) {
+      Linking.openURL(googleMapsLink);
+    } else {
+      const url = Platform.select({
+        ios: `maps:0,0?q=${encodeURIComponent(address)}`,
+        android: `geo:0,0?q=${encodeURIComponent(address)}`,
+      });
+      if (url) {
+        Linking.openURL(url);
+      }
     }
   };
 
@@ -122,29 +127,29 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   };
 
   const handleDeliver = async () => {
-  if (job?.paymentMethod === "CASH_ON_DELIVERY") {
-    // For COD orders, show amount collection dialog
-    Alert.prompt(
-      "Collect Payment",
-      `Please collect ₹${job.grandTotal} from the customer`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Collected",
-          onPress: async (amount: string | undefined) => {
-            const collectedAmount = amount ? parseFloat(amount) : job.grandTotal;
-            await confirmDelivery(collectedAmount);
+    if (job?.paymentMethod === "CASH_ON_DELIVERY") {
+      // For COD orders, show amount collection dialog
+      Alert.prompt(
+        "Collect Payment",
+        `Please collect ₹${job.grandTotal} from the customer`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Collected",
+            onPress: async (amount: string | undefined) => {
+              const collectedAmount = amount ? parseFloat(amount) : job.grandTotal;
+              await confirmDelivery(collectedAmount);
+            }
           }
-        }
-      ],
-      "plain-text",
-      job.grandTotal.toString()
-    );
-  } else {
-    // For pre-paid orders, just confirm delivery
-    await confirmDelivery();
-  }
-};
+        ],
+        "plain-text",
+        job.grandTotal.toString()
+      );
+    } else {
+      // For pre-paid orders, just confirm delivery
+      await confirmDelivery();
+    }
+  };
 
   const confirmDelivery = async (collectedAmount?: number) => {
     try {
@@ -275,7 +280,10 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           )}
           <TouchableOpacity
             style={styles.mapButton}
-            onPress={() => handleOpenMaps(job.partnerId?.address || "")}
+            onPress={() => handleOpenMaps(
+              job.partnerId?.address || "", 
+              job.partnerId?.googleMapsLink
+            )}
           >
             <Ionicons name="navigate" size={16} color="#1976D2" />
             <Text style={styles.mapButtonText}>Open in Maps</Text>

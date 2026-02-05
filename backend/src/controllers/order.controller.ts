@@ -593,14 +593,40 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
       status: "READY",
       deliveryPartnerId: { $exists: false }
     })
-      .sort({ createdAt: -1 })
-      .populate("customerId", "name phone")
-      .populate("partnerId", "restaurantName shopName phone address");
+    .populate("customerId", "name phone")
+    .populate({
+      path: "partnerId",
+      select: "restaurantName shopName phone address category location",
+      transform: (doc) => {
+        if (!doc) return doc;
+        
+        const partnerObj = doc.toObject ? doc.toObject() : doc;
+        
+        // Convert address object to string for delivery app
+        if (partnerObj.address) {
+          const addr = partnerObj.address;
+          const addressString = `${addr.roadStreet}, ${addr.colony}, ${addr.area}, ${addr.city}, ${addr.state} - ${addr.pincode}`;
+          
+          return {
+            ...partnerObj,
+            address: addressString,
+            googleMapsLink: addr.googleMapsLink || "",
+            location: partnerObj.location || null
+          };
+        }
+        
+        return partnerObj;
+      }
+    })
+    .sort({ createdAt: -1 });
+
+    console.log(`🔍 Found ${availableJobs.length} available delivery jobs for user ${user.id}`);
 
     return successResponse(res, availableJobs, "Available delivery jobs retrieved");
+
   } catch (err: any) {
     console.error("getAvailableDeliveryJobs error:", err);
-    return errorResponse(res, "Failed to fetch available jobs");
+    return errorResponse(res, "Failed to get available delivery jobs");
   }
 };
 
@@ -642,7 +668,30 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
     // Get populated order for response
     const populatedOrder = await Order.findById(orderId)
       .populate("customerId", "name phone")
-      .populate("partnerId", "restaurantName shopName phone address")
+      .populate({
+        path: "partnerId",
+        select: "restaurantName shopName phone address category",
+        transform: (doc) => {
+          if (!doc) return doc;
+          
+          const partnerObj = doc.toObject ? doc.toObject() : doc;
+          
+          // Convert address object to string for delivery app
+          if (partnerObj.address) {
+            const addr = partnerObj.address;
+            const addressString = `${addr.roadStreet}, ${addr.colony}, ${addr.area}, ${addr.city}, ${addr.state} - ${addr.pincode}`;
+            
+            return {
+              ...partnerObj,
+              address: addressString,
+              googleMapsLink: addr.googleMapsLink || "",
+              location: partnerObj.location || null
+            };
+          }
+          
+          return partnerObj;
+        }
+      })
       .populate("deliveryPartnerId", "name phone");
 
     console.log(`🚚 Delivery partner ${user.id} accepted job for order ${orderId}`);

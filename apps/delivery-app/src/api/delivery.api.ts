@@ -19,7 +19,8 @@ export interface PartnerInfo {
   restaurantName: string;
   shopName: string;
   phone: string;
-  address: string;
+  address: string;  // This will now be a string
+  googleMapsLink?: string;  // ADD THIS
   location?: {
     coordinates: [number, number];
   };

@@ -1,12 +1,11 @@
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { 
-  getAvailableDeliveryJobs, 
+  getAvailableDeliveryJobs,  // ✅ Correct name
   acceptDeliveryJob, 
   updateDeliveryStatus,
   getMyOrders,
-  getOrderDetails,
-  updateDeliveryStatus as updateOrderDeliveryStatus
+  getOrderDetails
 } from "../controllers/order.controller";
 
 const router = express.Router();
@@ -16,7 +15,7 @@ router.use(authMiddleware);
 
 // =================== DELIVERY JOBS ===================
 // Get available delivery jobs (READY orders not assigned)
-router.get("/available-jobs", getAvailableDeliveryJobs);
+router.get("/available-jobs", getAvailableDeliveryJobs);  // ✅ Use correct function
 
 // Accept a delivery job
 router.post("/:orderId/accept", acceptDeliveryJob);

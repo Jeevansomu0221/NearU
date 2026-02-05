@@ -215,7 +215,7 @@ export default function JobsScreen({ navigation }: any) {
                     [
                       {
                         text: "View Details",
-                        onPress: () => navigation.navigate("JobDetails", { 
+                        onPress: () => navigation.getParent()?.navigate("JobDetails", { 
                           orderId: orderId,
                           job: job
                         })
@@ -281,7 +281,7 @@ export default function JobsScreen({ navigation }: any) {
   const renderJobItem = ({ item }: { item: CalculatedJob }) => (
   <TouchableOpacity
     style={styles.jobCard}
-    onPress={() => navigation.navigate("JobDetails", { 
+    onPress={() => navigation.getParent()?.navigate("JobDetails", { 
       orderId: item._id,
       job: item
     })}

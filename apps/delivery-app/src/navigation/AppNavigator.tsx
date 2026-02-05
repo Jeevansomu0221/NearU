@@ -8,6 +8,7 @@ import LoginScreen from "../screens/LoginScreen";
 import OtpScreen from "../screens/OtpScreen";
 import JobsScreen from "../screens/JobsScreen";
 import MyJobsScreen from "../screens/MyJobsScreen";
+import JobDetailsScreen from "../screens/JobDetailsScreen"; // Make sure this import exists
 import EarningsScreen from "../screens/EarningsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
@@ -101,6 +102,12 @@ export default function AppNavigator() {
         name="Main"
         component={MainTabs}
         options={{ headerShown: false }}
+      />
+      {/* ADD JobDetailsScreen as a separate screen */}
+      <Stack.Screen
+        name="JobDetails"
+        component={JobDetailsScreen}
+        options={{ title: "Job Details" }}
       />
     </Stack.Navigator>
   );

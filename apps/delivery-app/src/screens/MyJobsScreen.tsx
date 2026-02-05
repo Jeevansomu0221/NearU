@@ -71,6 +71,9 @@ export default function MyJobsScreen({ navigation }: any) {
   };
 
   const formatAddress = (address: string) => {
+    if (!address || typeof address !== 'string') {
+      return "Address not available";
+    }
     const parts = address.split(',');
     return parts.length > 0 ? parts[0] : address;
   };
@@ -108,7 +111,7 @@ export default function MyJobsScreen({ navigation }: any) {
     >
       <View style={styles.jobHeader}>
         <View>
-          <Text style={styles.orderId}>Order #{item._id.slice(-6).toUpperCase()}</Text>
+          <Text style={styles.orderId}>Order #{item._id?.slice(-6).toUpperCase() || "N/A"}</Text>
           <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
@@ -122,7 +125,7 @@ export default function MyJobsScreen({ navigation }: any) {
           🏪 {item.partnerId?.restaurantName || item.partnerId?.shopName || "Restaurant"}
         </Text>
         <Text style={styles.restaurantAddress}>
-          📍 {item.partnerId?.address ? formatAddress(item.partnerId.address) : "Address not available"}
+          📍 {formatAddress(item.partnerId?.address || "")}
         </Text>
       </View>
 
@@ -141,7 +144,7 @@ export default function MyJobsScreen({ navigation }: any) {
           <Text style={styles.paymentMethod}>
             {item.paymentMethod === "CASH_ON_DELIVERY" ? "💰 COD" : "💳 Online"}
           </Text>
-          <Text style={styles.totalAmount}>₹{item.grandTotal}</Text>
+          <Text style={styles.totalAmount}>₹{item.grandTotal || 0}</Text>
         </View>
         <TouchableOpacity
           style={styles.actionButton}

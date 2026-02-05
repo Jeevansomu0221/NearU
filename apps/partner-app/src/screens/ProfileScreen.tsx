@@ -9,7 +9,8 @@ import {
   Alert,
   ScrollView,
   TextInput,
-  Switch
+  Switch,
+  Linking
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import api from "../api/client";
@@ -70,7 +71,18 @@ export default function ProfileScreen({ navigation }: any) {
   const [form, setForm] = useState({
     openingTime: "08:00",
     closingTime: "22:00",
-    isOpen: true
+    isOpen: true,
+    googleMapsLink: ""
+  });
+  const [editAddressMode, setEditAddressMode] = useState(false);
+  const [addressForm, setAddressForm] = useState({
+    roadStreet: "",
+    colony: "",
+    area: "",
+    city: "",
+    state: "",
+    pincode: "",
+    googleMapsLink: ""
   });
 
   useEffect(() => {
@@ -91,8 +103,23 @@ export default function ProfileScreen({ navigation }: any) {
         setForm({
           openingTime: profileData.openingTime || "08:00",
           closingTime: profileData.closingTime || "22:00",
-          isOpen: profileData.isOpen !== false
+          isOpen: profileData.isOpen !== false,
+          googleMapsLink: profileData.address?.googleMapsLink || ""
         });
+        
+        // Set address form
+        if (profileData.address) {
+          setAddressForm({
+            roadStreet: profileData.address.roadStreet || "",
+            colony: profileData.address.colony || "",
+            area: profileData.address.area || "",
+            city: profileData.address.city || "",
+            state: profileData.address.state || "",
+            pincode: profileData.address.pincode || "",
+            googleMapsLink: profileData.address.googleMapsLink || ""
+          });
+        }
+        
         setImageUri(profileData.shopImageUrl || null);
         
         console.log("✅ Profile loaded:", profileData.restaurantName);
@@ -168,6 +195,23 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
+  const openGoogleMaps = () => {
+    if (form.googleMapsLink) {
+      Linking.openURL(form.googleMapsLink).catch(err => 
+        Alert.alert("Error", "Could not open Google Maps link")
+      );
+    } else {
+      Alert.alert("No Google Maps link", "Please add your Google Maps link first");
+    }
+  };
+
+  const openGoogleMapsApp = () => {
+    const url = "https://maps.google.com";
+    Linking.openURL(url).catch(err => 
+      Alert.alert("Error", "Could not open Google Maps")
+    );
+  };
+
   const handleSaveProfile = async () => {
     try {
       setSaving(true);
@@ -189,10 +233,31 @@ export default function ProfileScreen({ navigation }: any) {
         shopImageUrl: shopImageUrl
       };
 
-      // Only allow changing timings and open status
+      // Only allow changing timings, open status, and Google Maps link
       updateData.openingTime = form.openingTime;
       updateData.closingTime = form.closingTime;
       updateData.isOpen = form.isOpen;
+      
+      // Update address if in edit mode
+      if (editAddressMode) {
+        updateData.address = {
+          ...profile?.address,
+          googleMapsLink: form.googleMapsLink,
+          // Include other address fields if they were edited
+          ...(addressForm.roadStreet && { roadStreet: addressForm.roadStreet }),
+          ...(addressForm.colony && { colony: addressForm.colony }),
+          ...(addressForm.area && { area: addressForm.area }),
+          ...(addressForm.city && { city: addressForm.city }),
+          ...(addressForm.state && { state: addressForm.state }),
+          ...(addressForm.pincode && { pincode: addressForm.pincode })
+        };
+      } else {
+        // Just update Google Maps link in address
+        updateData.address = {
+          ...profile?.address,
+          googleMapsLink: form.googleMapsLink
+        };
+      }
 
       console.log("Updating profile with:", updateData);
       
@@ -201,14 +266,10 @@ export default function ProfileScreen({ navigation }: any) {
       
       console.log("✅ Profile updated");
       
-      // Check if shopImageUrl is in response
-      if (responseData.data && responseData.data.shopImageUrl) {
-        console.log("🖼️ Shop image URL updated:", responseData.data.shopImageUrl);
-      }
-      
       Alert.alert("Success", "Profile updated successfully");
       setEditMode(false);
-      loadProfile(); // Reload to show updated image
+      setEditAddressMode(false);
+      loadProfile(); // Reload to show updated data
       
     } catch (error: any) {
       console.error("❌ Save error:", error);
@@ -264,7 +325,16 @@ export default function ProfileScreen({ navigation }: any) {
         <Text style={styles.title}>My Profile</Text>
         <TouchableOpacity 
           style={styles.editButton}
-          onPress={() => setEditMode(!editMode)}
+          onPress={() => {
+            if (editMode) {
+              setEditMode(false);
+              setEditAddressMode(false);
+              // Reset form to original values
+              loadProfile();
+            } else {
+              setEditMode(true);
+            }
+          }}
         >
           <Text style={styles.editButtonText}>
             {editMode ? "Cancel" : "Edit"}
@@ -273,7 +343,7 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
 
       <View style={styles.profileCard}>
-        {/* Shop Image - Show profile image first, then uploaded image */}
+        {/* Shop Image */}
         <TouchableOpacity 
           style={styles.imagePicker}
           onPress={pickImage}
@@ -333,6 +403,94 @@ export default function ProfileScreen({ navigation }: any) {
                   disabled={saving}
                 />
               </View>
+              
+              {/* Address Editing Section */}
+              {editAddressMode ? (
+                <>
+                  <Text style={styles.sectionSubtitle}>Edit Address Details</Text>
+                  
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Road/Street"
+                    value={addressForm.roadStreet}
+                    onChangeText={text => setAddressForm({...addressForm, roadStreet: text})}
+                    editable={!saving}
+                  />
+                  
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Colony/Society"
+                    value={addressForm.colony}
+                    onChangeText={text => setAddressForm({...addressForm, colony: text})}
+                    editable={!saving}
+                  />
+                  
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Area/Locality"
+                    value={addressForm.area}
+                    onChangeText={text => setAddressForm({...addressForm, area: text})}
+                    editable={!saving}
+                  />
+                  
+                  <TextInput
+                    style={styles.input}
+                    placeholder="City"
+                    value={addressForm.city}
+                    onChangeText={text => setAddressForm({...addressForm, city: text})}
+                    editable={!saving}
+                  />
+                  
+                  <TextInput
+                    style={styles.input}
+                    placeholder="State"
+                    value={addressForm.state}
+                    onChangeText={text => setAddressForm({...addressForm, state: text})}
+                    editable={!saving}
+                  />
+                  
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Pincode"
+                    value={addressForm.pincode}
+                    onChangeText={text => setAddressForm({...addressForm, pincode: text})}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    editable={!saving}
+                  />
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.editAddressButton}
+                  onPress={() => setEditAddressMode(true)}
+                >
+                  <Text style={styles.editAddressText}>✏️ Edit Address Details</Text>
+                </TouchableOpacity>
+              )}
+              
+              {/* Google Maps Link */}
+              <Text style={styles.label}>Google Maps Link</Text>
+              <View style={styles.mapsContainer}>
+                <TextInput
+                  placeholder="Paste Google Maps share link"
+                  value={form.googleMapsLink}
+                  onChangeText={text => setForm({...form, googleMapsLink: text})}
+                  style={[styles.input, styles.mapsInput]}
+                  editable={!saving}
+                />
+                <TouchableOpacity 
+                  style={styles.openMapsButton}
+                  onPress={openGoogleMapsApp}
+                >
+                  <Text style={styles.openMapsText}>Open Maps</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.testMapsButton}
+                onPress={openGoogleMaps}
+              >
+                <Text style={styles.testMapsText}>Test Google Maps Link</Text>
+              </TouchableOpacity>
             </>
           ) : (
             <>
@@ -351,48 +509,62 @@ export default function ProfileScreen({ navigation }: any) {
             </>
           )}
 
-          {/* Static Info (not editable) */}
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Owner:</Text>
-            <Text style={styles.infoValue}>{profile.ownerName}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Phone:</Text>
-            <Text style={styles.infoValue}>{profile.phone}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Address:</Text>
-            <Text style={styles.infoValue}>{formatAddress(profile.address)}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Status:</Text>
-            <View style={[
-              styles.statusBadge, 
-              profile.status === "APPROVED" ? styles.approvedBadge :
-              profile.status === "PENDING" ? styles.pendingBadge :
-              styles.rejectedBadge
-            ]}>
-              <Text style={styles.statusText}>{profile.status}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Menu Items:</Text>
-            <Text style={styles.infoValue}>{profile.menuItemsCount || 0}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Setup Complete:</Text>
-            <Text style={[
-              styles.infoValue,
-              profile.hasCompletedSetup ? styles.successText : styles.warningText
-            ]}>
-              {profile.hasCompletedSetup ? "Yes" : "No"}
-            </Text>
-          </View>
+          {/* Static Info (not editable when not in edit mode) */}
+          {!editMode && (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Owner:</Text>
+                <Text style={styles.infoValue}>{profile.ownerName}</Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Phone:</Text>
+                <Text style={styles.infoValue}>{profile.phone}</Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Address:</Text>
+                <Text style={styles.infoValue}>{formatAddress(profile.address)}</Text>
+              </View>
+              
+              {/* Google Maps Link Display */}
+              {profile.address?.googleMapsLink && (
+                <TouchableOpacity
+                  style={styles.mapsLinkButton}
+                  onPress={() => Linking.openURL(profile.address.googleMapsLink)}
+                >
+                  <Text style={styles.mapsLinkText}>📍 Open in Google Maps</Text>
+                </TouchableOpacity>
+              )}
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Status:</Text>
+                <View style={[
+                  styles.statusBadge, 
+                  profile.status === "APPROVED" ? styles.approvedBadge :
+                  profile.status === "PENDING" ? styles.pendingBadge :
+                  styles.rejectedBadge
+                ]}>
+                  <Text style={styles.statusText}>{profile.status}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Menu Items:</Text>
+                <Text style={styles.infoValue}>{profile.menuItemsCount || 0}</Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Setup Complete:</Text>
+                <Text style={[
+                  styles.infoValue,
+                  profile.hasCompletedSetup ? styles.successText : styles.warningText
+                ]}>
+                  {profile.hasCompletedSetup ? "Yes" : "No"}
+                </Text>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Save Button */}
@@ -554,16 +726,20 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontStyle: 'italic',
   },
-  shopName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
-  },
   shopCategory: {
     fontSize: 16,
     color: '#666',
     marginBottom: 12,
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 15,
+    marginBottom: 10,
+    paddingBottom: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   statusRow: {
     flexDirection: 'row',
@@ -643,6 +819,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fafafa',
   },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 10,
+    marginBottom: 5,
+  },
   timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -661,6 +844,66 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     color: '#333',
+  },
+  editAddressButton: {
+    backgroundColor: '#f0f8ff',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#2196F3',
+    borderStyle: 'dashed',
+  },
+  editAddressText: {
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  mapsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mapsInput: {
+    flex: 1,
+    marginRight: 10,
+  },
+  openMapsButton: {
+    backgroundColor: '#4285F4',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  openMapsText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  testMapsButton: {
+    backgroundColor: '#34A853',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 5,
+    marginBottom: 15,
+  },
+  testMapsText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  mapsLinkButton: {
+    backgroundColor: '#f8f8f8',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#4285F4',
+  },
+  mapsLinkText: {
+    color: '#4285F4',
+    fontWeight: '600',
   },
   saveButton: {
     backgroundColor: '#2196F3',
