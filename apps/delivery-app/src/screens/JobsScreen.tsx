@@ -286,7 +286,7 @@ export default function JobsScreen({ navigation }: any) {
       job: item
     })}
     activeOpacity={0.9}
-  >
+    >
     <View style={styles.jobHeader}>
       <View>
         <Text style={styles.orderId}>Order #{item._id?.slice(-6).toUpperCase() || "N/A"}</Text>
