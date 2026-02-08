@@ -6,6 +6,7 @@ import {
   getAllPartners,
   updatePartnerStatus
 } from "../api/admin.api";
+import "../styles/Partner.css"; // Import the CSS file
 
 interface Partner {
   _id: string;
@@ -205,11 +206,11 @@ const Partners: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "PENDING": return "bg-yellow-500";
-      case "APPROVED": return "bg-green-500";
-      case "REJECTED": return "bg-red-500";
-      case "SUSPENDED": return "bg-orange-500";
-      default: return "bg-gray-500";
+      case "PENDING": return "status-pending";
+      case "APPROVED": return "status-approved";
+      case "REJECTED": return "status-rejected";
+      case "SUSPENDED": return "status-suspended";
+      default: return "status-default";
     }
   };
 
@@ -298,21 +299,21 @@ const Partners: React.FC = () => {
   const partnersToShow = activeTab === "pending" ? pendingPartners : allPartners;
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Partner Management</h1>
+    <div className="partners-container">
+      <h1 className="partners-title">Partner Management</h1>
       
       {/* Debug buttons */}
-      <div className="flex space-x-2 mb-4">
+      <div className="debug-buttons">
         <button 
           onClick={testApi}
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          className="debug-button test-api"
         >
           Test API Connection
         </button>
         
         <button 
           onClick={testAuth}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          className="debug-button check-auth"
         >
           Check Auth Status
         </button>
@@ -323,24 +324,24 @@ const Partners: React.FC = () => {
             alert("LocalStorage cleared. Redirecting to login...");
             navigate("/login");
           }}
-          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+          className="debug-button clear-logout"
         >
           Clear & Logout
         </button>
       </div>
       
       {/* Authentication Status */}
-      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-        <div className="flex items-center justify-between">
+      <div className="auth-status">
+        <div className="auth-status-content">
           <div>
             <strong>Authentication Status:</strong>
-            <span className={`ml-2 px-2 py-1 rounded text-xs ${checkAuth() ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+            <span className={`auth-badge ${checkAuth() ? 'auth-success' : 'auth-error'}`}>
               {checkAuth() ? 'Authenticated (Admin)' : 'Not Authenticated'}
             </span>
           </div>
           <button
             onClick={loadPartners}
-            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+            className="refresh-button"
             disabled={loading}
           >
             {loading ? "Loading..." : "Refresh"}
@@ -350,21 +351,21 @@ const Partners: React.FC = () => {
       
       {/* Show error if exists */}
       {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+        <div className="error-message">
           <strong>Error:</strong> {error}
         </div>
       )}
       
       {/* Tabs */}
-      <div className="flex border-b mb-4">
+      <div className="tabs-container">
         <button
-          className={`px-4 py-2 font-medium ${activeTab === "pending" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500"}`}
+          className={`tab-button ${activeTab === "pending" ? "tab-active" : "tab-inactive"}`}
           onClick={() => setActiveTab("pending")}
         >
           Pending ({pendingPartners.length})
         </button>
         <button
-          className={`px-4 py-2 font-medium ${activeTab === "all" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500"}`}
+          className={`tab-button ${activeTab === "all" ? "tab-active" : "tab-inactive"}`}
           onClick={() => setActiveTab("all")}
         >
           All Partners ({allPartners.length})
@@ -373,65 +374,65 @@ const Partners: React.FC = () => {
 
       {/* Table */}
       {loading ? (
-        <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <p className="mt-2 text-gray-600">Loading partners...</p>
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p className="loading-text">Loading partners...</p>
         </div>
       ) : partnersToShow.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <p className="text-lg">No {activeTab === "pending" ? "pending" : ""} partners found</p>
-          <p className="text-sm mt-2">When partners register, they will appear here for approval.</p>
+        <div className="empty-state">
+          <p className="empty-title">No {activeTab === "pending" ? "pending" : ""} partners found</p>
+          <p className="empty-subtitle">When partners register, they will appear here for approval.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border">
+        <div className="table-container">
+          <table className="partners-table">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="py-2 px-4 border text-left">Owner</th>
-                <th className="py-2 px-4 border text-left">Restaurant</th>
-                <th className="py-2 px-4 border text-left">Phone</th>
-                <th className="py-2 px-4 border text-left">Address</th>
-                <th className="py-2 px-4 border text-left">Category</th>
-                <th className="py-2 px-4 border text-left">Status</th>
-                <th className="py-2 px-4 border text-left">Registered</th>
-                <th className="py-2 px-4 border text-left">Actions</th>
+              <tr>
+                <th className="table-header">Owner</th>
+                <th className="table-header">Restaurant</th>
+                <th className="table-header">Phone</th>
+                <th className="table-header">Address</th>
+                <th className="table-header">Category</th>
+                <th className="table-header">Status</th>
+                <th className="table-header">Registered</th>
+                <th className="table-header">Actions</th>
               </tr>
             </thead>
             <tbody>
               {partnersToShow.map((partner) => (
-                <tr key={partner._id} className="hover:bg-gray-50">
-                  <td className="py-2 px-4 border">{partner.ownerName}</td>
-                  <td className="py-2 px-4 border font-medium">{partner.restaurantName}</td>
-                  <td className="py-2 px-4 border font-mono">{partner.phone}</td>
-                  <td className="py-2 px-4 border text-sm">
+                <tr key={partner._id} className="table-row">
+                  <td className="table-cell">{partner.ownerName}</td>
+                  <td className="table-cell restaurant-name">{partner.restaurantName}</td>
+                  <td className="table-cell phone-number">{partner.phone}</td>
+                  <td className="table-cell address">
                     {formatAddress(partner.address)}
                   </td>
-                  <td className="py-2 px-4 border">
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                  <td className="table-cell">
+                    <span className="category-badge">
                       {partner.category.toUpperCase()}
                     </span>
                   </td>
-                  <td className="py-2 px-4 border">
-                    <span className={`px-2 py-1 rounded text-xs text-white ${getStatusColor(partner.status)}`}>
+                  <td className="table-cell">
+                    <span className={`status-badge ${getStatusColor(partner.status)}`}>
                       {partner.status}
                     </span>
                   </td>
-                  <td className="py-2 px-4 border text-sm">
+                  <td className="table-cell">
                     {new Date(partner.createdAt).toLocaleDateString()}
                   </td>
-                  <td className="py-2 px-4 border">
-                    <div className="flex space-x-2">
+                  <td className="table-cell">
+                    <div className="action-buttons">
                       {partner.status === "PENDING" && (
                         <>
                           <button
                             onClick={() => handleApprove(partner._id)}
-                            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+                            className="action-button approve-button"
                           >
                             Approve
                           </button>
                           <button
                             onClick={() => openRejectModal(partner)}
-                            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                            className="action-button reject-button"
                           >
                             Reject
                           </button>
@@ -439,7 +440,7 @@ const Partners: React.FC = () => {
                       )}
                       <button 
                         onClick={() => alert(`Partner ID: ${partner._id}\nFull details in console`)}
-                        className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm"
+                        className="action-button view-button"
                       >
                         View
                       </button>
@@ -454,29 +455,29 @@ const Partners: React.FC = () => {
 
       {/* Rejection Modal */}
       {rejectModal.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96">
-            <h2 className="text-xl font-bold mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="modal-title">
               Reject {rejectModal.partner?.ownerName}'s Application
             </h2>
-            <p className="mb-2">Please provide a reason for rejection:</p>
+            <p className="modal-description">Please provide a reason for rejection:</p>
             <textarea
-              className="w-full border rounded p-2 mb-4"
+              className="modal-textarea"
               rows={4}
               value={rejectModal.reason}
               onChange={(e) => setRejectModal(prev => ({ ...prev, reason: e.target.value }))}
               placeholder="Enter rejection reason (e.g., incomplete documents, location not serviced, etc.)"
             />
-            <div className="flex justify-end space-x-2">
+            <div className="modal-buttons">
               <button
                 onClick={() => setRejectModal({ show: false, partner: null, reason: "" })}
-                className="px-4 py-2 border rounded hover:bg-gray-100"
+                className="modal-button cancel-button"
               >
                 Cancel
               </button>
               <button
                 onClick={handleReject}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                className="modal-button confirm-button"
               >
                 Confirm Reject
               </button>

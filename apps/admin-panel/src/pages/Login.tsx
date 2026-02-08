@@ -126,7 +126,6 @@ const verifyOtp = async () => {
 
   return (
     <div className="login-container">
-      // In Login.tsx, add a debug button
 
       <div className="login-box">
         <h2>Admin Login</h2>

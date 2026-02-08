@@ -1,0 +1,402 @@
+/* Partners.css */
+.partners-container {
+  padding: 24px;
+}
+
+.partners-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 24px;
+  color: #1f2937;
+}
+
+/* Debug buttons */
+.debug-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.debug-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.debug-button:hover {
+  opacity: 0.9;
+}
+
+.test-api {
+  background-color: #6b7280;
+}
+
+.test-api:hover {
+  background-color: #4b5563;
+}
+
+.check-auth {
+  background-color: #3b82f6;
+}
+
+.check-auth:hover {
+  background-color: #2563eb;
+}
+
+.clear-logout {
+  background-color: #ef4444;
+}
+
+.clear-logout:hover {
+  background-color: #dc2626;
+}
+
+/* Auth status */
+.auth-status {
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+}
+
+.auth-status-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auth-badge {
+  margin-left: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.auth-success {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.auth-error {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.refresh-button {
+  padding: 6px 12px;
+  background-color: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background-color: #059669;
+}
+
+.refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Error message */
+.error-message {
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 4px;
+}
+
+/* Tabs */
+.tabs-container {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+}
+
+.tab-button {
+  padding: 8px 16px;
+  font-weight: 500;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  position: relative;
+}
+
+.tab-button::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: transparent;
+}
+
+.tab-active {
+  color: #3b82f6;
+}
+
+.tab-active::after {
+  background-color: #3b82f6;
+}
+
+.tab-inactive {
+  color: #6b7280;
+}
+
+.tab-inactive:hover {
+  color: #4b5563;
+}
+
+/* Loading state */
+.loading-container {
+  text-align: center;
+  padding: 32px 0;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  margin-top: 8px;
+  color: #6b7280;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 32px 0;
+  color: #6b7280;
+}
+
+.empty-title {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.empty-subtitle {
+  font-size: 14px;
+}
+
+/* Table */
+.table-container {
+  overflow-x: auto;
+}
+
+.partners-table {
+  width: 100%;
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  border-collapse: collapse;
+}
+
+.table-header {
+  padding: 12px 16px;
+  border: 1px solid #e5e7eb;
+  text-align: left;
+  background-color: #f3f4f6;
+  font-weight: 600;
+  color: #374151;
+}
+
+.table-row {
+  transition: background-color 0.2s;
+}
+
+.table-row:hover {
+  background-color: #f9fafb;
+}
+
+.table-cell {
+  padding: 12px 16px;
+  border: 1px solid #e5e7eb;
+}
+
+.restaurant-name {
+  font-weight: 500;
+}
+
+.phone-number {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.address {
+  font-size: 14px;
+}
+
+/* Badges */
+.category-badge {
+  padding: 4px 8px;
+  background-color: #dbeafe;
+  color: #1e40af;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+}
+
+.status-pending {
+  background-color: #f59e0b;
+}
+
+.status-approved {
+  background-color: #10b981;
+}
+
+.status-rejected {
+  background-color: #ef4444;
+}
+
+.status-suspended {
+  background-color: #f97316;
+}
+
+.status-default {
+  background-color: #6b7280;
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.action-button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.action-button:hover {
+  opacity: 0.9;
+}
+
+.approve-button {
+  background-color: #10b981;
+}
+
+.reject-button {
+  background-color: #ef4444;
+}
+
+.view-button {
+  background-color: #6b7280;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal {
+  background-color: white;
+  padding: 24px;
+  border-radius: 8px;
+  width: 384px;
+  max-width: 90%;
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  color: #1f2937;
+}
+
+.modal-description {
+  margin-bottom: 8px;
+  color: #4b5563;
+}
+
+.modal-textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.modal-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.cancel-button {
+  background-color: white;
+  color: #4b5563;
+  border: 1px solid #d1d5db;
+}
+
+.cancel-button:hover {
+  background-color: #f9fafb;
+}
+
+.confirm-button {
+  background-color: #ef4444;
+  color: white;
+}
+
+.confirm-button:hover {
+  background-color: #dc2626;
+}
