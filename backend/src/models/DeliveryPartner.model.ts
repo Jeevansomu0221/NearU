@@ -5,11 +5,26 @@ export interface IDeliveryPartner extends Document {
   phone: string;
   name: string;
   email?: string;
+  address?: string;
   vehicleType: string;
   vehicleNumber?: string;
   licenseNumber?: string;
+  profilePhotoUrl?: string;
+  reviewComment?: string;
+  documents?: {
+    aadhaarUrl?: string;
+    panUrl?: string;
+    drivingLicenseUrl?: string;
+    vehicleRcUrl?: string;
+    insuranceUrl?: string;
+    cancelledChequeUrl?: string;
+    bankAccountNumber?: string;
+    bankIfsc?: string;
+    submittedAt?: Date;
+    isComplete?: boolean;
+  };
   isAvailable: boolean;
-  status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
+  status: "PENDING" | "VERIFIED" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "INACTIVE";
   totalDeliveries: number;
   totalEarnings: number;
   currentLocation?: {
@@ -42,9 +57,13 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     email: {
       type: String
     },
+    address: {
+      type: String,
+      default: ""
+    },
     vehicleType: {
       type: String,
-      enum: ["Bike", "Cycle", "Car", "Scooter", "Motorcycle"],
+      enum: ["Bike", "Cycle", "Scooter", "Motorcycle"],
       default: "Bike"
     },
     vehicleNumber: {
@@ -53,14 +72,34 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     licenseNumber: {
       type: String
     },
+    profilePhotoUrl: {
+      type: String,
+      default: ""
+    },
+    reviewComment: {
+      type: String,
+      default: ""
+    },
+    documents: {
+      aadhaarUrl: { type: String, default: "" },
+      panUrl: { type: String, default: "" },
+      drivingLicenseUrl: { type: String, default: "" },
+      vehicleRcUrl: { type: String, default: "" },
+      insuranceUrl: { type: String, default: "" },
+      cancelledChequeUrl: { type: String, default: "" },
+      bankAccountNumber: { type: String, default: "" },
+      bankIfsc: { type: String, default: "" },
+      submittedAt: { type: Date, default: null },
+      isComplete: { type: Boolean, default: false }
+    },
     isAvailable: {
       type: Boolean,
       default: true
     },
     status: {
       type: String,
-      enum: ["ACTIVE", "INACTIVE", "SUSPENDED"],
-      default: "ACTIVE"
+      enum: ["PENDING", "VERIFIED", "ACTIVE", "REJECTED", "SUSPENDED", "INACTIVE"],
+      default: "PENDING"
     },
     totalDeliveries: {
       type: Number,

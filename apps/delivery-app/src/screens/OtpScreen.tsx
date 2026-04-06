@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { verifyOtp, sendOtp } from "../api/auth.api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getDeliveryProfile } from "../api/profile.api";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone } = route.params; // Only get phone, not testOtp
@@ -70,11 +71,16 @@ export default function OtpScreen({ route, navigation }: any) {
         
         console.log("✅ Token saved successfully");
         
-        // Navigate immediately without success Alert
-        console.log("🚀 Navigating to Main screen...");
+        const profileResponse = await getDeliveryProfile();
+        const nextRoute =
+          profileResponse.success && profileResponse.data?.isProfileComplete
+            ? "Main"
+            : "CompleteProfile";
+
+        console.log(`🚀 Navigating to ${nextRoute} screen...`);
         navigation.reset({
           index: 0,
-          routes: [{ name: "Main" }],
+          routes: [{ name: nextRoute }],
         });
         
       } else {

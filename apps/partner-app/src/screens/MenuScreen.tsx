@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   ScrollView
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import api from "../api/client";
 
@@ -28,7 +29,6 @@ interface MenuItem {
   preparationTime?: number;
 }
 
-// Define API response type
 interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -36,36 +36,25 @@ interface ApiResponse<T = any> {
   [key: string]: any;
 }
 
-// Define upload response type
 interface UploadResponse {
   success: boolean;
   data: {
     url: string;
-    publicId: string;
-    format: string;
-    size: number;
   };
   message: string;
 }
 
-// Category options for dropdown
-const CATEGORIES = [
-  "Restaurant",
-  "Bakery", 
-  "Tiffins",
-  "Fast Food",
-  "Unique Foods",
-  "Other"
-];
+const CATEGORIES = ["Restaurant", "Bakery", "Tiffins", "Fast Food", "Unique Foods", "Other"];
 
-export default function MenuScreen({ navigation }: any) {
+export default function MenuScreen() {
+  const insets = useSafeAreaInsets();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -80,88 +69,59 @@ export default function MenuScreen({ navigation }: any) {
     loadMenuItems();
   }, []);
 
+  const filteredItems = useMemo(() => {
+    if (!search.trim()) return menuItems;
+    return menuItems.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
+  }, [menuItems, search]);
+
   const loadMenuItems = async () => {
     try {
       setLoading(true);
-      console.log("📋 Loading menu items...");
-      
       const response = await api.get("/partners/menu");
-      console.log("✅ Menu response:", response.data);
-      
       const responseData = response.data as ApiResponse<MenuItem[]>;
-      
       if (responseData.success) {
         setMenuItems(responseData.data || []);
-        console.log(`✅ Loaded ${responseData.data?.length || 0} menu items`);
       } else {
-        console.error("Failed to load menu:", responseData.message);
         Alert.alert("Error", responseData.message || "Failed to load menu items");
       }
     } catch (error: any) {
-      console.error("❌ Failed to load menu:", {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      
-      let errorMessage = "Failed to load menu items";
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      }
-      
-      Alert.alert("Error", errorMessage);
+      Alert.alert("Error", error.response?.data?.message || "Failed to load menu items");
     } finally {
       setLoading(false);
     }
   };
 
-  // Function to handle image upload
-  const uploadImageToCloudinary = async (imageUri: string): Promise<string> => {
-    try {
-      console.log("📤 Uploading image to Cloudinary...");
-      
-      // Convert image to FormData
-      const formData = new FormData();
-      
-      // Get file name and type
-      const filename = imageUri.split('/').pop() || 'image.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
-      
-      // @ts-ignore - React Native FormData type issue
-      formData.append('image', {
-        uri: imageUri,
-        type: type,
-        name: filename
-      });
+  const uploadImageToCloudinary = async (selectedImageUri: string): Promise<string> => {
+    const formData = new FormData();
+    const filename = selectedImageUri.split("/").pop() || "image.jpg";
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : "image/jpeg";
 
-      // Upload to your backend
-      const response = await api.post('/upload/image', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+    // @ts-ignore React Native FormData file object
+    formData.append("image", {
+      uri: selectedImageUri,
+      type,
+      name: filename
+    });
 
-      const uploadData = response.data as UploadResponse;
-      
-      if (uploadData.success) {
-        console.log("✅ Image uploaded:", uploadData.data.url);
-        return uploadData.data.url; // Cloudinary URL
-      } else {
-        throw new Error(uploadData.message || "Upload failed");
+    const response = await api.post("/upload/image", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data"
       }
-      
-    } catch (error) {
-      console.error("❌ Image upload failed:", error);
-      throw error;
+    });
+
+    const uploadData = response.data as UploadResponse;
+    if (!uploadData.success) {
+      throw new Error(uploadData.message || "Upload failed");
     }
+    return uploadData.data.url;
   };
 
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert("Permission needed", "Please grant camera roll permissions to add images");
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please grant gallery permission to add images");
         return;
       }
 
@@ -169,148 +129,15 @@ export default function MenuScreen({ navigation }: any) {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.8
       });
 
       if (!result.canceled && result.assets[0].uri) {
         setImageUri(result.assets[0].uri);
       }
     } catch (error) {
-      console.error("Image picker error:", error);
       Alert.alert("Error", "Failed to pick image");
     }
-  };
-
-  const handleSave = async () => {
-    if (!form.name.trim()) {
-      Alert.alert("Error", "Item name is required");
-      return;
-    }
-
-    if (!form.price || isNaN(parseFloat(form.price)) || parseFloat(form.price) <= 0) {
-      Alert.alert("Error", "Please enter a valid price");
-      return;
-    }
-
-    if (!form.category) {
-      Alert.alert("Error", "Please select a category");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      
-      let imageUrl = editingItem?.imageUrl || "";
-      
-      // Upload new image if selected and not already a Cloudinary URL
-      if (imageUri && imageUri !== editingItem?.imageUrl) {
-        // Check if it's already a Cloudinary URL
-        if (!imageUri.startsWith('https://res.cloudinary.com')) {
-          imageUrl = await uploadImageToCloudinary(imageUri);
-        } else {
-          imageUrl = imageUri; // Already a Cloudinary URL
-        }
-      }
-
-      // Prepare data
-      const menuData = {
-        name: form.name.trim(),
-        description: form.description.trim(),
-        price: parseFloat(form.price),
-        category: form.category,
-        isVegetarian: form.isVegetarian,
-        preparationTime: parseInt(form.preparationTime) || 15,
-        isAvailable: form.isAvailable,
-        imageUrl: imageUrl
-      };
-
-      let response;
-      if (editingItem) {
-        // Update item
-        console.log("Updating menu item:", editingItem._id);
-        response = await api.put(`/partners/menu/${editingItem._id}`, menuData);
-        console.log("Update response:", response.data);
-        Alert.alert("Success", "Menu item updated successfully");
-      } else {
-        // Add new item
-        console.log("Adding new menu item:", menuData);
-        response = await api.post("/partners/menu", menuData);
-        console.log("Add response:", response.data);
-        Alert.alert("Success", "Menu item added successfully");
-        
-        // If this was the first item, mark setup as complete
-        if (menuItems.length === 0) {
-          try {
-            await api.post("/partners/complete-setup");
-            console.log("✅ Setup marked as complete");
-          } catch (setupError) {
-            console.error("Failed to mark setup complete:", setupError);
-          }
-        }
-      }
-      
-      setModalVisible(false);
-      resetForm();
-      loadMenuItems(); // Reload the list
-      
-    } catch (error: any) {
-      console.error("❌ Save error:", {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      
-      let errorMessage = "Failed to save menu item";
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.errors) {
-        errorMessage = error.response.data.errors.join(", ");
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      Alert.alert("Error", errorMessage);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const toggleAvailability = async (item: MenuItem) => {
-    try {
-      console.log("Toggling availability for:", item._id);
-      await api.patch(`/partners/menu/${item._id}/availability`, {
-        isAvailable: !item.isAvailable
-      });
-      loadMenuItems();
-    } catch (error: any) {
-      console.error("Toggle error:", error);
-      Alert.alert("Error", "Failed to update availability");
-    }
-  };
-
-  const handleDelete = (id: string) => {
-    Alert.alert(
-      "Delete Item",
-      "Are you sure you want to delete this menu item?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive",
-          onPress: async () => {
-            try {
-              console.log("Deleting menu item:", id);
-              await api.delete(`/partners/menu/${id}`);
-              Alert.alert("Success", "Menu item deleted");
-              loadMenuItems();
-            } catch (error: any) {
-              console.error("Delete error:", error);
-              Alert.alert("Error", "Failed to delete item");
-            }
-          }
-        }
-      ]
-    );
   };
 
   const resetForm = () => {
@@ -325,7 +152,107 @@ export default function MenuScreen({ navigation }: any) {
       isAvailable: true
     });
     setImageUri(null);
-    setShowCategoryDropdown(false);
+  };
+
+  const openEditor = (item?: MenuItem) => {
+    if (item) {
+      setEditingItem(item);
+      setForm({
+        name: item.name,
+        description: item.description,
+        price: item.price.toString(),
+        category: item.category || "Other",
+        isVegetarian: item.isVegetarian !== false,
+        preparationTime: item.preparationTime?.toString() || "15",
+        isAvailable: item.isAvailable
+      });
+      setImageUri(item.imageUrl || null);
+    } else {
+      resetForm();
+    }
+    setModalVisible(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      Alert.alert("Error", "Item name is required");
+      return;
+    }
+    if (!form.price || isNaN(parseFloat(form.price)) || parseFloat(form.price) <= 0) {
+      Alert.alert("Error", "Please enter a valid price");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      let imageUrl = editingItem?.imageUrl || "";
+      if (imageUri && imageUri !== editingItem?.imageUrl) {
+        imageUrl = imageUri.startsWith("https://res.cloudinary.com") ? imageUri : await uploadImageToCloudinary(imageUri);
+      }
+
+      const menuData = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        price: parseFloat(form.price),
+        category: form.category,
+        isVegetarian: form.isVegetarian,
+        preparationTime: parseInt(form.preparationTime, 10) || 15,
+        isAvailable: form.isAvailable,
+        imageUrl
+      };
+
+      if (editingItem) {
+        await api.put(`/partners/menu/${editingItem._id}`, menuData);
+        Alert.alert("Success", "Menu item updated successfully");
+      } else {
+        await api.post("/partners/menu", menuData);
+        if (menuItems.length === 0) {
+          try {
+            await api.post("/partners/complete-setup");
+          } catch (setupError) {
+            console.error("Failed to mark setup complete:", setupError);
+          }
+        }
+        Alert.alert("Success", "Menu item added successfully");
+      }
+
+      setModalVisible(false);
+      resetForm();
+      loadMenuItems();
+    } catch (error: any) {
+      Alert.alert("Error", error.response?.data?.message || error.message || "Failed to save menu item");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleAvailability = async (item: MenuItem) => {
+    try {
+      await api.patch(`/partners/menu/${item._id}/availability`, {
+        isAvailable: !item.isAvailable
+      });
+      loadMenuItems();
+    } catch (error) {
+      Alert.alert("Error", "Failed to update availability");
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    Alert.alert("Delete Item", "Are you sure you want to delete this menu item?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.delete(`/partners/menu/${id}`);
+            loadMenuItems();
+          } catch (error) {
+            Alert.alert("Error", "Failed to delete item");
+          }
+        }
+      }
+    ]);
   };
 
   const renderItem = ({ item }: { item: MenuItem }) => (
@@ -337,71 +264,42 @@ export default function MenuScreen({ navigation }: any) {
           <Text style={styles.placeholderText}>No Image</Text>
         </View>
       )}
-      
+
       <View style={styles.itemInfo}>
         <View style={styles.itemHeader}>
-          <Text style={styles.itemName}>{item.name}</Text>
-          {item.isVegetarian && (
-            <Text style={styles.vegBadge}>🟢 Veg</Text>
-          )}
-        </View>
-        <Text style={styles.itemDescription} numberOfLines={2}>
-          {item.description || "No description"}
-        </Text>
-        <View style={styles.itemDetails}>
-          <Text style={styles.itemPrice}>₹{item.price}</Text>
-          {item.preparationTime && (
-            <Text style={styles.preparationTime}>
-              ⏱️ {item.preparationTime} min
+          <View style={styles.itemTitleWrap}>
+            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.itemDescription} numberOfLines={1}>
+              {item.description || "Freshly prepared in-store."}
             </Text>
-          )}
+          </View>
+          <Text style={styles.itemPrice}>Rs {item.price}</Text>
         </View>
-        <Text style={styles.itemCategory}>{item.category || "Other"}</Text>
-      </View>
-      
-      <View style={styles.itemActions}>
-        <View style={styles.availabilityContainer}>
-          <Text style={[
-            styles.availabilityText,
-            { color: item.isAvailable ? "#4CAF50" : "#F44336" }
-          ]}>
-            {item.isAvailable ? "Available" : "Unavailable"}
-          </Text>
-          <Switch
-            value={item.isAvailable}
-            onValueChange={() => toggleAvailability(item)}
-            trackColor={{ false: "#767577", true: "#81C784" }}
-            thumbColor={item.isAvailable ? "#4CAF50" : "#F44336"}
-          />
+        <View style={styles.badgeRow}>
+          <Text style={styles.badge}>{item.category || "Other"}</Text>
+          <Text style={styles.badge}>{item.preparationTime || 15} min</Text>
+          {item.isVegetarian ? <Text style={styles.vegBadge}>Veg</Text> : null}
         </View>
-        
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => {
-              setEditingItem(item);
-              setForm({
-                name: item.name,
-                description: item.description,
-                price: item.price.toString(),
-                category: item.category,
-                isVegetarian: item.isVegetarian || true,
-                preparationTime: item.preparationTime?.toString() || "15",
-                isAvailable: item.isAvailable
-              });
-              setImageUri(item.imageUrl || null);
-              setModalVisible(true);
-            }}
-          >
-            <Text style={styles.editButton}>Edit</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => handleDelete(item._id)}
-          >
-            <Text style={styles.deleteButton}>Delete</Text>
-          </TouchableOpacity>
+        <View style={styles.itemFooter}>
+          <View style={styles.switchRow}>
+            <Text style={[styles.availabilityPill, item.isAvailable ? styles.availablePill : styles.unavailablePill]}>
+              {item.isAvailable ? "Available" : "Unavailable"}
+            </Text>
+            <Switch
+              value={item.isAvailable}
+              onValueChange={() => toggleAvailability(item)}
+              trackColor={{ false: "#E8DDD2", true: "#FFB08F" }}
+              thumbColor={item.isAvailable ? "#FF6B35" : "#BCA99B"}
+            />
+          </View>
+          <View style={styles.actionButtons}>
+            <TouchableOpacity style={styles.actionLink} onPress={() => openEditor(item)}>
+              <Text style={styles.editText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionLink} onPress={() => handleDelete(item._id)}>
+              <Text style={styles.deleteText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </View>
@@ -409,8 +307,8 @@ export default function MenuScreen({ navigation }: any) {
 
   if (loading && menuItems.length === 0) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6B35" />
         <Text style={styles.loadingText}>Loading menu...</Text>
       </View>
     );
@@ -418,165 +316,142 @@ export default function MenuScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>
-          Menu Items ({menuItems.length})
-        </Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => {
-            resetForm();
-            setModalVisible(true);
-          }}
-        >
-          <Text style={styles.addButtonText}>+ Add Item</Text>
-        </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View>
+          <Text style={styles.title}>Menu</Text>
+          <Text style={styles.subtitle}>Keep your dishes clear, compact, and easy to manage.</Text>
+        </View>
       </View>
 
-      {menuItems.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🍽️</Text>
-          <Text style={styles.emptyText}>No menu items yet</Text>
-          <Text style={styles.emptySubtext}>
-            Add your first item to start receiving orders
-          </Text>
-          <TouchableOpacity 
-            style={styles.emptyButton}
-            onPress={() => setModalVisible(true)}
-          >
-            <Text style={styles.emptyButtonText}>Add First Item</Text>
+      <View style={styles.searchWrap}>
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search menu items"
+            placeholderTextColor="#98A2B3"
+            value={search}
+            onChangeText={setSearch}
+          />
+          <TouchableOpacity style={styles.addButton} onPress={() => openEditor()}>
+            <Text style={styles.addButtonText}>+ Add</Text>
           </TouchableOpacity>
+        </View>
+      </View>
+
+      {filteredItems.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>{menuItems.length === 0 ? "No menu items yet" : "No matching items"}</Text>
+          <Text style={styles.emptySubtext}>
+            {menuItems.length === 0 ? "Add your first item to start receiving customer orders." : "Try a different search term."}
+          </Text>
+          {menuItems.length === 0 ? (
+            <TouchableOpacity style={styles.emptyButton} onPress={() => openEditor()}>
+              <Text style={styles.emptyButtonText}>Add First Item</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : (
         <FlatList
-          data={menuItems}
+          data={filteredItems}
           renderItem={renderItem}
-          keyExtractor={item => item._id}
-          contentContainerStyle={styles.list}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 90 }}
           refreshing={loading}
           onRefresh={loadMenuItems}
+          showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* Add/Edit Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => !saving && setModalVisible(false)}
-      >
+      {filteredItems.length > 0 ? (
+        <TouchableOpacity style={[styles.floatingAddButton, { bottom: insets.bottom + 16 }]} onPress={() => openEditor()}>
+          <Text style={styles.floatingAddButtonText}>Add Menu Item</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => !saving && setModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <ScrollView style={styles.modalScrollView} contentContainerStyle={styles.modalScrollContent}>
+          <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
-                {editingItem ? "Edit Menu Item" : "Add Menu Item"}
-              </Text>
-              
-              {/* Image Picker */}
-              <TouchableOpacity 
-                style={styles.imagePicker}
-                onPress={pickImage}
-                disabled={saving}
-              >
+              <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
+
+              <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving}>
                 {imageUri ? (
                   <Image source={{ uri: imageUri }} style={styles.selectedImage} />
                 ) : (
                   <View style={styles.imagePlaceholder}>
-                    <Text style={styles.imagePlaceholderText}>+ Add Image</Text>
-                    <Text style={styles.imagePlaceholderSubtext}>Tap to select</Text>
+                    <Text style={styles.imagePlaceholderText}>Add Image</Text>
+                    <Text style={styles.imagePlaceholderSubtext}>Tap to select from gallery</Text>
                   </View>
                 )}
               </TouchableOpacity>
-              
+
               <TextInput
                 style={styles.input}
-                placeholder="Item Name *"
+                placeholder="Item name"
+                placeholderTextColor="#98A2B3"
                 value={form.name}
-                onChangeText={text => setForm({...form, name: text})}
+                onChangeText={(text) => setForm({ ...form, name: text })}
                 editable={!saving}
               />
-              
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="Description"
+                placeholderTextColor="#98A2B3"
                 value={form.description}
-                onChangeText={text => setForm({...form, description: text})}
+                onChangeText={(text) => setForm({ ...form, description: text })}
                 multiline
                 numberOfLines={3}
                 editable={!saving}
               />
-              
               <TextInput
                 style={styles.input}
-                placeholder="Price (₹) *"
+                placeholder="Price"
+                placeholderTextColor="#98A2B3"
                 value={form.price}
-                onChangeText={text => setForm({...form, price: text.replace(/[^0-9.]/g, '')})}
+                onChangeText={(text) => setForm({ ...form, price: text.replace(/[^0-9.]/g, "") })}
                 keyboardType="decimal-pad"
                 editable={!saving}
               />
-              
-              {/* Category Selector */}
-              <View style={styles.categoryContainer}>
-                <Text style={styles.categoryLabel}>Category *</Text>
-                <TouchableOpacity
-                  style={styles.categorySelector}
-                  onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                  disabled={saving}
-                >
-                  <Text style={styles.categorySelectorText}>
-                    {form.category}
-                  </Text>
-                  <Text style={styles.dropdownArrow}>▼</Text>
-                </TouchableOpacity>
-                
-                {showCategoryDropdown && (
-                  <View style={styles.categoryDropdown}>
-                    {CATEGORIES.map((category) => (
-                      <TouchableOpacity
-                        key={category}
-                        style={styles.categoryOption}
-                        onPress={() => {
-                          setForm({...form, category});
-                          setShowCategoryDropdown(false);
-                        }}
-                      >
-                        <Text style={styles.categoryOptionText}>{category}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+
+              <Text style={styles.modalLabel}>Category</Text>
+              <View style={styles.categoryWrap}>
+                {CATEGORIES.map((category) => {
+                  const selected = form.category === category;
+                  return (
+                    <TouchableOpacity
+                      key={category}
+                      style={[styles.categoryChip, selected && styles.categoryChipSelected]}
+                      onPress={() => setForm({ ...form, category })}
+                      disabled={saving}
+                    >
+                      <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>{category}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              
+
               <TextInput
                 style={styles.input}
-                placeholder="Preparation Time (minutes)"
+                placeholder="Preparation time in minutes"
+                placeholderTextColor="#98A2B3"
                 value={form.preparationTime}
-                onChangeText={text => setForm({...form, preparationTime: text.replace(/\D/g, '')})}
+                onChangeText={(text) => setForm({ ...form, preparationTime: text.replace(/\D/g, "") })}
                 keyboardType="number-pad"
                 editable={!saving}
               />
-              
-              <View style={styles.switchContainer}>
-                <Text style={styles.switchLabel}>Vegetarian</Text>
-                <Switch
-                  value={form.isVegetarian}
-                  onValueChange={value => setForm({...form, isVegetarian: value})}
-                  disabled={saving}
-                />
+
+              <View style={styles.formSwitchRow}>
+                <Text style={styles.formSwitchLabel}>Vegetarian</Text>
+                <Switch value={form.isVegetarian} onValueChange={(value) => setForm({ ...form, isVegetarian: value })} disabled={saving} />
               </View>
-              
-              <View style={styles.switchContainer}>
-                <Text style={styles.switchLabel}>Available for Order</Text>
-                <Switch
-                  value={form.isAvailable}
-                  onValueChange={value => setForm({...form, isAvailable: value})}
-                  disabled={saving}
-                />
+              <View style={styles.formSwitchRow}>
+                <Text style={styles.formSwitchLabel}>Available for order</Text>
+                <Switch value={form.isAvailable} onValueChange={(value) => setForm({ ...form, isAvailable: value })} disabled={saving} />
               </View>
-              
+
               <View style={styles.modalButtons}>
-                <TouchableOpacity 
-                  style={[styles.modalButton, styles.cancelButton]}
+                <TouchableOpacity
+                  style={styles.cancelButton}
                   onPress={() => {
                     if (!saving) {
                       setModalVisible(false);
@@ -587,19 +462,9 @@ export default function MenuScreen({ navigation }: any) {
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.modalButton, styles.saveButton, saving && styles.saveButtonDisabled]}
-                  onPress={handleSave}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>
-                      {editingItem ? "Update" : "Save"}
-                    </Text>
-                  )}
+
+                <TouchableOpacity style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
+                  {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.saveButtonText}>{editingItem ? "Update" : "Save"}</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -613,368 +478,375 @@ export default function MenuScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5"
+    backgroundColor: "#F7F3EE"
   },
-  centerContainer: {
+  loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff"
+    backgroundColor: "#F7F3EE"
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#666"
+    marginTop: 12,
+    color: "#6B5E55",
+    fontSize: 15
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 15,
-    backgroundColor: "#fff",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2
+    paddingHorizontal: 16,
+    paddingBottom: 10
   },
   title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333"
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  subtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#7B6D63"
   },
   addButton: {
-    backgroundColor: "#2196F3",
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 5,
-    elevation: 2
+    backgroundColor: "#FF6B35",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12
   },
   addButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 14
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800"
   },
-  list: {
-    padding: 15
+  searchWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 12
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    fontSize: 14,
+    color: "#1A120B",
+    marginRight: 10
   },
   menuItem: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    marginBottom: 10,
-    padding: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    padding: 10,
+    marginBottom: 10
   },
   itemImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 12
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginRight: 10
   },
   placeholderImage: {
-    backgroundColor: "#e0e0e0",
+    backgroundColor: "#FFE4D7",
     justifyContent: "center",
     alignItems: "center"
   },
   placeholderText: {
-    color: "#888",
-    fontSize: 11
+    fontSize: 11,
+    color: "#8B6A54"
   },
   itemInfo: {
+    flex: 1
+  },
+  itemTitleWrap: {
     flex: 1,
-    justifyContent: "space-between"
+    marginRight: 8
   },
   itemHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 4
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    flex: 1
-  },
-  vegBadge: {
-    fontSize: 11,
-    color: "#4CAF50",
-    marginLeft: 5,
-    backgroundColor: "#E8F5E9",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10
-  },
-  itemDescription: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 6
-  },
-  itemDetails: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#2C2018"
   },
   itemPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2196F3",
-    marginRight: 10
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FF6B35"
   },
-  preparationTime: {
-    fontSize: 12,
-    color: "#666"
-  },
-  itemCategory: {
+  itemDescription: {
     fontSize: 11,
-    color: "#666",
-    backgroundColor: "#f0f0f0",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    alignSelf: 'flex-start'
+    lineHeight: 16,
+    color: "#6B5E55",
+    marginTop: 3
   },
-  itemActions: {
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginLeft: 10
-  },
-  availabilityContainer: {
-    alignItems: "center",
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     marginBottom: 8
   },
-  availabilityText: {
+  badge: {
+    backgroundColor: "#F8EFE7",
+    color: "#7A5640",
     fontSize: 10,
-    fontWeight: "500",
+    fontWeight: "700",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: "hidden",
+    marginRight: 6,
     marginBottom: 4
+  },
+  vegBadge: {
+    backgroundColor: "#E8F5E9",
+    color: "#216E39",
+    fontSize: 10,
+    fontWeight: "700",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: "hidden"
+  },
+  itemFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  availabilityPill: {
+    overflow: "hidden",
+    fontSize: 10,
+    fontWeight: "800",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginRight: 8
+  },
+  availablePill: {
+    backgroundColor: "#E8F5E9",
+    color: "#216E39"
+  },
+  unavailablePill: {
+    backgroundColor: "#FDECEC",
+    color: "#B42318"
   },
   actionButtons: {
     flexDirection: "row"
   },
-  actionButton: {
-    marginLeft: 8
+  actionLink: {
+    paddingHorizontal: 4
   },
-  editButton: {
-    color: "#2196F3",
-    fontSize: 12,
-    fontWeight: "500",
-    padding: 4
+  editText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#C4541C",
+    marginRight: 10
   },
-  deleteButton: {
-    color: "#F44336",
-    fontSize: 12,
-    fontWeight: "500",
-    padding: 4
+  deleteText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#B42318"
+  },
+  floatingAddButton: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    backgroundColor: "#FF6B35",
+    borderRadius: 18,
+    alignItems: "center",
+    paddingVertical: 15,
+    shadowColor: "#FF6B35",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    elevation: 8
+  },
+  floatingAddButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800"
   },
   emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 40
+    padding: 30
   },
-  emptyIcon: {
-    fontSize: 60,
-    marginBottom: 20
-  },
-  emptyText: {
-    fontSize: 18,
-    color: "#666",
-    fontWeight: "600",
-    marginBottom: 10
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 8
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#999",
+    lineHeight: 20,
+    color: "#7B6D63",
     textAlign: "center",
-    marginBottom: 25,
-    lineHeight: 20
+    marginBottom: 18
   },
   emptyButton: {
-    backgroundColor: "#2196F3",
-    paddingHorizontal: 25,
-    paddingVertical: 12,
-    borderRadius: 6,
-    elevation: 2
+    backgroundColor: "#FF6B35",
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 12
   },
   emptyButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800"
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center"
+    backgroundColor: "rgba(0,0,0,0.35)"
   },
-  modalScrollView: {
-    flex: 1
-  },
-  modalScrollContent: {
-    padding: 20,
-    justifyContent: "center"
+  modalScroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: 16
   },
   modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4
+    backgroundColor: "#FFFFFF",
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#EFE5DA"
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-    color: "#333"
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 16,
+    textAlign: "center"
   },
   imagePicker: {
     alignItems: "center",
-    marginBottom: 20
+    marginBottom: 16
   },
   selectedImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#2196F3"
+    width: 132,
+    height: 132,
+    borderRadius: 22
   },
   imagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 10,
-    backgroundColor: "#f0f0f0",
+    width: 132,
+    height: 132,
+    borderRadius: 22,
+    backgroundColor: "#FFF6EF",
+    borderWidth: 1,
+    borderColor: "#F3DED0",
     justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#ccc",
-    borderStyle: "dashed"
+    alignItems: "center"
   },
   imagePlaceholderText: {
-    color: "#666",
-    fontSize: 16,
-    fontWeight: "500"
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#C4541C"
   },
   imagePlaceholderSubtext: {
-    color: "#999",
     fontSize: 12,
+    color: "#8B6A54",
     marginTop: 5
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 16,
-    backgroundColor: "#fafafa"
+    borderColor: "#D9D0C5",
+    borderRadius: 16,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+    fontSize: 15,
+    color: "#1A120B",
+    backgroundColor: "#FFFCF8",
+    marginBottom: 12
   },
   textArea: {
-    height: 80,
+    minHeight: 88,
     textAlignVertical: "top"
   },
-  categoryContainer: {
-    marginBottom: 12,
-    position: "relative"
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#6B5E55",
+    marginBottom: 8
   },
-  categoryLabel: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 6,
-    fontWeight: "500"
-  },
-  categorySelector: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: "#fafafa",
+  categoryWrap: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center"
+    flexWrap: "wrap",
+    marginBottom: 12
   },
-  categorySelectorText: {
-    fontSize: 16,
-    color: "#333"
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "#F8EFE7",
+    marginRight: 8,
+    marginBottom: 8
   },
-  dropdownArrow: {
+  categoryChipSelected: {
+    backgroundColor: "#FF6B35"
+  },
+  categoryChipText: {
     fontSize: 12,
-    color: "#666"
+    fontWeight: "700",
+    color: "#7A5640"
   },
-  categoryDropdown: {
-    position: "absolute",
-    top: 70,
-    left: 0,
-    right: 0,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    zIndex: 1000,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3
+  categoryChipTextSelected: {
+    color: "#FFFFFF"
   },
-  categoryOption: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0"
-  },
-  categoryOptionText: {
-    fontSize: 16,
-    color: "#333"
-  },
-  switchContainer: {
+  formSwitchRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
-    paddingVertical: 5
+    paddingVertical: 8
   },
-  switchLabel: {
-    fontSize: 16,
-    color: "#333"
+  formSwitchLabel: {
+    fontSize: 14,
+    color: "#2C2018",
+    fontWeight: "700"
   },
   modalButtons: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10
-  },
-  modalButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center"
+    marginTop: 12
   },
   cancelButton: {
-    backgroundColor: "#f5f5f5",
-    marginRight: 10
-  },
-  saveButton: {
-    backgroundColor: "#2196F3",
-    marginLeft: 10
-  },
-  saveButtonDisabled: {
-    backgroundColor: "#90CAF9",
-    opacity: 0.7
+    flex: 1,
+    backgroundColor: "#F5EDE6",
+    borderRadius: 16,
+    alignItems: "center",
+    paddingVertical: 15,
+    marginRight: 8
   },
   cancelButtonText: {
-    color: "#666",
-    fontWeight: "bold",
-    fontSize: 16
+    color: "#7B6D63",
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: "#FF6B35",
+    borderRadius: 16,
+    alignItems: "center",
+    paddingVertical: 15,
+    marginLeft: 8
+  },
+  saveButtonDisabled: {
+    backgroundColor: "#FFB08F"
   },
   saveButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800"
   }
 });

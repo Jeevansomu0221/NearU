@@ -103,6 +103,22 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
+    const hasMandatoryDocuments = Boolean(
+      documents?.fssaiUrl &&
+      documents?.ownerIdProofUrl &&
+      documents?.bankProofUrl &&
+      documents?.bankAccountNumber &&
+      documents?.bankIfsc &&
+      documents?.addressProofUrl
+    );
+
+    if (!hasMandatoryDocuments) {
+      return res.status(400).json({
+        success: false,
+        message: "FSSAI, owner ID proof, bank details, and restaurant address proof are mandatory"
+      });
+    }
+
     let partner = await Partner.findOne({ phone });
 
     // Prepare partner data
@@ -124,10 +140,19 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       category: category || "other",
       documents: {
         fssaiUrl: documents?.fssaiUrl || "",
+        gstUrl: documents?.gstUrl || "",
         shopLicenseUrl: documents?.shopLicenseUrl || "",
-        idProofUrl: documents?.idProofUrl || "",
-        submittedAt: (documents?.fssaiUrl || documents?.shopLicenseUrl || documents?.idProofUrl) ? new Date() : null,
-        isComplete: !!(documents?.fssaiUrl && documents?.shopLicenseUrl && documents?.idProofUrl)
+        ownerIdProofUrl: documents?.ownerIdProofUrl || "",
+        ownerPanUrl: documents?.ownerPanUrl || "",
+        bankProofUrl: documents?.bankProofUrl || "",
+        bankAccountNumber: documents?.bankAccountNumber || "",
+        bankIfsc: documents?.bankIfsc || "",
+        addressProofUrl: documents?.addressProofUrl || "",
+        menuProofUrl: documents?.menuProofUrl || "",
+        restaurantPhotosUrls: Array.isArray(documents?.restaurantPhotosUrls) ? documents.restaurantPhotosUrls : [],
+        operatingHoursNote: documents?.operatingHoursNote || "",
+        submittedAt: hasMandatoryDocuments ? new Date() : null,
+        isComplete: hasMandatoryDocuments
       },
       status: "PENDING",
       isOpen: true,
@@ -406,12 +431,12 @@ export const getMyStatus = async (req: Request, res: Response) => {
     const objectId = toObjectId(userId);
     if (objectId) {
       partner = await Partner.findOne({ userId: objectId })
-        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen");
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason");
     }
     
     if (!partner && userPhone) {
       partner = await Partner.findOne({ phone: userPhone })
-        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen");
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason");
     }
     
     if (!partner) {
@@ -696,7 +721,7 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
-    const { shopImageUrl, restaurantName, openingTime, closingTime, isOpen } = req.body;
+    const { shopImageUrl, restaurantName, openingTime, closingTime, isOpen, address } = req.body;
     
     // Find partner by userId
     const partner = await Partner.findOne({ userId: objectId });
@@ -732,6 +757,13 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     
     if (isOpen !== undefined) {
       updates.isOpen = isOpen;
+    }
+
+    if (address && typeof address === "object") {
+      updates.address = {
+        ...partner.address,
+        ...address
+      };
     }
 
     Object.assign(partner, updates);

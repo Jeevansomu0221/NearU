@@ -1,18 +1,18 @@
-// apps/customer-app/src/screens/CartScreen.tsx
-import React, { useState, useEffect, useCallback } from "react";
-import { 
-  View, 
-  Text, 
-  Alert, 
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  Alert,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  TextInput
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
 import { getUserProfile, type UserProfile } from "../api/user.api";
 
-// Define proper types
 interface CartItem {
   _id?: string;
   name: string;
@@ -24,23 +24,19 @@ interface CartItem {
 }
 
 export default function CartScreen({ route, navigation }: any) {
-  const { shop } = route.params;
   const { items, clear, removeItem, updateQuantity } = useCart();
   const [loading, setLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [note, setNote] = useState("");
+  const insets = useSafeAreaInsets();
 
-  // Load user profile function
   const loadUserProfile = useCallback(async () => {
     try {
       setLoadingProfile(true);
       const response = await getUserProfile();
-      
       if (response.success && response.data) {
         setUserProfile(response.data);
-        console.log("CartScreen: Profile loaded with address:", response.data.address);
-      } else {
-        console.log("CartScreen: Failed to load profile:", response.message);
       }
     } catch (error) {
       console.error("CartScreen: Error loading profile:", error);
@@ -49,66 +45,52 @@ export default function CartScreen({ route, navigation }: any) {
     }
   }, []);
 
-  // Load profile when component mounts
   useEffect(() => {
     loadUserProfile();
   }, [loadUserProfile]);
 
-  // Add focus listener to refresh profile when screen comes into focus
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      console.log("CartScreen: Screen focused, refreshing profile...");
-      loadUserProfile();
-    });
-
+    const unsubscribe = navigation.addListener("focus", loadUserProfile);
     return unsubscribe;
   }, [navigation, loadUserProfile]);
 
-  // Also refresh when navigating back from Profile screen
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('state', () => {
-      console.log("CartScreen: Navigation state changed, refreshing profile...");
-      setTimeout(() => {
-        loadUserProfile();
-      }, 500);
+  const groupedItems = useMemo(() => {
+    const groups = new Map<string, { shopId: string; shopName: string; items: CartItem[] }>();
+
+    items.forEach((item: CartItem) => {
+      const existing = groups.get(item.shopId) || {
+        shopId: item.shopId,
+        shopName: item.shopName,
+        items: []
+      };
+      existing.items.push(item);
+      groups.set(item.shopId, existing);
     });
 
-    return unsubscribe;
-  }, [navigation, loadUserProfile]);
+    return Array.from(groups.values()).map((group) => ({
+      ...group,
+      subtotal: group.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    }));
+  }, [items]);
 
-  const calculateSubtotal = () => {
-    return items.reduce((sum: number, item: CartItem) => sum + (item.price * item.quantity), 0);
+  const deliveryFee = groupedItems.length * 49;
+  const subtotal = items.reduce((sum: number, item: CartItem) => sum + item.price * item.quantity, 0);
+  const total = subtotal + deliveryFee;
+
+  const formatAddress = () => {
+    if (!userProfile?.address) {
+      return "No address saved. Please add delivery address in Profile.";
+    }
+
+    if (typeof userProfile.address === "string") {
+      return userProfile.address;
+    }
+
+    const addr = userProfile.address;
+    return [addr.street, addr.area, addr.landmark ? `Near ${addr.landmark}` : null, `${addr.city}, ${addr.state} - ${addr.pincode}`]
+      .filter(Boolean)
+      .join(", ");
   };
-
-  const calculateTotal = () => {
-    const subtotal = calculateSubtotal();
-    const deliveryFee = 49;
-    return subtotal + deliveryFee;
-  };
-
-  // In CartScreen.tsx, update the formatAddress function:
-
-const formatAddress = () => {
-  if (!userProfile?.address) {
-    return "No address saved. Please add delivery address in Profile.";
-  }
-  
-  // Check if address is string or object
-  if (typeof userProfile.address === 'string') {
-    return userProfile.address;
-  }
-  
-  // Handle address object - use 'street' instead of 'roadStreet'
-  const addr = userProfile.address;
-  const parts = [
-    addr.street,  // Changed from addr.roadStreet to addr.street
-    addr.area,
-    addr.landmark ? `Near ${addr.landmark}` : null,
-    `${addr.city}, ${addr.state} - ${addr.pincode}`
-  ].filter(Boolean);
-  
-  return parts.join(', ');
-};
 
   const proceedToPayment = async () => {
     if (items.length === 0) {
@@ -116,295 +98,179 @@ const formatAddress = () => {
       return;
     }
 
-    // Check if user has address
     if (!userProfile?.address) {
-      Alert.alert(
-        "📍 Address Required",
-        "Please add your delivery address in Profile before placing order.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { 
-            text: "Add Address Now", 
-            onPress: () => {
-              navigation.navigate("Profile");
-            }
-          }
-        ]
-      );
+      Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Add Address", onPress: () => navigation.navigate("Profile") }
+      ]);
       return;
     }
 
-    // Navigate directly to Payment Screen
     navigation.navigate("Payment", {
-      shop,
       userProfile,
       orderSummary: {
         items,
-        subtotal: calculateSubtotal(),
-        deliveryFee: 49,
-        total: calculateTotal(),
-        address: formatAddress()
+        subtotal,
+        deliveryFee,
+        total,
+        address: formatAddress(),
+        note,
+        groupedShops: groupedItems
       }
     });
   };
 
-  const handleRemoveItem = (itemName: string) => {
-    Alert.alert(
-      "Remove Item",
-      "Are you sure you want to remove this item from cart?",
-      [
+  const handleRemoveItem = (item: CartItem) => {
+      Alert.alert("Remove Item", "Remove this item from cart?", [
         { text: "Cancel", style: "cancel" },
-        { text: "Remove", onPress: () => removeItem(itemName), style: "destructive" }
-      ]
-    );
+        { text: "Remove", style: "destructive", onPress: () => removeItem(item) }
+      ]);
   };
 
-  const handleQuantityChange = (itemName: string, change: number) => {
-    const item = items.find((i: CartItem) => i.name === itemName);
-    if (item) {
-      const newQuantity = item.quantity + change;
-      if (newQuantity > 0) {
-        updateQuantity(itemName, newQuantity);
-      } else {
-        handleRemoveItem(itemName);
-      }
+  const handleQuantityChange = (item: CartItem, change: number) => {
+    const newQuantity = item.quantity + change;
+    if (newQuantity > 0) {
+      updateQuantity(item, newQuantity);
+    } else {
+      handleRemoveItem(item);
     }
   };
-
-  const handleChangeAddress = () => {
-    navigation.navigate("Profile");
-  };
-
-  const renderEmptyCart = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>🛒 Your cart is empty</Text>
-      <Text style={styles.emptySubText}>
-        Add delicious items from the menu to get started!
-      </Text>
-      <TouchableOpacity
-        style={styles.browseButton}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.browseButtonText}>Browse Menu</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderAddressSection = () => {
-    if (loadingProfile) {
-      return (
-        <View style={styles.deliveryInfo}>
-          <ActivityIndicator size="small" color="#FF6B35" />
-          <Text style={styles.loadingAddressText}>Loading address...</Text>
-        </View>
-      );
-    }
-
-    const hasAddress = !!userProfile?.address;
-    const addressColor = hasAddress ? '#666' : '#FF6B35';
-    const addressTextStyle = hasAddress ? styles.deliveryAddress : styles.noAddressText;
-
-    return (
-      <View style={styles.deliveryInfo}>
-        <View style={styles.deliveryHeader}>
-          <Text style={styles.deliveryTitle}>📦 Delivery Address</Text>
-          <TouchableOpacity onPress={handleChangeAddress}>
-            <Text style={styles.changeAddressText}>
-              {hasAddress ? "Change" : "Add Address"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        
-        {hasAddress ? (
-          <>
-            <Text style={addressTextStyle}>
-              {userProfile?.name || "Customer"}
-            </Text>
-            <Text style={[styles.deliveryPhone, { color: addressColor }]}>
-              📱 {userProfile?.phone}
-            </Text>
-            <Text style={addressTextStyle}>
-              {formatAddress()}
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text style={addressTextStyle}>
-              No delivery address saved
-            </Text>
-            <Text style={styles.addressWarning}>
-              Please add your address to place order
-            </Text>
-          </>
-        )}
-        
-        <TouchableOpacity 
-          style={styles.addressButton}
-          onPress={handleChangeAddress}
-        >
-          <Text style={styles.addressButtonText}>
-            {hasAddress ? "Change Address" : "Add Address Now"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderCartItems = () => (
-    <>
-      <ScrollView style={styles.itemsContainer}>
-        <View style={styles.shopInfo}>
-          <Text style={styles.shopName}>{shop.shopName || shop.restaurantName}</Text>
-          <Text style={styles.shopCategory}>{shop.category || "Restaurant"}</Text>
-        </View>
-
-        {items.map((item: CartItem, idx: number) => (
-          <View key={`${item.name}-${idx}`} style={styles.itemCard}>
-            <View style={styles.itemInfo}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemPrice}>₹{item.price} each</Text>
-            </View>
-            
-            <View style={styles.quantityControls}>
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => handleQuantityChange(item.name, -1)}
-                disabled={loading}
-              >
-                <Text style={styles.quantityButtonText}>-</Text>
-              </TouchableOpacity>
-              
-              <Text style={styles.quantityText}>{item.quantity}</Text>
-              
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => handleQuantityChange(item.name, 1)}
-                disabled={loading}
-              >
-                <Text style={styles.quantityButtonText}>+</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.itemTotal}>
-              <Text style={styles.itemTotalText}>₹{item.price * item.quantity}</Text>
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => handleRemoveItem(item.name)}
-                disabled={loading}
-              >
-                <Text style={styles.removeButtonText}>Remove</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-        
-        <View style={styles.summaryContainer}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>₹{calculateSubtotal()}</Text>
-          </View>
-          
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Delivery Fee</Text>
-            <Text style={styles.summaryValue}>₹49</Text>
-          </View>
-          
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Platform Fee</Text>
-            <Text style={styles.summaryValue}>₹0</Text>
-          </View>
-          
-          <View style={styles.grandTotalRow}>
-            <Text style={styles.grandTotalLabel}>Total Amount</Text>
-            <Text style={styles.grandTotalValue}>₹{calculateTotal()}</Text>
-          </View>
-          
-          <View style={styles.taxNote}>
-            <Text style={styles.taxNoteText}>
-              *Inclusive of all taxes
-            </Text>
-          </View>
-        </View>
-        
-        {renderAddressSection()}
-        
-        <View style={styles.noteContainer}>
-          <Text style={styles.noteTitle}>📝 Special Instructions (Optional)</Text>
-          <Text style={styles.noteText}>
-            Add cooking instructions, allergies, or delivery preferences
-          </Text>
-        </View>
-      </ScrollView>
-      
-      <View style={styles.footer}>
-        <View style={styles.footerTotal}>
-          <Text style={styles.footerTotalLabel}>Total</Text>
-          <Text style={styles.footerTotalValue}>₹{calculateTotal()}</Text>
-        </View>
-        
-        <TouchableOpacity
-          style={[
-            styles.placeOrderButton, 
-            loading && styles.placeOrderButtonDisabled,
-            (!userProfile?.address || items.length === 0) && styles.placeOrderButtonDisabled
-          ]}
-          onPress={proceedToPayment}
-          disabled={loading || items.length === 0 || !userProfile?.address}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.placeOrderButtonText}>
-              {!userProfile?.address ? "Add Address First" : 
-               items.length === 0 ? "Cart Empty" : 
-               `Proceed to Payment • ₹${calculateTotal()}`}
-            </Text>
-          )}
-        </TouchableOpacity>
-        
-        {!userProfile?.address && (
-          <Text style={styles.addressWarningFooter}>
-            Please add delivery address in Profile to place order
-          </Text>
-        )}
-      </View>
-    </>
-  );
 
   if (loadingProfile) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF6B35" />
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Text style={styles.loadingText}>Loading cart...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <Text style={styles.title}>Your Cart</Text>
-        {items.length > 0 && (
+        {items.length > 0 ? (
           <TouchableOpacity
             style={styles.clearButton}
-            onPress={() => {
-              Alert.alert(
-                "Clear Cart",
-                "Are you sure you want to clear all items?",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Clear", onPress: clear, style: "destructive" }
-                ]
-              );
-            }}
-            disabled={loading}
+            onPress={() =>
+              Alert.alert("Clear Cart", "Remove all items from cart?", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Clear", style: "destructive", onPress: clear }
+              ])
+            }
           >
             <Text style={styles.clearButtonText}>Clear All</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
-      
-      {items.length === 0 ? renderEmptyCart() : renderCartItems()}
+
+      {items.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Your cart is empty</Text>
+          <Text style={styles.emptySubText}>Add food from one or more restaurants to continue.</Text>
+          <TouchableOpacity style={styles.browseButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.browseButtonText}>Browse Shops</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <ScrollView
+            style={styles.itemsContainer}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: 128 + insets.bottom }]}
+          >
+            {groupedItems.map((group) => (
+              <View key={group.shopId} style={styles.shopCard}>
+                <View style={styles.shopCardHeader}>
+                  <View>
+                    <Text style={styles.shopName}>{group.shopName}</Text>
+                    <Text style={styles.shopSubtext}>{group.items.length} item{group.items.length === 1 ? "" : "s"}</Text>
+                  </View>
+                  <Text style={styles.shopSubtotal}>Rs {group.subtotal}</Text>
+                </View>
+
+                {group.items.map((item) => (
+                  <View key={`${item.shopId}-${item.menuItemId || item.name}`} style={styles.itemCard}>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName}>{item.name}</Text>
+                      <Text style={styles.itemPrice}>Rs {item.price} each</Text>
+                    </View>
+
+                    <View style={styles.itemActions}>
+                      <View style={styles.quantityControls}>
+                        <TouchableOpacity style={styles.quantityButton} onPress={() => handleQuantityChange(item, -1)}>
+                          <Text style={styles.quantityButtonText}>-</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.quantityText}>{item.quantity}</Text>
+                        <TouchableOpacity style={styles.quantityButton} onPress={() => handleQuantityChange(item, 1)}>
+                          <Text style={styles.quantityButtonText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <TouchableOpacity onPress={() => handleRemoveItem(item)}>
+                        <Text style={styles.removeButtonText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ))}
+
+            <View style={styles.sectionCard}>
+              <View style={styles.deliveryHeader}>
+                <Text style={styles.sectionTitle}>Delivery Address</Text>
+                <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+                  <Text style={styles.linkText}>{userProfile?.address ? "Change" : "Add Address"}</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.addressName}>{userProfile?.name || "Customer"}</Text>
+              <Text style={styles.addressPhone}>{userProfile?.phone}</Text>
+              <Text style={styles.addressText}>{formatAddress()}</Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Special Instructions</Text>
+              <TextInput
+                style={styles.instructionsInput}
+                value={note}
+                onChangeText={setNote}
+                placeholder="Add delivery notes, gate number, less spicy, no onions..."
+                placeholderTextColor="#98A2B3"
+                multiline
+                textAlignVertical="top"
+              />
+              <Text style={styles.instructionsHint}>These instructions will be attached to your order.</Text>
+            </View>
+
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Items Total</Text>
+                <Text style={styles.summaryValue}>Rs {subtotal}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Delivery Fee ({groupedItems.length} restaurant{groupedItems.length === 1 ? "" : "s"})</Text>
+                <Text style={styles.summaryValue}>Rs {deliveryFee}</Text>
+              </View>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Total Amount</Text>
+                <Text style={styles.totalValue}>Rs {total}</Text>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
+            <View>
+              <Text style={styles.footerLabel}>Total</Text>
+              <Text style={styles.footerTotal}>Rs {total}</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.checkoutButton, (!userProfile?.address || loading) && styles.checkoutButtonDisabled]}
+              onPress={proceedToPayment}
+              disabled={loading || !userProfile?.address}
+            >
+              <Text style={styles.checkoutButtonText}>Continue to Payment</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -412,321 +278,298 @@ const formatAddress = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#F7F3EE"
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center"
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 16,
-    color: '#666',
+    fontSize: 15,
+    color: "#6B5E55"
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 12
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: "800",
+    color: "#2C2018"
   },
   clearButton: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#ffebee',
-    borderRadius: 6,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#FDECEC"
   },
   clearButtonText: {
-    fontSize: 14,
-    color: '#f44336',
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#C7362E"
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32
   },
   emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 8
   },
   emptySubText: {
     fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    marginBottom: 24,
     lineHeight: 20,
+    textAlign: "center",
+    color: "#7B6D63",
+    marginBottom: 20
   },
   browseButton: {
-    backgroundColor: '#FF6B35',
-    paddingHorizontal: 24,
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 18,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 16
   },
   browseButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  shopInfo: {
-    padding: 16,
-    backgroundColor: '#f8f8f8',
-    marginBottom: 8,
-  },
-  shopName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  shopCategory: {
-    fontSize: 14,
-    color: '#666',
+    color: "#fff",
+    fontWeight: "800"
   },
   itemsContainer: {
-    flex: 1,
+    flex: 1
+  },
+  scrollContent: {
+    paddingBottom: 120
+  },
+  shopCard: {
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    padding: 14
+  },
+  shopCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
+  },
+  shopName: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  shopSubtext: {
+    fontSize: 11,
+    color: "#8B6A54",
+    marginTop: 2
+  },
+  shopSubtotal: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#FF6B35"
   },
   itemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F4EAE0"
   },
   itemInfo: {
     flex: 1,
+    marginRight: 12
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2C2018",
+    marginBottom: 4
   },
   itemPrice: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 12,
+    color: "#7B6D63"
+  },
+  itemActions: {
+    alignItems: "flex-end"
   },
   quantityControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6
   },
   quantityButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F6EEE6",
+    alignItems: "center",
+    justifyContent: "center"
   },
   quantityButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2C2018"
   },
   quantityText: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginHorizontal: 12,
     minWidth: 24,
-    textAlign: 'center',
-  },
-  itemTotal: {
-    alignItems: 'flex-end',
-  },
-  itemTotalText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FF6B35',
-    marginBottom: 4,
-  },
-  removeButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#ffebee',
-    borderRadius: 4,
+    textAlign: "center",
+    fontWeight: "700",
+    color: "#2C2018"
   },
   removeButtonText: {
-    fontSize: 12,
-    color: '#f44336',
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#C7362E"
   },
-  summaryContainer: {
-    padding: 16,
-    backgroundColor: '#f9f9f9',
-    margin: 16,
-    borderRadius: 12,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-  },
-  grandTotalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-  },
-  grandTotalLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  grandTotalValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FF6B35',
-  },
-  taxNote: {
-    marginTop: 8,
-  },
-  taxNoteText: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-  },
-  deliveryInfo: {
-    padding: 16,
-    backgroundColor: '#f0f7ff',
+  sectionCard: {
+    backgroundColor: "#FFFFFF",
     marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 8,
+    marginBottom: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    padding: 14
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 10
   },
   deliveryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
   },
-  deliveryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  deliveryAddress: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  deliveryPhone: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  noAddressText: {
-    fontSize: 14,
-    color: '#FF6B35',
-    lineHeight: 20,
-    marginBottom: 4,
-    fontStyle: 'italic',
-  },
-  addressWarning: {
+  linkText: {
     fontSize: 12,
-    color: '#F44336',
-    marginTop: 4,
+    fontWeight: "700",
+    color: "#FF6B35"
   },
-  loadingAddressText: {
+  addressName: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 8,
+    fontWeight: "700",
+    color: "#2C2018",
+    marginBottom: 4
   },
-  changeAddressText: {
-    fontSize: 14,
-    color: '#2196F3',
-    fontWeight: '500',
+  addressPhone: {
+    fontSize: 12,
+    color: "#8B6A54",
+    marginBottom: 6
   },
-  addressButton: {
-    backgroundColor: '#E3F2FD',
-    paddingVertical: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  addressButtonText: {
-    color: '#2196F3',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  noteContainer: {
-    padding: 16,
-    backgroundColor: '#FFF8E1',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 8,
-  },
-  noteTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  noteText: {
+  addressText: {
     fontSize: 13,
-    color: '#666',
+    lineHeight: 19,
+    color: "#6B5E55"
+  },
+  instructionsInput: {
+    minHeight: 96,
+    borderWidth: 1,
+    borderColor: "#D9D0C5",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#1A120B",
+    backgroundColor: "#FFFCF8"
+  },
+  instructionsHint: {
+    fontSize: 11,
+    color: "#8B6A54",
+    marginTop: 8
+  },
+  summaryCard: {
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    padding: 14
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: "#7B6D63"
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2C2018"
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F4EAE0"
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#FF6B35"
   },
   footer: {
-    padding: 16,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
-    backgroundColor: '#fff',
+    borderTopColor: "#E8DDD2",
+    backgroundColor: "rgba(247,243,238,0.98)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  footerLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#8B6A54"
   },
   footerTotal: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  footerTotalLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  footerTotalValue: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#FF6B35',
+    fontWeight: "800",
+    color: "#2C2018",
+    marginTop: 2
   },
-  placeOrderButton: {
-    backgroundColor: '#FF6B35',
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
+  checkoutButton: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 16
   },
-  placeOrderButtonDisabled: {
-    backgroundColor: '#FFB08F',
+  checkoutButtonDisabled: {
+    backgroundColor: "#FFB08F"
   },
-  placeOrderButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  addressWarningFooter: {
-    fontSize: 12,
-    color: '#F44336',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
+  checkoutButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800"
+  }
 });

@@ -13,6 +13,7 @@ import { RouteProp } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { verifyOtp, VerifyOtpResponse } from '../api/auth.api';
+import { getUserProfile } from '../api/user.api';
 
 type OtpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Otp'>;
 type OtpScreenRouteProp = RouteProp<RootStackParamList, 'Otp'>;
@@ -26,6 +27,32 @@ export default function OtpScreen({ navigation, route }: Props) {
   const { phone } = route.params;
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const isCustomerProfileComplete = (profile: {
+    name?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+      area?: string;
+    };
+  }) => {
+    const hasRealName =
+      !!profile.name &&
+      !/^Customer\s\d{4}$/.test(profile.name.trim()) &&
+      profile.name.trim().length >= 3;
+
+    const address = profile.address;
+    return Boolean(
+      hasRealName &&
+        address?.street &&
+        address?.city &&
+        address?.state &&
+        address?.pincode &&
+        address?.area
+    );
+  };
 
   const handleVerifyOTP = async () => {
     if (!otp || otp.length !== 6) {
@@ -53,11 +80,16 @@ export default function OtpScreen({ navigation, route }: Props) {
         }
         
         Alert.alert('Success', 'Login successful!');
-        
-        // Navigate to Home and clear navigation stack
+
+        const profileResponse = await getUserProfile();
+        const nextRoute =
+          profileResponse.success && profileResponse.data && isCustomerProfileComplete(profileResponse.data)
+            ? { name: 'Home' as const }
+            : { name: 'Profile' as const, params: { forceComplete: true } };
+
         navigation.reset({
           index: 0,
-          routes: [{ name: 'Home' }],
+          routes: [nextRoute],
         });
       } else {
         // Handle error response

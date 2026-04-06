@@ -1,149 +1,145 @@
-import { useEffect, useState } from "react";
-import api from "../api/client";
-import "../styles/orders.css";
+import { Button, Card, Input, Select, Space, Table, Tag, Typography } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { getOrders, updateOrderStatus, type OrderRecord } from "../api/admin.api";
+
+const ORDER_STATUSES = [
+  "PENDING",
+  "CONFIRMED",
+  "PREPARING",
+  "READY",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
+  "CANCELLED"
+];
 
 export default function Orders() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [deliveryUsers, setDeliveryUsers] = useState<any[]>([]);
-  const [pricingOrder, setPricingOrder] = useState<any | null>(null);
-  const [assignOrder, setAssignOrder] = useState<any | null>(null);
-
-  const [itemTotal, setItemTotal] = useState("");
-  const [deliveryFee, setDeliveryFee] = useState("");
-  const [deliveryUserId, setDeliveryUserId] = useState("");
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
 
   const loadOrders = async () => {
-    const res = await api.get("/admin/orders");
-    setOrders(res.data);
+    setLoading(true);
+    try {
+      setOrders(await getOrders());
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const loadDeliveryUsers = async () => {
-  const res = await api.get("/admin/partners");
-  setDeliveryUsers(
-    res.data.filter((p: any) => p.role === "delivery")
-  );
-};
-
 
   useEffect(() => {
     loadOrders();
-    loadDeliveryUsers();
   }, []);
 
-  const priceOrder = async () => {
-    await api.post(`/orders/${pricingOrder._id}/price`, {
-      itemTotal: Number(itemTotal),
-      deliveryFee: Number(deliveryFee)
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const matchesStatus = !statusFilter || order.status === statusFilter;
+      const haystack = `${order._id} ${order.customerId?.name || ""} ${order.customerId?.phone || ""} ${order.partnerId?.restaurantName || ""}`.toLowerCase();
+      return matchesStatus && haystack.includes(query.toLowerCase());
     });
+  }, [orders, query, statusFilter]);
 
-    setPricingOrder(null);
-    setItemTotal("");
-    setDeliveryFee("");
-    loadOrders();
-  };
-
-  const assignDelivery = async () => {
-    await api.post(`/orders/${assignOrder._id}/assign-delivery`, {
-      deliveryPartnerId: deliveryUserId
-    });
-
-    setAssignOrder(null);
-    setDeliveryUserId("");
+  const handleStatusChange = async (orderId: string, status: string) => {
+    await updateOrderStatus(orderId, status);
     loadOrders();
   };
 
   return (
-    <div className="page">
-      <h1>Orders</h1>
+    <Card bordered={false}>
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
+          <Input
+            allowClear
+            style={{ maxWidth: 320 }}
+            prefix={<SearchOutlined />}
+            placeholder="Search order, customer, or restaurant"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <Select
+            allowClear
+            placeholder="Filter by status"
+            style={{ minWidth: 220 }}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={ORDER_STATUSES.map((status) => ({ label: status, value: status }))}
+          />
+        </Space>
 
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Request</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {orders.map(o => (
-            <tr key={o._id}>
-              <td>{o._id.slice(-6)}</td>
-              <td>{o.note || "-"}</td>
-              <td>{o.status}</td>
-              <td>
-                {o.orderType === "CUSTOM" && o.status === "CREATED" && (
-                  <button onClick={() => setPricingOrder(o)}>
-                    Price
-                  </button>
-                )}
-
-                {o.status === "CONFIRMED" && (
-                  <button onClick={() => setAssignOrder(o)}>
-                    Assign Delivery
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* PRICE MODAL */}
-      {pricingOrder && (
-        <div className="modal">
-          <div className="modal-content">
-            <h3>Price Order</h3>
-            <p>{pricingOrder.note}</p>
-
-            <input
-              type="number"
-              placeholder="Item Total"
-              value={itemTotal}
-              onChange={e => setItemTotal(e.target.value)}
-            />
-
-            <input
-              type="number"
-              placeholder="Delivery Fee"
-              value={deliveryFee}
-              onChange={e => setDeliveryFee(e.target.value)}
-            />
-
-            <div className="actions">
-              <button onClick={priceOrder}>Send Price</button>
-              <button onClick={() => setPricingOrder(null)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ASSIGN DELIVERY MODAL */}
-      {assignOrder && (
-        <div className="modal">
-          <div className="modal-content">
-            <h3>Assign Delivery</h3>
-
-            <select
-              value={deliveryUserId}
-              onChange={e => setDeliveryUserId(e.target.value)}
-            >
-              <option value="">Select delivery partner</option>
-              {deliveryUsers.map(d => (
-                <option key={d._id} value={d._id}>
-                  {d.name} ({d.phone})
-                </option>
-              ))}
-            </select>
-
-            <div className="actions">
-              <button onClick={assignDelivery}>Assign</button>
-              <button onClick={() => setAssignOrder(null)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+        <Table
+          rowKey="_id"
+          loading={loading}
+          dataSource={filteredOrders}
+          pagination={{ pageSize: 10 }}
+          columns={[
+            {
+              title: "Order",
+              render: (_, order) => (
+                <div>
+                  <Typography.Text strong>#{order._id.slice(-6)}</Typography.Text>
+                  <div>
+                    <Typography.Text type="secondary">
+                      {new Date(order.createdAt).toLocaleString()}
+                    </Typography.Text>
+                  </div>
+                </div>
+              )
+            },
+            {
+              title: "Customer",
+              render: (_, order) => (
+                <div>
+                  <div>{order.customerId?.name || "Unknown customer"}</div>
+                  <Typography.Text type="secondary">{order.customerId?.phone || "No phone"}</Typography.Text>
+                </div>
+              )
+            },
+            {
+              title: "Restaurant",
+              render: (_, order) => order.partnerId?.restaurantName || "Unknown partner"
+            },
+            {
+              title: "Payment",
+              render: (_, order) => (
+                <div>
+                  <div>{order.paymentMethod}</div>
+                  <Typography.Text type="secondary">{order.paymentStatus}</Typography.Text>
+                </div>
+              )
+            },
+            {
+              title: "Status",
+              render: (_, order) => <Tag color={order.status === "DELIVERED" ? "green" : "blue"}>{order.status}</Tag>
+            },
+            {
+              title: "Amount",
+              dataIndex: "grandTotal",
+              render: (value: number) => `Rs ${value}`
+            },
+            {
+              title: "Actions",
+              render: (_, order) => (
+                <Space wrap>
+                  <Button size="small" onClick={() => navigate(`/orders/${order._id}`)}>
+                    Open
+                  </Button>
+                  <Select
+                    size="small"
+                    style={{ width: 170 }}
+                    placeholder="Update status"
+                    value={order.status}
+                    onChange={(value) => handleStatusChange(order._id, value)}
+                    options={ORDER_STATUSES.map((status) => ({ value: status, label: status }))}
+                  />
+                </Space>
+              )
+            }
+          ]}
+        />
+      </Space>
+    </Card>
   );
 }

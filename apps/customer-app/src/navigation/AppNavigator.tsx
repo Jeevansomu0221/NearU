@@ -1,6 +1,7 @@
 // apps/customer-app/src/navigation/AppNavigator.tsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
@@ -12,6 +13,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 import OrderStatusScreen from "../screens/OrderStatusScreen";
 import OrdersScreen from "../screens/OrdersScreen";
 import PaymentScreen from '../screens/PaymentScreen'; // Keep PaymentScreen
+import { getUserProfile } from '../api/user.api';
 
 // Define Address interface
 export interface Address {
@@ -34,6 +36,7 @@ export interface Shop {
   address: string | Address; // Can be string or object
   isOpen: boolean;
   rating: number;
+  shopImageUrl?: string;
   closingTime?: string;
   openingTime?: string;
   phone?: string;
@@ -55,6 +58,13 @@ export interface OrderSummary {
   deliveryFee: number;
   total: number;
   address: string;
+  note?: string;
+  groupedShops?: Array<{
+    shopId: string;
+    shopName: string;
+    items: any[];
+    subtotal: number;
+  }>;
 }
 
 // Define stack param list - UPDATED (removed OrderSummary)
@@ -67,15 +77,14 @@ export type RootStackParamList = {
     shop?: Shop;
   };
   Cart: {
-    shop: Shop;
-  };
-  Profile: undefined;
+    shop?: Shop;
+  } | undefined;
+  Profile: { forceComplete?: boolean } | undefined;
   OrderStatus: {
     orderId: string;
   };
   Orders: undefined;
   Payment: { // Only Payment screen remains
-    shop: Shop;
     userProfile: UserProfile;
     orderSummary: OrderSummary;
   };
@@ -83,10 +92,63 @@ export type RootStackParamList = {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
+const isCustomerProfileComplete = (profile: {
+  name?: string;
+  address?: Address & { street?: string; landmark?: string };
+}) => {
+  const hasRealName =
+    !!profile.name &&
+    !/^Customer\s\d{4}$/.test(profile.name.trim()) &&
+    profile.name.trim().length >= 3;
+
+  const address = profile.address;
+  const hasAddress =
+    !!address?.street &&
+    !!address?.city &&
+    !!address?.state &&
+    !!address?.pincode &&
+    !!address?.area;
+
+  return Boolean(hasRealName && hasAddress);
+};
+
 export default function AppNavigator() {
+  const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | 'Loading'>('Loading');
+
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+
+        if (!token) {
+          setInitialRoute('Login');
+          return;
+        }
+
+        const response = await getUserProfile();
+        if (response.success && response.data) {
+          setInitialRoute(isCustomerProfileComplete(response.data) ? 'Home' : 'Profile');
+          return;
+        }
+
+        await AsyncStorage.multiRemove(['token', 'user']);
+        setInitialRoute('Login');
+      } catch (error) {
+        await AsyncStorage.multiRemove(['token', 'user']);
+        setInitialRoute('Login');
+      }
+    };
+
+    checkSession();
+  }, []);
+
+  if (initialRoute === 'Loading') {
+    return null;
+  }
+
   return (
     <Stack.Navigator
-      initialRouteName="Login"
+      initialRouteName={initialRoute}
       screenOptions={{
         headerShown: true,
         headerStyle: {
@@ -115,8 +177,7 @@ export default function AppNavigator() {
         name="Home" 
         component={HomeScreen}
         options={{ 
-          title: 'NearU Food',
-          headerRight: undefined
+          headerShown: false
         }}
       />
       <Stack.Screen 
@@ -127,12 +188,16 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Cart" 
         component={CartScreen}
-        options={{ title: 'Your Cart' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen 
         name="Profile" 
         component={ProfileScreen}
-        options={{ title: 'My Profile' }}
+        initialParams={{ forceComplete: initialRoute === 'Profile' }}
+        options={({ route }) => ({
+          title: route.params?.forceComplete ? 'Complete Registration' : 'My Profile',
+          headerLeft: route.params?.forceComplete ? () => null : undefined,
+        })}
       />
       <Stack.Screen 
         name="OrderStatus" 
@@ -148,7 +213,7 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Payment" 
         component={PaymentScreen}
-        options={{ title: 'Payment' }}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

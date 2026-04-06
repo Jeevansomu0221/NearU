@@ -95,6 +95,7 @@ const PartnerSchema = new Schema(
         "fast-food", 
         "sweets",       // ADDED
         "ice-creams",   // ADDED
+        "juice",
         "other"
       ]
     },
@@ -124,8 +125,17 @@ const PartnerSchema = new Schema(
     },
     documents: {
       fssaiUrl: String,
+      gstUrl: String,
       shopLicenseUrl: String,
-      idProofUrl: String,
+      ownerIdProofUrl: String,
+      ownerPanUrl: String,
+      bankProofUrl: String,
+      bankAccountNumber: String,
+      bankIfsc: String,
+      addressProofUrl: String,
+      menuProofUrl: String,
+      restaurantPhotosUrls: [String],
+      operatingHoursNote: String,
       // ADD THIS: Document submission tracking
       submittedAt: Date,
       isComplete: { type: Boolean, default: false }

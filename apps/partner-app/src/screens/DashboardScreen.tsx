@@ -1,5 +1,4 @@
-// apps/partner-app/src/screens/DashboardScreen.tsx
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,14 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert
+  Alert,
+  ActivityIndicator
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 
 export default function DashboardScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const [shopOpen, setShopOpen] = useState(true);
   const [partner, setPartner] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     todayOrders: 0,
     totalOrders: 0,
@@ -27,181 +30,153 @@ export default function DashboardScreen({ navigation }: any) {
     loadDashboardData();
   }, []);
 
-  // Update the loadDashboardData function in DashboardScreen.tsx
-const loadDashboardData = async () => {
-  try {
-    const phone = await AsyncStorage.getItem("phone");
-    const res = await api.get(`/partners/status/${phone}`);
-    const partnerData = res.data as { success: boolean; data: any };
-    setPartner(partnerData.data);
-    
-    // Load stats - use a fallback for now
+  const loadDashboardData = async () => {
     try {
-      const statsRes = await api.get("/partners/stats");
-      const statsData = statsRes.data as { success: boolean; data: any };
-      setStats(statsData.data || {
-        todayOrders: 0,
-        totalOrders: 0,
-        pendingOrders: 0,
-        todayEarnings: 0,
-        totalEarnings: 0
-      });
-    } catch (statsError) {
-      console.log("Stats endpoint not available yet, using defaults");
+      setLoading(true);
+      const phone = await AsyncStorage.getItem("phone");
+      const res = await api.get(`/partners/status/${phone}`);
+      const partnerData = res.data as { success: boolean; data: any };
+      setPartner(partnerData.data);
+      setShopOpen(partnerData.data?.isOpen !== false);
+
+      try {
+        const statsRes = await api.get("/partners/stats");
+        const statsData = statsRes.data as { success: boolean; data: any };
+        setStats(
+          statsData.data || {
+            todayOrders: 0,
+            totalOrders: 0,
+            pendingOrders: 0,
+            todayEarnings: 0,
+            totalEarnings: 0
+          }
+        );
+      } catch (statsError) {
+        console.log("Stats endpoint not available yet, using defaults");
+      }
+    } catch (error) {
+      console.error("Failed to load dashboard:", error);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Failed to load dashboard:", error);
-  }
-};
+  };
 
   const toggleShopStatus = async () => {
     try {
       await api.put("/partners/shop-status", { isOpen: !shopOpen });
       setShopOpen(!shopOpen);
-      Alert.alert(
-        "Shop Status Updated",
-        `Your shop is now ${!shopOpen ? "OPEN" : "CLOSED"}`
-      );
+      Alert.alert("Shop Status Updated", `Your shop is now ${!shopOpen ? "OPEN" : "CLOSED"}`);
     } catch (error) {
       Alert.alert("Error", "Failed to update shop status");
     }
   };
 
-  if (!partner) {
+  if (loading && !partner) {
     return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6B35" />
+        <Text style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
   }
 
+  if (!partner) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Unable to load partner details.</Text>
+      </View>
+    );
+  }
+
+  const quickStats = [
+    { label: "Today's Orders", value: stats.todayOrders },
+    { label: "Today's Earnings", value: `Rs ${stats.todayEarnings}` },
+    { label: "Pending Orders", value: stats.pendingOrders },
+    { label: "Menu Items", value: partner.menuItemsCount || 0 }
+  ];
+
+  const quickActions = [
+    { title: "Manage Menu", description: "Add, edit, and organize your dishes", target: "Menu" },
+    { title: "View Orders", description: `${stats.pendingOrders} pending orders waiting right now`, target: "Orders" },
+    { title: "Shop Profile", description: "Update timings, shop image, and address", target: "Profile" },
+    { title: "Business Settings", description: "Adjust business preferences and hours", target: "Settings" }
+  ];
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.shopStatusContainer}>
-          <Text style={styles.shopName}>{partner.restaurantName}</Text>
-          <View style={styles.statusRow}>
-            <Text style={styles.statusText}>
-              Status: {shopOpen ? "OPEN" : "CLOSED"}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>Partner dashboard</Text>
+        <Text style={styles.heroTitle}>{partner.restaurantName || partner.shopName || "Your Shop"}</Text>
+        <Text style={styles.heroSubtitle}>
+          Track live performance, manage availability, and stay on top of incoming orders.
+        </Text>
+
+        <View style={styles.statusCard}>
+          <View style={styles.statusCopy}>
+            <Text style={styles.statusLabel}>Store visibility</Text>
+            <Text style={styles.statusValue}>{shopOpen ? "Open for orders" : "Temporarily closed"}</Text>
+            <Text style={styles.statusHint}>
+              {shopOpen ? "Customers can discover and order from your store." : "Customers will not be able to place new orders."}
             </Text>
-            <Switch
-              value={shopOpen}
-              onValueChange={toggleShopStatus}
-              trackColor={{ false: "#767577", true: "#4CAF50" }}
-              thumbColor={shopOpen ? "#fff" : "#f4f3f4"}
-            />
           </View>
-          <Text style={styles.statusNote}>
-            {shopOpen 
-              ? "Customers can see and order from your shop" 
-              : "Your shop is hidden from customers"}
-          </Text>
+          <Switch
+            value={shopOpen}
+            onValueChange={toggleShopStatus}
+            trackColor={{ false: "#E8DDD2", true: "#FFB08F" }}
+            thumbColor={shopOpen ? "#FF6B35" : "#BCA99B"}
+          />
         </View>
       </View>
 
-      {/* Quick Stats */}
-      <View style={styles.statsContainer}>
-        <Text style={styles.sectionTitle}>Today's Overview</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Today's overview</Text>
         <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{stats.todayOrders}</Text>
-            <Text style={styles.statLabel}>Today's Orders</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>₹{stats.todayEarnings}</Text>
-            <Text style={styles.statLabel}>Today's Earnings</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{stats.pendingOrders}</Text>
-            <Text style={styles.statLabel}>Pending Orders</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{partner.menuItemsCount || 0}</Text>
-            <Text style={styles.statLabel}>Menu Items</Text>
-          </View>
+          {quickStats.map((stat) => (
+            <View key={stat.label} style={styles.statCard}>
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
-      {/* Quick Actions */}
-      <View style={styles.actionsContainer}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => navigation.navigate("Menu")}
-        >
-          <View style={styles.actionIconContainer}>
-            <Text style={styles.actionIcon}>🍽️</Text>
-          </View>
-          <View style={styles.actionContent}>
-            <Text style={styles.actionTitle}>Manage Menu</Text>
-            <Text style={styles.actionDescription}>
-              Add/Edit products, prices, and images
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => navigation.navigate("Orders")}
-        >
-          <View style={styles.actionIconContainer}>
-            <Text style={styles.actionIcon}>📦</Text>
-          </View>
-          <View style={styles.actionContent}>
-            <Text style={styles.actionTitle}>View Orders</Text>
-            <Text style={styles.actionDescription}>
-              {stats.pendingOrders} pending orders
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => navigation.navigate("Profile")}
-        >
-          <View style={styles.actionIconContainer}>
-            <Text style={styles.actionIcon}>🏪</Text>
-          </View>
-          <View style={styles.actionContent}>
-            <Text style={styles.actionTitle}>Shop Profile</Text>
-            <Text style={styles.actionDescription}>
-              Edit shop details and documents
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => navigation.navigate("Settings")}
-        >
-          <View style={styles.actionIconContainer}>
-            <Text style={styles.actionIcon}>⏰</Text>
-          </View>
-          <View style={styles.actionContent}>
-            <Text style={styles.actionTitle}>Business Hours</Text>
-            <Text style={styles.actionDescription}>
-              Set opening and closing times
-            </Text>
-          </View>
-        </TouchableOpacity>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Quick actions</Text>
+        {quickActions.map((action) => (
+          <TouchableOpacity key={action.title} style={styles.actionCard} onPress={() => navigation.navigate(action.target)}>
+            <View style={styles.actionCopy}>
+              <Text style={styles.actionTitle}>{action.title}</Text>
+              <Text style={styles.actionDescription}>{action.description}</Text>
+            </View>
+            <Text style={styles.actionArrow}>Open</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {/* Recent Orders Preview */}
-      <View style={styles.ordersPreview}>
-        <View style={styles.previewHeader}>
-          <Text style={styles.sectionTitle}>Recent Orders</Text>
-          <TouchableOpacity onPress={() => navigation.navigate("Orders")}>
-            <Text style={styles.viewAllText}>View All</Text>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Business snapshot</Text>
+          <TouchableOpacity onPress={loadDashboardData}>
+            <Text style={styles.linkText}>Refresh</Text>
           </TouchableOpacity>
         </View>
-        {/* You can add recent orders list here */}
-        <View style={styles.emptyOrders}>
-          <Text style={styles.emptyText}>No recent orders</Text>
-          <Text style={styles.emptySubtext}>
-            Orders will appear here when customers place them
-          </Text>
+        <View style={styles.snapshotCard}>
+          <View style={styles.snapshotRow}>
+            <Text style={styles.snapshotLabel}>Total orders</Text>
+            <Text style={styles.snapshotValue}>{stats.totalOrders}</Text>
+          </View>
+          <View style={styles.snapshotRow}>
+            <Text style={styles.snapshotLabel}>Total earnings</Text>
+            <Text style={styles.snapshotValue}>Rs {stats.totalEarnings}</Text>
+          </View>
+          <View style={styles.snapshotRow}>
+            <Text style={styles.snapshotLabel}>Approval status</Text>
+            <Text style={styles.snapshotValue}>{partner.status || "Approved"}</Text>
+          </View>
         </View>
       </View>
     </ScrollView>
@@ -211,46 +186,95 @@ const loadDashboardData = async () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5"
+    backgroundColor: "#F7F3EE"
   },
-  header: {
-    backgroundColor: "#2196F3",
-    padding: 20
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F7F3EE"
   },
-  shopStatusContainer: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 10,
-    elevation: 3
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: "#6B5E55"
   },
-  shopName: {
-    fontSize: 22,
-    fontWeight: "bold",
+  hero: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    backgroundColor: "#FF6B35",
+    borderRadius: 30,
+    padding: 18
+  },
+  heroEyebrow: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#FFE4D7",
     marginBottom: 10
   },
-  statusRow: {
+  heroTitle: {
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "800",
+    color: "#FFFFFF"
+  },
+  heroSubtitle: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#FFF4EE"
+  },
+  statusCard: {
+    marginTop: 14,
+    backgroundColor: "#FFF6F1",
+    borderRadius: 18,
+    padding: 13,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  statusCopy: {
+    flex: 1,
+    marginRight: 14
+  },
+  statusLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#8B6A54",
+    marginBottom: 4
+  },
+  statusValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  statusHint: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#6B5E55"
+  },
+  section: {
+    marginHorizontal: 16,
+    marginBottom: 14
+  },
+  sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 5
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: "600"
-  },
-  statusNote: {
-    fontSize: 12,
-    color: "#666",
-    fontStyle: "italic"
-  },
-  statsContainer: {
-    padding: 15
+    marginBottom: 12
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 15,
-    color: "#333"
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 10
+  },
+  linkText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#C4541C"
   },
   statsGrid: {
     flexDirection: "row",
@@ -258,83 +282,77 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   statCard: {
-    backgroundColor: "#fff",
     width: "48%",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    alignItems: "center",
-    elevation: 2
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    padding: 13,
+    marginBottom: 8
   },
   statValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#2196F3"
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#FF6B35",
+    marginBottom: 4
   },
   statLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 5
-  },
-  actionsContainer: {
-    padding: 15
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#7B6D63"
   },
   actionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    padding: 13,
+    marginBottom: 8,
     flexDirection: "row",
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    alignItems: "center",
-    elevation: 2
+    alignItems: "center"
   },
-  actionIconContainer: {
-    marginRight: 15
-  },
-  actionIcon: {
-    fontSize: 30
-  },
-  actionContent: {
-    flex: 1
+  actionCopy: {
+    flex: 1,
+    marginRight: 12
   },
   actionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#2C2018",
     marginBottom: 3
   },
   actionDescription: {
     fontSize: 12,
-    color: "#666"
+    lineHeight: 17,
+    color: "#6B5E55"
   },
-  ordersPreview: {
-    padding: 15,
-    paddingBottom: 30
+  actionArrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#C4541C"
   },
-  previewHeader: {
+  snapshotCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    padding: 13
+  },
+  snapshotRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2E9E0"
   },
-  viewAllText: {
-    color: "#2196F3",
-    fontWeight: "600"
-  },
-  emptyOrders: {
-    backgroundColor: "#fff",
-    padding: 30,
-    borderRadius: 10,
-    alignItems: "center",
-    elevation: 2
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 5
-  },
-  emptySubtext: {
+  snapshotLabel: {
     fontSize: 12,
-    color: "#999",
-    textAlign: "center"
+    color: "#7B6D63"
+  },
+  snapshotValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2C2018"
   }
 });

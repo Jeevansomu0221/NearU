@@ -1,21 +1,21 @@
-import React, { useEffect, useState } from "react";
-import { 
-  View, 
-  Text, 
-  Button, 
-  FlatList, 
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  FlatList,
   StyleSheet,
   ScrollView,
   Alert,
   Image,
-  TouchableOpacity
+  TouchableOpacity,
+  ActivityIndicator
 } from "react-native";
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList, Shop } from '../navigation/AppNavigator';
+import { StackNavigationProp } from "@react-navigation/stack";
+import { RootStackParamList, Shop } from "../navigation/AppNavigator";
 import { getPartnerMenu } from "../api/menu.api";
 import { useCart } from "../context/CartContext";
 
-type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ShopDetail'>;
+type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, "ShopDetail">;
 
 interface MenuItem {
   _id: string;
@@ -39,146 +39,100 @@ interface Props {
 
 export default function ShopDetailScreen({ route, navigation }: Props) {
   const { shopId, shop: passedShop } = route.params;
-  const [shop, setShop] = useState<Shop | null>(passedShop || null);
+  const [shop] = useState<Shop | null>(passedShop || null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
-  
-  // Use cart context
-  const { addItem, currentShopId, clearCartForNewShop } = useCart();
+  const [loading, setLoading] = useState(true);
+  const { addItem, getItemCount } = useCart();
 
   const loadMenu = async () => {
     try {
+      setLoading(true);
       const res: any = await getPartnerMenu(shopId);
       if (res.data && Array.isArray(res.data)) {
-        setMenu(res.data);
-        console.log("📱 Menu loaded with items:", res.data.length);
-        res.data.forEach((item: MenuItem, index: number) => {
-          console.log(`Item ${index}: ${item.name}, Image URL: ${item.imageUrl || 'No image'}`);
-        });
+        setMenu(res.data.filter((item: MenuItem) => item.isAvailable));
+      } else {
+        setMenu([]);
       }
     } catch (error: any) {
       console.error("Error loading menu:", error);
       Alert.alert("Error", "Failed to load menu");
+      setMenu([]);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!shop && shopId) {
-      console.log("Need to fetch shop details for:", shopId);
-    }
     loadMenu();
   }, [shopId]);
 
   const formatAddress = (address: any) => {
     if (!address) return "Address not available";
-    
-    if (typeof address === 'string') {
-      return address;
-    }
-    
-    if (typeof address === 'object') {
-      const parts = [
-        address.roadStreet,
-        address.colony,
-        address.area,
-        address.city,
-        address.state,
-        address.pincode
-      ].filter(Boolean);
-      
-      return parts.join(', ');
-    }
-    
-    return "Address not available";
+    if (typeof address === "string") return address;
+    return [address.roadStreet, address.colony, address.area, address.city, address.state, address.pincode]
+      .filter(Boolean)
+      .join(", ");
   };
+
+  const groupedMenu = useMemo(() => {
+    const source = new Map<string, MenuItem[]>();
+    menu.forEach((item) => {
+      const key = item.category?.trim() || "Popular";
+      const existing = source.get(key) || [];
+      existing.push(item);
+      source.set(key, existing);
+    });
+    return Array.from(source.entries());
+  }, [menu]);
 
   const handleAddToCart = (item: MenuItem) => {
     if (!shop) {
       Alert.alert("Error", "Shop information not available");
       return;
     }
-    
-    // Get shop name safely
+
     const shopName = shop.shopName || shop.restaurantName || "Restaurant";
-    
-    // Check if we're switching shops
-    if (currentShopId && currentShopId !== shop._id) {
-      Alert.alert(
-        "Switch Restaurant?",
-        `Your cart contains items from another restaurant. Adding items from "${shopName}" will clear your current cart.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { 
-            text: "Clear & Add", 
-            onPress: () => {
-              // Clear cart for new shop
-              clearCartForNewShop(shop._id, shopName);
-              
-              // Add the new item
-              const cartItem = {
-                _id: item._id,
-                name: item.name,
-                price: item.price,
-                quantity: 1,
-                shopId: shop._id,
-                shopName: shopName,
-                menuItemId: item._id
-              };
-              
-              addItem(cartItem);
-              Alert.alert("Added", `${item.name} added to cart`);
-            }
-          }
-        ]
-      );
-      return;
-    }
-    
-    // Add item to cart (same shop)
-    const cartItem = {
+
+    addItem({
       _id: item._id,
       name: item.name,
       price: item.price,
       quantity: 1,
       shopId: shop._id,
-      shopName: shopName,
+      shopName,
       menuItemId: item._id
-    };
-    
-    addItem(cartItem);
-    Alert.alert("Added", `${item.name} added to cart`);
+    });
   };
 
-  // Render menu item with image
-  const renderMenuItem = ({ item }: { item: MenuItem }) => (
-    <View style={styles.menuItem}>
-      {/* Display menu item image if available */}
+  const renderMenuCard = (item: MenuItem) => (
+    <View key={item._id} style={styles.menuCard}>
       {item.imageUrl ? (
-        <Image 
-          source={{ uri: item.imageUrl }} 
-          style={styles.menuItemImage}
-          resizeMode="cover"
-        />
+        <Image source={{ uri: item.imageUrl }} style={styles.menuImage} resizeMode="cover" />
       ) : (
-        <View style={[styles.menuItemImage, styles.placeholderImage]}>
-          <Text style={styles.placeholderText}>No Image</Text>
+        <View style={[styles.menuImage, styles.placeholderImage]}>
+          <Text style={styles.placeholderEmoji}>🍽️</Text>
         </View>
       )}
-      
-      <View style={styles.menuItemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        {item.description && (
-          <Text style={styles.itemDescription}>{item.description}</Text>
+
+      <View style={styles.menuContent}>
+        <View style={styles.menuTop}>
+          <Text style={styles.itemName}>{item.name}</Text>
+          <Text style={styles.itemPrice}>Rs {item.price}</Text>
+        </View>
+        {item.description ? (
+          <Text style={styles.itemDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+        ) : (
+          <Text style={styles.itemDescriptionMuted}>Freshly prepared in-store.</Text>
         )}
-        <Text style={styles.itemPrice}>₹{item.price}</Text>
-      </View>
-      
-      <View style={styles.addButtonContainer}>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => handleAddToCart(item)}
-        >
-          <Text style={styles.addButtonText}>Add</Text>
-        </TouchableOpacity>
+
+        <View style={styles.cardFooter}>
+          <Text style={styles.cardFooterNote}>Ready in a few minutes</Text>
+          <TouchableOpacity style={styles.addButton} onPress={() => handleAddToCart(item)}>
+            <Text style={styles.addButtonText}>Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -192,205 +146,370 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   }
 
   const shopName = shop.restaurantName || shop.shopName || "Restaurant";
-  const shopCategory = shop.category || "Food";
+  const category = shop.category || "Food";
+  const itemCount = getItemCount();
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.shopHeader}>
-        <Text style={styles.shopName}>{shopName}</Text>
-        <Text style={styles.category}>{shopCategory}</Text>
-        
-        <View style={styles.statusContainer}>
-          <View style={[styles.statusDot, shop.isOpen ? styles.open : styles.closed]} />
-          <Text style={styles.statusText}>
-            {shop.isOpen ? 'Open Now' : 'Closed'}
-          </Text>
-        </View>
-        
-        {shop.rating && (
-          <Text style={styles.rating}>⭐ {shop.rating.toFixed(1)}</Text>
-        )}
-        
-        {shop.address && (
-          <View style={styles.addressContainer}>
-            <Text style={styles.addressTitle}>Address:</Text>
-            <Text style={styles.addressText}>{formatAddress(shop.address)}</Text>
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.hero}>
+          <View style={styles.heroArt}>
+            {shop.shopImageUrl ? (
+              <Image source={{ uri: shop.shopImageUrl }} style={styles.heroImage} resizeMode="cover" />
+            ) : (
+              <View style={[styles.heroImage, styles.heroPlaceholder]}>
+                <Text style={styles.heroPlaceholderEmoji}>🍴</Text>
+              </View>
+            )}
           </View>
-        )}
-      </View>
 
-      <View style={styles.menuContainer}>
-        <Text style={styles.menuTitle}>Menu</Text>
-        
-        {menu.length === 0 ? (
-          <Text style={styles.noMenu}>No menu items available</Text>
+          <View style={styles.heroInfo}>
+            <View style={styles.heroHeader}>
+              <Text style={styles.shopName}>{shopName}</Text>
+              <View style={[styles.statusBadge, shop.isOpen ? styles.openBadge : styles.closedBadge]}>
+                <Text style={[styles.statusText, shop.isOpen ? styles.openText : styles.closedText]}>
+                  {shop.isOpen ? "Open" : "Closed"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.categoryPill}>{category}</Text>
+              <Text style={styles.rating}>★ {shop.rating?.toFixed(1) || "0.0"}</Text>
+            </View>
+
+            <Text style={styles.addressText}>{formatAddress(shop.address)}</Text>
+
+            <Text style={styles.deliveryMeta}>
+              {shop.openingTime && shop.closingTime
+                ? `${shop.openingTime} - ${shop.closingTime}`
+                : "Serving now"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Menu</Text>
+          <Text style={styles.sectionSubtitle}>{menu.length} items available</Text>
+        </View>
+
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#FF6B35" />
+            <Text style={styles.loadingText}>Loading menu...</Text>
+          </View>
+        ) : menu.length === 0 ? (
+          <View style={styles.emptyMenu}>
+            <Text style={styles.emptyMenuTitle}>Menu coming soon</Text>
+            <Text style={styles.emptyMenuText}>This shop has not added any available items yet.</Text>
+          </View>
         ) : (
-          <FlatList
-            data={menu.filter(item => item.isAvailable)}
-            keyExtractor={item => item._id}
-            scrollEnabled={false}
-            renderItem={renderMenuItem}
-          />
+          groupedMenu.map(([section, items]) => (
+            <View key={section} style={styles.menuSection}>
+              <Text style={styles.menuSectionTitle}>{section}</Text>
+              {items.map(renderMenuCard)}
+            </View>
+          ))
         )}
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <View>
+          <Text style={styles.footerLabel}>Cart</Text>
+          <Text style={styles.footerValue}>{itemCount} item{itemCount === 1 ? "" : "s"}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.viewCartButton}
+          onPress={() => navigation.navigate("Cart")}
+        >
+          <Text style={styles.viewCartButtonText}>View Cart</Text>
+        </TouchableOpacity>
       </View>
-
-      <View style={styles.buttonContainer}>
-  <Button
-    title="View Cart"
-    onPress={() => {
-      if (shop) {
-        navigation.navigate("Cart", { 
-          shop: shop // Make sure this matches what CartScreen expects
-        });
-      } else {
-        Alert.alert("Error", "Shop information not available");
-      }
-    }}
-    color="#FF6B35"
-  />
-</View>
-
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#F7F3EE"
+  },
+  content: {
+    paddingBottom: 120
   },
   centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40
   },
-  shopHeader: {
-    padding: 16,
-    backgroundColor: '#f8f8f8',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#6F6259"
+  },
+  hero: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 28,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    overflow: "hidden"
+  },
+  heroArt: {
+    height: 210,
+    backgroundColor: "#FFF1EA"
+  },
+  heroImage: {
+    width: "100%",
+    height: "100%"
+  },
+  heroPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FF6B35"
+  },
+  heroPlaceholderEmoji: {
+    fontSize: 48
+  },
+  heroInfo: {
+    padding: 18
+  },
+  heroHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 10
   },
   shopName: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 4,
+    flex: 1,
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginRight: 12
   },
-  category: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 12,
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999
   },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+  openBadge: {
+    backgroundColor: "#DDF8E5"
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  open: {
-    backgroundColor: '#4CAF50',
-  },
-  closed: {
-    backgroundColor: '#F44336',
+  closedBadge: {
+    backgroundColor: "#FDE1E1"
   },
   statusText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  openText: {
+    color: "#216E39"
+  },
+  closedText: {
+    color: "#B42318"
+  },
+  metaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
+  },
+  categoryPill: {
+    backgroundColor: "#F8EFE7",
+    color: "#7A5640",
+    fontSize: 12,
+    fontWeight: "700",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: "hidden"
   },
   rating: {
     fontSize: 16,
-    color: '#FF9800',
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  addressContainer: {
-    marginTop: 8,
-  },
-  addressTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: "800",
+    color: "#E29A13"
   },
   addressText: {
     fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    lineHeight: 21,
+    color: "#6F6259",
+    marginBottom: 8
   },
-  menuContainer: {
-    padding: 16,
+  deliveryMeta: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#50745E"
   },
-  menuTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
+  sectionHeader: {
+    marginTop: 20,
+    marginHorizontal: 16,
+    marginBottom: 6
   },
-  noMenu: {
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  sectionSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#7B6D63"
+  },
+  menuSection: {
+    marginTop: 12,
+    marginHorizontal: 16
+  },
+  menuSectionTitle: {
     fontSize: 16,
-    color: '#999',
-    textAlign: 'center',
-    padding: 20,
+    fontWeight: "800",
+    color: "#5C4638",
+    marginBottom: 10
   },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  menuCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    padding: 12,
+    marginBottom: 12,
+    alignItems: "flex-start"
   },
-  menuItemImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
+  menuImage: {
+    width: 82,
+    height: 82,
+    borderRadius: 16,
+    marginRight: 12
   },
   placeholderImage: {
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFE4D7"
   },
-  placeholderText: {
-    color: '#888',
-    fontSize: 10,
+  placeholderEmoji: {
+    fontSize: 28
   },
-  menuItemInfo: {
+  menuContent: {
     flex: 1,
+    minHeight: 82,
+    justifyContent: "space-between"
+  },
+  menuTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 6
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  itemDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginRight: 8
   },
   itemPrice: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FF6B35',
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#FF6B35"
   },
-  addButtonContainer: {
-    width: 70,
+  itemDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#72645A",
+    marginBottom: 10
+  },
+  itemDescriptionMuted: {
+    fontSize: 13,
+    color: "#9C8E84",
+    marginBottom: 10
+  },
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2
+  },
+  cardFooterNote: {
+    fontSize: 11,
+    color: "#8C7C71",
+    fontWeight: "600",
+    marginRight: 10
   },
   addButton: {
-    backgroundColor: '#FF6B35',
-    paddingHorizontal: 16,
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 12
   },
   addButtonText: {
-    color: 'white',
-    fontWeight: '600',
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  emptyMenu: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 28,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    alignItems: "center"
+  },
+  emptyMenuTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 8
+  },
+  emptyMenuText: {
     fontSize: 14,
+    color: "#7B6D63",
+    textAlign: "center",
+    lineHeight: 20
   },
-  buttonContainer: {
-    padding: 16,
-    paddingBottom: 32,
+  footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    backgroundColor: "rgba(247, 243, 238, 0.98)",
+    borderTopWidth: 1,
+    borderTopColor: "#E8DDD2"
   },
+  footerLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#8A7A70"
+  },
+  footerValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginTop: 2
+  },
+  viewCartButton: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 18,
+    shadowColor: "#FF6B35",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 6
+  },
+  viewCartButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800"
+  }
 });

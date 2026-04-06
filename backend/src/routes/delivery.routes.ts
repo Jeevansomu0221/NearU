@@ -1,34 +1,49 @@
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { 
-  getAvailableDeliveryJobs,  // ✅ Correct name
-  acceptDeliveryJob, 
+  getAvailableDeliveryJobs,
+  acceptDeliveryJob,
   updateDeliveryStatus,
   getMyOrders,
   getOrderDetails
 } from "../controllers/order.controller";
+import {
+  getDeliveryProfile,
+  updateDeliveryProfile,
+  getDeliveryStats,
+  getTodaysEarnings,
+  getAllDeliveryPartnersForAdmin,
+  updateDeliveryPartnerStatusByAdmin
+} from "../controllers/delivery.controller";
+import { roleMiddleware } from "../middlewares/role.middleware";
 
 const router = express.Router();
 
 // Apply auth middleware to all delivery routes
 router.use(authMiddleware);
 
-// =================== DELIVERY JOBS ===================
-// Get available delivery jobs (READY orders not assigned)
-router.get("/available-jobs", getAvailableDeliveryJobs);  // ✅ Use correct function
+// =================== PROFILE ===================
+router.get("/profile", getDeliveryProfile);
+router.put("/profile", updateDeliveryProfile);
 
-// Accept a delivery job
+// =================== STATS ===================
+router.get("/stats", getDeliveryStats);
+router.get("/earnings/today", getTodaysEarnings);
+
+// =================== ADMIN DELIVERY VERIFICATION ===================
+router.get("/admin/all", roleMiddleware(["admin"]), getAllDeliveryPartnersForAdmin);
+router.put("/admin/:deliveryPartnerId/status", roleMiddleware(["admin"]), updateDeliveryPartnerStatusByAdmin);
+
+// =================== DELIVERY JOBS ===================
+router.get("/available-jobs", getAvailableDeliveryJobs);
+
 router.post("/:orderId/accept", acceptDeliveryJob);
 
 // =================== MY ORDERS ===================
-// Get my assigned delivery orders
 router.get("/my-orders", getMyOrders);
-
-// Get order details
 router.get("/orders/:orderId", getOrderDetails);
 
 // =================== ORDER STATUS UPDATES ===================
-// Update delivery status (PICKED_UP, DELIVERED)
 router.patch("/:orderId/status", updateDeliveryStatus);
 
 export default router;

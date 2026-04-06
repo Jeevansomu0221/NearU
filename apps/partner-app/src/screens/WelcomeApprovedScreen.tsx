@@ -1,196 +1,141 @@
-// apps/partner-app/src/screens/WelcomeApprovedScreen.tsx
 import React from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Image,
-  SafeAreaView,
-  ScrollView 
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function WelcomeApprovedScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.content}>
-          {/* Celebration emoji instead of image to avoid file issues */}
-          <View style={styles.emojiContainer}>
-            <Text style={styles.emoji}>🎉</Text>
-          </View>
-          
-          <Text style={styles.title}>Congratulations!</Text>
-          <Text style={styles.subtitle}>Your shop has been approved!</Text>
-          
-          <Text style={styles.message}>
-            Now you can set up your menu, manage products, and start receiving orders.
-          </Text>
-          
-          <View style={styles.stepsCard}>
-            <Text style={styles.stepTitle}>Next Steps:</Text>
-            <View style={styles.stepItem}>
-              <Text style={styles.stepNumber}>1.</Text>
-              <Text style={styles.step}>Set up your menu with prices</Text>
-            </View>
-            <View style={styles.stepItem}>
-              <Text style={styles.stepNumber}>2.</Text>
-              <Text style={styles.step}>Add product images</Text>
-            </View>
-            <View style={styles.stepItem}>
-              <Text style={styles.stepNumber}>3.</Text>
-              <Text style={styles.step}>Set shop opening hours</Text>
-            </View>
-            <View style={styles.stepItem}>
-              <Text style={styles.stepNumber}>4.</Text>
-              <Text style={styles.step}>Start receiving orders!</Text>
-            </View>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.primaryButton}
-            onPress={() => navigation.navigate("Menu")}
-          >
-            <Text style={styles.primaryButtonText}>Setup Menu Now</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.secondaryButton}
-            onPress={() => navigation.navigate("Dashboard")}
-          >
-            <Text style={styles.secondaryButtonText}>
-              Go to Dashboard
-            </Text>
-          </TouchableOpacity>
-          
-          <Text style={styles.note}>
-            Tip: Complete your menu setup first to start receiving orders from customers.
-          </Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>Approved</Text>
+        <Text style={styles.heroTitle}>Your shop has been approved</Text>
+        <Text style={styles.heroSubtitle}>
+          Finish your menu setup so customers can discover the shop and start placing orders.
+        </Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Next steps</Text>
+        <View style={styles.stepRow}>
+          <Text style={styles.stepNumber}>1</Text>
+          <Text style={styles.stepText}>Add your main dishes and prices</Text>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+        <View style={styles.stepRow}>
+          <Text style={styles.stepNumber}>2</Text>
+          <Text style={styles.stepText}>Upload clean item photos</Text>
+        </View>
+        <View style={styles.stepRow}>
+          <Text style={styles.stepNumber}>3</Text>
+          <Text style={styles.stepText}>Check shop timings and availability</Text>
+        </View>
+
+        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate("Menu")}>
+          <Text style={styles.primaryButtonText}>Set Up Menu</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate("Dashboard")}>
+          <Text style={styles.secondaryButtonText}>Go to Dashboard</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#fff"
-  },
   container: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
+    flex: 1,
+    backgroundColor: "#F7F3EE"
   },
-  content: {
-    alignItems: "center",
+  hero: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: "#216E39",
+    borderRadius: 28,
+    padding: 22
   },
-  emojiContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#E8F5E9",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 25
+  heroEyebrow: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#DDF8E5",
+    marginBottom: 10
   },
-  emoji: {
-    fontSize: 60
-  },
-  title: {
+  heroTitle: {
     fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 8,
-    color: "#4CAF50",
-    textAlign: "center"
+    lineHeight: 34,
+    fontWeight: "800",
+    color: "#FFFFFF"
   },
-  subtitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 20,
-    color: "#333",
-    textAlign: "center"
+  heroSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#EDF9F0"
   },
-  message: {
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 30,
-    color: "#666",
-    lineHeight: 24,
-    paddingHorizontal: 10
-  },
-  stepsCard: {
-    backgroundColor: "#f8f9fa",
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 30,
-    width: "100%",
+  card: {
+    marginHorizontal: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#e9ecef"
+    borderColor: "#EFE5DA",
+    padding: 18
   },
-  stepTitle: {
+  sectionTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 15,
-    color: "#333"
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 14
   },
-  stepItem: {
+  stepRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     marginBottom: 12
   },
   stepNumber: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2196F3",
-    marginRight: 10,
-    minWidth: 20
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#FDE9DE",
+    color: "#C4541C",
+    textAlign: "center",
+    lineHeight: 26,
+    fontWeight: "800",
+    marginRight: 10
   },
-  step: {
-    fontSize: 15,
-    color: "#555",
+  stepText: {
     flex: 1,
-    lineHeight: 22
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#6B5E55"
   },
   primaryButton: {
-    backgroundColor: "#2196F3",
-    padding: 18,
-    borderRadius: 10,
-    width: "100%",
-    marginBottom: 12,
+    backgroundColor: "#FF6B35",
+    borderRadius: 18,
     alignItems: "center",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4
+    paddingVertical: 15,
+    marginTop: 8,
+    marginBottom: 10
   },
   primaryButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold"
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800"
   },
   secondaryButton: {
-    backgroundColor: "transparent",
-    borderWidth: 2,
-    borderColor: "#2196F3",
-    padding: 18,
-    borderRadius: 10,
-    width: "100%",
-    marginBottom: 20,
-    alignItems: "center"
+    backgroundColor: "#FDE9DE",
+    borderRadius: 18,
+    alignItems: "center",
+    paddingVertical: 15
   },
   secondaryButtonText: {
-    color: "#2196F3",
-    fontSize: 18,
-    fontWeight: "bold"
-  },
-  note: {
+    color: "#C4541C",
     fontSize: 14,
-    color: "#888",
-    textAlign: "center",
-    fontStyle: "italic",
-    marginTop: 10,
-    lineHeight: 20
+    fontWeight: "800"
   }
 });

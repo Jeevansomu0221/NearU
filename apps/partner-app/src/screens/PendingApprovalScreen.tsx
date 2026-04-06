@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  StyleSheet,
   TouchableOpacity,
-  ActivityIndicator 
+  ActivityIndicator,
+  ScrollView
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 
@@ -14,7 +16,6 @@ interface PartnerData {
   ownerName: string;
   restaurantName: string;
   phone: string;
-  address: string;
   category: string;
   status: string;
   hasCompletedSetup?: boolean;
@@ -22,11 +23,8 @@ interface PartnerData {
   createdAt: string;
 }
 
-interface PendingApprovalScreenProps {
-  navigation: any;
-}
-
-export default function PendingApprovalScreen({ navigation }: PendingApprovalScreenProps) {
+export default function PendingApprovalScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const [partnerData, setPartnerData] = useState<PartnerData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,7 +32,7 @@ export default function PendingApprovalScreen({ navigation }: PendingApprovalScr
     try {
       const token = await AsyncStorage.getItem("token");
       const phone = await AsyncStorage.getItem("phone");
-      
+
       if (!token || !phone) {
         navigation.reset({
           index: 0,
@@ -45,21 +43,17 @@ export default function PendingApprovalScreen({ navigation }: PendingApprovalScr
 
       const res = await api.get("/partners/my-status");
       const data = res.data as { success: boolean; data: PartnerData };
-      
+
       if (data.success && data.data) {
         setPartnerData(data.data);
-        
-        // Auto-navigate based on status
+
         if (data.data.status === "APPROVED") {
-          // Check if they need menu setup
           if (!data.data.hasCompletedSetup && (!data.data.menuItemsCount || data.data.menuItemsCount === 0)) {
-            // Redirect to WelcomeApproved screen first
             navigation.reset({
               index: 0,
               routes: [{ name: "WelcomeApproved" }]
             });
           } else {
-            // Already has menu items, go to dashboard
             navigation.reset({
               index: 0,
               routes: [{ name: "Dashboard" }]
@@ -81,229 +75,211 @@ export default function PendingApprovalScreen({ navigation }: PendingApprovalScr
 
   useEffect(() => {
     checkStatus();
-    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
+    const interval = setInterval(checkStatus, 30000);
     return () => clearInterval(interval);
   }, []);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
+        <ActivityIndicator size="large" color="#FF6B35" />
         <Text style={styles.loadingText}>Checking your application status...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Application Under Review</Text>
-        <Text style={styles.subtitle}>
-          We're reviewing your partner application
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>Application review</Text>
+        <Text style={styles.heroTitle}>Your shop application is under review</Text>
+        <Text style={styles.heroSubtitle}>
+          We are checking your business details before approval. This screen refreshes automatically every 30 seconds.
         </Text>
       </View>
-      
-      <View style={styles.content}>
-        <Text style={styles.message}>
-          Your application is currently being reviewed by our admin team.
-        </Text>
-        <Text style={styles.message}>
-          This usually takes 24-48 hours. You'll receive a notification once a decision is made.
-        </Text>
-        
-        {partnerData && (
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>Application Details</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Owner Name:</Text>
-              <Text style={styles.infoValue}>{partnerData.ownerName}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Restaurant:</Text>
-              <Text style={styles.infoValue}>{partnerData.restaurantName}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Category:</Text>
-              <Text style={styles.infoValue}>{partnerData.category}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Submitted:</Text>
-              <Text style={styles.infoValue}>
-                {new Date(partnerData.createdAt).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </Text>
-            </View>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>
-                Status: {partnerData.status}
-              </Text>
-            </View>
-          </View>
-        )}
-        
-        <View style={styles.actions}>
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={checkStatus}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>Refresh Status</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.secondaryButton}
-            onPress={() => navigation.navigate("Login")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.secondaryButtonText}>Back to Login</Text>
-          </TouchableOpacity>
+
+      <View style={styles.card}>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>Pending</Text>
         </View>
-        
-        <Text style={styles.footerText}>
-          This page will automatically refresh every 30 seconds.
-          You'll be redirected once your application is processed.
+        <Text style={styles.cardTitle}>What happens next</Text>
+        <Text style={styles.cardText}>
+          The admin team will verify your shop details and approve the account. Once approved, you will be taken straight into setup.
         </Text>
       </View>
-    </View>
+
+      {partnerData ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Application details</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Owner</Text>
+            <Text style={styles.infoValue}>{partnerData.ownerName}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Shop</Text>
+            <Text style={styles.infoValue}>{partnerData.restaurantName}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Category</Text>
+            <Text style={styles.infoValue}>{partnerData.category}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Submitted</Text>
+            <Text style={styles.infoValue}>
+              {new Date(partnerData.createdAt).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric"
+              })}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.actions}>
+        <TouchableOpacity style={styles.primaryButton} onPress={checkStatus}>
+          <Text style={styles.primaryButtonText}>Refresh Status</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate("Login")}>
+          <Text style={styles.secondaryButtonText}>Back to Login</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F7F3EE"
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 20,
+    backgroundColor: "#F7F3EE",
+    padding: 20
   },
   loadingText: {
-    marginTop: 20,
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
+    marginTop: 16,
+    fontSize: 15,
+    color: "#6B5E55",
+    textAlign: "center"
   },
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
+  hero: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: "#FF6B35",
+    borderRadius: 28,
+    padding: 22
   },
-  header: {
-    backgroundColor: "#2196F3",
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-    alignItems: "center",
+  heroEyebrow: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#FFE4D7",
+    marginBottom: 10
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 8,
+  heroTitle: {
+    fontSize: 27,
+    lineHeight: 33,
+    fontWeight: "800",
+    color: "#FFFFFF"
   },
-  subtitle: {
-    fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
+  heroSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#FFF4EE"
   },
-  content: {
-    flex: 1,
-    padding: 20,
-    paddingTop: 30,
-  },
-  message: {
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 15,
-    color: "#666",
-    lineHeight: 22,
-  },
-  infoCard: {
-    backgroundColor: "#f8f9fa",
-    padding: 20,
-    borderRadius: 12,
-    marginTop: 20,
-    marginBottom: 30,
+  card: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#e9ecef",
+    borderColor: "#EFE5DA",
+    padding: 16
   },
-  infoTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "#333",
-    textAlign: "center",
+  badge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FFF2D9",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#A15C00"
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 8
+  },
+  cardText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#6B5E55"
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 10
   },
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
+    alignItems: "flex-start",
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: "#F2E9E0"
   },
   infoLabel: {
-    fontSize: 16,
-    color: "#666",
-    fontWeight: "500",
+    fontSize: 13,
+    color: "#7B6D63",
+    marginRight: 12
   },
   infoValue: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "600",
-  },
-  statusBadge: {
-    backgroundColor: "#FFC107",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: "center",
-    marginTop: 20,
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
+    flex: 1,
+    textAlign: "right",
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2C2018"
   },
   actions: {
-    gap: 12,
-    marginBottom: 20,
+    paddingHorizontal: 16
   },
-  button: {
-    backgroundColor: "#2196F3",
-    padding: 16,
-    borderRadius: 10,
+  primaryButton: {
+    backgroundColor: "#FF6B35",
+    borderRadius: 18,
     alignItems: "center",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    paddingVertical: 15,
+    marginBottom: 10
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800"
   },
   secondaryButton: {
-    backgroundColor: "transparent",
-    padding: 16,
-    borderRadius: 10,
+    backgroundColor: "#FDE9DE",
+    borderRadius: 18,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#2196F3",
+    paddingVertical: 15
   },
   secondaryButtonText: {
-    color: "#2196F3",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  footerText: {
+    color: "#C4541C",
     fontSize: 14,
-    color: "#888",
-    textAlign: "center",
-    fontStyle: "italic",
-    lineHeight: 20,
-    marginTop: 20,
-  },
+    fontWeight: "800"
+  }
 });

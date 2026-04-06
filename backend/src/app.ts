@@ -7,19 +7,14 @@ import partnerRoutes from "./routes/partner.routes";
 import orderRoutes from "./routes/order.routes";
 import adminRoutes from "./routes/admin.routes";
 import deliveryRoutes from "./routes/delivery.routes";
-import uploadRoutes from "./routes/upload.routes"; // ADD THIS
+import uploadRoutes from "./routes/upload.routes";
 import paymentRoutes from "./routes/payment.routes";
+
 const app = express();
 
-// Configure CORS...
+// Configure CORS
 app.use(cors({
-  origin: [
-    'http://localhost:8081',
-    'http://localhost:19006',
-    'http://localhost:5173',
-    'exp://10.3.128.220:8081',
-    /\.exp\.direct$/,
-  ],
+  origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
@@ -35,8 +30,9 @@ app.use("/api/partners", partnerRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/delivery", deliveryRoutes);
-app.use("/api/upload", uploadRoutes); // ADD THIS
+app.use("/api/upload", uploadRoutes);
 app.use("/api/payment", paymentRoutes);
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "NearU backend is running" });

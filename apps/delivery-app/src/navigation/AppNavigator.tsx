@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Import screens
 import LoginScreen from "../screens/LoginScreen";
@@ -11,6 +12,7 @@ import MyJobsScreen from "../screens/MyJobsScreen";
 import JobDetailsScreen from "../screens/JobDetailsScreen"; // Make sure this import exists
 import EarningsScreen from "../screens/EarningsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import { getDeliveryProfile } from "../api/profile.api";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -75,9 +77,41 @@ function MainTabs() {
 
 // Stack Navigator
 export default function AppNavigator() {
+  const [initialRoute, setInitialRoute] = useState("Loading");
+
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+          setInitialRoute("Login");
+          return;
+        }
+
+        const profileResponse = await getDeliveryProfile();
+        if (profileResponse.success && profileResponse.data) {
+          setInitialRoute(profileResponse.data.isProfileComplete ? "Main" : "CompleteProfile");
+          return;
+        }
+
+        await AsyncStorage.multiRemove(["token", "user"]);
+        setInitialRoute("Login");
+      } catch (error) {
+        await AsyncStorage.multiRemove(["token", "user"]);
+        setInitialRoute("Login");
+      }
+    };
+
+    checkSession();
+  }, []);
+
+  if (initialRoute === "Loading") {
+    return null;
+  }
+
   return (
     <Stack.Navigator
-      initialRouteName="Login"
+      initialRouteName={initialRoute}
       screenOptions={{
         headerStyle: {
           backgroundColor: "#4CAF50",
@@ -102,6 +136,15 @@ export default function AppNavigator() {
         name="Main"
         component={MainTabs}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="CompleteProfile"
+        component={ProfileScreen}
+        initialParams={{ forceComplete: true }}
+        options={{
+          title: "Complete Registration",
+          headerLeft: () => null
+        }}
       />
       {/* ADD JobDetailsScreen as a separate screen */}
       <Stack.Screen

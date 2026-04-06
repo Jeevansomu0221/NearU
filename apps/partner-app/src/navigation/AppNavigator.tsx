@@ -165,9 +165,9 @@ export default function AppNavigator() {
 
   if (loading || initialRoute === "Loading") {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={{ marginTop: 20, fontSize: 16, color: "#666" }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F7F3EE" }}>
+        <ActivityIndicator size="large" color="#FF6B35" />
+        <Text style={{ marginTop: 20, fontSize: 16, color: "#6B5E55" }}>
           Loading your account...
         </Text>
       </View>
@@ -179,13 +179,17 @@ export default function AppNavigator() {
       initialRouteName={initialRoute}
       screenOptions={{
         headerStyle: {
-          backgroundColor: "#f8f9fa",
+          backgroundColor: "#FFF8F1",
         },
-        headerTintColor: "#333",
+        headerTintColor: "#2C2018",
         headerTitleStyle: {
-          fontWeight: "600",
+          fontWeight: "700",
         },
         headerBackTitle: "Back",
+        headerShadowVisible: false,
+        contentStyle: {
+          backgroundColor: "#F7F3EE"
+        }
       }}
     >
       <Stack.Screen 

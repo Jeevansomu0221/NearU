@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,23 +8,22 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-} from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../navigation/AppNavigator';
-import apiClient from '../api/client';
+  RefreshControl
+} from "react-native";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RootStackParamList } from "../navigation/AppNavigator";
+import { getPartners } from "../api/menu.api";
 
-type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
+type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
 interface AddressObject {
-  state: string;
-  city: string;
-  pincode: string;
-  area: string;
-  colony: string;
-  roadStreet: string;
-  nearbyPlaces: string[];
-  googleMapsLink: string;
+  state?: string;
+  city?: string;
+  pincode?: string;
+  area?: string;
+  colony?: string;
+  roadStreet?: string;
 }
 
 interface Shop {
@@ -36,171 +35,219 @@ interface Shop {
   isOpen: boolean;
   rating: number;
   shopImageUrl?: string;
+  openingTime?: string;
+  closingTime?: string;
 }
 
 interface Props {
   navigation: HomeScreenNavigationProp;
 }
 
+const categoryLabels: Record<string, string> = {
+  all: "All",
+  bakery: "Bakery",
+  "tiffin-center": "Tiffin",
+  sweets: "Sweets",
+  "fast-food": "Fast Food",
+  "mini-restaurant": "Mini Restaurant",
+  "ice-creams": "Ice Creams",
+  other: "Local Shop"
+};
+
+const filterOptions = [
+  { key: "all", label: "All" },
+  { key: "tiffin-center", label: "Tiffins" },
+  { key: "mini-restaurant", label: "Restaurant" },
+  { key: "bakery", label: "Bakery" },
+  { key: "fast-food", label: "Fast Food" },
+  { key: "sweets", label: "Sweets" }
+];
+
 export default function HomeScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState("all");
 
   useEffect(() => {
     loadNearbyShops();
   }, []);
 
-  const loadNearbyShops = async () => {
+  const loadNearbyShops = async (showRefresh = false) => {
     try {
-      setLoading(true);
-      console.log('📱 Fetching nearby shops...');
-      
-      const response: any = await apiClient.get('/partners/shops');
-      console.log('📦 FULL API Response:', JSON.stringify(response, null, 2));
-      
-      let shopsData: Shop[] = [];
-      
-      if (response && Array.isArray(response.data)) {
-        shopsData = response.data;
-      } else if (response && response.success && Array.isArray(response.data)) {
-        shopsData = response.data;
+      if (showRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
-      
-      console.log('🛍️ Shops loaded:', shopsData.length);
-      shopsData.forEach((shop: any, index: number) => {
-        console.log(`Shop ${index}:`, JSON.stringify(shop, null, 2));
-      });
-      setShops(shopsData);
-      
+
+      const response = await getPartners();
+
+      if (response?.success && Array.isArray(response.data)) {
+        setShops(response.data);
+      } else if (Array.isArray((response as any)?.data)) {
+        setShops((response as any).data);
+      } else {
+        setShops([]);
+      }
     } catch (error: any) {
-      console.error('❌ API Error:', error);
-      Alert.alert('Error', error.message || 'Failed to load shops');
+      console.error("HomeScreen load error:", error);
+      Alert.alert("Error", error.message || "Failed to load shops");
       setShops([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const formatAddress = (address: string | AddressObject): string => {
     if (!address) return "Address not available";
-    
-    if (typeof address === 'string') {
-      return address;
-    }
-    
-    if (typeof address === 'object') {
-      const addr = address as AddressObject;
-      const parts = [
-        addr.roadStreet,
-        addr.colony,
-        addr.area,
-        addr.city
-      ].filter(Boolean);
-      
-      return parts.join(', ');
-    }
-    
-    return "Address not available";
+    if (typeof address === "string") return address;
+    return [address.roadStreet, address.colony, address.area, address.city].filter(Boolean).join(", ");
   };
 
-  const renderShopItem = ({ item }: { item: Shop }) => (
-    <TouchableOpacity
-      style={styles.shopCard}
-      onPress={() => navigation.navigate('ShopDetail', { 
-        shopId: item._id,
-        shop: item 
-      })}
-    >
-      <View style={styles.shopCardContent}>
-        {/* Shop Image - FIXED: No require() needed since we only use URI or placeholder */}
-        {item.shopImageUrl ? (
-          <Image 
-            source={{ uri: item.shopImageUrl }} 
-            style={styles.shopImage}
-            resizeMode="cover"
-            onError={(e) => {
-              console.log('Image load error:', e.nativeEvent.error);
-              // If image fails to load, it will show the placeholder
-            }}
-          />
-        ) : (
-          <View style={[styles.shopImage, styles.placeholderImage]}>
-            <Text style={styles.placeholderEmoji}>
-              {getCategoryEmoji(item.category)}
-            </Text>
-            <Text style={styles.placeholderText}>No Image</Text>
-          </View>
-        )}
-        
-        <View style={styles.shopInfo}>
-          <View style={styles.shopHeader}>
-            <Text style={styles.shopName} numberOfLines={1}>
-              {item.shopName || item.restaurantName}
-            </Text>
-            <View style={[styles.statusDot, item.isOpen ? styles.open : styles.closed]}>
-              <Text style={styles.statusText}>{item.isOpen ? 'Open' : 'Closed'}</Text>
-            </View>
-          </View>
-          
-          <Text style={styles.shopCategory}>{item.category}</Text>
-          
-          <Text style={styles.shopAddress} numberOfLines={1}>
-            {formatAddress(item.address)}
-          </Text>
-          
-          <View style={styles.ratingContainer}>
-            <Text style={styles.shopRating}>⭐ {item.rating?.toFixed(1) || '0.0'}</Text>
-          </View>
+  const getCategoryEmoji = (category: string) => {
+    const value = (category || "").toLowerCase();
+    if (value.includes("bakery")) return "🥐";
+    if (value.includes("tiffin")) return "🍽";
+    if (value.includes("sweet")) return "🧁";
+    if (value.includes("ice")) return "🍨";
+    if (value.includes("fast")) return "🍔";
+    return "🏪";
+  };
+
+  const renderHeader = () => (
+    <View style={[styles.headerWrap, { paddingTop: insets.top + 8 }]}>
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>NearU Food</Text>
+        <Text style={styles.heroTitle}>Local shops near you</Text>
+        <Text style={styles.heroSubtitle}>Fresh nearby favorites with fast menu browsing.</Text>
+      </View>
+
+      <View style={styles.metricsRow}>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{shops.length}</Text>
+          <Text style={styles.metricLabel}>Total Shops</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{shops.filter((shop) => shop.isOpen).length}</Text>
+          <Text style={styles.metricLabel}>Open Now</Text>
         </View>
       </View>
-    </TouchableOpacity>
+
+      <FlatList
+        data={filterOptions}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(item) => item.key}
+        contentContainerStyle={styles.filtersRow}
+        renderItem={({ item }) => {
+          const active = selectedFilter === item.key;
+          return (
+            <TouchableOpacity
+              style={[styles.filterChip, active && styles.filterChipActive]}
+              onPress={() => setSelectedFilter(item.key)}
+            >
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{item.label}</Text>
+            </TouchableOpacity>
+          );
+        }}
+      />
+    </View>
   );
 
-  // Helper function to get emoji based on category
-  const getCategoryEmoji = (category: string) => {
-    if (!category) return '🏪';
-    const lowerCategory = category.toLowerCase();
-    if (lowerCategory.includes('pizza') || lowerCategory.includes('italian')) return '🍕';
-    if (lowerCategory.includes('burger') || lowerCategory.includes('fast')) return '🍔';
-    if (lowerCategory.includes('chinese') || lowerCategory.includes('asian')) return '🥡';
-    if (lowerCategory.includes('indian')) return '🥘';
-    if (lowerCategory.includes('coffee') || lowerCategory.includes('cafe')) return '☕';
-    if (lowerCategory.includes('dessert') || lowerCategory.includes('sweet')) return '🍰';
-    if (lowerCategory.includes('beverage') || lowerCategory.includes('drink')) return '🥤';
-    return '🏪';
+  const renderShopItem = ({ item }: { item: Shop }) => {
+    const displayName = item.shopName || item.restaurantName || "Local Shop";
+    const address = formatAddress(item.address);
+    const category = categoryLabels[item.category] || item.category;
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.88}
+        style={styles.shopCard}
+        onPress={() =>
+          navigation.navigate("ShopDetail", {
+            shopId: item._id,
+            shop: item
+          })
+        }
+      >
+        <View style={styles.thumbWrap}>
+          {item.shopImageUrl ? (
+            <Image source={{ uri: item.shopImageUrl }} style={styles.shopImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.shopImage, styles.placeholderImage]}>
+              <Text style={styles.placeholderEmoji}>{getCategoryEmoji(item.category)}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.shopInfo}>
+          <View style={styles.topRow}>
+            <Text style={styles.shopName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.viewMenu}>View Menu</Text>
+          </View>
+
+          <View style={styles.middleRow}>
+            <Text style={styles.categoryText} numberOfLines={1}>
+              {category}
+            </Text>
+            <View style={[styles.statusBadge, item.isOpen ? styles.openBadge : styles.closedBadge]}>
+              <Text style={[styles.statusText, item.isOpen ? styles.openText : styles.closedText]}>
+                {item.isOpen ? "Open" : "Closed"}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.addressText} numberOfLines={1}>
+            {address || "Address not available"}
+          </Text>
+
+          <View style={styles.bottomRow}>
+            <Text style={styles.ratingText}>★ {item.rating?.toFixed(1) || "0.0"}</Text>
+            <Text style={styles.timeText} numberOfLines={1}>
+              {item.openingTime && item.closingTime ? `${item.openingTime} - ${item.closingTime}` : "Available now"}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
+
+  const renderEmpty = () => (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyTitle}>No shops found right now</Text>
+      <Text style={styles.emptyText}>Pull down to refresh or try again in a moment.</Text>
+    </View>
+  );
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF6B35" />
-        <Text>Loading nearby shops...</Text>
+        <Text style={styles.loadingText}>Loading nearby shops...</Text>
       </View>
     );
   }
 
+  const filteredShops =
+    selectedFilter === "all" ? shops : shops.filter((shop) => shop.category === selectedFilter);
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>NearU</Text>
-        <Text style={styles.subtitle}>Local shops near you</Text>
-      </View>
-
-      {shops.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Text>No shops found in your area</Text>
-          <TouchableOpacity onPress={loadNearbyShops} style={styles.retryButton}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={shops}
-          renderItem={renderShopItem}
-          keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.list}
-        />
-      )}
+      <FlatList
+        data={filteredShops}
+        keyExtractor={(item) => item._id}
+        renderItem={renderShopItem}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops(true)} tintColor="#FF6B35" />}
+      />
     </View>
   );
 }
@@ -208,128 +255,229 @@ export default function HomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#F7F3EE"
   },
-  header: {
-    padding: 20,
-    backgroundColor: '#FF6B35',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F7F3EE"
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+  loadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#6B5E55"
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.9,
+  listContent: {
+    paddingBottom: 18
   },
-  list: {
-    padding: 16,
+  headerWrap: {
+    paddingBottom: 8
+  },
+  hero: {
+    marginHorizontal: 16,
+    marginTop: 0,
+    marginBottom: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderRadius: 22,
+    backgroundColor: "#FF6B35"
+  },
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFE5DA",
+    marginBottom: 6
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginBottom: 4
+  },
+  heroSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#FFF3ED"
+  },
+  metricsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 10
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  metricValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 2
+  },
+  metricLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#8B6A54"
+  },
+  filtersRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 4
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    marginRight: 8
+  },
+  filterChipActive: {
+    backgroundColor: "#FF6B35",
+    borderColor: "#FF6B35"
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#6F6259"
+  },
+  filterChipTextActive: {
+    color: "#FFFFFF"
   },
   shopCard: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    marginBottom: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 10,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: '#eee',
-    overflow: 'hidden',
+    borderColor: "#EFE5DA",
+    flexDirection: "row",
+    alignItems: "center"
   },
-  shopCardContent: {
-    flexDirection: 'row',
-    padding: 12,
+  thumbWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    overflow: "hidden",
+    marginRight: 10,
+    backgroundColor: "#FFF2EB"
   },
   shopImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 12,
+    width: "100%",
+    height: "100%"
   },
   placeholderImage: {
-    backgroundColor: '#FF6B35',
-    justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FF6B35"
   },
   placeholderEmoji: {
-    fontSize: 32,
-    marginBottom: 4,
-  },
-  placeholderText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 26
   },
   shopInfo: {
-    flex: 1,
-    justifyContent: 'space-between',
+    flex: 1
   },
-  shopHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 3
   },
   shopName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
     flex: 1,
-    marginRight: 8,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginRight: 8
   },
-  statusDot: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    minWidth: 60,
-    alignItems: 'center',
+  viewMenu: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#FF6B35"
   },
-  open: {
-    backgroundColor: '#4CAF50',
+  middleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 3
   },
-  closed: {
-    backgroundColor: '#F44336',
+  categoryText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#8B6A54",
+    marginRight: 8
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999
+  },
+  openBadge: {
+    backgroundColor: "#DDF8E5"
+  },
+  closedBadge: {
+    backgroundColor: "#FDE1E1"
   },
   statusText: {
-    color: '#fff',
+    fontSize: 9,
+    fontWeight: "800"
+  },
+  openText: {
+    color: "#216E39"
+  },
+  closedText: {
+    color: "#B42318"
+  },
+  addressText: {
+    fontSize: 10,
+    color: "#7B6D63",
+    marginBottom: 4
+  },
+  bottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  ratingText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "800",
+    color: "#E29A13"
   },
-  shopCategory: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
+  timeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#5C7C66",
+    marginLeft: 8
   },
-  shopAddress: {
+  emptyState: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 24,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    alignItems: "center"
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 6
+  },
+  emptyText: {
     fontSize: 13,
-    color: '#888',
-    marginBottom: 6,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  shopRating: {
-    fontSize: 14,
-    color: '#FF9800',
-    fontWeight: '600',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  retryButton: {
-    marginTop: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#FF6B35',
-    borderRadius: 8,
-  },
-  retryText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
+    color: "#7B6D63",
+    textAlign: "center",
+    lineHeight: 18
+  }
 });

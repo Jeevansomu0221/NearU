@@ -1,5 +1,4 @@
-// apps/customer-app/src/screens/PaymentScreen.tsx
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -10,210 +9,197 @@ import {
   Alert,
   Modal
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
 import { createShopOrder } from "../api/order.api";
 
+interface CheckoutGroup {
+  shopId: string;
+  shopName: string;
+  items: Array<{
+    _id?: string;
+    name: string;
+    price: number;
+    quantity: number;
+    menuItemId?: string;
+  }>;
+  subtotal: number;
+}
+
 export default function PaymentScreen({ route, navigation }: any) {
-  const { shop, userProfile, orderSummary } = route.params;
+  const { userProfile, orderSummary } = route.params;
   const { items, clear } = useCart();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH_ON_DELIVERY");
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
 
   const paymentMethods = [
-    { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "💵" },
-    { id: "UPI", name: "UPI Payment", icon: "📱" }
+    { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
+    { id: "UPI", name: "UPI Payment", icon: "UPI" }
   ];
 
-  // Calculate delivery time estimate (30-45 minutes)
+  const groupedShops = useMemo<CheckoutGroup[]>(() => {
+    if (Array.isArray(orderSummary?.groupedShops) && orderSummary.groupedShops.length > 0) {
+      return orderSummary.groupedShops;
+    }
+
+    const grouped = new Map<string, CheckoutGroup>();
+    (items || []).forEach((item: any) => {
+      const existing: CheckoutGroup = grouped.get(item.shopId) || {
+        shopId: item.shopId,
+        shopName: item.shopName,
+        items: [],
+        subtotal: 0
+      };
+
+      existing.items.push(item);
+      existing.subtotal += item.price * item.quantity;
+      grouped.set(item.shopId, existing);
+    });
+
+    return Array.from(grouped.values());
+  }, [items, orderSummary?.groupedShops]);
+
   const getDeliveryTime = () => {
     const now = new Date();
-    const deliveryTime = new Date(now.getTime() + 45 * 60000); // Add 45 minutes
-    return deliveryTime.toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
+    const deliveryTime = new Date(now.getTime() + 45 * 60000);
+    return deliveryTime.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
       hour12: true
     });
   };
 
   const formatAddress = (address: any) => {
     if (!address) return "No address";
-    
-    // Check if address is string
-    if (typeof address === 'string') return address;
-    
-    // Format object address
-    const addr = address;
+    if (typeof address === "string") return address;
+
     const parts = [
-      addr.street,
-      addr.area,
-      addr.landmark ? `Near ${addr.landmark}` : null,
-      `${addr.city}, ${addr.state} - ${addr.pincode}`
+      address.street,
+      address.area,
+      address.landmark ? `Near ${address.landmark}` : null,
+      `${address.city}, ${address.state} - ${address.pincode}`
     ].filter(Boolean);
-    
-    return parts.join(', ');
+
+    return parts.join(", ");
   };
 
-  const handlePayment = async () => {
-    if (paymentMethod === "CASH_ON_DELIVERY") {
-      await createOrderWithCOD();
-    } else if (paymentMethod === "UPI") {
-      await processUPIPayment();
-    }
-  };
+  const placeOrders = async (selectedMethod: string) => {
+    const createdOrders = [];
 
-  const createOrderWithCOD = async () => {
-    try {
-      setLoading(true);
-      console.log("🛒 Creating COD order with items:", items);
-      
-      const orderItems = items.map((item: any) => ({
+    for (const group of groupedShops) {
+      const orderItems = group.items.map((item: any) => ({
         name: item.name,
         quantity: item.quantity,
         price: item.price,
         menuItemId: item.menuItemId || item._id || "temp-id"
       }));
 
-      console.log("📝 Order items formatted:", orderItems);
-      console.log("🏪 Shop ID:", shop._id);
-      console.log("📍 Delivery address:", orderSummary.address);
-      
       const response = await createShopOrder(
-        shop._id,
+        group.shopId,
         orderSummary.address,
         orderItems,
-        "",
-        "CASH_ON_DELIVERY"
+        orderSummary.note || "",
+        selectedMethod
       );
 
-      console.log("📦 Order API Response:", response);
-
-      if (response.success && response.data) {
-        console.log("✅ Order created successfully:", response.data._id);
-        clear();
-        navigation.replace("OrderStatus", { 
-          orderId: response.data._id 
-        });
-      } else {
-        console.error("❌ Order creation failed:", response.message);
-        Alert.alert(
-          "Order Failed", 
-          response.message || "Failed to place order",
-          [{ text: "OK", style: "default" }]
-        );
+      if (!response.success || !response.data) {
+        throw new Error(response.message || `Failed to place order for ${group.shopName}`);
       }
+
+      createdOrders.push(response.data);
+    }
+
+    return createdOrders;
+  };
+
+  const handleSuccessfulCheckout = (createdOrders: any[]) => {
+    clear();
+
+    if (createdOrders.length === 1) {
+      navigation.replace("OrderStatus", { orderId: createdOrders[0]._id });
+      return;
+    }
+
+    Alert.alert(
+      "Orders Placed",
+      `${createdOrders.length} restaurant orders were placed successfully.`,
+      [{ text: "View Orders", onPress: () => navigation.replace("Orders") }]
+    );
+  };
+
+  const handlePayment = async () => {
+    try {
+      setLoading(true);
+
+      if (paymentMethod === "UPI") {
+        Alert.alert(
+          "UPI Payment",
+          "Continue to simulate the UPI payment and confirm all restaurant orders.",
+          [
+            {
+              text: "Cancel",
+              style: "cancel",
+              onPress: () => setLoading(false)
+            },
+            {
+              text: "Pay Now",
+              onPress: async () => {
+                try {
+                  const createdOrders = await placeOrders("UPI");
+                  Alert.alert(
+                    "Payment Successful",
+                    "Your UPI payment was processed successfully.",
+                    [{ text: "View Orders", onPress: () => handleSuccessfulCheckout(createdOrders) }]
+                  );
+                } catch (error: any) {
+                  Alert.alert("Payment Failed", error.message || "Failed to process payment");
+                } finally {
+                  setLoading(false);
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+
+      const createdOrders = await placeOrders("CASH_ON_DELIVERY");
+      handleSuccessfulCheckout(createdOrders);
     } catch (error: any) {
-      console.error("❌ COD Order error:", {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        url: error.config?.url
-      });
-      
-      let errorMessage = "Failed to place COD order";
-      
+      let errorMessage = "Failed to place order";
+
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
-      } else if (error.message.includes("Network Error")) {
+      } else if (typeof error.message === "string" && error.message.includes("Network Error")) {
         errorMessage = "Cannot connect to server. Please check your internet connection.";
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
-      Alert.alert(
-        "Order Failed", 
-        errorMessage,
-        [
-          { 
-            text: "Try Again", 
-            onPress: () => createOrderWithCOD(),
-            style: "default"
-          },
-          { 
-            text: "Cancel", 
-            style: "cancel" 
-          }
-        ]
-      );
-    } finally {
+
+      Alert.alert("Order Failed", errorMessage);
       setLoading(false);
+      return;
     }
-  };
 
-  const processUPIPayment = async () => {
-    try {
-      setLoading(true);
-      
-      const orderItems = items.map((item: any) => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        menuItemId: item.menuItemId || item._id || "temp-id"
-      }));
-
-      const orderResponse = await createShopOrder(
-        shop._id,
-        orderSummary.address,
-        orderItems,
-        "",
-        "UPI"
-      );
-
-      if (!orderResponse.success || !orderResponse.data) {
-        throw new Error(orderResponse.message || "Failed to create order");
-      }
-
-      const order = orderResponse.data;
-      
-      // Simulate UPI payment flow
-      Alert.alert(
-        "UPI Payment",
-        "Opening UPI payment gateway...",
-        [
-          {
-            text: "Pay Now",
-            onPress: () => {
-              // Simulate successful UPI payment after 2 seconds
-              setTimeout(() => {
-                Alert.alert(
-                  "Payment Successful!",
-                  "Your UPI payment was processed successfully!",
-                  [
-                    {
-                      text: "View Order",
-                      onPress: () => {
-                        clear();
-                        navigation.replace("OrderStatus", { orderId: order._id });
-                      }
-                    }
-                  ]
-                );
-              }, 2000);
-            }
-          },
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => {
-              setLoading(false);
-            }
-          }
-        ]
-      );
-
-    } catch (error: any) {
-      console.error("Payment error:", error);
-      Alert.alert("Payment Failed", error.message || "Failed to process payment");
-      setLoading(false);
-    }
+    setLoading(false);
   };
 
   const renderPaymentMethod = () => {
-    const method = paymentMethods.find(m => m.id === paymentMethod);
+    const method = paymentMethods.find((entry) => entry.id === paymentMethod);
+
     return (
       <View style={styles.selectedMethod}>
-        <Text style={styles.methodIcon}>{method?.icon}</Text>
-        <Text style={styles.methodName}>{method?.name}</Text>
+        <View>
+          <Text style={styles.methodChip}>{method?.icon}</Text>
+        </View>
+        <View style={styles.methodBody}>
+          <Text style={styles.methodName}>{method?.name}</Text>
+          <Text style={styles.methodHint}>
+            {paymentMethod === "CASH_ON_DELIVERY" ? "Pay when your order arrives" : "Pay now and confirm instantly"}
+          </Text>
+        </View>
         <TouchableOpacity onPress={() => setShowPaymentMethods(true)}>
           <Text style={styles.changeText}>Change</Text>
         </TouchableOpacity>
@@ -223,176 +209,122 @@ export default function PaymentScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.content}>
-        {/* Order Summary Header */}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingTop: insets.top + 14, paddingBottom: 180 + insets.bottom }}
+      >
         <View style={styles.headerSection}>
-          <Text style={styles.headerTitle}>Order Summary</Text>
-          <Text style={styles.headerSubtitle}>Review before payment</Text>
+          <Text style={styles.headerEyebrow}>Checkout</Text>
+          <Text style={styles.headerTitle}>Review and place your order</Text>
+          <Text style={styles.headerSubtitle}>
+            {groupedShops.length} restaurant{groupedShops.length === 1 ? "" : "s"} • {items.length} item
+            {items.length === 1 ? "" : "s"}
+          </Text>
         </View>
 
-        {/* Restaurant Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Restaurant</Text>
-          <View style={styles.restaurantInfo}>
-            <Text style={styles.restaurantName}>{shop.shopName}</Text>
-            <Text style={styles.restaurantCategory}>{shop.category || "Restaurant"}</Text>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeadRow}>
+            <Text style={styles.sectionTitle}>Delivery details</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+              <Text style={styles.linkText}>Change</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.customerName}>{userProfile.name}</Text>
+          <Text style={styles.customerPhone}>{userProfile.phone}</Text>
+          <Text style={styles.deliveryAddress}>{formatAddress(userProfile.address)}</Text>
+          <View style={styles.deliveryTimeBanner}>
+            <Text style={styles.deliveryTimeTitle}>Estimated delivery</Text>
+            <Text style={styles.deliveryTimeText}>30-45 min • By {getDeliveryTime()}</Text>
           </View>
         </View>
 
-        {/* Delivery Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Delivery Details</Text>
-          <View style={styles.deliveryCard}>
-            <View style={styles.deliveryRow}>
-              <Text style={styles.deliveryLabel}>📍 Delivery to:</Text>
-              <TouchableOpacity 
-                style={styles.changeAddressButton}
-                onPress={() => navigation.navigate("Profile")}
-              >
-                <Text style={styles.changeAddressText}>Change</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={styles.customerName}>{userProfile.name}</Text>
-            <Text style={styles.customerPhone}>📱 {userProfile.phone}</Text>
-            <Text style={styles.deliveryAddress}>
-              {formatAddress(userProfile.address)}
-            </Text>
-            
-            <View style={styles.deliveryTimeContainer}>
-              <Text style={styles.deliveryTimeIcon}>⏰</Text>
-              <View style={styles.deliveryTimeInfo}>
-                <Text style={styles.deliveryTimeTitle}>Estimated Delivery Time</Text>
-                <Text style={styles.deliveryTime}>30-45 minutes • By {getDeliveryTime()}</Text>
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Restaurants</Text>
+          {groupedShops.map((group) => (
+            <View key={group.shopId} style={styles.restaurantBlock}>
+              <View style={styles.restaurantHeader}>
+                <Text style={styles.restaurantName}>{group.shopName}</Text>
+                <Text style={styles.restaurantSubtotal}>Rs {group.subtotal}</Text>
               </View>
+              {group.items.map((item) => (
+                <View key={`${group.shopId}-${item.menuItemId || item.name}`} style={styles.itemRow}>
+                  <Text style={styles.itemName}>
+                    {item.quantity} x {item.name}
+                  </Text>
+                  <Text style={styles.itemPrice}>Rs {item.quantity * item.price}</Text>
+                </View>
+              ))}
             </View>
-          </View>
+          ))}
         </View>
 
-        {/* Order Items Summary */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Items</Text>
-          <View style={styles.itemsCard}>
-            {items.slice(0, 3).map((item: any, index: number) => (
-              <View key={index} style={styles.itemRow}>
-                <Text style={styles.itemName}>{item.quantity} × {item.name}</Text>
-                <Text style={styles.itemPrice}>₹{item.price * item.quantity}</Text>
-              </View>
-            ))}
-            {items.length > 3 && (
-              <Text style={styles.moreItemsText}>+{items.length - 3} more items</Text>
-            )}
-            <View style={styles.itemsTotal}>
-              <Text style={styles.itemsTotalLabel}>Items Total</Text>
-              <Text style={styles.itemsTotalValue}>₹{orderSummary.subtotal}</Text>
-            </View>
+        {orderSummary.note ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Special instructions</Text>
+            <Text style={styles.instructionsText}>{orderSummary.note}</Text>
           </View>
-        </View>
+        ) : null}
 
-        {/* Payment Method */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Payment method</Text>
           {renderPaymentMethod()}
         </View>
 
-        {/* Price Breakdown */}
-        <View style={styles.priceSection}>
+        <View style={styles.priceCard}>
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Item Total</Text>
-            <Text style={styles.priceValue}>₹{orderSummary.subtotal}</Text>
+            <Text style={styles.priceLabel}>Items total</Text>
+            <Text style={styles.priceValue}>Rs {orderSummary.subtotal}</Text>
           </View>
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Delivery Fee</Text>
-            <Text style={styles.priceValue}>₹{orderSummary.deliveryFee}</Text>
+            <Text style={styles.priceLabel}>Delivery fee</Text>
+            <Text style={styles.priceValue}>Rs {orderSummary.deliveryFee}</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Amount to Pay</Text>
-            <Text style={styles.totalValue}>₹{orderSummary.total}</Text>
+            <Text style={styles.totalLabel}>Amount to pay</Text>
+            <Text style={styles.totalValue}>Rs {orderSummary.total}</Text>
           </View>
-          <Text style={styles.taxNote}>*Inclusive of all taxes</Text>
+          <Text style={styles.taxNote}>Inclusive of all taxes</Text>
         </View>
 
-        {/* Payment Instructions */}
-        {paymentMethod === "CASH_ON_DELIVERY" && (
+        {paymentMethod === "CASH_ON_DELIVERY" ? (
           <View style={styles.infoSection}>
-            <Text style={styles.infoIcon}>💰</Text>
-            <View style={styles.infoContent}>
-              <Text style={styles.infoTitle}>Pay on Delivery</Text>
-              <Text style={styles.infoText}>
-                • Pay cash to delivery partner when order arrives
-                • Exact change is appreciated
-                • Delivery partner will provide receipt
-              </Text>
-            </View>
+            <Text style={styles.infoTitle}>Cash on delivery</Text>
+            <Text style={styles.infoText}>Pay cash when the order reaches you. Keeping change ready helps with a faster handoff.</Text>
+          </View>
+        ) : (
+          <View style={styles.infoSection}>
+            <Text style={styles.infoTitle}>UPI payment</Text>
+            <Text style={styles.infoText}>You will confirm payment first, and then all restaurant orders will be placed together.</Text>
           </View>
         )}
-
-        {paymentMethod === "UPI" && (
-          <View style={styles.infoSection}>
-            <Text style={styles.infoIcon}>📱</Text>
-            <View style={styles.infoContent}>
-              <Text style={styles.infoTitle}>UPI Payment</Text>
-              <Text style={styles.infoText}>
-                • You'll be redirected to UPI app
-                • Complete payment to confirm order
-                • Payment verification takes 2-3 seconds
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Security Info */}
-        <View style={styles.securitySection}>
-          <Text style={styles.securityIcon}>🔒</Text>
-          <Text style={styles.securityText}>
-            Your payment information is secure and encrypted
-          </Text>
-        </View>
       </ScrollView>
 
-      {/* Payment Button */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
         <View style={styles.footerSummary}>
-          <View>
-            <Text style={styles.deliveryEstimate}>Estimated delivery by {getDeliveryTime()}</Text>
-            <Text style={styles.footerTotalLabel}>Total: ₹{orderSummary.total}</Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.payButton,
-              loading && styles.payButtonDisabled
-            ]}
-            onPress={handlePayment}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.payButtonText}>
-                {paymentMethod === "CASH_ON_DELIVERY" 
-                  ? `Place COD Order`
-                  : `Pay via UPI`}
-              </Text>
-            )}
-          </TouchableOpacity>
+          <Text style={styles.footerEstimate}>Estimated by {getDeliveryTime()}</Text>
+          <Text style={styles.footerTotal}>Rs {orderSummary.total}</Text>
         </View>
-        
-        <Text style={styles.termsText}>
-          By proceeding, you agree to our Terms & Conditions
-        </Text>
+        <TouchableOpacity
+          style={[styles.payButton, loading && styles.payButtonDisabled]}
+          onPress={handlePayment}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.payButtonText}>
+              {paymentMethod === "CASH_ON_DELIVERY" ? "Place Order" : "Pay and Place Order"}
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
 
-      {/* Payment Methods Modal */}
-      <Modal
-        visible={showPaymentMethods}
-        transparent={true}
-        animationType="slide"
-      >
+      <Modal visible={showPaymentMethods} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Payment Method</Text>
-            
-            {paymentMethods.map(method => (
+
+            {paymentMethods.map((method) => (
               <TouchableOpacity
                 key={method.id}
                 style={styles.methodOption}
@@ -405,21 +337,14 @@ export default function PaymentScreen({ route, navigation }: any) {
                 <View style={styles.methodInfo}>
                   <Text style={styles.methodOptionName}>{method.name}</Text>
                   <Text style={styles.methodDescription}>
-                    {method.id === "CASH_ON_DELIVERY" 
-                      ? "Pay cash when order arrives" 
-                      : "Pay now via UPI apps"}
+                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "Pay immediately using UPI"}
                   </Text>
                 </View>
-                {paymentMethod === method.id && (
-                  <Text style={styles.selectedIndicator}>✓</Text>
-                )}
+                {paymentMethod === method.id ? <Text style={styles.selectedIndicator}>Selected</Text> : null}
               </TouchableOpacity>
             ))}
 
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowPaymentMethods(false)}
-            >
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowPaymentMethods(false)}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -432,381 +357,334 @@ export default function PaymentScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#F7F3EE"
   },
   content: {
-    flex: 1,
+    flex: 1
   },
   headerSection: {
-    padding: 20,
-    backgroundColor: '#f8f8f8',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: 16,
+    marginBottom: 14
+  },
+  headerEyebrow: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#8B6A54",
+    marginBottom: 8
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#2C2018"
   },
   headerSubtitle: {
+    marginTop: 6,
     fontSize: 14,
-    color: '#666',
+    color: "#7B6D63"
   },
-  section: {
+  sectionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    marginHorizontal: 16,
+    marginBottom: 12
+  },
+  sectionHeadRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    fontWeight: "800",
+    color: "#2C2018"
   },
-  restaurantInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  restaurantName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  restaurantCategory: {
-    fontSize: 14,
-    color: '#666',
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  deliveryCard: {
-    backgroundColor: '#f9f9f9',
-    padding: 16,
-    borderRadius: 8,
-  },
-  deliveryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  deliveryLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-  },
-  changeAddressButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  changeAddressText: {
-    fontSize: 14,
-    color: '#2196F3',
-    fontWeight: '500',
+  linkText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FF6B35"
   },
   customerName: {
     fontSize: 15,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
+    fontWeight: "700",
+    color: "#2C2018"
   },
   customerPhone: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    marginTop: 4,
+    fontSize: 13,
+    color: "#7B6D63"
   },
   deliveryAddress: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 16,
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#6B5E55"
   },
-  deliveryTimeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
+  deliveryTimeBanner: {
+    marginTop: 14,
     padding: 12,
-    borderRadius: 8,
-  },
-  deliveryTimeIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  deliveryTimeInfo: {
-    flex: 1,
+    borderRadius: 16,
+    backgroundColor: "#E8F5E9"
   },
   deliveryTimeTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2E7D32',
-    marginBottom: 2,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#216E39"
   },
-  deliveryTime: {
+  deliveryTimeText: {
+    marginTop: 4,
     fontSize: 13,
-    color: '#2E7D32',
+    color: "#216E39"
   },
-  itemsCard: {
-    backgroundColor: '#f9f9f9',
-    padding: 16,
-    borderRadius: 8,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  itemName: {
-    fontSize: 14,
-    color: '#333',
-  },
-  itemPrice: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-  },
-  moreItemsText: {
-    fontSize: 13,
-    color: '#666',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  itemsTotal: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
+  restaurantBlock: {
     paddingTop: 12,
+    marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    borderTopColor: "#F2E9E0"
   },
-  itemsTotalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+  restaurantHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8
   },
-  itemsTotalValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FF6B35',
-  },
-  selectedMethod: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-    padding: 12,
-    borderRadius: 8,
-  },
-  methodIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  methodName: {
+  restaurantName: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: "800",
+    color: "#2C2018",
+    marginRight: 8
+  },
+  restaurantSubtotal: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FF6B35"
+  },
+  itemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingVertical: 5
+  },
+  itemName: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#5E5148",
+    marginRight: 12
+  },
+  itemPrice: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2C2018"
+  },
+  instructionsText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#6B5E55"
+  },
+  selectedMethod: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFCF8",
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    borderRadius: 18,
+    padding: 14
+  },
+  methodChip: {
+    minWidth: 42,
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FF6B35"
+  },
+  methodBody: {
+    flex: 1,
+    marginHorizontal: 10
+  },
+  methodName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#2C2018"
+  },
+  methodHint: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#7B6D63"
   },
   changeText: {
-    fontSize: 14,
-    color: '#2196F3',
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FF6B35"
   },
-  priceSection: {
+  priceCard: {
+    backgroundColor: "#FFF9F4",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#F0DDCF",
     padding: 16,
-    backgroundColor: '#f9f9f9',
-    margin: 16,
-    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 12
   },
   priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
   },
   priceLabel: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    color: "#7B6D63"
   },
   priceValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2C2018"
   },
   totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    borderTopColor: "#F0DDCF",
+    marginTop: 6,
+    paddingTop: 12
   },
   totalLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "800",
+    color: "#2C2018"
   },
   totalValue: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#FF6B35',
+    fontWeight: "800",
+    color: "#FF6B35"
   },
   taxNote: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
     marginTop: 8,
+    fontSize: 11,
+    color: "#8B6A54"
   },
   infoSection: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#E3F2FD',
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
     padding: 16,
-    margin: 16,
-    borderRadius: 8,
-  },
-  infoIcon: {
-    fontSize: 20,
-    marginRight: 12,
-    marginTop: 2,
-  },
-  infoContent: {
-    flex: 1,
+    marginHorizontal: 16
   },
   infoTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1565C0',
-    marginBottom: 6,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 6
   },
   infoText: {
     fontSize: 13,
-    color: '#1565C0',
-    lineHeight: 18,
-  },
-  securitySection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    padding: 16,
-    margin: 16,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  securityIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  securityText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#2E7D32',
+    lineHeight: 19,
+    color: "#6B5E55"
   },
   footer: {
-    padding: 16,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: "rgba(247,243,238,0.98)",
     borderTopWidth: 1,
-    borderTopColor: '#eee',
-    backgroundColor: '#fff',
+    borderTopColor: "#E8DDD2"
   },
   footerSummary: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 12
   },
-  deliveryEstimate: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 2,
+  footerEstimate: {
+    fontSize: 12,
+    color: "#8B6A54",
+    marginBottom: 4
   },
-  footerTotalLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+  footerTotal: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#2C2018"
   },
   payButton: {
-    backgroundColor: '#FF6B35',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 120,
-    alignItems: 'center',
+    backgroundColor: "#FF6B35",
+    paddingVertical: 15,
+    borderRadius: 18,
+    alignItems: "center"
   },
   payButtonDisabled: {
-    backgroundColor: '#FFB08F',
+    backgroundColor: "#FFB08F"
   },
   payButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  termsText: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'center',
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800"
   },
   modalContainer: {
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.35)"
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '50%',
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 20,
-    textAlign: 'center',
+    fontWeight: "800",
+    color: "#2C2018",
+    textAlign: "center",
+    marginBottom: 16
   },
   methodOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#F3ECE4"
   },
   methodOptionIcon: {
-    fontSize: 20,
-    marginRight: 15,
-    width: 30,
+    width: 46,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FF6B35"
   },
   methodInfo: {
-    flex: 1,
+    flex: 1
   },
   methodOptionName: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-    marginBottom: 2,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#2C2018"
   },
   methodDescription: {
-    fontSize: 13,
-    color: '#666',
+    marginTop: 3,
+    fontSize: 12,
+    color: "#7B6D63"
   },
   selectedIndicator: {
-    fontSize: 16,
-    color: '#FF6B35',
-    fontWeight: 'bold',
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#216E39"
   },
   cancelButton: {
-    marginTop: 20,
-    paddingVertical: 16,
-    alignItems: 'center',
+    marginTop: 16,
+    paddingVertical: 14,
+    alignItems: "center"
   },
   cancelButtonText: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
-  },
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#7B6D63"
+  }
 });

@@ -1,5 +1,6 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { NativeModules, Platform } from "react-native";
 
 // Define generic API response type
 export interface ApiResponse<T = any> {
@@ -9,13 +10,50 @@ export interface ApiResponse<T = any> {
   [key: string]: any;
 }
 
+const DEV_LAN_HOST = "10.3.189.31";
+
+const isPrivateIp = (hostname: string) => {
+  return (
+    /^10\./.test(hostname) ||
+    /^192\.168\./.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+  );
+};
+
 const api = axios.create({
-  baseURL: "http://10.3.128.220:5000/api",
+  baseURL: (() => {
+    const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+    if (envUrl) {
+      return envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`;
+    }
+
+    const scriptURL = NativeModules.SourceCode?.scriptURL;
+    if (scriptURL) {
+      try {
+        const bundleUrl = new URL(scriptURL);
+        const hostname = bundleUrl.hostname;
+
+        if (isPrivateIp(hostname)) {
+          return `http://${hostname}:5000/api`;
+        }
+      } catch (error) {
+        console.warn("Failed to parse bundle URL for API host detection:", error);
+      }
+    }
+
+    if (Platform.OS === "android") {
+      return `http://${DEV_LAN_HOST}:5000/api`;
+    }
+
+    return `http://${DEV_LAN_HOST}:5000/api`;
+  })(),
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+console.log("Partner API base URL:", api.defaults.baseURL);
 
 // Add token to requests
 api.interceptors.request.use(

@@ -1,50 +1,101 @@
+import { ArrowLeftOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Descriptions, Row, Skeleton, Space, Table, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import api from "../api/client";
+import { useNavigate, useParams } from "react-router-dom";
+import { getOrder, type OrderRecord } from "../api/admin.api";
 
 export default function OrderDetails() {
-  const { id } = useParams();
-  const [order, setOrder] = useState<any>(null);
+  const { orderId } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [order, setOrder] = useState<OrderRecord | null>(null);
 
   useEffect(() => {
-    api.get(`/admin/orders/${id}`).then((res: any) => {
-      setOrder(res.data);
-      setLoading(false);
-    });
-  }, [id]);
+    const load = async () => {
+      if (!orderId) return;
+      setLoading(true);
+      try {
+        setOrder(await getOrder(orderId));
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  if (loading) return <p>Loading...</p>;
-  if (!order) return <p>Order not found</p>;
+    load();
+  }, [orderId]);
+
+  if (loading) {
+    return <Skeleton active paragraph={{ rows: 10 }} />;
+  }
+
+  if (!order) {
+    return (
+      <Card bordered={false}>
+        <Typography.Title level={4}>Order not found</Typography.Title>
+      </Card>
+    );
+  }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Order Details</h2>
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("/orders")} style={{ width: "fit-content" }}>
+        Back to Orders
+      </Button>
 
-      <p><b>Order ID:</b> {order._id}</p>
-      <p><b>Status:</b> {order.status}</p>
-      <p><b>Total:</b> ₹{order.totalAmount}</p>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} xl={14}>
+          <Card
+            bordered={false}
+            title={`Order #${order._id.slice(-6)}`}
+            extra={<Tag color={order.status === "DELIVERED" ? "green" : "blue"}>{order.status}</Tag>}
+          >
+            <Descriptions column={1} size="small">
+              <Descriptions.Item label="Created">{new Date(order.createdAt).toLocaleString()}</Descriptions.Item>
+              <Descriptions.Item label="Customer">
+                {order.customerId?.name || "Unknown"} {order.customerId?.phone ? `(${order.customerId.phone})` : ""}
+              </Descriptions.Item>
+              <Descriptions.Item label="Restaurant">{order.partnerId?.restaurantName || "Unknown"}</Descriptions.Item>
+              <Descriptions.Item label="Delivery Partner">
+                {order.deliveryPartnerId?.name || "Not assigned"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Delivery Address">{order.deliveryAddress}</Descriptions.Item>
+              <Descriptions.Item label="Payment">
+                {order.paymentMethod} / {order.paymentStatus}
+              </Descriptions.Item>
+              <Descriptions.Item label="Notes">{order.note || "No instructions added"}</Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </Col>
 
-      <hr />
+        <Col xs={24} xl={10}>
+          <Card bordered={false} title="Billing Summary">
+            <Descriptions column={1} size="small">
+              <Descriptions.Item label="Items Total">Rs {order.itemTotal}</Descriptions.Item>
+              <Descriptions.Item label="Delivery Fee">Rs {order.deliveryFee}</Descriptions.Item>
+              <Descriptions.Item label="Grand Total">
+                <Typography.Text strong>Rs {order.grandTotal}</Typography.Text>
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </Col>
+      </Row>
 
-      <h3>Customer</h3>
-      <p>{order.customer?.phone}</p>
-      <p>{order.deliveryAddress}</p>
-
-      <hr />
-
-      <h3>Sub Orders</h3>
-      {order.subOrders?.length > 0 ? (
-        order.subOrders.map((s: any) => (
-          <div key={s._id} style={{ border: "1px solid #ddd", marginBottom: 10, padding: 10 }}>
-            <p>Partner: {s.partnerId}</p>
-            <p>Status: {s.status}</p>
-            <p>Price: ₹{s.price || "Not set"}</p>
-          </div>
-        ))
-      ) : (
-        <p>No suborders yet</p>
-      )}
-    </div>
+      <Card bordered={false} title="Order Items">
+        <Table
+          rowKey={(item) => `${item.name}-${item.price}`}
+          pagination={false}
+          dataSource={order.items || []}
+          columns={[
+            { title: "Item", dataIndex: "name" },
+            { title: "Qty", dataIndex: "quantity" },
+            { title: "Unit Price", dataIndex: "price", render: (value: number) => `Rs ${value}` },
+            {
+              title: "Line Total",
+              render: (_, item) => `Rs ${item.quantity * item.price}`
+            }
+          ]}
+        />
+      </Card>
+    </Space>
   );
 }

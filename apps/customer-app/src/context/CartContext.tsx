@@ -18,8 +18,8 @@ interface CartContextType {
   currentShopId: string | null;
   currentShopName: string | null;
   addItem: (item: CartItem) => void;
-  removeItem: (itemName: string) => void;
-  updateQuantity: (itemName: string, newQuantity: number) => void;
+  removeItem: (item: Pick<CartItem, "shopId" | "menuItemId" | "name">) => void;
+  updateQuantity: (item: Pick<CartItem, "shopId" | "menuItemId" | "name">, newQuantity: number) => void;
   clear: () => void;
   clearCartForNewShop: (shopId: string, shopName: string) => void;
   getCartTotal: () => number;
@@ -39,60 +39,60 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const [currentShopId, setCurrentShopId] = useState<string | null>(null);
   const [currentShopName, setCurrentShopName] = useState<string | null>(null);
 
+  const matchesCartItem = (
+    existingItem: CartItem,
+    targetItem: Pick<CartItem, "shopId" | "menuItemId" | "name">
+  ) => {
+    const existingKey = existingItem.menuItemId || existingItem.name;
+    const targetKey = targetItem.menuItemId || targetItem.name;
+
+    return existingItem.shopId === targetItem.shopId && existingKey === targetKey;
+  };
+
   const addItem = (item: CartItem) => {
     setItems(prev => {
-      // Check if we're switching shops
-      if (currentShopId && item.shopId !== currentShopId) {
-        // Clear cart and switch to new shop
-        setCurrentShopId(item.shopId);
-        setCurrentShopName(item.shopName);
-        return [{ ...item, quantity: item.quantity || 1 }];
-      }
-      
-      // Set current shop if not set
-      if (!currentShopId) {
-        setCurrentShopId(item.shopId);
-        setCurrentShopName(item.shopName);
-      }
-
-      // Use menuItemId if available, otherwise use name
       const itemId = item.menuItemId || item.name;
-      const existing = prev.find(i => (i.menuItemId || i.name) === itemId);
+      const existing = prev.find(
+        i => i.shopId === item.shopId && (i.menuItemId || i.name) === itemId
+      );
       
       if (existing) {
         return prev.map(i =>
-          (i.menuItemId || i.name) === itemId
+          i.shopId === item.shopId && (i.menuItemId || i.name) === itemId
             ? { ...i, quantity: i.quantity + (item.quantity || 1) }
             : i
         );
       }
       return [...prev, { ...item, quantity: item.quantity || 1 }];
     });
+
+    if (!currentShopId) {
+      setCurrentShopId(item.shopId);
+      setCurrentShopName(item.shopName);
+    }
   };
 
-  const removeItem = (itemName: string) => {
+  const removeItem = (item: Pick<CartItem, "shopId" | "menuItemId" | "name">) => {
     setItems(prev => {
-      const newItems = prev.filter(i => i.name !== itemName);
-      
-      // If cart is empty, clear shop info
-      if (newItems.length === 0) {
-        setCurrentShopId(null);
-        setCurrentShopName(null);
-      }
-      
+      const newItems = prev.filter(existingItem => !matchesCartItem(existingItem, item));
+      const firstItem = newItems[0];
+
+      setCurrentShopId(firstItem?.shopId || null);
+      setCurrentShopName(firstItem?.shopName || null);
+
       return newItems;
     });
   };
 
-  const updateQuantity = (itemName: string, newQuantity: number) => {
+  const updateQuantity = (item: Pick<CartItem, "shopId" | "menuItemId" | "name">, newQuantity: number) => {
     if (newQuantity < 1) {
-      removeItem(itemName);
+      removeItem(item);
       return;
     }
     
     setItems(prev => 
       prev.map(i => 
-        i.name === itemName ? { ...i, quantity: newQuantity } : i
+        matchesCartItem(i, item) ? { ...i, quantity: newQuantity } : i
       )
     );
   };
@@ -104,7 +104,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   };
 
   const clearCartForNewShop = (shopId: string, shopName: string) => {
-    setItems([]);
+    setItems(prev => prev.filter(item => item.shopId === shopId));
     setCurrentShopId(shopId);
     setCurrentShopName(shopName);
   };

@@ -89,7 +89,7 @@ export const getAvailableJobs = (): Promise<ApiResponse<DeliveryJob[]>> => {
  * Get job details by ID
  */
 export const getJobDetails = (orderId: string): Promise<ApiResponse<DeliveryJob>> => {
-  return apiGet<DeliveryJob>(`/orders/${orderId}/details`);
+  return apiGet<DeliveryJob>(`/orders/delivery/${orderId}`);
 };
 
 /**
@@ -114,14 +114,14 @@ export const rejectJob = (orderId: string): Promise<ApiResponse<{ message: strin
  * Get my assigned delivery orders
  */
 export const getMyDeliveryOrders = (): Promise<ApiResponse<DeliveryOrder[]>> => {
-  return apiGet<DeliveryOrder[]>("/orders/delivery/my-orders");
+  return apiGet<DeliveryOrder[]>("/orders/delivery/my");
 };
 
 /**
  * Get order details (for assigned orders)
  */
 export const getMyOrderDetails = (orderId: string): Promise<ApiResponse<DeliveryOrder>> => {
-  return apiGet<DeliveryOrder>(`/orders/${orderId}/details`);
+  return apiGet<DeliveryOrder>(`/orders/delivery/${orderId}`);
 };
 
 // =================== ORDER STATUS UPDATES ===================
@@ -138,7 +138,7 @@ export const updateDeliveryStatus = (
   if (location) {
     data.location = location;
   }
-  return apiPatch<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data);
+  return apiPost<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data);
 };
 
 /**
@@ -166,7 +166,7 @@ export const markAsDelivered = (
   if (location) {
     data.location = location;
   }
-  return apiPatch<DeliveryOrder>(`/orders/delivery/${orderId}/deliver`, data);
+  return apiPost<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data);
 };
 
 // =================== DELIVERY STATS ===================
