@@ -80,12 +80,15 @@ export default function DeliveryPartners() {
 
   const documentRows = selected
     ? [
-        { label: "Aadhaar Card", url: selected.documents?.aadhaarUrl, required: true },
-        { label: "Driving License", url: selected.documents?.drivingLicenseUrl, required: true },
-        { label: "Vehicle RC", url: selected.documents?.vehicleRcUrl, required: true },
-        { label: "Cancelled Cheque", url: selected.documents?.cancelledChequeUrl, required: true },
-        { label: "PAN Card", url: selected.documents?.panUrl, required: false },
-        { label: "Insurance Document", url: selected.documents?.insuranceUrl, required: false }
+        { label: `Aadhaar Front${selected.documents?.aadhaarNumber ? ` (${selected.documents.aadhaarNumber})` : ""}`, url: selected.documents?.aadhaarFrontUrl || selected.documents?.aadhaarUrl, required: true },
+        { label: "Aadhaar Back", url: selected.documents?.aadhaarBackUrl, required: true },
+        { label: `PAN Front${selected.documents?.panNumber ? ` (${selected.documents.panNumber})` : ""}`, url: selected.documents?.panFrontUrl || selected.documents?.panUrl, required: true },
+        { label: "Driving License Front", url: selected.documents?.drivingLicenseFrontUrl || selected.documents?.drivingLicenseUrl, required: true },
+        { label: "Driving License Back", url: selected.documents?.drivingLicenseBackUrl, required: true },
+        { label: "Vehicle RC Front", url: selected.documents?.vehicleRcFrontUrl || selected.documents?.vehicleRcUrl, required: true },
+        { label: "Vehicle RC Back", url: selected.documents?.vehicleRcBackUrl, required: true },
+        { label: "Vehicle Insurance", url: selected.documents?.insuranceUrl, required: true },
+        { label: `Bank Proof${selected.documents?.bankDocumentType ? ` (${selected.documents.bankDocumentType})` : ""}`, url: selected.documents?.cancelledChequeUrl || selected.documents?.bankPassbookUrl || selected.documents?.bankStatementUrl, required: true }
       ]
     : [];
 
@@ -231,6 +234,7 @@ export default function DeliveryPartners() {
             </div>
             <div>
               <Typography.Text type="secondary">Bank Details</Typography.Text>
+              <div>{selected.documents?.bankAccountHolderName || "Account holder not provided"}</div>
               <div>{selected.documents?.bankAccountNumber || "Not provided"}</div>
               <Typography.Text type="secondary">IFSC</Typography.Text>
               <div>{selected.documents?.bankIfsc || "Not provided"}</div>

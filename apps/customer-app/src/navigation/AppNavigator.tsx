@@ -17,12 +17,22 @@ import { getUserProfile } from '../api/user.api';
 
 // Define Address interface
 export interface Address {
+  recipientName?: string;
+  houseFlatDoorNo?: string;
+  buildingApartmentName?: string;
+  streetRoadName?: string;
+  street?: string;
   state?: string;
   city?: string;
+  cityTownVillage?: string;
   pincode?: string;
   area?: string;
+  areaLocality?: string;
   colony?: string;
   roadStreet?: string;
+  landmark?: string;
+  district?: string;
+  country?: string;
   nearbyPlaces?: string[];
   googleMapsLink?: string;
 }
@@ -94,7 +104,7 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 const isCustomerProfileComplete = (profile: {
   name?: string;
-  address?: Address & { street?: string; landmark?: string };
+  address?: Address;
 }) => {
   const hasRealName =
     !!profile.name &&
@@ -103,11 +113,12 @@ const isCustomerProfileComplete = (profile: {
 
   const address = profile.address;
   const hasAddress =
-    !!address?.street &&
-    !!address?.city &&
+    !!(address?.houseFlatDoorNo || address?.street) &&
+    !!(address?.streetRoadName || address?.street) &&
+    !!(address?.cityTownVillage || address?.city) &&
     !!address?.state &&
     !!address?.pincode &&
-    !!address?.area;
+    !!(address?.areaLocality || address?.area);
 
   return Boolean(hasRealName && hasAddress);
 };

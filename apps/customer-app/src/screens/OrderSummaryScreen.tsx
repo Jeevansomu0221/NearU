@@ -58,11 +58,14 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
     // Handle address object
     const addr = userProfile.address;
     const parts = [
-      addr.street || addr.roadStreet,
-      addr.area,
-      addr.city,
-      addr.state,
-      addr.pincode
+      addr.recipientName,
+      [addr.houseFlatDoorNo, addr.buildingApartmentName].filter(Boolean).join(", ") || addr.street || addr.roadStreet,
+      addr.streetRoadName,
+      addr.areaLocality || addr.area,
+      addr.landmark ? `Near ${addr.landmark}` : null,
+      [addr.cityTownVillage || addr.city, addr.district ? `${addr.district} District` : null, addr.state].filter(Boolean).join(", ") +
+        (addr.pincode ? ` - ${addr.pincode}` : ""),
+      addr.country || "India"
     ].filter(Boolean);
     
     return parts.join(', ');

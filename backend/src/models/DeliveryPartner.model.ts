@@ -12,12 +12,25 @@ export interface IDeliveryPartner extends Document {
   profilePhotoUrl?: string;
   reviewComment?: string;
   documents?: {
+    aadhaarNumber?: string;
+    aadhaarFrontUrl?: string;
+    aadhaarBackUrl?: string;
     aadhaarUrl?: string;
+    panNumber?: string;
+    panFrontUrl?: string;
     panUrl?: string;
+    drivingLicenseFrontUrl?: string;
+    drivingLicenseBackUrl?: string;
     drivingLicenseUrl?: string;
+    vehicleRcFrontUrl?: string;
+    vehicleRcBackUrl?: string;
     vehicleRcUrl?: string;
     insuranceUrl?: string;
+    bankDocumentType?: "cheque" | "passbook" | "statement" | "";
+    bankAccountHolderName?: string;
     cancelledChequeUrl?: string;
+    bankPassbookUrl?: string;
+    bankStatementUrl?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
     submittedAt?: Date;
@@ -81,12 +94,25 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
       default: ""
     },
     documents: {
+      aadhaarNumber: { type: String, default: "" },
+      aadhaarFrontUrl: { type: String, default: "" },
+      aadhaarBackUrl: { type: String, default: "" },
       aadhaarUrl: { type: String, default: "" },
+      panNumber: { type: String, default: "" },
+      panFrontUrl: { type: String, default: "" },
       panUrl: { type: String, default: "" },
+      drivingLicenseFrontUrl: { type: String, default: "" },
+      drivingLicenseBackUrl: { type: String, default: "" },
       drivingLicenseUrl: { type: String, default: "" },
+      vehicleRcFrontUrl: { type: String, default: "" },
+      vehicleRcBackUrl: { type: String, default: "" },
       vehicleRcUrl: { type: String, default: "" },
       insuranceUrl: { type: String, default: "" },
+      bankDocumentType: { type: String, enum: ["cheque", "passbook", "statement", ""], default: "" },
+      bankAccountHolderName: { type: String, default: "" },
       cancelledChequeUrl: { type: String, default: "" },
+      bankPassbookUrl: { type: String, default: "" },
+      bankStatementUrl: { type: String, default: "" },
       bankAccountNumber: { type: String, default: "" },
       bankIfsc: { type: String, default: "" },
       submittedAt: { type: Date, default: null },

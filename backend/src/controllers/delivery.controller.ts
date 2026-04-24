@@ -25,6 +25,14 @@ const ensureDeliveryUser = (req: AuthRequest, res: Response) => {
   return user;
 };
 
+const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const aadhaarRegex = /^[0-9]{12}$/;
+const dlRegex = /^[A-Z]{2}[0-9]{2}[0-9]{11}$/;
+const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
+const firstString = (...values: any[]) =>
+  values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+
 const isDeliveryProfileComplete = (profile: {
   name?: string;
   address?: string;
@@ -32,12 +40,26 @@ const isDeliveryProfileComplete = (profile: {
   vehicleNumber?: string;
   licenseNumber?: string;
   documents?: {
+    aadhaarNumber?: string;
+    aadhaarFrontUrl?: string;
+    aadhaarBackUrl?: string;
     aadhaarUrl?: string;
+    panNumber?: string;
+    panFrontUrl?: string;
+    drivingLicenseFrontUrl?: string;
+    drivingLicenseBackUrl?: string;
     drivingLicenseUrl?: string;
+    vehicleRcFrontUrl?: string;
+    vehicleRcBackUrl?: string;
     vehicleRcUrl?: string;
+    insuranceUrl?: string;
+    bankAccountHolderName?: string;
+    bankDocumentType?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
     cancelledChequeUrl?: string;
+    bankPassbookUrl?: string;
+    bankStatementUrl?: string;
   };
 }) => {
   const hasRealName =
@@ -46,12 +68,21 @@ const isDeliveryProfileComplete = (profile: {
     profile.name.trim().length >= 3;
 
   const hasMandatoryDocuments = Boolean(
-    profile.documents?.aadhaarUrl?.trim() &&
-      profile.documents?.drivingLicenseUrl?.trim() &&
-      profile.documents?.vehicleRcUrl?.trim() &&
+    (profile.documents?.aadhaarFrontUrl?.trim() || profile.documents?.aadhaarUrl?.trim()) &&
+      profile.documents?.aadhaarBackUrl?.trim() &&
+      profile.documents?.panFrontUrl?.trim() &&
+      (profile.documents?.drivingLicenseFrontUrl?.trim() || profile.documents?.drivingLicenseUrl?.trim()) &&
+      profile.documents?.drivingLicenseBackUrl?.trim() &&
+      (profile.documents?.vehicleRcFrontUrl?.trim() || profile.documents?.vehicleRcUrl?.trim()) &&
+      profile.documents?.vehicleRcBackUrl?.trim() &&
+      profile.documents?.insuranceUrl?.trim() &&
+      profile.documents?.bankAccountHolderName?.trim() &&
       profile.documents?.bankAccountNumber?.trim() &&
       profile.documents?.bankIfsc?.trim() &&
-      profile.documents?.cancelledChequeUrl?.trim()
+      profile.documents?.bankDocumentType?.trim() &&
+      (profile.documents?.cancelledChequeUrl?.trim() ||
+        profile.documents?.bankPassbookUrl?.trim() ||
+        profile.documents?.bankStatementUrl?.trim())
   );
 
   return Boolean(
@@ -172,7 +203,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
     }
 
     if (licenseNumber !== undefined) {
-      if (typeof licenseNumber !== "string" || !/^[A-Z]{2}[0-9]{2}[0-9A-Z]{8,14}$/i.test(licenseNumber.trim())) {
+      if (typeof licenseNumber !== "string" || !dlRegex.test(licenseNumber.trim().toUpperCase())) {
         return errorResponse(res, "Driving license format looks invalid", 400);
       }
       updateDelivery.licenseNumber = licenseNumber.trim().toUpperCase();
@@ -195,23 +226,71 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         return errorResponse(res, "Delivery profile not found", 404);
       }
 
-      const nextDocuments = {
+      const nextDocuments: any = {
         ...(currentPartner.documents || {}),
         ...documents
       };
 
+      const normalizedDocuments = {
+        ...nextDocuments,
+        aadhaarNumber: firstString(nextDocuments.aadhaarNumber, nextDocuments.aadhaar_number),
+        aadhaarFrontUrl: firstString(nextDocuments.aadhaarFrontUrl, nextDocuments.aadhaar_front_url, nextDocuments.aadhaarUrl),
+        aadhaarBackUrl: firstString(nextDocuments.aadhaarBackUrl, nextDocuments.aadhaar_back_url),
+        panNumber: firstString(nextDocuments.panNumber, nextDocuments.pan_number).toUpperCase(),
+        panFrontUrl: firstString(nextDocuments.panFrontUrl, nextDocuments.pan_front_url, nextDocuments.panUrl),
+        drivingLicenseFrontUrl: firstString(nextDocuments.drivingLicenseFrontUrl, nextDocuments.dlFrontUrl, nextDocuments.dl_front_url, nextDocuments.drivingLicenseUrl),
+        drivingLicenseBackUrl: firstString(nextDocuments.drivingLicenseBackUrl, nextDocuments.dlBackUrl, nextDocuments.dl_back_url),
+        vehicleRcFrontUrl: firstString(nextDocuments.vehicleRcFrontUrl, nextDocuments.vehicle_rc_front_url, nextDocuments.vehicleRcUrl),
+        vehicleRcBackUrl: firstString(nextDocuments.vehicleRcBackUrl, nextDocuments.vehicle_rc_back_url),
+        bankAccountHolderName: firstString(nextDocuments.bankAccountHolderName, nextDocuments.bank_account_holder_name),
+        bankAccountNumber: firstString(nextDocuments.bankAccountNumber, nextDocuments.bank_account_number),
+        bankIfsc: firstString(nextDocuments.bankIfsc, nextDocuments.bank_ifsc).toUpperCase(),
+        bankDocumentType: firstString(nextDocuments.bankDocumentType, nextDocuments.bank_document_type),
+        cancelledChequeUrl: firstString(nextDocuments.cancelledChequeUrl),
+        bankPassbookUrl: firstString(nextDocuments.bankPassbookUrl),
+        bankStatementUrl: firstString(nextDocuments.bankStatementUrl)
+      };
+
+      if (normalizedDocuments.aadhaarNumber && !aadhaarRegex.test(normalizedDocuments.aadhaarNumber)) {
+        return errorResponse(res, "Aadhaar number must be 12 digits", 400);
+      }
+      if (normalizedDocuments.panNumber && !panRegex.test(normalizedDocuments.panNumber)) {
+        return errorResponse(res, "PAN number must match AAAAA9999A format", 400);
+      }
+      if (normalizedDocuments.bankAccountNumber && !/^[0-9]+$/.test(normalizedDocuments.bankAccountNumber)) {
+        return errorResponse(res, "Bank account number must be numeric", 400);
+      }
+      if (normalizedDocuments.bankIfsc && !ifscRegex.test(normalizedDocuments.bankIfsc)) {
+        return errorResponse(res, "IFSC code format is invalid", 400);
+      }
+
       const hasMandatoryDocuments = Boolean(
-        nextDocuments.aadhaarUrl?.trim() &&
-          nextDocuments.drivingLicenseUrl?.trim() &&
-          nextDocuments.vehicleRcUrl?.trim() &&
-          nextDocuments.bankAccountNumber?.trim() &&
-          nextDocuments.bankIfsc?.trim() &&
-          nextDocuments.cancelledChequeUrl?.trim()
+        normalizedDocuments.aadhaarNumber &&
+          normalizedDocuments.aadhaarFrontUrl &&
+          normalizedDocuments.aadhaarBackUrl &&
+          normalizedDocuments.panNumber &&
+          normalizedDocuments.panFrontUrl &&
+          normalizedDocuments.drivingLicenseFrontUrl &&
+          normalizedDocuments.drivingLicenseBackUrl &&
+          normalizedDocuments.vehicleRcFrontUrl &&
+          normalizedDocuments.vehicleRcBackUrl &&
+          normalizedDocuments.insuranceUrl?.trim() &&
+          normalizedDocuments.bankAccountHolderName &&
+          normalizedDocuments.bankAccountNumber &&
+          normalizedDocuments.bankIfsc &&
+          normalizedDocuments.bankDocumentType &&
+          (normalizedDocuments.cancelledChequeUrl ||
+            normalizedDocuments.bankPassbookUrl ||
+            normalizedDocuments.bankStatementUrl)
       );
 
       updateDelivery.documents = {
-        ...nextDocuments,
-        bankIfsc: nextDocuments.bankIfsc?.trim()?.toUpperCase?.() || nextDocuments.bankIfsc || "",
+        ...normalizedDocuments,
+        aadhaarUrl: normalizedDocuments.aadhaarFrontUrl,
+        panUrl: normalizedDocuments.panFrontUrl,
+        drivingLicenseUrl: normalizedDocuments.drivingLicenseFrontUrl,
+        vehicleRcUrl: normalizedDocuments.vehicleRcFrontUrl,
+        bankIfsc: normalizedDocuments.bankIfsc,
         submittedAt: hasMandatoryDocuments ? new Date() : currentPartner.documents?.submittedAt || null,
         isComplete: hasMandatoryDocuments
       };

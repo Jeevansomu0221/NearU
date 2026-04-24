@@ -74,9 +74,11 @@ export default function Partners() {
 
   const documentItems = selectedPartner
     ? [
-        { label: "FSSAI License", url: selectedPartner.documents?.fssaiUrl, required: true },
-        { label: "Owner ID Proof", url: selectedPartner.documents?.ownerIdProofUrl, required: true },
-        { label: "Bank Proof", url: selectedPartner.documents?.bankProofUrl, required: true },
+        { label: `FSSAI License${selectedPartner.documents?.fssaiNumber ? ` (${selectedPartner.documents.fssaiNumber})` : ""}`, url: selectedPartner.documents?.fssaiUrl, required: true },
+        { label: `PAN Front${selectedPartner.documents?.panNumber ? ` (${selectedPartner.documents.panNumber})` : ""}`, url: selectedPartner.documents?.panFrontUrl || selectedPartner.documents?.ownerPanUrl, required: true },
+        { label: `Aadhaar Front${selectedPartner.documents?.aadhaarNumber ? ` (${selectedPartner.documents.aadhaarNumber})` : ""}`, url: selectedPartner.documents?.aadhaarFrontUrl || selectedPartner.documents?.ownerIdProofUrl, required: true },
+        { label: "Aadhaar Back", url: selectedPartner.documents?.aadhaarBackUrl, required: true },
+        { label: `Bank Proof${selectedPartner.documents?.bankDocumentType ? ` (${selectedPartner.documents.bankDocumentType})` : ""}`, url: selectedPartner.documents?.bankProofUrl, required: true },
         { label: "Address Proof", url: selectedPartner.documents?.addressProofUrl, required: true },
         { label: "GST Certificate", url: selectedPartner.documents?.gstUrl, required: false },
         { label: "Shop License", url: selectedPartner.documents?.shopLicenseUrl, required: false },
@@ -256,6 +258,7 @@ export default function Partners() {
             </div>
             <div>
               <Typography.Text type="secondary">Bank account details</Typography.Text>
+              <div>{selectedPartner.documents?.bankAccountHolderName || "Account holder not provided"}</div>
               <div>{selectedPartner.documents?.bankAccountNumber || "Not provided"}</div>
               <Typography.Text type="secondary">IFSC</Typography.Text>
               <div>{selectedPartner.documents?.bankIfsc || "Not provided"}</div>

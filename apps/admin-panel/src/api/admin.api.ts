@@ -30,12 +30,20 @@ export interface PartnerRecord {
   rejectionReason?: string;
   menuItemsCount?: number;
   documents?: {
+    fssaiNumber?: string;
     fssaiUrl?: string;
+    panNumber?: string;
+    panFrontUrl?: string;
+    aadhaarNumber?: string;
+    aadhaarFrontUrl?: string;
+    aadhaarBackUrl?: string;
     gstUrl?: string;
     shopLicenseUrl?: string;
     ownerIdProofUrl?: string;
     ownerPanUrl?: string;
     bankProofUrl?: string;
+    bankDocumentType?: "cheque" | "passbook" | "statement" | "";
+    bankAccountHolderName?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
     addressProofUrl?: string;
@@ -103,12 +111,25 @@ export interface DeliveryPartnerRecord {
   createdAt: string;
   updatedAt: string;
   documents?: {
+    aadhaarNumber?: string;
+    aadhaarFrontUrl?: string;
+    aadhaarBackUrl?: string;
     aadhaarUrl?: string;
+    panNumber?: string;
+    panFrontUrl?: string;
     panUrl?: string;
+    drivingLicenseFrontUrl?: string;
+    drivingLicenseBackUrl?: string;
     drivingLicenseUrl?: string;
+    vehicleRcFrontUrl?: string;
+    vehicleRcBackUrl?: string;
     vehicleRcUrl?: string;
     insuranceUrl?: string;
+    bankDocumentType?: "cheque" | "passbook" | "statement" | "";
+    bankAccountHolderName?: string;
     cancelledChequeUrl?: string;
+    bankPassbookUrl?: string;
+    bankStatementUrl?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
     submittedAt?: string;

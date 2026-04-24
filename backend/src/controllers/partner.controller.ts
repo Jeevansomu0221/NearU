@@ -37,6 +37,14 @@ const toObjectId = (id: any): Types.ObjectId | null => {
   }
 };
 
+const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const aadhaarRegex = /^[0-9]{12}$/;
+const fssaiRegex = /^[0-9]{14}$/;
+const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
+const firstString = (...values: any[]) =>
+  values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+
 /**
  * CREATE / UPDATE PARTNER PROFILE
  */
@@ -103,19 +111,59 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
+    const normalizedDocs = {
+      fssaiNumber: firstString(documents?.fssaiNumber, documents?.fssai_number),
+      fssaiUrl: firstString(documents?.fssaiUrl, documents?.fssai_url),
+      panNumber: firstString(documents?.panNumber, documents?.pan_number).toUpperCase(),
+      panFrontUrl: firstString(documents?.panFrontUrl, documents?.pan_front_url, documents?.ownerPanUrl),
+      aadhaarNumber: firstString(documents?.aadhaarNumber, documents?.aadhaar_number),
+      aadhaarFrontUrl: firstString(documents?.aadhaarFrontUrl, documents?.aadhaar_front_url, documents?.ownerIdProofUrl),
+      aadhaarBackUrl: firstString(documents?.aadhaarBackUrl, documents?.aadhaar_back_url),
+      bankAccountHolderName: firstString(documents?.bankAccountHolderName, documents?.bank_account_holder_name),
+      bankAccountNumber: firstString(documents?.bankAccountNumber, documents?.bank_account_number),
+      bankIfsc: firstString(documents?.bankIfsc, documents?.bank_ifsc).toUpperCase(),
+      bankDocumentType: firstString(documents?.bankDocumentType, documents?.bank_document_type, documents?.bankProofType),
+      bankProofUrl: firstString(documents?.bankProofUrl, documents?.cancelledChequeUrl, documents?.bankPassbookUrl, documents?.bankStatementUrl),
+      addressProofUrl: firstString(documents?.addressProofUrl, documents?.address_proof_url),
+      gstUrl: firstString(documents?.gstUrl),
+      shopLicenseUrl: firstString(documents?.shopLicenseUrl),
+      menuProofUrl: firstString(documents?.menuProofUrl),
+      operatingHoursNote: firstString(documents?.operatingHoursNote)
+    };
+
+    if (!fssaiRegex.test(normalizedDocs.fssaiNumber)) {
+      return res.status(400).json({ success: false, message: "FSSAI number must be 14 digits" });
+    }
+    if (!panRegex.test(normalizedDocs.panNumber)) {
+      return res.status(400).json({ success: false, message: "PAN number must match AAAAA9999A format" });
+    }
+    if (!aadhaarRegex.test(normalizedDocs.aadhaarNumber)) {
+      return res.status(400).json({ success: false, message: "Aadhaar number must be 12 digits" });
+    }
+    if (!/^[0-9]+$/.test(normalizedDocs.bankAccountNumber)) {
+      return res.status(400).json({ success: false, message: "Bank account number must be numeric" });
+    }
+    if (!ifscRegex.test(normalizedDocs.bankIfsc)) {
+      return res.status(400).json({ success: false, message: "IFSC code format is invalid" });
+    }
+
     const hasMandatoryDocuments = Boolean(
-      documents?.fssaiUrl &&
-      documents?.ownerIdProofUrl &&
-      documents?.bankProofUrl &&
-      documents?.bankAccountNumber &&
-      documents?.bankIfsc &&
-      documents?.addressProofUrl
+      normalizedDocs.fssaiUrl &&
+      normalizedDocs.panFrontUrl &&
+      normalizedDocs.aadhaarFrontUrl &&
+      normalizedDocs.aadhaarBackUrl &&
+      normalizedDocs.bankAccountHolderName &&
+      normalizedDocs.bankAccountNumber &&
+      normalizedDocs.bankIfsc &&
+      normalizedDocs.bankDocumentType &&
+      normalizedDocs.bankProofUrl &&
+      normalizedDocs.addressProofUrl
     );
 
     if (!hasMandatoryDocuments) {
       return res.status(400).json({
         success: false,
-        message: "FSSAI, owner ID proof, bank details, and restaurant address proof are mandatory"
+        message: "FSSAI, PAN front, Aadhaar front/back, bank details with one proof, and restaurant address proof are mandatory"
       });
     }
 
@@ -139,18 +187,26 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       },
       category: category || "other",
       documents: {
-        fssaiUrl: documents?.fssaiUrl || "",
+        fssaiNumber: normalizedDocs.fssaiNumber,
+        fssaiUrl: normalizedDocs.fssaiUrl,
+        panNumber: normalizedDocs.panNumber,
+        panFrontUrl: normalizedDocs.panFrontUrl,
+        aadhaarNumber: normalizedDocs.aadhaarNumber,
+        aadhaarFrontUrl: normalizedDocs.aadhaarFrontUrl,
+        aadhaarBackUrl: normalizedDocs.aadhaarBackUrl,
         gstUrl: documents?.gstUrl || "",
         shopLicenseUrl: documents?.shopLicenseUrl || "",
-        ownerIdProofUrl: documents?.ownerIdProofUrl || "",
-        ownerPanUrl: documents?.ownerPanUrl || "",
-        bankProofUrl: documents?.bankProofUrl || "",
-        bankAccountNumber: documents?.bankAccountNumber || "",
-        bankIfsc: documents?.bankIfsc || "",
-        addressProofUrl: documents?.addressProofUrl || "",
-        menuProofUrl: documents?.menuProofUrl || "",
+        ownerIdProofUrl: normalizedDocs.aadhaarFrontUrl,
+        ownerPanUrl: normalizedDocs.panFrontUrl,
+        bankProofUrl: normalizedDocs.bankProofUrl,
+        bankDocumentType: normalizedDocs.bankDocumentType,
+        bankAccountHolderName: normalizedDocs.bankAccountHolderName,
+        bankAccountNumber: normalizedDocs.bankAccountNumber,
+        bankIfsc: normalizedDocs.bankIfsc,
+        addressProofUrl: normalizedDocs.addressProofUrl,
+        menuProofUrl: normalizedDocs.menuProofUrl,
         restaurantPhotosUrls: Array.isArray(documents?.restaurantPhotosUrls) ? documents.restaurantPhotosUrls : [],
-        operatingHoursNote: documents?.operatingHoursNote || "",
+        operatingHoursNote: normalizedDocs.operatingHoursNote,
         submittedAt: hasMandatoryDocuments ? new Date() : null,
         isComplete: hasMandatoryDocuments
       },

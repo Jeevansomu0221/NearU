@@ -41,23 +41,35 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [houseFlatDoorNo, setHouseFlatDoorNo] = useState("");
+  const [buildingApartmentName, setBuildingApartmentName] = useState("");
+  const [streetRoadName, setStreetRoadName] = useState("");
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [pincode, setPincode] = useState("");
   const [area, setArea] = useState("");
   const [landmark, setLandmark] = useState("");
+  const [district, setDistrict] = useState("");
+  const [country, setCountry] = useState("India");
 
   const hydrateForm = (userData: UserProfile) => {
     setProfile(userData);
     setName(userData.name || "");
     setEmail(userData.email || "");
+    setRecipientName(userData.address?.recipientName || userData.name || "");
+    setHouseFlatDoorNo(userData.address?.houseFlatDoorNo || "");
+    setBuildingApartmentName(userData.address?.buildingApartmentName || "");
+    setStreetRoadName(userData.address?.streetRoadName || userData.address?.street || "");
     setStreet(userData.address?.street || "");
-    setCity(userData.address?.city || "");
+    setCity(userData.address?.cityTownVillage || userData.address?.city || "");
     setState(userData.address?.state || "");
     setPincode(userData.address?.pincode || "");
-    setArea(userData.address?.area || "");
+    setArea(userData.address?.areaLocality || userData.address?.area || "");
     setLandmark(userData.address?.landmark || "");
+    setDistrict(userData.address?.district || "");
+    setCountry(userData.address?.country || "India");
   };
 
   const loadProfile = async () => {
@@ -106,7 +118,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
-      if (!street.trim() || !city.trim() || !state.trim() || !pincode.trim() || !area.trim()) {
+      if (!recipientName.trim() || !houseFlatDoorNo.trim() || !streetRoadName.trim() || !city.trim() || !state.trim() || !pincode.trim() || !area.trim() || !country.trim()) {
         Alert.alert("Error", "Please complete your full delivery address");
         return;
       }
@@ -116,18 +128,30 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
+      const legacyStreet = [houseFlatDoorNo.trim(), buildingApartmentName.trim(), streetRoadName.trim()]
+        .filter(Boolean)
+        .join(", ");
+
       const [profileResult, addressResult] = await Promise.all([
         updateUserProfile({
           name: name.trim(),
           email: email.trim() || undefined
         }),
         updateUserAddress({
-          street: street.trim(),
+          recipientName: recipientName.trim(),
+          houseFlatDoorNo: houseFlatDoorNo.trim(),
+          buildingApartmentName: buildingApartmentName.trim() || undefined,
+          streetRoadName: streetRoadName.trim(),
+          areaLocality: area.trim(),
+          street: legacyStreet,
           city: city.trim(),
+          cityTownVillage: city.trim(),
           state: state.trim(),
           pincode: pincode.trim(),
           area: area.trim(),
-          landmark: landmark.trim() || undefined
+          landmark: landmark.trim() || undefined,
+          district: district.trim() || undefined,
+          country: country.trim()
         })
       ]);
 
@@ -207,6 +231,21 @@ export default function ProfileScreen({ navigation, route }: any) {
         return "#666";
     }
   };
+
+  const savedAddress = profile?.address;
+  const hasSavedAddress = Boolean(
+    savedAddress &&
+      (
+        savedAddress.houseFlatDoorNo ||
+        savedAddress.street ||
+        savedAddress.streetRoadName ||
+        savedAddress.areaLocality ||
+        savedAddress.area ||
+        savedAddress.cityTownVillage ||
+        savedAddress.city ||
+        savedAddress.pincode
+      )
+  );
 
   if (loading) {
     return (
@@ -338,21 +377,54 @@ export default function ProfileScreen({ navigation, route }: any) {
           {editing ? (
             <>
             <TextInput
-              style={[styles.input, styles.largeInput, focusedField === "street" && styles.inputFocused]}
-              value={street}
-              onChangeText={setStreet}
-              placeholder="Street / House No"
+              style={[styles.input, focusedField === "recipientName" && styles.inputFocused]}
+              value={recipientName}
+              onChangeText={setRecipientName}
+              placeholder="Recipient name"
               placeholderTextColor="#98A2B3"
               selectionColor="#FF6B35"
               cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("street")}
+              onFocus={() => setFocusedField("recipientName")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
+              style={[styles.input, focusedField === "houseFlatDoorNo" && styles.inputFocused]}
+              value={houseFlatDoorNo}
+              onChangeText={setHouseFlatDoorNo}
+              placeholder="House / flat / door number"
+              placeholderTextColor="#98A2B3"
+              selectionColor="#FF6B35"
+              cursorColor="#FF6B35"
+              onFocus={() => setFocusedField("houseFlatDoorNo")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
+              style={[styles.input, focusedField === "buildingApartmentName" && styles.inputFocused]}
+              value={buildingApartmentName}
+              onChangeText={setBuildingApartmentName}
+              placeholder="Building / apartment name (optional)"
+              placeholderTextColor="#98A2B3"
+              selectionColor="#FF6B35"
+              cursorColor="#FF6B35"
+              onFocus={() => setFocusedField("buildingApartmentName")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
+              style={[styles.input, styles.largeInput, focusedField === "streetRoadName" && styles.inputFocused]}
+              value={streetRoadName}
+              onChangeText={setStreetRoadName}
+              placeholder="Street / road name"
+              placeholderTextColor="#98A2B3"
+              selectionColor="#FF6B35"
+              cursorColor="#FF6B35"
+              onFocus={() => setFocusedField("streetRoadName")}
               onBlur={() => setFocusedField(null)}
             />
             <TextInput
               style={[styles.input, focusedField === "area" && styles.inputFocused]}
               value={area}
               onChangeText={setArea}
-              placeholder="Area / Locality"
+              placeholder="Area / locality"
               placeholderTextColor="#98A2B3"
               selectionColor="#FF6B35"
               cursorColor="#FF6B35"
@@ -363,7 +435,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               style={[styles.input, focusedField === "landmark" && styles.inputFocused]}
               value={landmark}
               onChangeText={setLandmark}
-              placeholder="Landmark (optional)"
+              placeholder="Landmark (optional, e.g. Near XYZ School)"
               placeholderTextColor="#98A2B3"
               selectionColor="#FF6B35"
               cursorColor="#FF6B35"
@@ -375,7 +447,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 style={[styles.input, styles.half, focusedField === "city" && styles.inputFocused]}
                 value={city}
                 onChangeText={setCity}
-                placeholder="City"
+                placeholder="City / town / village"
                 placeholderTextColor="#98A2B3"
                 selectionColor="#FF6B35"
                 cursorColor="#FF6B35"
@@ -395,6 +467,17 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
             </View>
             <TextInput
+              style={[styles.input, focusedField === "district" && styles.inputFocused]}
+              value={district}
+              onChangeText={setDistrict}
+              placeholder="District (optional)"
+              placeholderTextColor="#98A2B3"
+              selectionColor="#FF6B35"
+              cursorColor="#FF6B35"
+              onFocus={() => setFocusedField("district")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
               style={[styles.input, focusedField === "pincode" && styles.inputFocused]}
               value={pincode}
               onChangeText={(value) => setPincode(value.replace(/\D/g, "").slice(0, 6))}
@@ -407,19 +490,43 @@ export default function ProfileScreen({ navigation, route }: any) {
               onFocus={() => setFocusedField("pincode")}
               onBlur={() => setFocusedField(null)}
             />
+            <TextInput
+              style={[styles.input, focusedField === "country" && styles.inputFocused]}
+              value={country}
+              onChangeText={setCountry}
+              placeholder="Country"
+              placeholderTextColor="#98A2B3"
+              selectionColor="#FF6B35"
+              cursorColor="#FF6B35"
+              onFocus={() => setFocusedField("country")}
+              onBlur={() => setFocusedField(null)}
+            />
             </>
           ) : (
             <View style={styles.addressCard}>
-            {profile?.address?.street ? <Text style={styles.addressText}>{profile.address.street}</Text> : null}
-            {profile?.address?.area ? <Text style={styles.addressText}>{profile.address.area}</Text> : null}
+            {hasSavedAddress ? (
+              <>
+            {profile?.address?.recipientName ? <Text style={styles.addressText}>{profile.address.recipientName}</Text> : null}
+            {profile?.address?.houseFlatDoorNo || profile?.address?.buildingApartmentName ? (
+              <Text style={styles.addressText}>
+                {[profile?.address?.houseFlatDoorNo, profile?.address?.buildingApartmentName].filter(Boolean).join(", ")}
+              </Text>
+            ) : profile?.address?.street ? <Text style={styles.addressText}>{profile.address.street}</Text> : null}
+            {profile?.address?.streetRoadName ? <Text style={styles.addressText}>{profile.address.streetRoadName}</Text> : null}
+            {profile?.address?.areaLocality || profile?.address?.area ? <Text style={styles.addressText}>{profile.address.areaLocality || profile.address.area}</Text> : null}
             {profile?.address?.landmark ? (
               <Text style={styles.addressText}>Near {profile.address.landmark}</Text>
             ) : null}
-            {profile?.address?.city || profile?.address?.state || profile?.address?.pincode ? (
+            {profile?.address?.cityTownVillage || profile?.address?.city || profile?.address?.state || profile?.address?.pincode ? (
               <Text style={styles.addressText}>
-                {[profile?.address?.city, profile?.address?.state].filter(Boolean).join(", ")}
+                {[profile?.address?.cityTownVillage || profile?.address?.city, profile?.address?.district ? `${profile.address.district} District` : null, profile?.address?.state].filter(Boolean).join(", ")}
                 {profile?.address?.pincode ? ` - ${profile.address.pincode}` : ""}
               </Text>
+            ) : null}
+            {profile?.address?.country ? (
+              <Text style={styles.addressText}>{profile.address.country}</Text>
+            ) : null}
+              </>
             ) : (
               <Text style={styles.emptyText}>No address saved yet.</Text>
             )}

@@ -24,6 +24,22 @@ const UserSchema = new Schema({
   },
   // ADD THIS ADDRESS FIELD
   address: {
+    recipientName: {
+      type: String,
+      default: ""
+    },
+    houseFlatDoorNo: {
+      type: String,
+      default: ""
+    },
+    buildingApartmentName: {
+      type: String,
+      default: ""
+    },
+    streetRoadName: {
+      type: String,
+      default: ""
+    },
     street: {
       type: String,
       default: ""
@@ -47,6 +63,18 @@ const UserSchema = new Schema({
     landmark: {
       type: String,
       default: ""
+    },
+    cityTownVillage: {
+      type: String,
+      default: ""
+    },
+    district: {
+      type: String,
+      default: ""
+    },
+    country: {
+      type: String,
+      default: "India"
     }
   },
   fcmToken: {

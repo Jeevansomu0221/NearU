@@ -11,7 +11,8 @@ export interface ApiResponse<T = any> {
   [key: string]: any;
 }
 
-const DEV_LAN_HOST = "10.3.189.31";
+const DEV_LAN_HOST = "10.3.8.130";
+const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
 
 const isPrivateIp = (hostname: string) => {
   return (
@@ -33,7 +34,7 @@ const resolveApiBaseUrl = () => {
       const bundleUrl = new URL(scriptURL);
       const hostname = bundleUrl.hostname;
 
-      if (isPrivateIp(hostname)) {
+      if (isPrivateIp(hostname) && !BLOCKED_DEV_HOSTS.has(hostname)) {
         return `http://${hostname}:5000/api`;
       }
     } catch (error) {

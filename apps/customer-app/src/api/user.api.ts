@@ -8,12 +8,20 @@ export interface UserProfile {
   phone: string;
   email?: string;
   address?: {
+    recipientName?: string;
+    houseFlatDoorNo?: string;
+    buildingApartmentName?: string;
+    streetRoadName?: string;
     street: string;
     city: string;
+    cityTownVillage?: string;
     state: string;
     pincode: string;
     area: string;
+    areaLocality?: string;
     landmark?: string;
+    district?: string;
+    country?: string;
   };
   createdAt: string;
 }
@@ -39,12 +47,20 @@ export const updateUserProfile = (profileData: {
  * UPDATE USER ADDRESS
  */
 export const updateUserAddress = (addressData: {
+  recipientName?: string;
+  houseFlatDoorNo?: string;
+  buildingApartmentName?: string;
+  streetRoadName?: string;
   street?: string;
   city?: string;
+  cityTownVillage?: string;
   state?: string;
   pincode?: string;
   area?: string;
+  areaLocality?: string;
   landmark?: string;
+  district?: string;
+  country?: string;
 }): Promise<ApiResponse<UserProfile>> => {
   return apiPut<UserProfile>("/users/address", addressData);
 };

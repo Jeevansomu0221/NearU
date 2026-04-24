@@ -30,9 +30,18 @@ const INDIAN_CITIES = [
 ];
 
 type DocumentState = {
+  fssaiNumber: string;
   fssaiUrl: string;
-  ownerIdProofUrl: string;
-  bankProofUrl: string;
+  panNumber: string;
+  panFrontUrl: string;
+  aadhaarNumber: string;
+  aadhaarFrontUrl: string;
+  aadhaarBackUrl: string;
+  bankDocumentType: "cheque" | "passbook" | "statement" | "";
+  bankAccountHolderName: string;
+  cancelledChequeUrl: string;
+  bankPassbookUrl: string;
+  bankStatementUrl: string;
   bankAccountNumber: string;
   bankIfsc: string;
   addressProofUrl: string;
@@ -53,8 +62,12 @@ interface UploadResponse {
 
 type UploadingKey =
   | "fssaiUrl"
-  | "ownerIdProofUrl"
-  | "bankProofUrl"
+  | "panFrontUrl"
+  | "aadhaarFrontUrl"
+  | "aadhaarBackUrl"
+  | "cancelledChequeUrl"
+  | "bankPassbookUrl"
+  | "bankStatementUrl"
   | "addressProofUrl"
   | "gstUrl"
   | "shopLicenseUrl"
@@ -63,9 +76,10 @@ type UploadingKey =
   | null;
 
 const mandatoryDocs: Array<{ key: keyof DocumentState; title: string; subtitle: string }> = [
-  { key: "fssaiUrl", title: "FSSAI License", subtitle: "Mandatory for legal food operations" },
-  { key: "ownerIdProofUrl", title: "Owner ID Proof", subtitle: "Aadhaar or PAN for KYC" },
-  { key: "bankProofUrl", title: "Cancelled Cheque / Passbook", subtitle: "Required for payouts" },
+  { key: "fssaiUrl", title: "FSSAI License", subtitle: "Single PDF/image document" },
+  { key: "panFrontUrl", title: "PAN Card - Upload Front Side", subtitle: "Mandatory owner PAN proof" },
+  { key: "aadhaarFrontUrl", title: "Aadhaar - Upload Front Side", subtitle: "Mandatory owner Aadhaar proof" },
+  { key: "aadhaarBackUrl", title: "Aadhaar - Upload Back Side", subtitle: "Mandatory owner Aadhaar proof" },
   { key: "addressProofUrl", title: "Restaurant Address Proof", subtitle: "Utility bill, rental proof, or property document" }
 ];
 
@@ -75,6 +89,17 @@ const optionalDocs: Array<{ key: keyof DocumentState; title: string; subtitle: s
   { key: "ownerPanUrl", title: "Owner PAN Copy", subtitle: "Useful for additional verification" },
   { key: "menuProofUrl", title: "Menu List / Proof", subtitle: "Optional support for faster review" }
 ];
+
+const getUploadMimeType = (filename: string) => {
+  const extension = filename.split(".").pop()?.toLowerCase();
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "png") return "image/png";
+  if (extension === "webp") return "image/webp";
+  if (extension === "heic") return "image/heic";
+  if (extension === "heif") return "image/heif";
+  if (extension === "pdf") return "application/pdf";
+  return "image/jpeg";
+};
 
 export default function OnboardingScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -96,9 +121,18 @@ export default function OnboardingScreen({ navigation }: any) {
     googleMapsLink: ""
   });
   const [documents, setDocuments] = useState<DocumentState>({
+    fssaiNumber: "",
     fssaiUrl: "",
-    ownerIdProofUrl: "",
-    bankProofUrl: "",
+    panNumber: "",
+    panFrontUrl: "",
+    aadhaarNumber: "",
+    aadhaarFrontUrl: "",
+    aadhaarBackUrl: "",
+    bankDocumentType: "",
+    bankAccountHolderName: "",
+    cancelledChequeUrl: "",
+    bankPassbookUrl: "",
+    bankStatementUrl: "",
     bankAccountNumber: "",
     bankIfsc: "",
     addressProofUrl: "",
@@ -136,8 +170,7 @@ export default function OnboardingScreen({ navigation }: any) {
   const uploadImageToCloudinary = async (imageUri: string): Promise<string> => {
     const formData = new FormData();
     const filename = imageUri.split("/").pop() || "document.jpg";
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : "image/jpeg";
+    const type = getUploadMimeType(filename);
 
     // @ts-ignore React Native FormData file object
     formData.append("image", {
@@ -149,7 +182,8 @@ export default function OnboardingScreen({ navigation }: any) {
     const response = await api.post<UploadResponse>("/upload/image", formData, {
       headers: {
         "Content-Type": "multipart/form-data"
-      }
+      },
+      timeout: 420000
     });
 
     const uploadData = response.data;
@@ -174,7 +208,7 @@ export default function OnboardingScreen({ navigation }: any) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 0.8
+        quality: 0.6
       });
 
       if (result.canceled || !result.assets[0]?.uri) {
@@ -216,11 +250,29 @@ export default function OnboardingScreen({ navigation }: any) {
     ) {
       return "Please provide a valid Google Maps link";
     }
-    if (!documents.fssaiUrl || !documents.ownerIdProofUrl || !documents.bankProofUrl || !documents.addressProofUrl) {
-      return "Please upload all mandatory restaurant documents";
+    if (!/^\d{14}$/.test(documents.fssaiNumber.trim())) {
+      return "FSSAI number must be 14 digits";
     }
-    if (!documents.bankAccountNumber || !documents.bankIfsc) {
-      return "Bank account number and IFSC are mandatory";
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(documents.panNumber.trim().toUpperCase())) {
+      return "PAN number must match AAAAA9999A format";
+    }
+    if (!/^\d{12}$/.test(documents.aadhaarNumber.trim())) {
+      return "Aadhaar number must be 12 digits";
+    }
+    if (!documents.fssaiUrl || !documents.panFrontUrl || !documents.aadhaarFrontUrl || !documents.aadhaarBackUrl || !documents.addressProofUrl) {
+      return "Please upload FSSAI, PAN front, Aadhaar front/back, and address proof";
+    }
+    if (!documents.bankAccountHolderName.trim()) {
+      return "Account holder name is mandatory";
+    }
+    if (!documents.bankAccountNumber || !/^\d+$/.test(documents.bankAccountNumber.trim())) {
+      return "Bank account number must be numeric";
+    }
+    if (!documents.bankIfsc || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) {
+      return "IFSC format is invalid";
+    }
+    if (!documents.bankDocumentType || (!documents.cancelledChequeUrl && !documents.bankPassbookUrl && !documents.bankStatementUrl)) {
+      return "Upload any one bank proof: cancelled cheque, passbook, or bank statement";
     }
     return null;
   };
@@ -257,6 +309,13 @@ export default function OnboardingScreen({ navigation }: any) {
         userId: userId || fallbackUserId,
         documents: {
           ...documents,
+          fssaiNumber: documents.fssaiNumber.trim(),
+          panNumber: documents.panNumber.trim().toUpperCase(),
+          aadhaarNumber: documents.aadhaarNumber.trim(),
+          ownerIdProofUrl: documents.aadhaarFrontUrl,
+          ownerPanUrl: documents.panFrontUrl,
+          bankProofUrl: documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl,
+          bankAccountHolderName: documents.bankAccountHolderName.trim(),
           bankAccountNumber: documents.bankAccountNumber.trim(),
           bankIfsc: documents.bankIfsc.trim().toUpperCase(),
           operatingHoursNote: documents.operatingHoursNote.trim()
@@ -419,11 +478,50 @@ export default function OnboardingScreen({ navigation }: any) {
           <View style={styles.tipCard}>
             <Text style={styles.tipTitle}>These are required</Text>
             <Text style={styles.tipText}>
-              FSSAI License, owner ID proof, bank proof with bank details, and restaurant address proof are mandatory before admin approval.
+              FSSAI, PAN front, Aadhaar front/back, bank proof with bank details, and restaurant address proof are mandatory before admin approval.
             </Text>
           </View>
 
+          <Text style={styles.label}>FSSAI number *</Text>
+          <TextInput
+            placeholder="14-digit FSSAI number"
+            placeholderTextColor="#98A2B3"
+            value={documents.fssaiNumber}
+            onChangeText={(value) => setDocuments((prev) => ({ ...prev, fssaiNumber: value.replace(/\D/g, "").slice(0, 14) }))}
+            keyboardType="number-pad"
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>PAN number *</Text>
+          <TextInput
+            placeholder="AAAAA9999A"
+            placeholderTextColor="#98A2B3"
+            autoCapitalize="characters"
+            value={documents.panNumber}
+            onChangeText={(value) => setDocuments((prev) => ({ ...prev, panNumber: value.toUpperCase().slice(0, 10) }))}
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Aadhaar number *</Text>
+          <TextInput
+            placeholder="12-digit Aadhaar number"
+            placeholderTextColor="#98A2B3"
+            value={documents.aadhaarNumber}
+            onChangeText={(value) => setDocuments((prev) => ({ ...prev, aadhaarNumber: value.replace(/\D/g, "").slice(0, 12) }))}
+            keyboardType="number-pad"
+            style={styles.input}
+          />
+
           {mandatoryDocs.map((doc) => renderDocCard(doc.title, doc.subtitle, doc.key, true))}
+
+          <Text style={styles.label}>Account holder name *</Text>
+          <TextInput
+            placeholder="Enter payout account holder name"
+            placeholderTextColor="#98A2B3"
+            value={documents.bankAccountHolderName}
+            onChangeText={(value) => setDocuments((prev) => ({ ...prev, bankAccountHolderName: value }))}
+            style={styles.input}
+          />
 
           <Text style={styles.label}>Bank account number *</Text>
           <TextInput
@@ -444,6 +542,26 @@ export default function OnboardingScreen({ navigation }: any) {
             onChangeText={(value) => setDocuments((prev) => ({ ...prev, bankIfsc: value.toUpperCase() }))}
             style={styles.input}
           />
+
+          <Text style={styles.helperText}>Upload any one: Cancelled Cheque (Recommended) / Passbook / Bank Statement</Text>
+          <View style={styles.categoryWrap}>
+            {(["cheque", "passbook", "statement"] as const).map((type) => {
+              const selected = documents.bankDocumentType === type;
+              return (
+                <TouchableOpacity key={type} style={[styles.categoryChip, selected && styles.categoryChipSelected]} onPress={() => setDocuments((prev) => ({ ...prev, bankDocumentType: type }))}>
+                  <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>
+                    {type === "cheque" ? "Cancelled Cheque" : type === "passbook" ? "Passbook" : "Bank Statement"}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {documents.bankDocumentType === "passbook"
+            ? renderDocCard("Bank Passbook", "First page image for payout verification", "bankPassbookUrl", true)
+            : documents.bankDocumentType === "statement"
+              ? renderDocCard("Bank Statement", "Recent statement as PDF/image", "bankStatementUrl", true)
+              : renderDocCard("Cancelled Cheque", "Recommended payout verification proof", "cancelledChequeUrl", true)}
 
           <Text style={styles.sectionTitle}>If applicable</Text>
           <View style={styles.tipCard}>

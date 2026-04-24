@@ -46,6 +46,17 @@ interface UploadResponse {
 
 const CATEGORIES = ["Restaurant", "Bakery", "Tiffins", "Fast Food", "Unique Foods", "Other"];
 
+const getUploadMimeType = (filename: string) => {
+  const extension = filename.split(".").pop()?.toLowerCase();
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "png") return "image/png";
+  if (extension === "webp") return "image/webp";
+  if (extension === "heic") return "image/heic";
+  if (extension === "heif") return "image/heif";
+  if (extension === "pdf") return "application/pdf";
+  return "image/jpeg";
+};
+
 export default function MenuScreen() {
   const insets = useSafeAreaInsets();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -94,8 +105,7 @@ export default function MenuScreen() {
   const uploadImageToCloudinary = async (selectedImageUri: string): Promise<string> => {
     const formData = new FormData();
     const filename = selectedImageUri.split("/").pop() || "image.jpg";
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : "image/jpeg";
+    const type = getUploadMimeType(filename);
 
     // @ts-ignore React Native FormData file object
     formData.append("image", {
@@ -107,7 +117,8 @@ export default function MenuScreen() {
     const response = await api.post("/upload/image", formData, {
       headers: {
         "Content-Type": "multipart/form-data"
-      }
+      },
+      timeout: 420000
     });
 
     const uploadData = response.data as UploadResponse;
@@ -129,7 +140,7 @@ export default function MenuScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8
+        quality: 0.6
       });
 
       if (!result.canceled && result.assets[0].uri) {

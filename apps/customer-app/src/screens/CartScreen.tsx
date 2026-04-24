@@ -87,7 +87,16 @@ export default function CartScreen({ route, navigation }: any) {
     }
 
     const addr = userProfile.address;
-    return [addr.street, addr.area, addr.landmark ? `Near ${addr.landmark}` : null, `${addr.city}, ${addr.state} - ${addr.pincode}`]
+    return [
+      addr.recipientName,
+      [addr.houseFlatDoorNo, addr.buildingApartmentName].filter(Boolean).join(", ") || addr.street,
+      addr.streetRoadName,
+      addr.areaLocality || addr.area,
+      addr.landmark ? `Near ${addr.landmark}` : null,
+      [addr.cityTownVillage || addr.city, addr.district ? `${addr.district} District` : null, addr.state].filter(Boolean).join(", ") +
+        (addr.pincode ? ` - ${addr.pincode}` : ""),
+      addr.country || "India"
+    ]
       .filter(Boolean)
       .join(", ");
   };

@@ -10,7 +10,9 @@ export interface ApiResponse<T = any> {
   [key: string]: any;
 }
 
-const DEV_LAN_HOST = "10.3.189.31";
+const DEV_LAN_HOST = "10.3.8.130";
+const ANDROID_EMULATOR_HOST = "10.0.2.2";
+const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
 
 const isPrivateIp = (hostname: string) => {
   return (
@@ -20,33 +22,46 @@ const isPrivateIp = (hostname: string) => {
   );
 };
 
-const api = axios.create({
-  baseURL: (() => {
-    const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-    if (envUrl) {
-      return envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`;
-    }
+const addUnique = (items: string[], value: string) => {
+  if (!items.includes(value)) {
+    items.push(value);
+  }
+};
 
-    const scriptURL = NativeModules.SourceCode?.scriptURL;
-    if (scriptURL) {
-      try {
-        const bundleUrl = new URL(scriptURL);
-        const hostname = bundleUrl.hostname;
+const resolveApiBaseUrls = () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (envUrl) {
+    return [envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`];
+  }
 
-        if (isPrivateIp(hostname)) {
-          return `http://${hostname}:5000/api`;
-        }
-      } catch (error) {
-        console.warn("Failed to parse bundle URL for API host detection:", error);
+  const urls: string[] = [];
+  const scriptURL = NativeModules.SourceCode?.scriptURL;
+  if (scriptURL) {
+    try {
+      const bundleUrl = new URL(scriptURL);
+      const hostname = bundleUrl.hostname;
+
+      if (isPrivateIp(hostname) && !BLOCKED_DEV_HOSTS.has(hostname)) {
+        addUnique(urls, `http://${hostname}:5000/api`);
       }
+    } catch (error) {
+      console.warn("Failed to parse bundle URL for API host detection:", error);
     }
+  }
 
-    if (Platform.OS === "android") {
-      return `http://${DEV_LAN_HOST}:5000/api`;
-    }
+  addUnique(urls, `http://${DEV_LAN_HOST}:5000/api`);
 
-    return `http://${DEV_LAN_HOST}:5000/api`;
-  })(),
+  if (Platform.OS === "android") {
+    addUnique(urls, `http://${ANDROID_EMULATOR_HOST}:5000/api`);
+  }
+
+  return urls;
+};
+
+const API_BASE_URLS = resolveApiBaseUrls();
+
+const api = axios.create({
+  baseURL: API_BASE_URLS[0],
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
@@ -54,6 +69,7 @@ const api = axios.create({
 });
 
 console.log("Partner API base URL:", api.defaults.baseURL);
+console.log("Partner API fallback URLs:", API_BASE_URLS);
 
 // Add token to requests
 api.interceptors.request.use(
@@ -80,7 +96,20 @@ api.interceptors.response.use(
     console.log(`✅ ${response.status} ${response.config.url}`);
     return response;
   },
-  (error: any) => {
+  async (error: any) => {
+    const requestConfig = error.config;
+    const currentRetryIndex = requestConfig?._baseUrlRetryIndex || 0;
+    const nextBaseUrl = API_BASE_URLS[currentRetryIndex + 1];
+    const isNetworkError = error.message === "Network Error" || (error.request && !error.response);
+
+    if (isNetworkError && requestConfig && nextBaseUrl) {
+      console.log(`Trying fallback API base URL: ${nextBaseUrl}`);
+      requestConfig._baseUrlRetryIndex = currentRetryIndex + 1;
+      requestConfig.baseURL = nextBaseUrl;
+      api.defaults.baseURL = nextBaseUrl;
+      return api.request(requestConfig);
+    }
+
     if (error.response) {
       const url = error.config?.url || '';
       const method = error.config?.method?.toUpperCase() || 'GET';

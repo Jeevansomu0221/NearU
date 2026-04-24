@@ -104,7 +104,7 @@ const PartnerSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
       // REMOVED: unique: true - This causes duplicate key error for null values
-      index: { sparse: true } // This allows multiple null values
+      // Index is declared once below with a partial filter.
     },
     // SHOP STATUS
     isOpen: {
@@ -124,12 +124,24 @@ const PartnerSchema = new Schema(
       default: 4
     },
     documents: {
+      fssaiNumber: String,
       fssaiUrl: String,
+      panNumber: String,
+      panFrontUrl: String,
+      aadhaarNumber: String,
+      aadhaarFrontUrl: String,
+      aadhaarBackUrl: String,
       gstUrl: String,
       shopLicenseUrl: String,
       ownerIdProofUrl: String,
       ownerPanUrl: String,
       bankProofUrl: String,
+      bankDocumentType: {
+        type: String,
+        enum: ["cheque", "passbook", "statement", ""],
+        default: ""
+      },
+      bankAccountHolderName: String,
       bankAccountNumber: String,
       bankIfsc: String,
       addressProofUrl: String,
@@ -179,7 +191,6 @@ PartnerSchema.index(
 
 // Index for faster status queries
 PartnerSchema.index({ status: 1 });
-PartnerSchema.index({ phone: 1 });
 // Index for location-based queries
 PartnerSchema.index({ 'address.pincode': 1 });
 PartnerSchema.index({ 'address.area': 1 });

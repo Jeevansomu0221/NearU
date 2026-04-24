@@ -82,7 +82,22 @@ export const updateUserProfile = async (req: AuthRequest, res: Response) => {
 export const updateUserAddress = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
-    const { street, city, state, pincode, area, landmark } = req.body;
+    const {
+      recipientName,
+      houseFlatDoorNo,
+      buildingApartmentName,
+      streetRoadName,
+      street,
+      city,
+      cityTownVillage,
+      state,
+      pincode,
+      area,
+      areaLocality,
+      landmark,
+      district,
+      country
+    } = req.body;
 
     if (!user) {
       return errorResponse(res, "Unauthorized", 401);
@@ -94,13 +109,28 @@ export const updateUserAddress = async (req: AuthRequest, res: Response) => {
     }
 
     // Build address object
+    const normalizedStreet =
+      street ||
+      [houseFlatDoorNo, buildingApartmentName, streetRoadName]
+        .filter(Boolean)
+        .join(", ");
+    const normalizedArea = area || areaLocality || "";
+    const normalizedCity = city || cityTownVillage || "";
+
     const address = {
-      street: street || "",
-      city: city || "",
+      recipientName: recipientName || "",
+      houseFlatDoorNo: houseFlatDoorNo || "",
+      buildingApartmentName: buildingApartmentName || "",
+      streetRoadName: streetRoadName || "",
+      street: normalizedStreet,
+      city: normalizedCity,
+      cityTownVillage: normalizedCity,
       state: state || "",
       pincode: pincode || "",
-      area: area || "",
-      landmark: landmark || ""
+      area: normalizedArea,
+      landmark: landmark || "",
+      district: district || "",
+      country: country || "India"
     };
 
     // Update user address

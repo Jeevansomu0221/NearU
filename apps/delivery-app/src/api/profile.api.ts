@@ -13,12 +13,25 @@ export interface DeliveryProfile {
   profilePhotoUrl?: string;
   reviewComment?: string;
   documents?: {
+    aadhaarNumber?: string;
+    aadhaarFrontUrl?: string;
+    aadhaarBackUrl?: string;
     aadhaarUrl?: string;
+    panNumber?: string;
+    panFrontUrl?: string;
     panUrl?: string;
+    drivingLicenseFrontUrl?: string;
+    drivingLicenseBackUrl?: string;
     drivingLicenseUrl?: string;
+    vehicleRcFrontUrl?: string;
+    vehicleRcBackUrl?: string;
     vehicleRcUrl?: string;
     insuranceUrl?: string;
+    bankDocumentType?: "cheque" | "passbook" | "statement" | "";
+    bankAccountHolderName?: string;
     cancelledChequeUrl?: string;
+    bankPassbookUrl?: string;
+    bankStatementUrl?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
     submittedAt?: string;
