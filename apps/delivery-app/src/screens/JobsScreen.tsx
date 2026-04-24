@@ -14,6 +14,8 @@ import { getAvailableJobs, acceptJob, DeliveryJob, calculateDistance } from "../
 import * as Location from 'expo-location';
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage"; // ADD THIS IMPORT
+import { getDeliveryProfile } from "../api/profile.api";
+import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
 interface CalculatedJob extends DeliveryJob {
   distance?: number;
@@ -28,6 +30,24 @@ export default function JobsScreen({ navigation }: any) {
   const [acceptingJobId, setAcceptingJobId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+
+  const ensureAccountCanAccessJobs = async () => {
+    const profileResponse = await getDeliveryProfile();
+    if (!profileResponse.success || !profileResponse.data) {
+      return false;
+    }
+
+    const nextRoute = resolveDeliveryRoute(profileResponse.data);
+    if (nextRoute !== "Main") {
+      navigation.getParent()?.reset({
+        index: 0,
+        routes: [{ name: nextRoute }]
+      });
+      return false;
+    }
+
+    return true;
+  };
 
   // Get user location
   useEffect(() => {
@@ -125,6 +145,14 @@ export default function JobsScreen({ navigation }: any) {
 
   const loadAvailableJobs = async () => {
     try {
+      const canAccessJobs = await ensureAccountCanAccessJobs();
+      if (!canAccessJobs) {
+        setJobs([]);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
       // First check token storage
       await checkTokenStorage();
       

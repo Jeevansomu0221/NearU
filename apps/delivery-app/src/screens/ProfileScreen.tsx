@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URLS } from "../api/client";
 import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
+import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
 const DRAFT_KEY = "delivery_registration_draft_v2";
 const STEPS = ["Basic", "Vehicle", "Documents", "Bank"] as const;
@@ -573,7 +574,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       await AsyncStorage.removeItem(DRAFT_KEY);
       Alert.alert("Submitted", "Your delivery profile is now pending admin verification.");
       if (forceComplete) {
-        navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+        navigation.reset({ index: 0, routes: [{ name: resolveDeliveryRoute(response.data) }] });
       }
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to save profile");

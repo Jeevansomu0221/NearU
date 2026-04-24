@@ -11,6 +11,7 @@ import {
 import { verifyOtp, sendOtp } from "../api/auth.api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getDeliveryProfile } from "../api/profile.api";
+import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone } = route.params; // Only get phone, not testOtp
@@ -73,8 +74,8 @@ export default function OtpScreen({ route, navigation }: any) {
         
         const profileResponse = await getDeliveryProfile();
         const nextRoute =
-          profileResponse.success && profileResponse.data?.isProfileComplete
-            ? "Main"
+          profileResponse.success && profileResponse.data
+            ? resolveDeliveryRoute(profileResponse.data)
             : "CompleteProfile";
 
         console.log(`🚀 Navigating to ${nextRoute} screen...`);

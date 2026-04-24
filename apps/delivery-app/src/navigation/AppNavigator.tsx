@@ -12,7 +12,9 @@ import MyJobsScreen from "../screens/MyJobsScreen";
 import JobDetailsScreen from "../screens/JobDetailsScreen"; // Make sure this import exists
 import EarningsScreen from "../screens/EarningsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import ReviewStatusScreen from "../screens/ReviewStatusScreen";
 import { getDeliveryProfile } from "../api/profile.api";
+import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -90,7 +92,7 @@ export default function AppNavigator() {
 
         const profileResponse = await getDeliveryProfile();
         if (profileResponse.success && profileResponse.data) {
-          setInitialRoute(profileResponse.data.isProfileComplete ? "Main" : "CompleteProfile");
+          setInitialRoute(resolveDeliveryRoute(profileResponse.data));
           return;
         }
 
@@ -143,6 +145,14 @@ export default function AppNavigator() {
         initialParams={{ forceComplete: true }}
         options={{
           title: "Complete Registration",
+          headerLeft: () => null
+        }}
+      />
+      <Stack.Screen
+        name="ReviewStatus"
+        component={ReviewStatusScreen}
+        options={{
+          title: "Verification Status",
           headerLeft: () => null
         }}
       />
