@@ -10,10 +10,9 @@ import {
   RefreshControl,
   Platform
 } from "react-native";
-import { getAvailableJobs, acceptJob, DeliveryJob, calculateDistance } from "../api/delivery.api";
+import { getAvailableJobs, acceptJob, DeliveryJob, calculateDistance, updateLocation } from "../api/delivery.api";
 import * as Location from 'expo-location';
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage"; // ADD THIS IMPORT
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
@@ -68,29 +67,16 @@ export default function JobsScreen({ navigation }: any) {
     })();
   }, []);
 
-  // Add this debug function
-  const checkTokenStorage = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      const user = await AsyncStorage.getItem("user");
-      
-      console.log("=== JOBS SCREEN TOKEN CHECK ===");
-      console.log("Token exists:", !!token);
-      if (token) {
-        console.log("Token length:", token.length);
-        console.log("Token preview:", token.substring(0, 30) + "...");
-      }
-      console.log("User exists:", !!user);
-      if (user) {
-        console.log("User data:", JSON.parse(user));
-      }
-      console.log("=== END CHECK ===");
-    } catch (error) {
-      console.error("Error checking token storage:", error);
-    }
-  };
+  const checkTokenStorage = async () => {};
 
   const calculateJobDetails = async (job: DeliveryJob): Promise<CalculatedJob> => {
+    if (typeof job.distanceToRestaurant === "number") {
+      return {
+        ...job,
+        distance: parseFloat(job.distanceToRestaurant.toFixed(1))
+      };
+    }
+
     if (!userLocation || !job.partnerId?.location?.coordinates) {
       return job;
     }
@@ -199,6 +185,17 @@ export default function JobsScreen({ navigation }: any) {
     }, 30000);
     
     return () => clearInterval(interval);
+  }, [userLocation]);
+
+  useEffect(() => {
+    if (!userLocation) return;
+
+    updateLocation({
+      latitude: userLocation.coords.latitude,
+      longitude: userLocation.coords.longitude
+    }).catch((error) => {
+      console.log("Failed to sync rider location", error);
+    });
   }, [userLocation]);
 
   const onRefresh = async () => {

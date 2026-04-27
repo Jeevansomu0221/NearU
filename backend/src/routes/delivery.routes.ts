@@ -13,7 +13,9 @@ import {
   getDeliveryStats,
   getTodaysEarnings,
   getAllDeliveryPartnersForAdmin,
-  updateDeliveryPartnerStatusByAdmin
+  updateDeliveryPartnerStatusByAdmin,
+  updateDeliveryLocation,
+  calculateDeliveryDistance
 } from "../controllers/delivery.controller";
 import { roleMiddleware } from "../middlewares/role.middleware";
 
@@ -45,5 +47,7 @@ router.get("/orders/:orderId", getOrderDetails);
 
 // =================== ORDER STATUS UPDATES ===================
 router.patch("/:orderId/status", updateDeliveryStatus);
+router.post("/location", updateDeliveryLocation);
+router.post("/calculate-distance", calculateDeliveryDistance);
 
 export default router;

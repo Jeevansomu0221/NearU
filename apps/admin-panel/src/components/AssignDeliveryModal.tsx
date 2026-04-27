@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
-import api from "../api/client";
+import { assignDeliveryPartnerToOrder, getDeliveryPartners, type DeliveryPartnerRecord } from "../api/admin.api";
 
 export default function AssignDeliveryModal({ orderId, onClose }: any) {
-  const [partners, setPartners] = useState<any[]>([]);
+  const [partners, setPartners] = useState<DeliveryPartnerRecord[]>([]);
   const [selected, setSelected] = useState("");
 
   useEffect(() => {
-    api.get("/admin/delivery-partners").then(res => setPartners(res.data));
+    getDeliveryPartners().then((result) => {
+      setPartners(result.filter((partner) => partner.status === "ACTIVE"));
+    });
   }, []);
 
   const assign = async () => {
-    await api.post("/admin/assign-delivery", {
-      orderId,
-      deliveryPartnerId: selected
-    });
+    if (!selected) return;
+    await assignDeliveryPartnerToOrder(orderId, selected);
     onClose();
     window.location.reload();
   };
@@ -22,16 +22,16 @@ export default function AssignDeliveryModal({ orderId, onClose }: any) {
     <div className="modal">
       <h3>Assign Delivery</h3>
 
-      <select onChange={e => setSelected(e.target.value)}>
-        <option>Select Delivery Partner</option>
-        {partners.map(p => (
-          <option key={p._id} value={p._id}>
-            {p.phone}
+      <select onChange={(e) => setSelected(e.target.value)} value={selected}>
+        <option value="">Select Delivery Partner</option>
+        {partners.map((partner) => (
+          <option key={partner._id} value={partner._id}>
+            {(partner.userId?.name || partner.name || "Rider")} ({partner.userId?.phone || partner.phone || "No phone"})
           </option>
         ))}
       </select>
 
-      <button onClick={assign}>Assign</button>
+      <button onClick={assign} disabled={!selected}>Assign</button>
       <button onClick={onClose}>Cancel</button>
     </div>
   );

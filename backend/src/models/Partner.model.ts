@@ -83,6 +83,17 @@ const PartnerSchema = new Schema(
         }
       }
     },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point"
+      },
+      coordinates: {
+        type: [Number],
+        default: [0, 0]
+      }
+    },
     
     // UPDATE: Add sweets and ice creams to categories
     category: {
@@ -191,6 +202,7 @@ PartnerSchema.index(
 
 // Index for faster status queries
 PartnerSchema.index({ status: 1 });
+PartnerSchema.index({ location: "2dsphere" });
 // Index for location-based queries
 PartnerSchema.index({ 'address.pincode': 1 });
 PartnerSchema.index({ 'address.area': 1 });

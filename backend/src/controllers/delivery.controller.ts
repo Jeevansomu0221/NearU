@@ -4,6 +4,7 @@ import Order from "../models/Order.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import User from "../models/User.model";
 import { successResponse, errorResponse } from "../utils/response";
+import { config } from "../config/env";
 
 interface AuthRequest extends Request {
   user?: {
@@ -32,6 +33,8 @@ const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+
+const safeTrimmedString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
 const isDeliveryProfileComplete = (profile: {
   name?: string;
@@ -63,34 +66,34 @@ const isDeliveryProfileComplete = (profile: {
   };
 }) => {
   const hasRealName =
-    !!profile.name &&
-    !/^Delivery\s\d{4}$/.test(profile.name.trim()) &&
-    profile.name.trim().length >= 3;
+    !!safeTrimmedString(profile.name) &&
+    !/^Delivery\s\d{4}$/.test(safeTrimmedString(profile.name)) &&
+    safeTrimmedString(profile.name).length >= 3;
 
   const hasMandatoryDocuments = Boolean(
-    (profile.documents?.aadhaarFrontUrl?.trim() || profile.documents?.aadhaarUrl?.trim()) &&
-      profile.documents?.aadhaarBackUrl?.trim() &&
-      profile.documents?.panFrontUrl?.trim() &&
-      (profile.documents?.drivingLicenseFrontUrl?.trim() || profile.documents?.drivingLicenseUrl?.trim()) &&
-      profile.documents?.drivingLicenseBackUrl?.trim() &&
-      (profile.documents?.vehicleRcFrontUrl?.trim() || profile.documents?.vehicleRcUrl?.trim()) &&
-      profile.documents?.vehicleRcBackUrl?.trim() &&
-      profile.documents?.insuranceUrl?.trim() &&
-      profile.documents?.bankAccountHolderName?.trim() &&
-      profile.documents?.bankAccountNumber?.trim() &&
-      profile.documents?.bankIfsc?.trim() &&
-      profile.documents?.bankDocumentType?.trim() &&
-      (profile.documents?.cancelledChequeUrl?.trim() ||
-        profile.documents?.bankPassbookUrl?.trim() ||
-        profile.documents?.bankStatementUrl?.trim())
+    (safeTrimmedString(profile.documents?.aadhaarFrontUrl) || safeTrimmedString(profile.documents?.aadhaarUrl)) &&
+      safeTrimmedString(profile.documents?.aadhaarBackUrl) &&
+      safeTrimmedString(profile.documents?.panFrontUrl) &&
+      (safeTrimmedString(profile.documents?.drivingLicenseFrontUrl) || safeTrimmedString(profile.documents?.drivingLicenseUrl)) &&
+      safeTrimmedString(profile.documents?.drivingLicenseBackUrl) &&
+      (safeTrimmedString(profile.documents?.vehicleRcFrontUrl) || safeTrimmedString(profile.documents?.vehicleRcUrl)) &&
+      safeTrimmedString(profile.documents?.vehicleRcBackUrl) &&
+      safeTrimmedString(profile.documents?.insuranceUrl) &&
+      safeTrimmedString(profile.documents?.bankAccountHolderName) &&
+      safeTrimmedString(profile.documents?.bankAccountNumber) &&
+      safeTrimmedString(profile.documents?.bankIfsc) &&
+      safeTrimmedString(profile.documents?.bankDocumentType) &&
+      (safeTrimmedString(profile.documents?.cancelledChequeUrl) ||
+        safeTrimmedString(profile.documents?.bankPassbookUrl) ||
+        safeTrimmedString(profile.documents?.bankStatementUrl))
   );
 
   return Boolean(
     hasRealName &&
-      profile.address?.trim() &&
-      profile.vehicleType &&
-      profile.vehicleNumber?.trim() &&
-      profile.licenseNumber?.trim() &&
+      safeTrimmedString(profile.address) &&
+      safeTrimmedString(profile.vehicleType) &&
+      safeTrimmedString(profile.vehicleNumber) &&
+      safeTrimmedString(profile.licenseNumber) &&
       hasMandatoryDocuments
   );
 };
@@ -506,6 +509,80 @@ export const updateDeliveryPartnerStatusByAdmin = async (req: AuthRequest, res: 
   } catch (error) {
     console.error("updateDeliveryPartnerStatusByAdmin error:", error);
     return errorResponse(res, "Failed to update delivery partner status");
+  }
+};
+
+export const updateDeliveryLocation = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = ensureDeliveryUser(req, res);
+    if (!user) return;
+
+    const { latitude, longitude } = req.body;
+    if (typeof latitude !== "number" || typeof longitude !== "number") {
+      return errorResponse(res, "latitude and longitude are required", 400);
+    }
+
+    const deliveryPartner = await DeliveryPartner.findOneAndUpdate(
+      { userId: user.id },
+      {
+        currentLocation: {
+          type: "Point",
+          coordinates: [longitude, latitude]
+        },
+        isAvailable: true
+      },
+      { new: true }
+    );
+
+    if (!deliveryPartner) {
+      return errorResponse(res, "Delivery profile not found", 404);
+    }
+
+    return successResponse(res, {
+      currentLocation: deliveryPartner.currentLocation,
+      freshnessMinutes: config.deliveryLocationFreshnessMinutes
+    }, "Location updated successfully");
+  } catch (error) {
+    console.error("updateDeliveryLocation error:", error);
+    return errorResponse(res, "Failed to update delivery location");
+  }
+};
+
+export const calculateDeliveryDistance = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = ensureDeliveryUser(req, res);
+    if (!user) return;
+
+    const { origin, destination } = req.body || {};
+    if (
+      typeof origin?.latitude !== "number" ||
+      typeof origin?.longitude !== "number" ||
+      typeof destination?.latitude !== "number" ||
+      typeof destination?.longitude !== "number"
+    ) {
+      return errorResponse(res, "origin and destination coordinates are required", 400);
+    }
+
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+    const dLat = toRadians(destination.latitude - origin.latitude);
+    const dLng = toRadians(destination.longitude - origin.longitude);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRadians(origin.latitude)) *
+        Math.cos(toRadians(destination.latitude)) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const distance = earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const duration = Math.max(5, Math.round((distance / 25) * 60));
+
+    return successResponse(res, {
+      distance: Number(distance.toFixed(2)),
+      duration
+    }, "Distance calculated successfully");
+  } catch (error) {
+    console.error("calculateDeliveryDistance error:", error);
+    return errorResponse(res, "Failed to calculate distance");
   }
 };
 

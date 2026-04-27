@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
+import { config } from "./env";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -34,13 +35,13 @@ const startLocalMongoForDev = async () => {
 
 const connectDB = async (): Promise<void> => {
   try {
-    const mongoURI = process.env.MONGODB_URI || process.env.MONGO_URI || "mongodb://127.0.0.1:27017/nearu";
+    const mongoURI = config.mongodbURI;
     
     let conn;
     try {
       conn = await mongoose.connect(mongoURI, { serverSelectionTimeoutMS: 5000 });
     } catch (error: any) {
-      if (isLocalMongoUri(mongoURI) && error?.message?.includes("ECONNREFUSED")) {
+      if (!config.isProduction && isLocalMongoUri(mongoURI) && error?.message?.includes("ECONNREFUSED")) {
         await startLocalMongoForDev();
         conn = await mongoose.connect(mongoURI, { serverSelectionTimeoutMS: 10000 });
       } else {

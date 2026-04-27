@@ -1,23 +1,41 @@
-import jwt from "jsonwebtoken";
+import jwt, { SignOptions } from "jsonwebtoken";
+import { config } from "../config/env";
 
-const JWT_SECRET = process.env.JWT_SECRET || "nearu-secret-key-change-in-production";
-const JWT_EXPIRY = "7d";
-
-export interface JwtPayload {
-  userId: string;
-  role: string;
+export interface AccessTokenPayload {
+  id: string;
   phone: string;
+  role: string;
+  name: string;
+  partnerId?: string | null;
+  deliveryPartnerId?: string | null;
+  sessionVersion: number;
+  type: "access";
 }
 
-export const generateToken = (payload: JwtPayload): string => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+export interface RefreshTokenPayload {
+  id: string;
+  sessionVersion: number;
+  type: "refresh";
+}
+
+export const generateAccessToken = (payload: Omit<AccessTokenPayload, "type">): string =>
+  jwt.sign({ ...payload, type: "access" }, config.jwtSecret, { expiresIn: config.jwtExpiry } as SignOptions);
+
+export const generateRefreshToken = (payload: Omit<RefreshTokenPayload, "type">): string =>
+  jwt.sign({ ...payload, type: "refresh" }, config.jwtSecret, { expiresIn: config.refreshJwtExpiry } as SignOptions);
+
+export const verifyAccessToken = (token: string): AccessTokenPayload => {
+  const decoded = jwt.verify(token, config.jwtSecret) as AccessTokenPayload;
+  if (decoded.type !== "access") {
+    throw new Error("Invalid access token");
+  }
+  return decoded;
 };
 
-export const verifyToken = (token: string): JwtPayload => {
-  try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
-  } catch (error) {
-    console.error("JWT verification error:", error);
-    throw new Error("Invalid token");
+export const verifyRefreshToken = (token: string): RefreshTokenPayload => {
+  const decoded = jwt.verify(token, config.jwtSecret) as RefreshTokenPayload;
+  if (decoded.type !== "refresh") {
+    throw new Error("Invalid refresh token");
   }
+  return decoded;
 };

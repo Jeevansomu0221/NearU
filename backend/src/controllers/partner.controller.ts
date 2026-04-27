@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 import Partner from "../models/Partner.model";
 import User from "../models/User.model";
+import { parseGoogleMapsLink } from "../utils/mapsParser";
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
@@ -111,6 +112,14 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
+    const parsedCoordinates = parseGoogleMapsLink(googleMapsLink.trim());
+    if (!parsedCoordinates) {
+      return res.status(400).json({
+        success: false,
+        message: "Google Maps link must contain usable coordinates"
+      });
+    }
+
     const normalizedDocs = {
       fssaiNumber: firstString(documents?.fssaiNumber, documents?.fssai_number),
       fssaiUrl: firstString(documents?.fssaiUrl, documents?.fssai_url),
@@ -184,6 +193,10 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         roadStreet: roadStreet.trim(),
         nearbyPlaces: Array.isArray(nearbyPlaces) ? nearbyPlaces.map(p => p.trim()) : [],
         googleMapsLink: googleMapsLink.trim()
+      },
+      location: {
+        type: "Point",
+        coordinates: [parsedCoordinates.longitude, parsedCoordinates.latitude]
       },
       category: category || "other",
       documents: {
@@ -820,6 +833,16 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
         ...partner.address,
         ...address
       };
+
+      const currentAddress = (partner.address || {}) as any;
+      const mapsLink = updates.address.googleMapsLink || currentAddress.googleMapsLink;
+      const parsedCoordinates = parseGoogleMapsLink(mapsLink);
+      if (parsedCoordinates) {
+        updates.location = {
+          type: "Point",
+          coordinates: [parsedCoordinates.longitude, parsedCoordinates.latitude]
+        };
+      }
     }
 
     Object.assign(partner, updates);

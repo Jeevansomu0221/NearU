@@ -82,6 +82,8 @@ export interface OrderRecord {
     name: string;
     phone: string;
   };
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   items?: Array<{
     name: string;
     quantity: number;
@@ -199,5 +201,12 @@ export const getOrder = async (orderId: string) => {
 
 export const updateOrderStatus = async (orderId: string, status: string) => {
   const response = await api.put<ApiEnvelope<OrderRecord>>(`/admin/orders/${orderId}/status`, { status });
+  return response.data;
+};
+
+export const assignDeliveryPartnerToOrder = async (orderId: string, deliveryPartnerId: string) => {
+  const response = await api.post<ApiEnvelope<OrderRecord>>(`/orders/admin/orders/${orderId}/assign-delivery`, {
+    deliveryPartnerId
+  });
   return response.data;
 };

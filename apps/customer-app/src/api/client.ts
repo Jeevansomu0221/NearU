@@ -1,9 +1,7 @@
-// apps/customer-app/src/api/client.ts
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeModules, Platform } from "react-native";
 
-// Define API response structure
 export interface ApiResponse<T = any> {
   success: boolean;
   message?: string;
@@ -12,6 +10,7 @@ export interface ApiResponse<T = any> {
 }
 
 const DEV_LAN_HOST = "10.3.8.130";
+const ANDROID_EMULATOR_HOST = "10.0.2.2";
 const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
 
 const isPrivateIp = (hostname: string) => {
@@ -22,12 +21,19 @@ const isPrivateIp = (hostname: string) => {
   );
 };
 
-const resolveApiBaseUrl = () => {
+const addUnique = (items: string[], value: string) => {
+  if (!items.includes(value)) {
+    items.push(value);
+  }
+};
+
+const resolveApiBaseUrls = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (envUrl) {
-    return envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`;
+    return [envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`];
   }
 
+  const urls: string[] = [];
   const scriptURL = NativeModules.SourceCode?.scriptURL;
   if (scriptURL) {
     try {
@@ -35,7 +41,7 @@ const resolveApiBaseUrl = () => {
       const hostname = bundleUrl.hostname;
 
       if (isPrivateIp(hostname) && !BLOCKED_DEV_HOSTS.has(hostname)) {
-        return `http://${hostname}:5000/api`;
+        addUnique(urls, `http://${hostname}:5000/api`);
       }
     } catch (error) {
       console.warn("Failed to parse bundle URL for API host detection:", error);
@@ -43,26 +49,29 @@ const resolveApiBaseUrl = () => {
   }
 
   if (Platform.OS === "android") {
-    return `http://${DEV_LAN_HOST}:5000/api`;
+    addUnique(urls, `http://${ANDROID_EMULATOR_HOST}:5000/api`);
   }
 
-  return `http://${DEV_LAN_HOST}:5000/api`;
+  addUnique(urls, `http://${DEV_LAN_HOST}:5000/api`);
+  addUnique(urls, "http://127.0.0.1:5000/api");
+
+  return urls;
 };
 
-const API_BASE_URL = resolveApiBaseUrl();
+const API_BASE_URLS = resolveApiBaseUrls();
+const API_BASE_URL = API_BASE_URLS[0];
 console.log("Customer API base URL:", API_BASE_URL);
+console.log("Customer API fallback URLs:", API_BASE_URLS);
 
-// Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
   headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    "Content-Type": "application/json",
+    Accept: "application/json",
   }
 });
 
-// REQUEST INTERCEPTOR
 api.interceptors.request.use(
   async (config: any) => {
     try {
@@ -78,34 +87,39 @@ api.interceptors.request.use(
   (error: any) => Promise.reject(error)
 );
 
-// RESPONSE INTERCEPTOR
 api.interceptors.response.use(
-  (response: any) => {
-    // Return the full response
-    return response;
-  },
-  (error: any) => {
+  (response: any) => response,
+  async (error: any) => {
+    const requestConfig = error.config;
+    const currentRetryIndex = requestConfig?._baseUrlRetryIndex || 0;
+    const nextBaseUrl = requestConfig ? API_BASE_URLS[currentRetryIndex + 1] : undefined;
+    const isNetworkError = error.message === "Network Error" || (error.request && !error.response);
+
     console.error("API Error:", {
       message: error.message,
       status: error.response?.status,
       url: error.config?.url,
       data: error.response?.data
     });
-    
+
+    if (isNetworkError && requestConfig && nextBaseUrl) {
+      console.log(`Trying fallback API base URL: ${nextBaseUrl}`);
+      requestConfig._baseUrlRetryIndex = currentRetryIndex + 1;
+      requestConfig.baseURL = nextBaseUrl;
+      api.defaults.baseURL = nextBaseUrl;
+      return api.request(requestConfig);
+    }
+
     if (error.message === "Network Error") {
       return Promise.reject(new Error("Cannot connect to server. Please check your connection."));
     }
-    
+
     return Promise.reject(error.response?.data || error);
   }
 );
 
-// Helper function to extract data from response
-const extractData = <T>(response: any): ApiResponse<T> => {
-  return response.data;
-};
+const extractData = <T>(response: any): ApiResponse<T> => response.data;
 
-// Create typed API functions
 export const apiGet = async <T = any>(url: string, config?: any): Promise<ApiResponse<T>> => {
   const response = await api.get(url, config);
   return extractData<T>(response);
@@ -131,7 +145,6 @@ export const apiPatch = async <T = any>(url: string, data?: any, config?: any): 
   return extractData<T>(response);
 };
 
-// Export default for backward compatibility
 const typedApi = {
   get: apiGet,
   post: apiPost,
@@ -140,4 +153,5 @@ const typedApi = {
   patch: apiPatch,
 };
 
+export { API_BASE_URL, API_BASE_URLS };
 export default typedApi;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,26 +9,151 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Switch
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 import {
   getUserProfile,
   updateUserProfile,
   updateUserAddress,
   type UserProfile
 } from "../api/user.api";
-import { getMyOrders } from "../api/order.api";
+import { getMyOrders, type Order } from "../api/order.api";
 
-interface Order {
-  _id: string;
-  status: string;
-  grandTotal: number;
-  createdAt: string;
-  partnerId: {
-    restaurantName: string;
-  };
-}
+const PROFILE_PREFS_KEY = "customer_profile_preferences";
+
+type PreferencesState = {
+  pushNotifications: boolean;
+  smsUpdates: boolean;
+  emailUpdates: boolean;
+  darkMode: boolean;
+  locationPermission: boolean;
+};
+
+const defaultPreferences: PreferencesState = {
+  pushNotifications: true,
+  smsUpdates: true,
+  emailUpdates: false,
+  darkMode: false,
+  locationPermission: true
+};
+
+const legalItems = [
+  { icon: "file-document-outline", title: "Terms & Conditions", detail: "How NearU orders, payments, and delivery work." },
+  { icon: "shield-lock-outline", title: "Privacy Policy", detail: "How profile, order, and location data are handled." },
+  { icon: "information-outline", title: "App Version", detail: "NearU Customer 1.0.0" }
+];
+
+const supportItems = [
+  { icon: "headset", title: "Customer Support", detail: "Live chat and callback support from 8 AM to 11 PM." },
+  { icon: "help-circle-outline", title: "FAQs", detail: "Delivery timings, cancellations, refunds, and account help." },
+  { icon: "alert-circle-outline", title: "Report an Issue", detail: "Raise an issue for payment, order, or delivery problems." }
+];
+
+const settingsItems = [
+  { icon: "translate", title: "Language", detail: "English" },
+  { icon: "theme-light-dark", title: "Theme", detail: "System default" }
+];
+
+const paymentMethods = [
+  { icon: "upi", title: "UPI ID", detail: "Add your preferred UPI for faster checkout", status: "Add" },
+  { icon: "credit-card-outline", title: "Saved Cards", detail: "No cards saved yet", status: "Empty" },
+  { icon: "wallet-outline", title: "Wallet", detail: "NearU wallet support can be enabled later", status: "Preview" },
+  { icon: "cash-100", title: "Cash on Delivery", detail: "Available where partners allow COD", status: "Enabled" }
+];
+
+const couponItems = [
+  { icon: "ticket-percent-outline", title: "WELCOME50", detail: "Flat 50 off on your next first order above Rs 199" },
+  { icon: "sale", title: "FREESHIP", detail: "Free delivery on select stores during lunch hours" }
+];
+
+const formatCurrency = (value?: number) => `Rs ${Number(value || 0).toFixed(0)}`;
+
+const formatDate = (dateString?: string) => {
+  if (!dateString) return "N/A";
+
+  try {
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    });
+  } catch {
+    return "Invalid date";
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case "PENDING":
+      return "Payment Pending";
+    case "CONFIRMED":
+      return "Order Placed";
+    case "ACCEPTED":
+      return "Restaurant Accepted";
+    case "PREPARING":
+      return "Preparing Food";
+    case "READY":
+      return "Ready for Pickup";
+    case "ASSIGNED":
+      return "Rider Assigned";
+    case "PICKED_UP":
+      return "On the Way";
+    case "DELIVERED":
+      return "Delivered";
+    case "CANCELLED":
+      return "Cancelled";
+    case "REJECTED":
+      return "Rejected";
+    default:
+      return status;
+  }
+};
+
+const getStatusTone = (status: string) => {
+  switch (status) {
+    case "DELIVERED":
+      return { bg: "#DDF8E5", fg: "#216E39" };
+    case "CONFIRMED":
+    case "ACCEPTED":
+      return { bg: "#DCEBFF", fg: "#175CD3" };
+    case "PREPARING":
+    case "PENDING":
+      return { bg: "#FFF0D5", fg: "#B54708" };
+    case "READY":
+    case "ASSIGNED":
+    case "PICKED_UP":
+      return { bg: "#ECE9FE", fg: "#5925DC" };
+    case "CANCELLED":
+    case "REJECTED":
+      return { bg: "#FEE4E2", fg: "#B42318" };
+    default:
+      return { bg: "#F2F4F7", fg: "#475467" };
+  }
+};
+
+const buildAddressLines = (profile: UserProfile | null) => {
+  const address = profile?.address;
+  if (!address) return [];
+
+  return [
+    address.recipientName || profile?.name,
+    [address.houseFlatDoorNo, address.buildingApartmentName].filter(Boolean).join(", ") || address.street,
+    address.streetRoadName,
+    address.areaLocality || address.area,
+    address.landmark ? `Near ${address.landmark}` : "",
+    [
+      address.cityTownVillage || address.city,
+      address.district ? `${address.district} District` : "",
+      address.state
+    ]
+      .filter(Boolean)
+      .join(", ") + (address.pincode ? ` - ${address.pincode}` : ""),
+    address.country || "India"
+  ].filter(Boolean) as string[];
+};
 
 export default function ProfileScreen({ navigation, route }: any) {
   const forceComplete = Boolean(route?.params?.forceComplete);
@@ -38,6 +163,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [editing, setEditing] = useState(forceComplete);
   const [saving, setSaving] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<PreferencesState>(defaultPreferences);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -75,7 +201,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const loadProfile = async () => {
     try {
       setLoading(true);
-      const profileResponse = await getUserProfile();
+      const [profileResponse, ordersResponse] = await Promise.all([getUserProfile(), getMyOrders()]);
 
       if (!profileResponse.success || !profileResponse.data) {
         Alert.alert("Error", profileResponse.message || "Failed to load profile");
@@ -83,15 +209,12 @@ export default function ProfileScreen({ navigation, route }: any) {
       }
 
       hydrateForm(profileResponse.data);
-
-      if (!forceComplete) {
-        const ordersResponse = await getMyOrders();
-        if (ordersResponse.success && ordersResponse.data) {
-          setOrders(ordersResponse.data.slice(0, 5));
-        }
+      if (ordersResponse.success && ordersResponse.data) {
+        setOrders(ordersResponse.data);
+      } else {
+        setOrders([]);
       }
     } catch (error: any) {
-      console.error("Error loading profile:", error);
       Alert.alert("Error", error.message || "Failed to load profile");
     } finally {
       setLoading(false);
@@ -101,6 +224,35 @@ export default function ProfileScreen({ navigation, route }: any) {
   useEffect(() => {
     loadProfile();
   }, []);
+
+  useEffect(() => {
+    const loadPreferences = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(PROFILE_PREFS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        setPreferences({ ...defaultPreferences, ...parsed });
+      } catch (error) {
+        console.warn("Failed to load profile preferences", error);
+      }
+    };
+
+    loadPreferences();
+  }, []);
+
+  const persistPreferences = async (nextState: PreferencesState) => {
+    setPreferences(nextState);
+    try {
+      await AsyncStorage.setItem(PROFILE_PREFS_KEY, JSON.stringify(nextState));
+    } catch (error) {
+      console.warn("Failed to save profile preferences", error);
+    }
+  };
+
+  const handleTogglePreference = (key: keyof PreferencesState) => {
+    const nextState = { ...preferences, [key]: !preferences[key] };
+    persistPreferences(nextState);
+  };
 
   const resetForm = () => {
     if (profile) {
@@ -118,7 +270,16 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
-      if (!recipientName.trim() || !houseFlatDoorNo.trim() || !streetRoadName.trim() || !city.trim() || !state.trim() || !pincode.trim() || !area.trim() || !country.trim()) {
+      if (
+        !recipientName.trim() ||
+        !houseFlatDoorNo.trim() ||
+        !streetRoadName.trim() ||
+        !city.trim() ||
+        !state.trim() ||
+        !pincode.trim() ||
+        !area.trim() ||
+        !country.trim()
+      ) {
         Alert.alert("Error", "Please complete your full delivery address");
         return;
       }
@@ -143,7 +304,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           buildingApartmentName: buildingApartmentName.trim() || undefined,
           streetRoadName: streetRoadName.trim(),
           areaLocality: area.trim(),
-          street: legacyStreet,
+          street: legacyStreet || street.trim(),
           city: city.trim(),
           cityTownVillage: city.trim(),
           state: state.trim(),
@@ -156,17 +317,11 @@ export default function ProfileScreen({ navigation, route }: any) {
       ]);
 
       if (!profileResult.success || !addressResult.success) {
-        Alert.alert(
-          "Error",
-          profileResult.message || addressResult.message || "Failed to update profile"
-        );
+        Alert.alert("Error", profileResult.message || addressResult.message || "Failed to update profile");
         return;
       }
 
-      Alert.alert(
-        "Success",
-        forceComplete ? "Registration completed successfully" : "Profile updated successfully"
-      );
+      Alert.alert("Success", forceComplete ? "Registration completed successfully" : "Profile updated successfully");
 
       await loadProfile();
       setEditing(false);
@@ -178,7 +333,6 @@ export default function ProfileScreen({ navigation, route }: any) {
         });
       }
     } catch (error: any) {
-      console.error("Profile update error:", error);
       Alert.alert("Error", error.message || "Failed to update profile");
     } finally {
       setSaving(false);
@@ -203,49 +357,46 @@ export default function ProfileScreen({ navigation, route }: any) {
     ]);
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric"
+  const handlePlaceholderAction = (title: string, message: string) => {
+    Alert.alert(title, message);
+  };
+
+  const addressLines = buildAddressLines(profile);
+  const memberSince = profile ? formatDate(profile.createdAt) : "N/A";
+  const completedSections = [
+    Boolean(profile?.name && profile.name.trim().length >= 3),
+    Boolean(addressLines.length > 0),
+    Boolean(profile?.email)
+  ].filter(Boolean).length;
+  const completionPercent = Math.round((completedSections / 3) * 100);
+
+  const ongoingOrders = orders.filter((order) => !["DELIVERED", "CANCELLED", "REJECTED"].includes(order.status)).slice(0, 3);
+  const recentOrders = orders.slice(0, 5);
+
+  const favoriteRestaurants = useMemo(() => {
+    const deduped = new Map<string, string>();
+    orders.forEach((order) => {
+      const partnerName =
+        (order.partnerId as any)?.restaurantName ||
+        (order.partnerId as any)?.shopName ||
+        "Local Partner";
+      deduped.set(partnerName, partnerName);
+    });
+    return Array.from(deduped.values()).slice(0, 4);
+  }, [orders]);
+
+  const favoriteDishes = useMemo(() => {
+    const counts = new Map<string, number>();
+    orders.forEach((order) => {
+      order.items?.forEach((item) => {
+        counts.set(item.name, (counts.get(item.name) || 0) + item.quantity);
       });
-    } catch {
-      return "Invalid date";
-    }
-  };
+    });
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "DELIVERED":
-        return "#4CAF50";
-      case "CONFIRMED":
-        return "#2196F3";
-      case "PREPARING":
-        return "#FF9800";
-      case "READY":
-        return "#9C27B0";
-      case "CANCELLED":
-        return "#F44336";
-      default:
-        return "#666";
-    }
-  };
-
-  const savedAddress = profile?.address;
-  const hasSavedAddress = Boolean(
-    savedAddress &&
-      (
-        savedAddress.houseFlatDoorNo ||
-        savedAddress.street ||
-        savedAddress.streetRoadName ||
-        savedAddress.areaLocality ||
-        savedAddress.area ||
-        savedAddress.cityTownVillage ||
-        savedAddress.city ||
-        savedAddress.pincode
-      )
-  );
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+  }, [orders]);
 
   if (loading) {
     return (
@@ -259,349 +410,599 @@ export default function ProfileScreen({ navigation, route }: any) {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 12}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
     >
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.content, forceComplete && styles.contentWithFooter]}
-        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-
-        <View style={[styles.header, forceComplete && styles.headerCompact]}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>{profile?.name?.charAt(0).toUpperCase() || "U"}</Text>
-          </View>
-          <View style={styles.headerInfo}>
-            <Text style={styles.userName}>{profile?.name || "User"}</Text>
-            <Text style={styles.userMeta}>{profile?.phone}</Text>
-            {profile?.email ? <Text style={styles.userMeta}>{profile.email}</Text> : null}
-          </View>
-        </View>
-
-        <View style={styles.editContainer}>
-          {editing ? (
-            <View style={styles.editButtons}>
-              {!forceComplete && (
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.secondaryButton]}
-                  onPress={resetForm}
-                  disabled={saving}
-                >
-                  <Text style={styles.secondaryButtonText}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-              {!forceComplete && (
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.primaryButton]}
-                  onPress={handleSaveProfile}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.primaryButtonText}>Save Changes</Text>
-                  )}
-                </TouchableOpacity>
-              )}
+        <View style={[styles.heroCard, forceComplete && styles.heroCardCompact]}>
+          <View style={styles.heroRow}>
+            <View style={styles.avatarWrap}>
+              <Text style={styles.avatarText}>{profile?.name?.charAt(0).toUpperCase() || "U"}</Text>
             </View>
-          ) : (
-            <TouchableOpacity style={[styles.actionButton, styles.primaryButton]} onPress={() => setEditing(true)}>
-              <Text style={styles.primaryButtonText}>Edit Profile</Text>
+            <View style={styles.heroMeta}>
+              <Text style={styles.heroName}>{profile?.name || "NearU Customer"}</Text>
+              <Text style={styles.heroSubtext}>{profile?.phone}</Text>
+              <Text style={styles.heroSubtext}>{profile?.email || "Add your email for invoices and offers"}</Text>
+            </View>
+          </View>
+
+          <View style={styles.heroInfoRow}>
+            <View style={styles.heroPill}>
+              <MaterialCommunityIcons name="calendar-check-outline" size={16} color="#7A4B21" />
+              <Text style={styles.heroPillText}>Member since {memberSince}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.photoButton}
+              onPress={() =>
+                handlePlaceholderAction("Profile Photo", "Profile photo upload can be connected next with Cloudinary.")
+              }
+            >
+              <MaterialCommunityIcons name="camera-outline" size={16} color="#FF6B35" />
+              <Text style={styles.photoButtonText}>Profile photo</Text>
             </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={[styles.section, forceComplete && styles.registrationSection]}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Personal Information</Text>
           </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Full Name</Text>
-          {editing ? (
-            <TextInput
-              style={[styles.input, focusedField === "name" && styles.inputFocused]}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter your full name"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("name")}
-              onBlur={() => setFocusedField(null)}
-            />
-          ) : (
-            <Text style={styles.value}>{profile?.name || "Not set"}</Text>
-          )}
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          {editing ? (
-            <TextInput
-              style={[styles.input, focusedField === "email" && styles.inputFocused]}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
-              placeholderTextColor="#98A2B3"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("email")}
-              onBlur={() => setFocusedField(null)}
-            />
-          ) : (
-            <Text style={styles.value}>{profile?.email || "Not set"}</Text>
-          )}
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Phone</Text>
-          <Text style={styles.value}>{profile?.phone}</Text>
-        </View>
-
-        <View style={[styles.field, styles.fieldLast]}>
-          <Text style={styles.label}>Member Since</Text>
-          <Text style={styles.value}>{profile ? formatDate(profile.createdAt) : "N/A"}</Text>
-        </View>
-        </View>
-
-        <View style={[styles.section, forceComplete && styles.registrationSection]}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Delivery Address</Text>
+          <View style={styles.progressRow}>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${completionPercent}%` }]} />
+            </View>
+            <Text style={styles.progressText}>{completionPercent}% complete</Text>
           </View>
+
+          {!forceComplete && (
+            <View style={styles.quickStats}>
+              <View style={styles.quickStatCard}>
+                <Text style={styles.quickStatValue}>{orders.length}</Text>
+                <Text style={styles.quickStatLabel}>Total Orders</Text>
+              </View>
+              <View style={styles.quickStatCard}>
+                <Text style={styles.quickStatValue}>{ongoingOrders.length}</Text>
+                <Text style={styles.quickStatLabel}>Live Orders</Text>
+              </View>
+              <View style={styles.quickStatCard}>
+                <Text style={styles.quickStatValue}>{favoriteRestaurants.length}</Text>
+                <Text style={styles.quickStatLabel}>Favorites</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.shortcutRow}>
+          <TouchableOpacity style={styles.shortcutCard} onPress={() => navigation.navigate("Orders")}>
+            <MaterialCommunityIcons name="truck-fast-outline" size={20} color="#FF6B35" />
+            <Text style={styles.shortcutTitle}>My Orders</Text>
+            <Text style={styles.shortcutDetail}>{ongoingOrders.length > 0 ? `${ongoingOrders.length} ongoing` : "View history"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.shortcutCard}
+            onPress={() => setEditing(true)}
+          >
+            <MaterialCommunityIcons name="map-marker-outline" size={20} color="#FF6B35" />
+            <Text style={styles.shortcutTitle}>Addresses</Text>
+            <Text style={styles.shortcutDetail}>{addressLines.length > 0 ? "Primary saved" : "Add now"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.shortcutCard}
+            onPress={() => handlePlaceholderAction("Payments", "Saved cards, UPI, and wallet UI are ready to connect to payment storage next.")}
+          >
+            <MaterialCommunityIcons name="credit-card-outline" size={20} color="#FF6B35" />
+            <Text style={styles.shortcutTitle}>Payments</Text>
+            <Text style={styles.shortcutDetail}>Manage methods</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Basic Profile Info</Text>
+            {editing && !forceComplete ? (
+              <View style={styles.inlineActions}>
+                <TouchableOpacity style={[styles.smallAction, styles.mutedAction]} onPress={resetForm} disabled={saving}>
+                  <Text style={styles.mutedActionText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.smallAction, styles.primaryAction]} onPress={handleSaveProfile} disabled={saving}>
+                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryActionText}>Save</Text>}
+                </TouchableOpacity>
+              </View>
+            ) : !editing ? (
+              <TouchableOpacity style={[styles.smallAction, styles.primaryAction]} onPress={() => setEditing(true)}>
+                <Text style={styles.primaryActionText}>Edit Profile</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <Text style={styles.sectionHint}>Photo, full name, phone number, email address, and delivery identity.</Text>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Full Name</Text>
+            {editing ? (
+              <TextInput
+                style={[styles.input, focusedField === "name" && styles.inputFocused]}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter your full name"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("name")}
+                onBlur={() => setFocusedField(null)}
+              />
+            ) : (
+              <Text style={styles.value}>{profile?.name || "Not set"}</Text>
+            )}
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Phone Number</Text>
+            <Text style={styles.value}>{profile?.phone || "Not set"}</Text>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Email Address</Text>
+            {editing ? (
+              <TextInput
+                style={[styles.input, focusedField === "email" && styles.inputFocused]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email address"
+                placeholderTextColor="#98A2B3"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => setFocusedField(null)}
+              />
+            ) : (
+              <Text style={styles.value}>{profile?.email || "Not set"}</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Saved Addresses</Text>
+            {!editing ? (
+              <TouchableOpacity style={styles.inlineLink} onPress={() => setEditing(true)}>
+                <Text style={styles.inlineLinkText}>{addressLines.length > 0 ? "Edit" : "Add New"}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <Text style={styles.sectionHint}>Home, work, and other labels can be layered in next. One primary delivery address is live now.</Text>
 
           {editing ? (
             <>
-            <TextInput
-              style={[styles.input, focusedField === "recipientName" && styles.inputFocused]}
-              value={recipientName}
-              onChangeText={setRecipientName}
-              placeholder="Recipient name"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("recipientName")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "houseFlatDoorNo" && styles.inputFocused]}
-              value={houseFlatDoorNo}
-              onChangeText={setHouseFlatDoorNo}
-              placeholder="House / flat / door number"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("houseFlatDoorNo")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "buildingApartmentName" && styles.inputFocused]}
-              value={buildingApartmentName}
-              onChangeText={setBuildingApartmentName}
-              placeholder="Building / apartment name (optional)"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("buildingApartmentName")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, styles.largeInput, focusedField === "streetRoadName" && styles.inputFocused]}
-              value={streetRoadName}
-              onChangeText={setStreetRoadName}
-              placeholder="Street / road name"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("streetRoadName")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "area" && styles.inputFocused]}
-              value={area}
-              onChangeText={setArea}
-              placeholder="Area / locality"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("area")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "landmark" && styles.inputFocused]}
-              value={landmark}
-              onChangeText={setLandmark}
-              placeholder="Landmark (optional, e.g. Near XYZ School)"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("landmark")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <View style={styles.row}>
               <TextInput
-                style={[styles.input, styles.half, focusedField === "city" && styles.inputFocused]}
-                value={city}
-                onChangeText={setCity}
-                placeholder="City / town / village"
+                style={[styles.input, focusedField === "recipientName" && styles.inputFocused]}
+                value={recipientName}
+                onChangeText={setRecipientName}
+                placeholder="Recipient name"
                 placeholderTextColor="#98A2B3"
-                selectionColor="#FF6B35"
-                cursorColor="#FF6B35"
-                onFocus={() => setFocusedField("city")}
+                onFocus={() => setFocusedField("recipientName")}
                 onBlur={() => setFocusedField(null)}
               />
               <TextInput
-                style={[styles.input, styles.half, focusedField === "state" && styles.inputFocused]}
-                value={state}
-                onChangeText={setState}
-                placeholder="State"
+                style={[styles.input, focusedField === "houseFlatDoorNo" && styles.inputFocused]}
+                value={houseFlatDoorNo}
+                onChangeText={setHouseFlatDoorNo}
+                placeholder="House / flat / door number"
                 placeholderTextColor="#98A2B3"
-                selectionColor="#FF6B35"
-                cursorColor="#FF6B35"
-                onFocus={() => setFocusedField("state")}
+                onFocus={() => setFocusedField("houseFlatDoorNo")}
                 onBlur={() => setFocusedField(null)}
               />
-            </View>
-            <TextInput
-              style={[styles.input, focusedField === "district" && styles.inputFocused]}
-              value={district}
-              onChangeText={setDistrict}
-              placeholder="District (optional)"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("district")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "pincode" && styles.inputFocused]}
-              value={pincode}
-              onChangeText={(value) => setPincode(value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="6-digit pincode"
-              placeholderTextColor="#98A2B3"
-              keyboardType="number-pad"
-              maxLength={6}
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("pincode")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "country" && styles.inputFocused]}
-              value={country}
-              onChangeText={setCountry}
-              placeholder="Country"
-              placeholderTextColor="#98A2B3"
-              selectionColor="#FF6B35"
-              cursorColor="#FF6B35"
-              onFocus={() => setFocusedField("country")}
-              onBlur={() => setFocusedField(null)}
-            />
+              <TextInput
+                style={[styles.input, focusedField === "buildingApartmentName" && styles.inputFocused]}
+                value={buildingApartmentName}
+                onChangeText={setBuildingApartmentName}
+                placeholder="Building / apartment name"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("buildingApartmentName")}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TextInput
+                style={[styles.input, focusedField === "streetRoadName" && styles.inputFocused]}
+                value={streetRoadName}
+                onChangeText={setStreetRoadName}
+                placeholder="Street / road name"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("streetRoadName")}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TextInput
+                style={[styles.input, focusedField === "area" && styles.inputFocused]}
+                value={area}
+                onChangeText={setArea}
+                placeholder="Area / locality"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("area")}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TextInput
+                style={[styles.input, focusedField === "landmark" && styles.inputFocused]}
+                value={landmark}
+                onChangeText={setLandmark}
+                placeholder="Landmark"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("landmark")}
+                onBlur={() => setFocusedField(null)}
+              />
+              <View style={styles.row}>
+                <TextInput
+                  style={[styles.input, styles.halfInput, focusedField === "city" && styles.inputFocused]}
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="City / town"
+                  placeholderTextColor="#98A2B3"
+                  onFocus={() => setFocusedField("city")}
+                  onBlur={() => setFocusedField(null)}
+                />
+                <TextInput
+                  style={[styles.input, styles.halfInput, focusedField === "state" && styles.inputFocused]}
+                  value={state}
+                  onChangeText={setState}
+                  placeholder="State"
+                  placeholderTextColor="#98A2B3"
+                  onFocus={() => setFocusedField("state")}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+              <TextInput
+                style={[styles.input, focusedField === "district" && styles.inputFocused]}
+                value={district}
+                onChangeText={setDistrict}
+                placeholder="District"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("district")}
+                onBlur={() => setFocusedField(null)}
+              />
+              <View style={styles.row}>
+                <TextInput
+                  style={[styles.input, styles.halfInput, focusedField === "pincode" && styles.inputFocused]}
+                  value={pincode}
+                  onChangeText={(value) => setPincode(value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="Pincode"
+                  placeholderTextColor="#98A2B3"
+                  keyboardType="number-pad"
+                  onFocus={() => setFocusedField("pincode")}
+                  onBlur={() => setFocusedField(null)}
+                />
+                <TextInput
+                  style={[styles.input, styles.halfInput, focusedField === "country" && styles.inputFocused]}
+                  value={country}
+                  onChangeText={setCountry}
+                  placeholder="Country"
+                  placeholderTextColor="#98A2B3"
+                  onFocus={() => setFocusedField("country")}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+
+              {!forceComplete && (
+                <TouchableOpacity style={styles.fullSaveButton} onPress={handleSaveProfile} disabled={saving}>
+                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.fullSaveButtonText}>Save Address</Text>}
+                </TouchableOpacity>
+              )}
             </>
-          ) : (
+          ) : addressLines.length > 0 ? (
             <View style={styles.addressCard}>
-            {hasSavedAddress ? (
-              <>
-            {profile?.address?.recipientName ? <Text style={styles.addressText}>{profile.address.recipientName}</Text> : null}
-            {profile?.address?.houseFlatDoorNo || profile?.address?.buildingApartmentName ? (
-              <Text style={styles.addressText}>
-                {[profile?.address?.houseFlatDoorNo, profile?.address?.buildingApartmentName].filter(Boolean).join(", ")}
-              </Text>
-            ) : profile?.address?.street ? <Text style={styles.addressText}>{profile.address.street}</Text> : null}
-            {profile?.address?.streetRoadName ? <Text style={styles.addressText}>{profile.address.streetRoadName}</Text> : null}
-            {profile?.address?.areaLocality || profile?.address?.area ? <Text style={styles.addressText}>{profile.address.areaLocality || profile.address.area}</Text> : null}
-            {profile?.address?.landmark ? (
-              <Text style={styles.addressText}>Near {profile.address.landmark}</Text>
-            ) : null}
-            {profile?.address?.cityTownVillage || profile?.address?.city || profile?.address?.state || profile?.address?.pincode ? (
-              <Text style={styles.addressText}>
-                {[profile?.address?.cityTownVillage || profile?.address?.city, profile?.address?.district ? `${profile.address.district} District` : null, profile?.address?.state].filter(Boolean).join(", ")}
-                {profile?.address?.pincode ? ` - ${profile.address.pincode}` : ""}
-              </Text>
-            ) : null}
-            {profile?.address?.country ? (
-              <Text style={styles.addressText}>{profile.address.country}</Text>
-            ) : null}
-              </>
-            ) : (
-              <Text style={styles.emptyText}>No address saved yet.</Text>
-            )}
+              <View style={styles.addressBadgeRow}>
+                <View style={styles.addressBadge}>
+                  <Text style={styles.addressBadgeText}>Home</Text>
+                </View>
+                <Text style={styles.addressDefaultText}>Default address</Text>
+              </View>
+              {addressLines.map((line) => (
+                <Text key={line} style={styles.addressLine}>
+                  {line}
+                </Text>
+              ))}
             </View>
+          ) : (
+            <Text style={styles.emptyText}>No address saved yet.</Text>
           )}
         </View>
 
         {!forceComplete && (
           <>
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Orders</Text>
-              {orders.length > 0 ? (
-                <TouchableOpacity onPress={() => navigation.navigate("Orders")}>
-                  <Text style={styles.linkText}>View All</Text>
-                </TouchableOpacity>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>My Orders</Text>
+              <Text style={styles.sectionHint}>Ongoing orders, past orders, reorder, invoice, and issue support.</Text>
+
+              {ongoingOrders.length > 0 ? (
+                <View style={styles.subSection}>
+                  <Text style={styles.subSectionTitle}>Ongoing Orders</Text>
+                  {ongoingOrders.map((order) => {
+                    const tone = getStatusTone(order.status);
+                    return (
+                      <TouchableOpacity
+                        key={order._id}
+                        style={styles.orderCard}
+                        onPress={() => navigation.navigate("OrderStatus", { orderId: order._id })}
+                      >
+                        <View style={styles.orderTopRow}>
+                          <View>
+                            <Text style={styles.orderId}>Order #{order._id.slice(-6)}</Text>
+                            <Text style={styles.orderPartner}>
+                              {(order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant"}
+                            </Text>
+                          </View>
+                          <View style={[styles.orderStatusChip, { backgroundColor: tone.bg }]}>
+                            <Text style={[styles.orderStatusText, { color: tone.fg }]}>{getStatusLabel(order.status)}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.orderBottomRow}>
+                          <Text style={styles.orderMeta}>{formatDate(order.createdAt)}</Text>
+                          <Text style={styles.orderTotal}>{formatCurrency(order.grandTotal)}</Text>
+                        </View>
+                        <View style={styles.orderActionRow}>
+                          <TouchableOpacity onPress={() => navigation.navigate("OrderStatus", { orderId: order._id })}>
+                            <Text style={styles.orderActionLink}>Live tracking</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handlePlaceholderAction("Report Issue", "Issue reporting UI is ready to connect to support tickets next.")}
+                          >
+                            <Text style={styles.orderActionLink}>Report issue</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               ) : null}
+
+              <View style={styles.subSection}>
+                <View style={styles.subSectionHeader}>
+                  <Text style={styles.subSectionTitle}>Past Orders</Text>
+                  {recentOrders.length > 0 ? (
+                    <TouchableOpacity onPress={() => navigation.navigate("Orders")}>
+                      <Text style={styles.inlineLinkText}>View all</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {recentOrders.length === 0 ? (
+                  <Text style={styles.emptyText}>No orders yet.</Text>
+                ) : (
+                  recentOrders.map((order) => (
+                    <View key={order._id} style={styles.orderHistoryRow}>
+                      <View style={styles.orderHistoryMeta}>
+                        <Text style={styles.orderHistoryTitle}>
+                          {(order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant"}
+                        </Text>
+                        <Text style={styles.orderHistorySubtext}>
+                          {formatDate(order.createdAt)} • {getStatusLabel(order.status)}
+                        </Text>
+                      </View>
+                      <View style={styles.orderHistoryActions}>
+                        <Text style={styles.orderHistoryAmount}>{formatCurrency(order.grandTotal)}</Text>
+                        <View style={styles.orderMiniActions}>
+                          <TouchableOpacity
+                            onPress={() => navigation.navigate("ShopDetail", { shopId: (order.partnerId as any)?._id || (order.partnerId as any), shop: undefined })}
+                          >
+                            <Text style={styles.orderMiniLink}>Reorder</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handlePlaceholderAction("Invoice", "Invoice download can be linked once PDF export is added to orders.")}
+                          >
+                            <Text style={styles.orderMiniLink}>Invoice</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
             </View>
 
-            {orders.length === 0 ? (
-              <Text style={styles.emptyText}>No orders yet.</Text>
-            ) : (
-              orders.map((order) => (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Payment Methods</Text>
+              <Text style={styles.sectionHint}>Saved cards, UPI IDs, wallet support, and COD visibility.</Text>
+              {paymentMethods.map((item) => (
                 <TouchableOpacity
-                  key={order._id}
-                  style={styles.orderCard}
-                  onPress={() => navigation.navigate("OrderStatus", { orderId: order._id })}
+                  key={item.title}
+                  style={styles.listRow}
+                  onPress={() => handlePlaceholderAction(item.title, item.detail)}
                 >
-                  <View style={styles.orderHeader}>
-                    <Text style={styles.orderId}>Order #{order._id.slice(-6)}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
-                      <Text style={styles.statusText}>{order.status}</Text>
+                  <View style={styles.listRowLeft}>
+                    <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
+                    <View style={styles.listRowTextWrap}>
+                      <Text style={styles.listRowTitle}>{item.title}</Text>
+                      <Text style={styles.listRowDetail}>{item.detail}</Text>
                     </View>
                   </View>
-                  <Text style={styles.orderRestaurant}>{order.partnerId?.restaurantName || "Restaurant"}</Text>
-                  <View style={styles.orderFooter}>
-                    <Text style={styles.orderMeta}>{formatDate(order.createdAt)}</Text>
-                    <Text style={styles.orderPrice}>Rs {order.grandTotal}</Text>
+                  <Text style={styles.rowTag}>{item.status}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Favorites & Saved Items</Text>
+              <Text style={styles.sectionHint}>Favorite restaurants and dishes based on your order history.</Text>
+              <View style={styles.favoriteBlock}>
+                <Text style={styles.favoriteTitle}>Favorite Restaurants</Text>
+                {favoriteRestaurants.length > 0 ? (
+                  favoriteRestaurants.map((name) => (
+                    <View key={name} style={styles.favoriteChip}>
+                      <MaterialCommunityIcons name="heart-outline" size={16} color="#C7362E" />
+                      <Text style={styles.favoriteChipText}>{name}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyText}>Order a few times and your favorite restaurants will show up here.</Text>
+                )}
+              </View>
+              <View style={styles.favoriteBlock}>
+                <Text style={styles.favoriteTitle}>Saved Dishes</Text>
+                {favoriteDishes.length > 0 ? (
+                  favoriteDishes.map(([dishName, count]) => (
+                    <View key={dishName} style={styles.favoriteChip}>
+                      <MaterialCommunityIcons name="silverware-fork-knife" size={16} color="#FF6B35" />
+                      <Text style={styles.favoriteChipText}>{dishName}</Text>
+                      <Text style={styles.favoriteChipCount}>{count}x</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyText}>Your most repeated dishes will appear here.</Text>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Offers & Coupons</Text>
+              <Text style={styles.sectionHint}>Available coupons, applied offers, and promo support.</Text>
+              {couponItems.map((coupon) => (
+                <TouchableOpacity
+                  key={coupon.title}
+                  style={styles.offerCard}
+                  onPress={() => handlePlaceholderAction(coupon.title, coupon.detail)}
+                >
+                  <MaterialCommunityIcons name={coupon.icon} size={22} color="#FF6B35" />
+                  <View style={styles.offerContent}>
+                    <Text style={styles.offerTitle}>{coupon.title}</Text>
+                    <Text style={styles.offerDetail}>{coupon.detail}</Text>
                   </View>
                 </TouchableOpacity>
-              ))
-            )}
-          </View>
+              ))}
+            </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Settings & Support</Text>
-            <TouchableOpacity style={styles.menuItem}>
-              <Text style={styles.menuText}>Customer Support</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem}>
-              <Text style={styles.menuText}>Terms & Conditions</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem}>
-              <Text style={styles.menuText}>Privacy Policy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuItem, styles.logoutItem]} onPress={handleLogout}>
-              <Text style={styles.logoutText}>Logout</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Notifications & Preferences</Text>
+              <Text style={styles.sectionHint}>Push, SMS, and email communication controls.</Text>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleTextWrap}>
+                  <Text style={styles.toggleTitle}>Push Notifications</Text>
+                  <Text style={styles.toggleDetail}>Order status, offers, and delivery updates</Text>
+                </View>
+                <Switch value={preferences.pushNotifications} onValueChange={() => handleTogglePreference("pushNotifications")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.pushNotifications ? "#FF6B35" : "#fff"} />
+              </View>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleTextWrap}>
+                  <Text style={styles.toggleTitle}>SMS Updates</Text>
+                  <Text style={styles.toggleDetail}>OTP, order, and driver arrival updates</Text>
+                </View>
+                <Switch value={preferences.smsUpdates} onValueChange={() => handleTogglePreference("smsUpdates")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.smsUpdates ? "#FF6B35" : "#fff"} />
+              </View>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleTextWrap}>
+                  <Text style={styles.toggleTitle}>Email Preferences</Text>
+                  <Text style={styles.toggleDetail}>Invoices, receipts, and new offers</Text>
+                </View>
+                <Switch value={preferences.emailUpdates} onValueChange={() => handleTogglePreference("emailUpdates")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.emailUpdates ? "#FF6B35" : "#fff"} />
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Security & Privacy</Text>
+              <Text style={styles.sectionHint}>Manage sessions, password flow, and privacy settings.</Text>
+              <TouchableOpacity style={styles.listRow} onPress={() => handlePlaceholderAction("Change Password", "OTP login is active now. Password-based login can be added later if you want it.")}>
+                <View style={styles.listRowLeft}>
+                  <MaterialCommunityIcons name="lock-reset" size={20} color="#FF6B35" />
+                  <View style={styles.listRowTextWrap}>
+                    <Text style={styles.listRowTitle}>Change Password</Text>
+                    <Text style={styles.listRowDetail}>Currently OTP-based login only</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.listRow} onPress={() => handlePlaceholderAction("Manage Sessions", "Session/device management can be connected to the refresh token session list next.")}>
+                <View style={styles.listRowLeft}>
+                  <MaterialCommunityIcons name="devices" size={20} color="#FF6B35" />
+                  <View style={styles.listRowTextWrap}>
+                    <Text style={styles.listRowTitle}>Manage Sessions & Devices</Text>
+                    <Text style={styles.listRowDetail}>View active sessions and sign out of old devices</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.listRow} onPress={() => handlePlaceholderAction("Privacy Settings", "Data export, consent, and privacy switches can be connected next.")}>
+                <View style={styles.listRowLeft}>
+                  <MaterialCommunityIcons name="shield-account-outline" size={20} color="#FF6B35" />
+                  <View style={styles.listRowTextWrap}>
+                    <Text style={styles.listRowTitle}>Privacy Settings</Text>
+                    <Text style={styles.listRowDetail}>Control data visibility and data-sharing permissions</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Help & Support</Text>
+              {supportItems.map((item) => (
+                <TouchableOpacity key={item.title} style={styles.listRow} onPress={() => handlePlaceholderAction(item.title, item.detail)}>
+                  <View style={styles.listRowLeft}>
+                    <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
+                    <View style={styles.listRowTextWrap}>
+                      <Text style={styles.listRowTitle}>{item.title}</Text>
+                      <Text style={styles.listRowDetail}>{item.detail}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>App Settings</Text>
+              {settingsItems.map((item) => (
+                <TouchableOpacity key={item.title} style={styles.listRow} onPress={() => handlePlaceholderAction(item.title, item.detail)}>
+                  <View style={styles.listRowLeft}>
+                    <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
+                    <View style={styles.listRowTextWrap}>
+                      <Text style={styles.listRowTitle}>{item.title}</Text>
+                      <Text style={styles.listRowDetail}>{item.detail}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleTextWrap}>
+                  <Text style={styles.toggleTitle}>Dark Mode</Text>
+                  <Text style={styles.toggleDetail}>Stored locally for now</Text>
+                </View>
+                <Switch value={preferences.darkMode} onValueChange={() => handleTogglePreference("darkMode")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.darkMode ? "#FF6B35" : "#fff"} />
+              </View>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleTextWrap}>
+                  <Text style={styles.toggleTitle}>Location Permission</Text>
+                  <Text style={styles.toggleDetail}>Needed for nearby delivery and better address accuracy</Text>
+                </View>
+                <Switch value={preferences.locationPermission} onValueChange={() => handleTogglePreference("locationPermission")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.locationPermission ? "#FF6B35" : "#fff"} />
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Legal & About</Text>
+              {legalItems.map((item) => (
+                <TouchableOpacity key={item.title} style={styles.listRow} onPress={() => handlePlaceholderAction(item.title, item.detail)}>
+                  <View style={styles.listRowLeft}>
+                    <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
+                    <View style={styles.listRowTextWrap}>
+                      <Text style={styles.listRowTitle}>{item.title}</Text>
+                      <Text style={styles.listRowDetail}>{item.detail}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Account Actions</Text>
+              <TouchableOpacity style={[styles.accountActionRow, styles.logoutRow]} onPress={handleLogout}>
+                <MaterialCommunityIcons name="logout" size={20} color="#C7362E" />
+                <Text style={styles.logoutRowText}>Logout</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.accountActionRow, styles.deleteRow]}
+                onPress={() => handlePlaceholderAction("Delete Account", "Delete account flow should be connected to backend account removal and policy checks before release.")}
+              >
+                <MaterialCommunityIcons name="delete-outline" size={20} color="#B42318" />
+                <Text style={styles.deleteRowText}>Delete Account</Text>
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </ScrollView>
 
       {forceComplete && editing && (
         <View style={styles.footerBar}>
-          <TouchableOpacity
-            style={[styles.footerButton, saving && styles.footerButtonDisabled]}
-            onPress={handleSaveProfile}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.footerButtonText}>Complete Registration</Text>
-            )}
+          <TouchableOpacity style={styles.footerButton} onPress={handleSaveProfile} disabled={saving}>
+            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Complete Registration</Text>}
           </TouchableOpacity>
         </View>
       )}
@@ -612,10 +1013,11 @@ export default function ProfileScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F4EF"
+    backgroundColor: "#F6F2EC"
   },
   content: {
-    paddingBottom: 32
+    paddingTop: 12,
+    paddingBottom: 28
   },
   contentWithFooter: {
     paddingBottom: 120
@@ -623,138 +1025,240 @@ const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    backgroundColor: "#F6F2EC"
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 16,
-    color: "#666"
+    fontSize: 15,
+    color: "#6B5E55"
   },
-  header: {
-    backgroundColor: "#fff",
-    padding: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee"
-  },
-  headerCompact: {
+  heroCard: {
     marginHorizontal: 16,
+    padding: 18,
     borderRadius: 24,
+    backgroundColor: "#FFF7EF",
     borderWidth: 1,
-    borderColor: "#ECE7DE",
-    marginTop: 8
+    borderColor: "#F3D7BF"
   },
-  avatarContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+  heroCardCompact: {
+    marginTop: 6
+  },
+  heroRow: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  avatarWrap: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
     backgroundColor: "#FF6B35",
-    justifyContent: "center",
     alignItems: "center",
-    marginRight: 16
+    justifyContent: "center",
+    marginRight: 14
   },
   avatarText: {
     fontSize: 28,
-    fontWeight: "bold",
-    color: "#fff"
+    fontWeight: "800",
+    color: "#FFFFFF"
   },
-  headerInfo: {
+  heroMeta: {
     flex: 1
   },
-  userName: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#333",
+  heroName: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: "#2C2018",
     marginBottom: 4
   },
-  userMeta: {
-    fontSize: 14,
-    color: "#666",
+  heroSubtext: {
+    fontSize: 13,
+    color: "#7A6F65",
     marginBottom: 2
   },
-  editContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16
-  },
-  editButtons: {
+  heroInfoRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 14,
     gap: 10
   },
-  actionButton: {
-    borderRadius: 10,
-    paddingVertical: 14,
+  heroPill: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "#FFE8D5",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     flex: 1
   },
-  primaryButton: {
+  heroPillText: {
+    fontSize: 12,
+    color: "#7A4B21",
+    fontWeight: "700",
+    marginLeft: 6
+  },
+  photoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#F1D4BF"
+  },
+  photoButtonText: {
+    fontSize: 12,
+    color: "#FF6B35",
+    fontWeight: "700",
+    marginLeft: 6
+  },
+  progressRow: {
+    marginTop: 16
+  },
+  progressTrack: {
+    width: "100%",
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#F3E3D5",
+    overflow: "hidden"
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
     backgroundColor: "#FF6B35"
   },
-  secondaryButton: {
-    backgroundColor: "#F1F3F5"
+  progressText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#7A6F65"
   },
-  primaryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700"
+  quickStats: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16
   },
-  secondaryButtonText: {
-    color: "#475467",
-    fontSize: 16,
-    fontWeight: "700"
+  quickStatCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#F1E1D5"
   },
-  fullWidth: {
-    flex: 1
+  quickStatValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  quickStatLabel: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#8B6A54"
+  },
+  shortcutRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 12
+  },
+  shortcutCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#ECE3D9",
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 12
+  },
+  shortcutTitle: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  shortcutDetail: {
+    marginTop: 4,
+    fontSize: 11,
+    color: "#7A6F65"
   },
   section: {
-    backgroundColor: "#fff",
-    padding: 18,
-    marginTop: 14,
     marginHorizontal: 16,
-    borderRadius: 22,
+    marginTop: 14,
+    padding: 18,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#ECE7DE",
-    shadowColor: "#2C1810",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.04,
-    shadowRadius: 18,
-    elevation: 2
-  },
-  registrationSection: {
-    backgroundColor: "#FFFCF7"
+    borderColor: "#ECE3D9"
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12
-  },
-  sectionTitleRow: {
-    marginBottom: 12
+    gap: 10
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#241D17"
+  },
+  sectionHint: {
+    marginTop: 6,
+    marginBottom: 14,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#7A6F65"
+  },
+  inlineActions: {
+    flexDirection: "row",
+    gap: 8
+  },
+  smallAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  primaryAction: {
+    backgroundColor: "#FF6B35"
+  },
+  mutedAction: {
+    backgroundColor: "#F1F3F5"
+  },
+  primaryActionText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  mutedActionText: {
+    color: "#475467",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  inlineLink: {
+    paddingVertical: 4
+  },
+  inlineLinkText: {
+    fontSize: 12,
     fontWeight: "700",
-    color: "#241D17",
-    marginBottom: 0
+    color: "#FF6B35"
   },
-  field: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F2F4F7"
-  },
-  fieldLast: {
-    borderBottomWidth: 0
+  fieldGroup: {
+    marginBottom: 14
   },
   label: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#7A6F65",
     marginBottom: 8
   },
   value: {
-    fontSize: 16,
+    fontSize: 15,
     color: "#241D17"
   },
   input: {
@@ -763,117 +1267,330 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 15,
     color: "#1A120B",
     backgroundColor: "#FFFFFF",
     marginBottom: 12
   },
   inputFocused: {
     borderColor: "#FF6B35",
-    backgroundColor: "#FFF8F4",
-    shadowColor: "#FF6B35",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    elevation: 3
-  },
-  largeInput: {
-    minHeight: 56
+    backgroundColor: "#FFF8F4"
   },
   row: {
     flexDirection: "row",
     gap: 10
   },
-  half: {
+  halfInput: {
     flex: 1
   },
   addressCard: {
-    backgroundColor: "#FAF5ED",
-    borderRadius: 16,
-    padding: 14
-  },
-  addressText: {
-    fontSize: 15,
-    color: "#344054",
-    marginBottom: 4
-  },
-  emptyText: {
-    fontSize: 15,
-    color: "#98A2B3"
-  },
-  linkText: {
-    color: "#FF6B35",
-    fontWeight: "700"
-  },
-  orderCard: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 10,
+    backgroundColor: "#FBF6EF",
+    borderRadius: 18,
     padding: 14,
-    marginBottom: 10
+    borderWidth: 1,
+    borderColor: "#F3E4D4"
   },
-  orderHeader: {
+  addressBadgeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8
+    marginBottom: 10
+  },
+  addressBadge: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999
+  },
+  addressBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  addressDefaultText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#8B6A54"
+  },
+  addressLine: {
+    fontSize: 14,
+    color: "#344054",
+    marginBottom: 5
+  },
+  fullSaveButton: {
+    marginTop: 4,
+    borderRadius: 16,
+    backgroundColor: "#FF6B35",
+    minHeight: 52,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  fullSaveButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  subSection: {
+    marginBottom: 18
+  },
+  subSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
+  },
+  subSectionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#241D17",
+    marginBottom: 10
+  },
+  orderCard: {
+    backgroundColor: "#FBF7F1",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#F1E5D8",
+    padding: 14,
+    marginBottom: 10
+  },
+  orderTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 8
   },
   orderId: {
     fontSize: 14,
-    fontWeight: "700",
-    color: "#101828"
+    fontWeight: "800",
+    color: "#241D17"
   },
-  statusBadge: {
+  orderPartner: {
+    fontSize: 13,
+    color: "#7A6F65",
+    marginTop: 4
+  },
+  orderStatusChip: {
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 4
+    paddingVertical: 6
   },
-  statusText: {
+  orderStatusText: {
     fontSize: 11,
-    color: "#fff",
-    fontWeight: "700"
+    fontWeight: "800"
   },
-  orderRestaurant: {
-    fontSize: 14,
-    color: "#475467",
-    marginBottom: 8
-  },
-  orderFooter: {
+  orderBottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center"
+    marginTop: 12
   },
   orderMeta: {
-    fontSize: 13,
-    color: "#667085"
+    fontSize: 12,
+    color: "#7A6F65"
   },
-  orderPrice: {
-    fontSize: 16,
+  orderTotal: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FF6B35"
+  },
+  orderActionRow: {
+    flexDirection: "row",
+    gap: 18,
+    marginTop: 12
+  },
+  orderActionLink: {
+    fontSize: 12,
     fontWeight: "700",
     color: "#FF6B35"
   },
-  menuItem: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F2F4F7"
+  orderHistoryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F2ECE5"
   },
-  menuText: {
-    fontSize: 16,
-    color: "#344054"
+  orderHistoryMeta: {
+    flex: 1,
+    marginRight: 12
   },
-  logoutItem: {
-    borderBottomWidth: 0
+  orderHistoryTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#241D17"
   },
-  logoutText: {
-    fontSize: 16,
-    color: "#F04438",
+  orderHistorySubtext: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#7A6F65"
+  },
+  orderHistoryActions: {
+    alignItems: "flex-end"
+  },
+  orderHistoryAmount: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FF6B35"
+  },
+  orderMiniActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 6
+  },
+  orderMiniLink: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FF6B35"
+  },
+  listRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F2ECE5"
+  },
+  listRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginRight: 12
+  },
+  listRowTextWrap: {
+    marginLeft: 12,
+    flex: 1
+  },
+  listRowTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#241D17"
+  },
+  listRowDetail: {
+    marginTop: 3,
+    fontSize: 12,
+    color: "#7A6F65",
+    lineHeight: 17
+  },
+  rowTag: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#FF6B35"
+  },
+  favoriteBlock: {
+    marginTop: 4,
+    marginBottom: 14
+  },
+  favoriteTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#241D17",
+    marginBottom: 10
+  },
+  favoriteChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#FBF6EF",
+    borderWidth: 1,
+    borderColor: "#F0E0D3",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8
+  },
+  favoriteChipText: {
+    marginLeft: 8,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#241D17"
+  },
+  favoriteChipCount: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: "#8B6A54",
     fontWeight: "700"
+  },
+  offerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF7EF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#F3E4D4",
+    padding: 14,
+    marginBottom: 10
+  },
+  offerContent: {
+    marginLeft: 12,
+    flex: 1
+  },
+  offerTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#241D17"
+  },
+  offerDetail: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#7A6F65",
+    lineHeight: 17
+  },
+  toggleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F2ECE5"
+  },
+  toggleTextWrap: {
+    flex: 1,
+    marginRight: 16
+  },
+  toggleTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#241D17"
+  },
+  toggleDetail: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#7A6F65"
+  },
+  accountActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F2ECE5"
+  },
+  logoutRow: {
+    marginTop: 4
+  },
+  deleteRow: {
+    marginTop: 2
+  },
+  logoutRowText: {
+    marginLeft: 12,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#C7362E"
+  },
+  deleteRowText: {
+    marginLeft: 12,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#B42318"
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#98A2B3"
   },
   footerBar: {
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: Platform.OS === "ios" ? 24 : 16,
-    backgroundColor: "rgba(246, 244, 239, 0.98)",
+    backgroundColor: "rgba(246, 242, 236, 0.98)",
     borderTopWidth: 1,
     borderTopColor: "#E7DED3"
   },
@@ -882,19 +1599,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     minHeight: 56,
     alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#FF6B35",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    elevation: 6
-  },
-  footerButtonDisabled: {
-    opacity: 0.7
+    justifyContent: "center"
   },
   footerButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "700"
+    fontWeight: "800"
   }
 });

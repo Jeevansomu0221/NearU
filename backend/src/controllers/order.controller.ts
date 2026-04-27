@@ -4,9 +4,11 @@ import mongoose from "mongoose";
 import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
 import MenuItem from "../models/MenuItem.model";
+import DeliveryPartner from "../models/DeliveryPartner.model";
 import { ROLES } from "../config/roles";
 import { successResponse, errorResponse } from "../utils/response";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import { config } from "../config/env";
 
 // Define interface for masked customer
 interface MaskedCustomer {
@@ -14,6 +16,40 @@ interface MaskedCustomer {
   name: string;
   phone?: string;
 }
+
+const formatPartnerForDelivery = (partnerDoc: any) => {
+  if (!partnerDoc) return partnerDoc;
+  const partnerObj = partnerDoc.toObject ? partnerDoc.toObject() : partnerDoc;
+
+  if (!partnerObj.address) {
+    return partnerObj;
+  }
+
+  const addr = partnerObj.address;
+  return {
+    ...partnerObj,
+    address: `${addr.roadStreet}, ${addr.colony}, ${addr.area}, ${addr.city}, ${addr.state} - ${addr.pincode}`,
+    googleMapsLink: addr.googleMapsLink || "",
+    location: partnerObj.location || null
+  };
+};
+
+const haversineKm = (from: [number, number], to: [number, number]) => {
+  const [fromLng, fromLat] = from;
+  const [toLng, toLat] = to;
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(toLat - fromLat);
+  const dLng = toRadians(toLng - fromLng);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(fromLat)) *
+      Math.cos(toRadians(toLat)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 
 /**
  * ================================
@@ -332,7 +368,16 @@ export const assignDelivery = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, `Order must be READY before assigning delivery. Current status: ${order.status}`, 400);
     }
 
-    order.deliveryPartnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
+    const deliveryPartner = await DeliveryPartner.findById(deliveryPartnerId).select("userId status isAvailable");
+    if (!deliveryPartner) {
+      return errorResponse(res, "Delivery partner not found", 404);
+    }
+
+    if (!["VERIFIED", "ACTIVE"].includes(deliveryPartner.status) || !deliveryPartner.isAvailable) {
+      return errorResponse(res, "Delivery partner is not eligible for assignment", 400);
+    }
+
+    order.deliveryPartnerId = new mongoose.Types.ObjectId(deliveryPartner.userId);
     order.status = "ASSIGNED";
 
     await order.save();
@@ -588,41 +633,58 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
       return errorResponse(res, "Unauthorized", 401);
     }
 
+    const deliveryPartner = await DeliveryPartner.findOne({ userId: user.id }).lean();
+    if (!deliveryPartner) {
+      return errorResponse(res, "Delivery profile not found", 404);
+    }
+
+    const riderCoordinates = deliveryPartner.currentLocation?.coordinates;
+    if (
+      deliveryPartner.status !== "ACTIVE" ||
+      !deliveryPartner.isAvailable ||
+      !riderCoordinates ||
+      riderCoordinates.length !== 2 ||
+      (riderCoordinates[0] === 0 && riderCoordinates[1] === 0)
+    ) {
+      return successResponse(res, [], "Delivery partner is not eligible for nearby jobs");
+    }
+
     // Find orders that are READY and not assigned to any delivery partner
     const availableJobs = await Order.find({
       status: "READY",
-      deliveryPartnerId: { $exists: false }
+      $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
     })
     .populate("customerId", "name phone")
     .populate({
       path: "partnerId",
       select: "restaurantName shopName phone address category location",
-      transform: (doc) => {
-        if (!doc) return doc;
-        
-        const partnerObj = doc.toObject ? doc.toObject() : doc;
-        
-        // Convert address object to string for delivery app
-        if (partnerObj.address) {
-          const addr = partnerObj.address;
-          const addressString = `${addr.roadStreet}, ${addr.colony}, ${addr.area}, ${addr.city}, ${addr.state} - ${addr.pincode}`;
-          
-          return {
-            ...partnerObj,
-            address: addressString,
-            googleMapsLink: addr.googleMapsLink || "",
-            location: partnerObj.location || null
-          };
-        }
-        
-        return partnerObj;
-      }
+      transform: formatPartnerForDelivery
     })
     .sort({ createdAt: -1 });
 
     console.log(`🔍 Found ${availableJobs.length} available delivery jobs for user ${user.id}`);
 
-    return successResponse(res, availableJobs, "Available delivery jobs retrieved");
+    const rankedJobs = availableJobs
+      .map((job: any) => {
+        const partnerCoordinates = job.partnerId?.location?.coordinates;
+        if (!partnerCoordinates || partnerCoordinates.length !== 2) {
+          return null;
+        }
+
+        const distanceToRestaurant = haversineKm(riderCoordinates as [number, number], partnerCoordinates);
+        if (distanceToRestaurant > config.deliveryRadiusKm) {
+          return null;
+        }
+
+        return {
+          ...job.toObject(),
+          distanceToRestaurant: Number(distanceToRestaurant.toFixed(2))
+        };
+      })
+      .filter(Boolean)
+      .sort((left: any, right: any) => left.distanceToRestaurant - right.distanceToRestaurant);
+
+    return successResponse(res, rankedJobs, "Available delivery jobs retrieved");
 
   } catch (err: any) {
     console.error("getAvailableDeliveryJobs error:", err);
@@ -644,26 +706,29 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const order = await Order.findById(orderId);
+    const deliveryPartner = await DeliveryPartner.findOne({ userId: user.id }).select("status isAvailable");
+    if (!deliveryPartner || deliveryPartner.status !== "ACTIVE" || !deliveryPartner.isAvailable) {
+      return errorResponse(res, "Delivery partner is not eligible to accept jobs", 403);
+    }
+
+    const order = await Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        status: "READY",
+        $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+      },
+      {
+        $set: {
+          deliveryPartnerId: new mongoose.Types.ObjectId(user.id),
+          status: "ASSIGNED"
+        }
+      },
+      { new: true }
+    );
 
     if (!order) {
-      return errorResponse(res, "Order not found", 404);
+      return errorResponse(res, "Order is no longer available", 409);
     }
-
-    // Check if order is READY and not assigned
-    if (order.status !== "READY") {
-      return errorResponse(res, `Order must be READY to accept. Current status: ${order.status}`, 400);
-    }
-
-    if (order.deliveryPartnerId) {
-      return errorResponse(res, "Order already assigned to another delivery partner", 400);
-    }
-
-    // Assign the delivery partner to this order
-    order.deliveryPartnerId = new mongoose.Types.ObjectId(user.id);
-    order.status = "ASSIGNED";
-
-    await order.save();
 
     // Get populated order for response
     const populatedOrder = await Order.findById(orderId)
@@ -671,26 +736,7 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       .populate({
         path: "partnerId",
         select: "restaurantName shopName phone address category",
-        transform: (doc) => {
-          if (!doc) return doc;
-          
-          const partnerObj = doc.toObject ? doc.toObject() : doc;
-          
-          // Convert address object to string for delivery app
-          if (partnerObj.address) {
-            const addr = partnerObj.address;
-            const addressString = `${addr.roadStreet}, ${addr.colony}, ${addr.area}, ${addr.city}, ${addr.state} - ${addr.pincode}`;
-            
-            return {
-              ...partnerObj,
-              address: addressString,
-              googleMapsLink: addr.googleMapsLink || "",
-              location: partnerObj.location || null
-            };
-          }
-          
-          return partnerObj;
-        }
+        transform: formatPartnerForDelivery
       })
       .populate("deliveryPartnerId", "name phone");
 

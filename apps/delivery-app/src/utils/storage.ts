@@ -7,9 +7,14 @@ export const setToken = async (token: string) => {
   await AsyncStorage.setItem("token", token);
 };
 
-export const getToken = () => memoryToken;
+export const getToken = async (): Promise<string | null> => {
+  if (memoryToken) return memoryToken;
+  const token = await AsyncStorage.getItem("token");
+  memoryToken = token;
+  return token;
+};
 
 export const clearToken = async () => {
   memoryToken = null;
-  await AsyncStorage.removeItem("token");
+  await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
 };

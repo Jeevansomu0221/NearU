@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 // Import screens
 import LoginScreen from "../screens/LoginScreen";
@@ -108,7 +109,13 @@ export default function AppNavigator() {
   }, []);
 
   if (initialRoute === "Loading") {
-    return null;
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingTitle}>Opening delivery app...</Text>
+        <Text style={styles.loadingSubtitle}>Checking your session</Text>
+      </View>
+    );
   }
 
   return (
@@ -165,3 +172,24 @@ export default function AppNavigator() {
     </Stack.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 24,
+  },
+  loadingTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  loadingSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#6B7280",
+  },
+});

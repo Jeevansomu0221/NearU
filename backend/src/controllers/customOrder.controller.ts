@@ -25,7 +25,7 @@ export const createCustomOrder = async (
 
     const order = await Order.create({
       orderType: "CUSTOM",
-      customerId: req.user.userId,
+      customerId: req.user.id,
       deliveryAddress,
       note,
       status: "CREATED"
@@ -60,7 +60,7 @@ export const getCustomOrderStatus = async (
       return res.status(404).json({ message: "Order not found" });
     }
 
-    if (order.customerId.toString() !== req.user.userId) {
+    if (order.customerId.toString() !== req.user.id) {
       return res.status(403).json({ message: "Access denied" });
     }
 
@@ -99,7 +99,7 @@ export const confirmCustomOrder = async (
       return res.status(404).json({ message: "Order not found" });
     }
 
-    if (order.customerId.toString() !== req.user.userId) {
+    if (order.customerId.toString() !== req.user.id) {
       return res.status(403).json({ message: "Access denied" });
     }
 

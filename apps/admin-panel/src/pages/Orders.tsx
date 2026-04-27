@@ -7,11 +7,14 @@ import { getOrders, updateOrderStatus, type OrderRecord } from "../api/admin.api
 const ORDER_STATUSES = [
   "PENDING",
   "CONFIRMED",
+  "ACCEPTED",
   "PREPARING",
   "READY",
-  "OUT_FOR_DELIVERY",
+  "ASSIGNED",
+  "PICKED_UP",
   "DELIVERED",
-  "CANCELLED"
+  "CANCELLED",
+  "REJECTED"
 ];
 
 export default function Orders() {

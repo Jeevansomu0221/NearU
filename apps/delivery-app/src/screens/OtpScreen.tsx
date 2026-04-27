@@ -1,30 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  Alert, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
   StyleSheet,
   ActivityIndicator
 } from "react-native";
-import { verifyOtp, sendOtp } from "../api/auth.api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { verifyOtp, sendOtp } from "../api/auth.api";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
 export default function OtpScreen({ route, navigation }: any) {
-  const { phone } = route.params; // Only get phone, not testOtp
+  const { phone } = route.params;
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
-  
-  // Timer for resend OTP
+
   useEffect(() => {
     if (timer > 0) {
       const interval = setInterval(() => {
-        setTimer(prev => {
+        setTimer((prev) => {
           if (prev <= 1) {
             setCanResend(true);
             return 0;
@@ -44,53 +43,30 @@ export default function OtpScreen({ route, navigation }: any) {
 
     try {
       setLoading(true);
-      console.log("Verifying OTP for:", phone, "OTP:", otp);
-      
       const response = await verifyOtp(phone, otp);
-      
-      console.log("🔍 OTP Verification Response:", response);
-      
-      // Check if response is successful
-      if (response.success) {
-        console.log("✅ OTP verified successfully");
-        
-        // Extract data from response
-        const token = response.data?.token || response.token;
-        const user = response.data?.user || response.user;
-        
-        if (!token) {
-          Alert.alert("Error", "No token received from server");
-          return;
-        }
-        
-        console.log("🔑 Token received");
-        console.log("👤 User data:", user);
-        
-        // Save token and user data to AsyncStorage
-        await AsyncStorage.setItem("token", token);
-        await AsyncStorage.setItem("user", JSON.stringify(user));
-        
-        console.log("✅ Token saved successfully");
-        
-        const profileResponse = await getDeliveryProfile();
-        const nextRoute =
-          profileResponse.success && profileResponse.data
-            ? resolveDeliveryRoute(profileResponse.data)
-            : "CompleteProfile";
 
-        console.log(`🚀 Navigating to ${nextRoute} screen...`);
-        navigation.reset({
-          index: 0,
-          routes: [{ name: nextRoute }],
-        });
-        
-      } else {
-        // Handle API error response
-        console.log("❌ OTP verification failed:", response.message);
+      if (!response.success || !response.data?.token || !response.data?.user) {
         Alert.alert("Error", response.message || "Invalid OTP. Please try again.");
+        return;
       }
+
+      await AsyncStorage.multiSet([
+        ["token", response.data.token],
+        ["refreshToken", response.data.refreshToken || ""],
+        ["user", JSON.stringify(response.data.user)]
+      ]);
+
+      const profileResponse = await getDeliveryProfile();
+      const nextRoute =
+        profileResponse.success && profileResponse.data
+          ? resolveDeliveryRoute(profileResponse.data)
+          : "CompleteProfile";
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: nextRoute }],
+      });
     } catch (error: any) {
-      console.error("❌ Verify OTP error:", error);
       Alert.alert("Error", error.message || "Failed to verify OTP. Please try again.");
     } finally {
       setLoading(false);
@@ -99,25 +75,18 @@ export default function OtpScreen({ route, navigation }: any) {
 
   const onResend = async () => {
     if (!canResend) return;
-    
     try {
       setLoading(true);
       setTimer(60);
       setCanResend(false);
       setOtp("");
-      
       const response = await sendOtp(phone);
-      
-      if (response.success) {
-        // No Alert for resend - just reset timer
-        console.log("✅ OTP resent successfully");
-      } else {
+      if (!response.success) {
         Alert.alert("Error", response.message || "Failed to resend OTP");
         setCanResend(true);
       }
     } catch (error: any) {
-      console.error("Resend OTP error:", error);
-      Alert.alert("Error", "Failed to resend OTP");
+      Alert.alert("Error", error.message || "Failed to resend OTP");
       setCanResend(true);
     } finally {
       setLoading(false);
@@ -131,7 +100,7 @@ export default function OtpScreen({ route, navigation }: any) {
         Enter the 6-digit code sent to{"\n"}
         <Text style={styles.phoneText}>+91 {phone}</Text>
       </Text>
-      
+
       <View style={styles.otpContainer}>
         <TextInput
           placeholder="000000"
@@ -144,7 +113,7 @@ export default function OtpScreen({ route, navigation }: any) {
         />
         <Text style={styles.otpHint}>Enter 6-digit OTP</Text>
       </View>
-      
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#4CAF50" />
@@ -159,127 +128,34 @@ export default function OtpScreen({ route, navigation }: any) {
           <Text style={styles.buttonText}>Verify OTP</Text>
         </TouchableOpacity>
       )}
-      
+
       <View style={styles.resendContainer}>
         <Text style={styles.timerText}>
           {canResend ? "Didn't receive code?" : `Resend OTP in ${timer}s`}
         </Text>
         <TouchableOpacity onPress={onResend} disabled={!canResend || loading}>
-          <Text style={[styles.resendText, canResend && styles.resendTextActive]}>
-            Resend OTP
-          </Text>
+          <Text style={[styles.resendText, canResend && styles.resendTextActive]}>Resend OTP</Text>
         </TouchableOpacity>
-      </View>
-      
-      {/* Development note - only in console, not in UI */}
-      <View style={styles.devNote}>
-        <Text style={styles.devNoteText}>
-          Note: Check console for test OTP in development
-        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    justifyContent: "center", 
-    padding: 20,
-    backgroundColor: '#f5f5f5'
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 8,
-    textAlign: "center"
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 40,
-    textAlign: "center",
-    lineHeight: 24
-  },
-  phoneText: {
-    fontWeight: "bold",
-    color: "#333"
-  },
-  otpContainer: {
-    marginBottom: 30,
-  },
-  otpInput: {
-    fontSize: 32,
-    textAlign: "center",
-    letterSpacing: 8,
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    color: "#333",
-    fontWeight: "bold"
-  },
-  otpHint: {
-    fontSize: 12,
-    color: "#999",
-    textAlign: "center",
-    marginTop: 8
-  },
-  loadingContainer: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 12,
-  },
-  button: {
-    backgroundColor: "#4CAF50",
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  buttonDisabled: {
-    backgroundColor: "#A5D6A7",
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  resendContainer: {
-    alignItems: "center",
-    marginTop: 30,
-    gap: 8
-  },
-  timerText: {
-    fontSize: 14,
-    color: "#666"
-  },
-  resendText: {
-    fontSize: 16,
-    color: "#999",
-    fontWeight: "500"
-  },
-  resendTextActive: {
-    color: "#4CAF50",
-    fontWeight: "600"
-  },
-  devNote: {
-    marginTop: 40,
-    padding: 12,
-    alignItems: "center",
-    opacity: 0.6
-  },
-  devNoteText: {
-    fontSize: 12,
-    color: "#666",
-    fontStyle: "italic",
-    textAlign: "center"
-  }
+  container: { flex: 1, justifyContent: "center", padding: 20, backgroundColor: '#f5f5f5' },
+  title: { fontSize: 28, fontWeight: "bold", color: "#333", marginBottom: 8, textAlign: "center" },
+  subtitle: { fontSize: 16, color: "#666", marginBottom: 40, textAlign: "center", lineHeight: 24 },
+  phoneText: { fontWeight: "bold", color: "#333" },
+  otpContainer: { marginBottom: 30 },
+  otpInput: { fontSize: 32, textAlign: "center", letterSpacing: 8, backgroundColor: "white", padding: 16, borderRadius: 8, borderWidth: 1, borderColor: "#ddd", color: "#333", fontWeight: "bold" },
+  otpHint: { fontSize: 12, color: "#999", textAlign: "center", marginTop: 8 },
+  loadingContainer: { alignItems: "center", marginTop: 20 },
+  loadingText: { fontSize: 16, color: "#666", marginTop: 12 },
+  button: { backgroundColor: "#4CAF50", paddingVertical: 16, borderRadius: 8, alignItems: "center", marginTop: 10 },
+  buttonDisabled: { backgroundColor: "#A5D6A7", opacity: 0.7 },
+  buttonText: { color: "white", fontSize: 18, fontWeight: "600" },
+  resendContainer: { alignItems: "center", marginTop: 30, gap: 8 },
+  timerText: { fontSize: 14, color: "#666" },
+  resendText: { fontSize: 16, color: "#999", fontWeight: "500" },
+  resendTextActive: { color: "#4CAF50", fontWeight: "600" }
 });

@@ -1,14 +1,12 @@
-// backend/src/routes/auth.routes.ts
 import { Router } from "express";
-import { sendOTP, verifyOTP, refreshToken } from "../controllers/auth.controller"; // Changed to verifyOTP
+import { authMiddleware } from "../middlewares/auth.middleware";
+import { logout, refreshToken, sendOTP, verifyOTP } from "../controllers/auth.controller";
 
 const router = Router();
 
-// Public routes
 router.post("/send-otp", sendOTP);
-router.post("/verify-otp", verifyOTP); // Changed to verifyOTP
-
-// Protected routes
-router.post("/refresh", refreshToken); // Will need auth middleware
+router.post("/verify-otp", verifyOTP);
+router.post("/refresh", refreshToken);
+router.post("/logout", authMiddleware, logout);
 
 export default router;

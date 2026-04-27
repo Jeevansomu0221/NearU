@@ -2,6 +2,11 @@ import axios from "axios";
 import { clearToken } from "../utils/auth";
 
 const resolveApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL?.trim();
+  if (envUrl) {
+    return envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`;
+  }
+
   const host = window.location.hostname;
 
   if (!host || host === "localhost" || host === "127.0.0.1") {

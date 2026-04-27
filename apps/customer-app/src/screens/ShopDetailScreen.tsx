@@ -1,18 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  ScrollView,
+  ActivityIndicator,
   Alert,
   Image,
+  ScrollView,
+  StyleSheet,
+  Text,
   TouchableOpacity,
-  ActivityIndicator
+  View
 } from "react-native";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RootStackParamList, Shop } from "../navigation/AppNavigator";
-import { getPartnerMenu } from "../api/menu.api";
+import { getPartnerDetails, getPartnerMenu } from "../api/menu.api";
 import { useCart } from "../context/CartContext";
 
 type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, "ShopDetail">;
@@ -37,160 +38,266 @@ interface Props {
   navigation: ShopDetailScreenNavigationProp;
 }
 
+const shopPlaceholders: Record<string, string> = {
+  bakery:
+    "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=320&q=80",
+  "tiffin-center":
+    "https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=320&q=80",
+  "mini-restaurant":
+    "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=320&q=80",
+  "fast-food":
+    "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=320&q=80",
+  sweets:
+    "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=320&q=80"
+};
+
+const menuPlaceholders = [
+  "https://images.unsplash.com/photo-1604908177522-0408f8c3f5e1?auto=format&fit=crop&w=240&q=80",
+  "https://images.unsplash.com/photo-1562967916-eb82221dfb92?auto=format&fit=crop&w=240&q=80",
+  "https://images.unsplash.com/photo-1506084868230-bb9d95c24759?auto=format&fit=crop&w=240&q=80"
+];
+
+const categoryIconMap: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
+  bakery: "bread-slice-outline",
+  "tiffin-center": "food-outline",
+  "mini-restaurant": "silverware-fork-knife",
+  "fast-food": "hamburger",
+  sweets: "cookie-outline",
+  other: "storefront-outline"
+};
+
+const categoryLabelMap: Record<string, string> = {
+  bakery: "Bakery",
+  "tiffin-center": "Tiffins",
+  "mini-restaurant": "Restaurant",
+  "fast-food": "Fast Food",
+  sweets: "Sweets",
+  other: "Food"
+};
+
 export default function ShopDetailScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { shopId, shop: passedShop } = route.params;
-  const [shop] = useState<Shop | null>(passedShop || null);
+  const [shop, setShop] = useState<Shop | null>(passedShop || null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const { addItem, getItemCount } = useCart();
-
-  const loadMenu = async () => {
-    try {
-      setLoading(true);
-      const res: any = await getPartnerMenu(shopId);
-      if (res.data && Array.isArray(res.data)) {
-        setMenu(res.data.filter((item: MenuItem) => item.isAvailable));
-      } else {
-        setMenu([]);
-      }
-    } catch (error: any) {
-      console.error("Error loading menu:", error);
-      Alert.alert("Error", "Failed to load menu");
-      setMenu([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const { items, addItem, updateQuantity, getItemCount, getCartTotal } = useCart();
 
   useEffect(() => {
-    loadMenu();
-  }, [shopId]);
+    const loadData = async () => {
+      try {
+        setLoading(true);
+
+        const [menuResponse, shopResponse] = await Promise.all([
+          getPartnerMenu(shopId),
+          passedShop ? Promise.resolve(null) : getPartnerDetails(shopId)
+        ]);
+
+        if (!passedShop && shopResponse && (shopResponse as any).success && (shopResponse as any).data) {
+          setShop((shopResponse as any).data);
+        }
+
+        if ((menuResponse as any).data && Array.isArray((menuResponse as any).data)) {
+          setMenu((menuResponse as any).data.filter((item: MenuItem) => item.isAvailable));
+        } else {
+          setMenu([]);
+        }
+      } catch (error: any) {
+        Alert.alert("Error", error.message || "Failed to load restaurant details");
+        setMenu([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [passedShop, shopId]);
+
+  const groupedMenu = useMemo(() => {
+    const map = new Map<string, MenuItem[]>();
+
+    menu.forEach((item) => {
+      const key = item.category?.trim() || "Popular";
+      const existing = map.get(key) || [];
+      existing.push(item);
+      map.set(key, existing);
+    });
+
+    return Array.from(map.entries());
+  }, [menu]);
+
+  useEffect(() => {
+    if (!selectedCategory && groupedMenu.length > 0) {
+      setSelectedCategory(groupedMenu[0][0]);
+    }
+  }, [groupedMenu, selectedCategory]);
+
+  const selectedItems = useMemo(() => {
+    const activeSection = groupedMenu.find(([title]) => title === selectedCategory);
+    return activeSection?.[1] || groupedMenu[0]?.[1] || [];
+  }, [groupedMenu, selectedCategory]);
 
   const formatAddress = (address: any) => {
     if (!address) return "Address not available";
     if (typeof address === "string") return address;
+
     return [address.roadStreet, address.colony, address.area, address.city, address.state, address.pincode]
       .filter(Boolean)
       .join(", ");
   };
 
-  const groupedMenu = useMemo(() => {
-    const source = new Map<string, MenuItem[]>();
-    menu.forEach((item) => {
-      const key = item.category?.trim() || "Popular";
-      const existing = source.get(key) || [];
-      existing.push(item);
-      source.set(key, existing);
-    });
-    return Array.from(source.entries());
-  }, [menu]);
+  const getShopName = () => shop?.restaurantName || shop?.shopName || "Restaurant";
 
-  const handleAddToCart = (item: MenuItem) => {
-    if (!shop) {
-      Alert.alert("Error", "Shop information not available");
+  const getShopCategoryKey = () => shop?.category || "other";
+
+  const getShopCategoryLabel = () => categoryLabelMap[getShopCategoryKey()] || "Food";
+
+  const getShopCategoryIcon = () => categoryIconMap[getShopCategoryKey()] || "storefront-outline";
+
+  const getMenuImage = (item: MenuItem, index: number) => {
+    return item.imageUrl || menuPlaceholders[index % menuPlaceholders.length];
+  };
+
+  const getCartQuantity = (item: MenuItem) => {
+    const cartItem = items.find(
+      (cartEntry) => cartEntry.shopId === shopId && (cartEntry.menuItemId || cartEntry._id) === item._id
+    );
+    return cartItem?.quantity || 0;
+  };
+
+  const handleIncrement = (item: MenuItem) => {
+    if (!shop) return;
+
+    const quantity = getCartQuantity(item);
+    if (quantity === 0) {
+      addItem({
+        _id: item._id,
+        menuItemId: item._id,
+        name: item.name,
+        price: item.price,
+        quantity: 1,
+        shopId: shop._id,
+        shopName: getShopName()
+      });
       return;
     }
 
-    const shopName = shop.shopName || shop.restaurantName || "Restaurant";
-
-    addItem({
-      _id: item._id,
-      name: item.name,
-      price: item.price,
-      quantity: 1,
-      shopId: shop._id,
-      shopName,
-      menuItemId: item._id
-    });
+    updateQuantity(
+      {
+        shopId: shop._id,
+        menuItemId: item._id,
+        name: item.name
+      },
+      quantity + 1
+    );
   };
 
-  const renderMenuCard = (item: MenuItem) => (
-    <View key={item._id} style={styles.menuCard}>
-      {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.menuImage} resizeMode="cover" />
-      ) : (
-        <View style={[styles.menuImage, styles.placeholderImage]}>
-          <Text style={styles.placeholderEmoji}>🍽️</Text>
-        </View>
-      )}
+  const handleDecrement = (item: MenuItem) => {
+    if (!shop) return;
 
-      <View style={styles.menuContent}>
-        <View style={styles.menuTop}>
-          <Text style={styles.itemName}>{item.name}</Text>
-          <Text style={styles.itemPrice}>Rs {item.price}</Text>
-        </View>
-        {item.description ? (
-          <Text style={styles.itemDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        ) : (
-          <Text style={styles.itemDescriptionMuted}>Freshly prepared in-store.</Text>
-        )}
+    const quantity = getCartQuantity(item);
+    if (quantity <= 0) return;
 
-        <View style={styles.cardFooter}>
-          <Text style={styles.cardFooterNote}>Ready in a few minutes</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => handleAddToCart(item)}>
-            <Text style={styles.addButtonText}>Add</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
+    updateQuantity(
+      {
+        shopId: shop._id,
+        menuItemId: item._id,
+        name: item.name
+      },
+      quantity - 1
+    );
+  };
 
-  if (!shop) {
+  if (!shop && loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text>Loading shop details...</Text>
+        <ActivityIndicator size="large" color="#FF6B35" />
+        <Text style={styles.loadingText}>Loading restaurant details...</Text>
       </View>
     );
   }
 
-  const shopName = shop.restaurantName || shop.shopName || "Restaurant";
-  const category = shop.category || "Food";
+  if (!shop) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.emptyTitle}>Restaurant not found</Text>
+      </View>
+    );
+  }
+
   const itemCount = getItemCount();
+  const totalAmount = getCartTotal();
+  const bannerImage = shop.shopImageUrl || shopPlaceholders[getShopCategoryKey()] || shopPlaceholders["mini-restaurant"];
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <View style={styles.heroArt}>
-            {shop.shopImageUrl ? (
-              <Image source={{ uri: shop.shopImageUrl }} style={styles.heroImage} resizeMode="cover" />
-            ) : (
-              <View style={[styles.heroImage, styles.heroPlaceholder]}>
-                <Text style={styles.heroPlaceholderEmoji}>🍴</Text>
-              </View>
-            )}
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 118 + Math.max(insets.bottom, 12) }]}>
+        <View style={styles.headerBackground}>
+          <View style={[styles.topBar, { paddingTop: insets.top + 4 }]}>
+            <TouchableOpacity style={styles.topBarButton} onPress={() => navigation.goBack()}>
+              <Feather name="arrow-left" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.topBarTitle}>Restaurant Details</Text>
+            <TouchableOpacity
+              style={styles.topBarButton}
+              onPress={() => Alert.alert("Favorites", "Favorite restaurants can be connected next.")}
+            >
+              <Feather name="heart" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.heroInfo}>
-            <View style={styles.heroHeader}>
-              <Text style={styles.shopName}>{shopName}</Text>
-              <View style={[styles.statusBadge, shop.isOpen ? styles.openBadge : styles.closedBadge]}>
-                <Text style={[styles.statusText, shop.isOpen ? styles.openText : styles.closedText]}>
+          <View style={styles.bannerCard}>
+            <Image source={{ uri: bannerImage }} style={styles.bannerImage} resizeMode="cover" />
+          </View>
+        </View>
+
+        <View style={styles.infoCard}>
+          <View style={styles.shopIconBubble}>
+            <MaterialCommunityIcons name={getShopCategoryIcon()} size={22} color="#FFFFFF" />
+          </View>
+
+          <View style={styles.infoTopRow}>
+            <View style={styles.infoTextBlock}>
+              <Text style={styles.shopName}>{getShopName()}</Text>
+              <View style={styles.categoryChip}>
+                <MaterialCommunityIcons name={getShopCategoryIcon()} size={13} color="#C96C2F" />
+                <Text style={styles.categoryChipText}>{getShopCategoryLabel()}</Text>
+              </View>
+            </View>
+
+            <View style={styles.infoMetaBlock}>
+              <View style={[styles.statusPill, !shop.isOpen && styles.statusPillClosed]}>
+                <Text style={[styles.statusText, !shop.isOpen && styles.statusTextClosed]}>
                   {shop.isOpen ? "Open" : "Closed"}
                 </Text>
               </View>
+              <View style={styles.ratingBlock}>
+                <Feather name="star" size={15} color="#F2A514" />
+                <Text style={styles.ratingValue}>{shop.rating?.toFixed(1) || "4.0"}</Text>
+              </View>
+              <Text style={styles.reviewText}>(120 reviews)</Text>
             </View>
+          </View>
 
-            <View style={styles.metaRow}>
-              <Text style={styles.categoryPill}>{category}</Text>
-              <Text style={styles.rating}>★ {shop.rating?.toFixed(1) || "0.0"}</Text>
-            </View>
+          <View style={styles.detailRow}>
+            <Feather name="map-pin" size={14} color="#7B7067" />
+            <Text style={styles.detailText} numberOfLines={2}>
+              {formatAddress(shop.address)}
+            </Text>
+          </View>
 
-            <Text style={styles.addressText}>{formatAddress(shop.address)}</Text>
-
-            <Text style={styles.deliveryMeta}>
-              {shop.openingTime && shop.closingTime
-                ? `${shop.openingTime} - ${shop.closingTime}`
-                : "Serving now"}
+          <View style={styles.detailRow}>
+            <Feather name="clock" size={14} color="#3F7657" />
+            <Text style={styles.timeValue}>
+              {shop.openingTime && shop.closingTime ? `${shop.openingTime} - ${shop.closingTime}` : "08:00 - 22:00"}
             </Text>
           </View>
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Menu</Text>
-          <Text style={styles.sectionSubtitle}>{menu.length} items available</Text>
+        <View style={styles.menuHeader}>
+          <Text style={styles.menuTitle}>Menu</Text>
+          <Text style={styles.menuSubtitle}>{menu.length} items available for order</Text>
         </View>
 
         {loading ? (
@@ -199,31 +306,132 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
             <Text style={styles.loadingText}>Loading menu...</Text>
           </View>
         ) : menu.length === 0 ? (
-          <View style={styles.emptyMenu}>
-            <Text style={styles.emptyMenuTitle}>Menu coming soon</Text>
-            <Text style={styles.emptyMenuText}>This shop has not added any available items yet.</Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Menu coming soon</Text>
+            <Text style={styles.emptyBody}>This restaurant has not added any available items yet.</Text>
           </View>
         ) : (
-          groupedMenu.map(([section, items]) => (
-            <View key={section} style={styles.menuSection}>
-              <Text style={styles.menuSectionTitle}>{section}</Text>
-              {items.map(renderMenuCard)}
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryTabs}
+            >
+              {groupedMenu.map(([section]) => {
+                const active = selectedCategory === section;
+
+                return (
+                  <TouchableOpacity
+                    key={section}
+                    style={[styles.categoryTab, active && styles.categoryTabActive]}
+                    onPress={() => setSelectedCategory(section)}
+                  >
+                    <MaterialCommunityIcons
+                      name={active ? "silverware-fork-knife" : "food-outline"}
+                      size={14}
+                      color={active ? "#FFFFFF" : "#6B6058"}
+                      style={styles.categoryTabIcon}
+                    />
+                    <Text style={[styles.categoryTabText, active && styles.categoryTabTextActive]}>{section}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.menuList}>
+              {selectedItems.map((item, index) => {
+                const quantity = getCartQuantity(item);
+
+                return (
+                  <View key={item._id} style={styles.menuCard}>
+                    {index === 0 ? (
+                      <View style={styles.bestSellerChip}>
+                        <Feather name="star" size={11} color="#F59E0B" />
+                        <Text style={styles.bestSellerText}>Best Seller</Text>
+                      </View>
+                    ) : null}
+
+                    <View style={styles.menuCardRow}>
+                      <Image source={{ uri: getMenuImage(item, index) }} style={styles.menuImage} resizeMode="cover" />
+
+                      <View style={styles.menuInfo}>
+                        <View style={styles.menuInfoTop}>
+                          <View style={styles.menuTitleBlock}>
+                            <Text style={styles.itemName}>{item.name}</Text>
+                            <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
+                          </View>
+                          <Text style={styles.itemPrice}>Rs {item.price}</Text>
+                        </View>
+
+                        <Text style={styles.itemDescription} numberOfLines={3}>
+                          {item.description || "Freshly prepared in-store with quality ingredients."}
+                        </Text>
+
+                        <View style={styles.menuInfoBottom}>
+                          <View style={styles.readyRow}>
+                            <Feather name="clock" size={12} color="#7C7168" />
+                            <Text style={styles.readyText}>Ready in a few minutes</Text>
+                          </View>
+
+                          <View style={styles.actionsColumn}>
+                            <View style={styles.stepper}>
+                              <TouchableOpacity
+                                style={styles.stepperButton}
+                                onPress={() => handleDecrement(item)}
+                                disabled={quantity === 0}
+                              >
+                                <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.stepperValue}>{quantity}</Text>
+                              <TouchableOpacity style={styles.stepperButton} onPress={() => handleIncrement(item)}>
+                                <Text style={styles.stepperButtonText}>+</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <TouchableOpacity style={styles.addButton} onPress={() => handleIncrement(item)}>
+                              <Feather name="shopping-cart" size={13} color="#FFFFFF" />
+                              <Text style={styles.addButtonText}>{quantity > 0 ? "Add More" : "Add"}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
-          ))
+          </>
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
-        <View>
-          <Text style={styles.footerLabel}>Cart</Text>
-          <Text style={styles.footerValue}>{itemCount} item{itemCount === 1 ? "" : "s"}</Text>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={styles.footerLeft}>
+          <View style={styles.footerCartIcon}>
+            <Feather name="shopping-cart" size={16} color="#FF6B35" />
+            {itemCount > 0 ? (
+              <View style={styles.footerBadge}>
+                <Text style={styles.footerBadgeText}>{itemCount}</Text>
+              </View>
+            ) : null}
+          </View>
+          <View>
+            <Text style={styles.footerLabel}>Cart</Text>
+            <Text style={styles.footerItems}>{itemCount} item{itemCount === 1 ? "" : "s"}</Text>
+          </View>
+        </View>
+
+        <View style={styles.footerPriceBlock}>
+          <Text style={styles.footerPriceLabel}>Total</Text>
+          <Text style={styles.footerPriceValue}>Rs {totalAmount}</Text>
         </View>
 
         <TouchableOpacity
-          style={styles.viewCartButton}
+          style={[styles.viewCartButton, itemCount === 0 && styles.viewCartButtonDisabled]}
           onPress={() => navigation.navigate("Cart")}
+          disabled={itemCount === 0}
         >
-          <Text style={styles.viewCartButtonText}>View Cart</Text>
+          <Text style={styles.viewCartButtonText}>{itemCount === 0 ? "Add Items" : "View Cart"}</Text>
+          <Feather name="chevron-right" size={16} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
     </View>
@@ -233,7 +441,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F3EE"
+    backgroundColor: "#FBF8F4"
   },
   content: {
     paddingBottom: 120
@@ -241,275 +449,458 @@ const styles = StyleSheet.create({
   centerContainer: {
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 40
+    paddingVertical: 34
   },
   loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: "#71655C"
+  },
+  headerBackground: {
+    backgroundColor: "#FF6B35",
+    paddingBottom: 48,
+    borderBottomLeftRadius: 34,
+    borderBottomRightRadius: 34
+  },
+  topBar: {
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  topBarButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)"
+  },
+  topBarTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#FFFFFF"
+  },
+  bannerCard: {
     marginTop: 12,
-    fontSize: 14,
-    color: "#6F6259"
+    marginHorizontal: 14,
+    height: 158,
+    borderRadius: 24,
+    overflow: "hidden",
+    backgroundColor: "#F4D9C7"
   },
-  hero: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 28,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#EFE5DA",
-    overflow: "hidden"
-  },
-  heroArt: {
-    height: 210,
-    backgroundColor: "#FFF1EA"
-  },
-  heroImage: {
+  bannerImage: {
     width: "100%",
     height: "100%"
   },
-  heroPlaceholder: {
+  infoCard: {
+    marginTop: -32,
+    marginHorizontal: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#EFE7DE",
+    padding: 14,
+    paddingTop: 18,
+    shadowColor: "#E4D7CB",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    elevation: 4
+  },
+  shopIconBubble: {
+    position: "absolute",
+    left: 18,
+    top: -34,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: "#FF6B35",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FF6B35"
+    borderWidth: 5,
+    borderColor: "#FFFFFF"
   },
-  heroPlaceholderEmoji: {
-    fontSize: 48
-  },
-  heroInfo: {
-    padding: 18
-  },
-  heroHeader: {
+  infoTopRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 10
+    alignItems: "flex-start",
+    paddingTop: 12
+  },
+  infoTextBlock: {
+    flex: 1,
+    paddingRight: 10
   },
   shopName: {
-    flex: 1,
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#2C2018",
-    marginRight: 12
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: "900",
+    color: "#201914"
   },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999
+  categoryChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#FFF1E6"
   },
-  openBadge: {
-    backgroundColor: "#DDF8E5"
+  categoryChipText: {
+    marginLeft: 5,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#C96C2F"
   },
-  closedBadge: {
-    backgroundColor: "#FDE1E1"
+  infoMetaBlock: {
+    alignItems: "flex-end"
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#EAF8EA"
+  },
+  statusPillClosed: {
+    backgroundColor: "#FDE8E8"
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: "800"
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#249A4B"
   },
-  openText: {
-    color: "#216E39"
+  statusTextClosed: {
+    color: "#C7362E"
   },
-  closedText: {
-    color: "#B42318"
-  },
-  metaRow: {
+  ratingBlock: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10
+    marginTop: 10
   },
-  categoryPill: {
-    backgroundColor: "#F8EFE7",
-    color: "#7A5640",
-    fontSize: 12,
-    fontWeight: "700",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    overflow: "hidden"
-  },
-  rating: {
+  ratingValue: {
+    marginLeft: 5,
     fontSize: 16,
-    fontWeight: "800",
-    color: "#E29A13"
+    fontWeight: "900",
+    color: "#E4A11D"
   },
-  addressText: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: "#6F6259",
-    marginBottom: 8
+  reviewText: {
+    marginTop: 2,
+    fontSize: 10,
+    color: "#8C8077"
   },
-  deliveryMeta: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#50745E"
-  },
-  sectionHeader: {
-    marginTop: 20,
-    marginHorizontal: 16,
-    marginBottom: 6
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#2C2018"
-  },
-  sectionSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#7B6D63"
-  },
-  menuSection: {
-    marginTop: 12,
-    marginHorizontal: 16
-  },
-  menuSectionTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#5C4638",
-    marginBottom: 10
-  },
-  menuCard: {
+  detailRow: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#EFE5DA",
-    padding: 12,
-    marginBottom: 12,
-    alignItems: "flex-start"
-  },
-  menuImage: {
-    width: 82,
-    height: 82,
-    borderRadius: 16,
-    marginRight: 12
-  },
-  placeholderImage: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFE4D7"
-  },
-  placeholderEmoji: {
-    fontSize: 28
-  },
-  menuContent: {
-    flex: 1,
-    minHeight: 82,
-    justifyContent: "space-between"
-  },
-  menuTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 6
+    marginTop: 10
   },
-  itemName: {
+  detailText: {
     flex: 1,
-    fontSize: 17,
+    marginLeft: 7,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#71655C"
+  },
+  timeValue: {
+    marginLeft: 7,
+    fontSize: 12,
     fontWeight: "800",
-    color: "#2C2018",
+    color: "#2F7553"
+  },
+  menuHeader: {
+    marginTop: 18,
+    marginHorizontal: 14
+  },
+  menuTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#201914"
+  },
+  menuSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#7A7067"
+  },
+  categoryTabs: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 2
+  },
+  categoryTab: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EEE8E0",
     marginRight: 8
   },
+  categoryTabActive: {
+    backgroundColor: "#FF6B35",
+    borderColor: "#FF6B35"
+  },
+  categoryTabIcon: {
+    marginRight: 5
+  },
+  categoryTabText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#5F564F"
+  },
+  categoryTabTextActive: {
+    color: "#FFFFFF"
+  },
+  menuList: {
+    paddingHorizontal: 14,
+    paddingTop: 8
+  },
+  menuCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#EEE8E0",
+    padding: 10,
+    marginBottom: 10,
+    shadowColor: "#E7DCCF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2
+  },
+  bestSellerChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FFF3E5",
+    marginBottom: 8
+  },
+  bestSellerText: {
+    marginLeft: 4,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#D98416"
+  },
+  menuCardRow: {
+    flexDirection: "row"
+  },
+  menuImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 16,
+    backgroundColor: "#F4E7DB"
+  },
+  menuInfo: {
+    flex: 1,
+    paddingLeft: 10
+  },
+  menuInfoTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start"
+  },
+  menuTitleBlock: {
+    flex: 1,
+    paddingRight: 8
+  },
+  itemName: {
+    fontSize: 16,
+    lineHeight: 19,
+    fontWeight: "900",
+    color: "#201914"
+  },
+  itemSubtext: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FF6B35"
+  },
   itemPrice: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "900",
     color: "#FF6B35"
   },
   itemDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#72645A",
-    marginBottom: 10
-  },
-  itemDescriptionMuted: {
-    fontSize: 13,
-    color: "#9C8E84",
-    marginBottom: 10
-  },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 2
-  },
-  cardFooterNote: {
+    marginTop: 7,
     fontSize: 11,
-    color: "#8C7C71",
-    fontWeight: "600",
-    marginRight: 10
+    lineHeight: 16,
+    color: "#72675E"
   },
-  addButton: {
-    backgroundColor: "#FF6B35",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12
+  menuInfoBottom: {
+    marginTop: 9
   },
-  addButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  emptyMenu: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 28,
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#EFE5DA",
+  readyRow: {
+    flexDirection: "row",
     alignItems: "center"
   },
-  emptyMenuTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#2C2018",
-    marginBottom: 8
+  readyText: {
+    marginLeft: 5,
+    fontSize: 10,
+    color: "#7C7168"
   },
-  emptyMenuText: {
-    fontSize: 14,
-    color: "#7B6D63",
+  actionsColumn: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F1C3AA",
+    borderRadius: 999,
+    paddingHorizontal: 2,
+    height: 34
+  },
+  stepperButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  stepperButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#D76E35"
+  },
+  stepperButtonDisabled: {
+    color: "#CFB8A8"
+  },
+  stepperValue: {
+    minWidth: 22,
     textAlign: "center",
-    lineHeight: 20
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#201914"
+  },
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FF6B35",
+    borderRadius: 12,
+    minWidth: 96,
+    height: 36
+  },
+  addButtonText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF"
+  },
+  emptyCard: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    padding: 20,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EEE8E0",
+    alignItems: "center"
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#201914"
+  },
+  emptyBody: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#7A7067",
+    textAlign: "center"
   },
   footer: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
+    backgroundColor: "rgba(255,255,255,0.98)",
+    borderTopWidth: 1,
+    borderTopColor: "#EDE4DB",
+    paddingTop: 10,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 20,
-    backgroundColor: "rgba(247, 243, 238, 0.98)",
-    borderTopWidth: 1,
-    borderTopColor: "#E8DDD2"
+    justifyContent: "space-between"
+  },
+  footerLeft: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  footerCartIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FFF4EB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 9
+  },
+  footerBadge: {
+    position: "absolute",
+    top: -4,
+    right: -2,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#FF6B35",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2
+  },
+  footerBadgeText: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: "#FFFFFF"
   },
   footerLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#8A7A70"
+    fontSize: 11,
+    color: "#8B7E74",
+    fontWeight: "700"
   },
-  footerValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#2C2018",
-    marginTop: 2
+  footerItems: {
+    marginTop: 1,
+    fontSize: 14,
+    color: "#201914",
+    fontWeight: "900"
+  },
+  footerPriceBlock: {
+    alignItems: "center"
+  },
+  footerPriceLabel: {
+    fontSize: 10,
+    color: "#8B7E74",
+    fontWeight: "700"
+  },
+  footerPriceValue: {
+    marginTop: 2,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#201914"
   },
   viewCartButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#FF6B35",
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    borderRadius: 18,
-    shadowColor: "#FF6B35",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 6
+    borderRadius: 16,
+    height: 44,
+    minWidth: 118
+  },
+  viewCartButtonDisabled: {
+    backgroundColor: "#FFB08F"
   },
   viewCartButtonText: {
+    fontSize: 13,
+    fontWeight: "800",
     color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800"
+    marginRight: 3
   }
 });

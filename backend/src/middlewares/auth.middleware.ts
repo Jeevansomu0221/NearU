@@ -1,8 +1,17 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import User from "../models/User.model";
+import { verifyAccessToken } from "../utils/jwt";
 
 export interface AuthRequest extends Request {
-  user?: any;
+  user?: {
+    id: string;
+    phone: string;
+    role: string;
+    name: string;
+    partnerId?: string | null;
+    deliveryPartnerId?: string | null;
+    sessionVersion: number;
+  };
 }
 
 export const authMiddleware = async (
@@ -11,67 +20,60 @@ export const authMiddleware = async (
   next: NextFunction
 ) => {
   try {
-    // Get token from header
     const authHeader = req.headers.authorization;
-    
-    console.log("🔐 Auth Middleware - Checking token");
-    console.log("Authorization header:", authHeader);
-    
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log("❌ No Bearer token found");
       return res.status(401).json({
         success: false,
         message: "No token provided"
       });
     }
-    
+
     const token = authHeader.split(" ")[1];
-    console.log("Token received:", token.substring(0, 20) + "...");
-    
-    // Verify token
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || 'your-secret-key'
-    ) as any;
-    
-    console.log("✅ Token verified successfully");
-    console.log("Decoded user:", {
-      id: decoded.id,
-      phone: decoded.phone,
-      role: decoded.role,
-      name: decoded.name
-    });
-    
-    // Add user to request
+    const decoded = verifyAccessToken(token);
+    const userRecord = await User.findById(decoded.id).select("isActive sessionVersion").lean();
+
+    if (!userRecord || !userRecord.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: "User account is inactive"
+      });
+    }
+
+    if (userRecord.sessionVersion !== decoded.sessionVersion) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please log in again."
+      });
+    }
+
     req.user = {
       id: decoded.id,
       phone: decoded.phone,
       role: decoded.role,
       name: decoded.name,
       partnerId: decoded.partnerId,
-      deliveryPartnerId: decoded.deliveryPartnerId
+      deliveryPartnerId: decoded.deliveryPartnerId,
+      sessionVersion: decoded.sessionVersion
     };
-    
-    console.log("🔒 User authenticated:", req.user.role);
+
     next();
   } catch (error: any) {
-    console.error("❌ Auth Middleware Error:", error.message);
-    
     if (error.name === "JsonWebTokenError") {
       return res.status(401).json({
         success: false,
         message: "Invalid token"
       });
     }
-    
+
     if (error.name === "TokenExpiredError") {
       return res.status(401).json({
         success: false,
         message: "Token expired"
       });
     }
-    
-    return res.status(500).json({
+
+    return res.status(401).json({
       success: false,
       message: "Authentication failed"
     });

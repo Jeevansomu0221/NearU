@@ -84,6 +84,10 @@ const UserSchema = new Schema({
     type: Boolean,
     default: true
   },
+  sessionVersion: {
+    type: Number,
+    default: 0
+  },
   lastLogin: {
     type: Date
   }

@@ -1,331 +1,218 @@
 import { Request, Response } from "express";
-import jwt from "jsonwebtoken";
 import { Types } from "mongoose";
 import User from "../models/User.model";
 import Partner from "../models/Partner.model";
-import DeliveryPartner from "../models/DeliveryPartner.model"; // Make sure this model exists
+import DeliveryPartner from "../models/DeliveryPartner.model";
 import { OTPService } from "../services/otp.service";
 import { successResponse, errorResponse } from "../utils/response";
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
+import { AuthRequest } from "../middlewares/auth.middleware";
+import { ROLES } from "../config/roles";
+import { config } from "../config/env";
 
-// Store test OTPs in memory for development
-const testOtps = new Map<string, string>(); // phone -> otp
+const phoneRegex = /^[0-9]{10}$/;
 
-/**
- * Send OTP to phone
- */
+const buildTokens = async (user: any) => {
+  let partnerId: string | null = null;
+  let deliveryPartnerId: string | null = null;
+
+  if (user.role === ROLES.PARTNER) {
+    const partner = await Partner.findOne({ userId: user._id }).select("_id").lean();
+    partnerId = partner?._id?.toString() || null;
+  }
+
+  if (user.role === ROLES.DELIVERY) {
+    let deliveryPartner = await DeliveryPartner.findOne({ userId: user._id }).select("_id").lean();
+
+    if (!deliveryPartner) {
+      const created = await DeliveryPartner.create({
+        userId: user._id,
+        phone: user.phone,
+        name: user.name,
+        isAvailable: false,
+        status: "PENDING"
+      });
+      deliveryPartner = { _id: created._id } as any;
+    }
+
+    deliveryPartnerId = deliveryPartner?._id?.toString() || null;
+  }
+
+  const sessionVersion = user.sessionVersion || 0;
+  const accessToken = generateAccessToken({
+    id: user._id.toString(),
+    phone: user.phone,
+    role: user.role,
+    name: user.name,
+    partnerId,
+    deliveryPartnerId,
+    sessionVersion
+  });
+  const refreshToken = generateRefreshToken({
+    id: user._id.toString(),
+    sessionVersion
+  });
+
+  return {
+    accessToken,
+    refreshToken,
+    partnerId,
+    deliveryPartnerId
+  };
+};
+
 export const sendOTP = async (req: Request, res: Response) => {
   try {
     const { phone, role } = req.body;
 
-    console.log("📱 sendOTP called with:", { phone, role });
-
     if (!phone || !role) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number and role are required"
-      });
+      return errorResponse(res, "Phone number and role are required", 400);
     }
 
-    // Validate phone number format (basic)
-    const phoneRegex = /^[0-9]{10}$/;
     if (!phoneRegex.test(phone)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid phone number format (10 digits required)"
-      });
+      return errorResponse(res, "Invalid phone number format", 400);
     }
 
-    // ✅ UPDATED: Add "delivery" role to valid roles
-    const validRoles = ['customer', 'partner', 'admin', 'delivery'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid role. Must be: ${validRoles.join(", ")}`
-      });
+    if (!Object.values(ROLES).includes(role)) {
+      return errorResponse(res, "Invalid role", 400);
     }
 
-    // ✅ DEVELOPMENT/TEST MODE: Generate and display test OTP
-    const testOtp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
-    testOtps.set(phone, testOtp);
-    
-    console.log("========================================");
-    console.log("🔐 DEVELOPMENT MODE - TEST OTP GENERATED");
-    console.log(`📱 Phone: ${phone}`);
-    console.log(`🔢 OTP: ${testOtp}`);
-    console.log(`👤 Role: ${role}`);
-    console.log("========================================");
-    
-    // In production, you would use:
-    // const result = await OTPService.sendOTP(phone);
-    
-    // For development, simulate success with test OTP info
-    return res.json({
-      success: true,
-      message: "OTP sent successfully (DEVELOPMENT MODE)",
-      phone: phone,
-      role: role,
-      testMode: true,
-      testOtp: testOtp, // Include test OTP in response for development
-      note: "In production, OTP would be sent via SMS"
-    });
+    if (role === ROLES.ADMIN) {
+      const existingAdmin = await User.findOne({ phone, role: ROLES.ADMIN }).select("_id").lean();
+      if (!existingAdmin) {
+        return errorResponse(res, "Admin OTP is restricted", 403);
+      }
+    }
 
+    await OTPService.sendOTP(phone);
+
+    const data: { phone: string; devOtp?: string } = { phone };
+    const devOtp = OTPService.getDevOtp(phone);
+    if (!config.isProduction && devOtp) {
+      data.devOtp = devOtp;
+    }
+
+    return successResponse(res, data, "OTP sent successfully");
   } catch (error: any) {
-    console.error("❌ sendOTP error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to send OTP",
-      error: error.message
-    });
+    return errorResponse(res, error.message || "Failed to send OTP", 400);
   }
 };
 
-/**
- * Verify OTP and login/register
- */
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
     const { phone, otp, role } = req.body;
-    
-    console.log("🔍 OTP Verification Request:", { phone, otp, role });
-    
-    // Validate required fields
+
     if (!phone || !otp || !role) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone, OTP, and role are required"
-      });
+      return errorResponse(res, "Phone, OTP, and role are required", 400);
     }
-    
-    // ✅ UPDATED: Validate role
-    const validRoles = ['customer', 'partner', 'admin', 'delivery'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid role. Must be: ${validRoles.join(", ")}`
-      });
+
+    if (!phoneRegex.test(phone)) {
+      return errorResponse(res, "Invalid phone number format", 400);
     }
-    
-    // DEVELOPMENT/TEST MODE: Check against stored test OTP
-    if (testOtps.has(phone)) {
-      const storedOtp = testOtps.get(phone);
-      if (otp === storedOtp) {
-        console.log("✅ TEST MODE: OTP verified successfully");
-        testOtps.delete(phone); // Remove used OTP
-      } else {
-        console.log("❌ TEST MODE: Invalid OTP");
-        console.log(`   Expected: ${storedOtp}, Received: ${otp}`);
-        return res.status(400).json({
-          success: false,
-          message: "Invalid OTP"
-        });
-      }
-    } else {
-      console.log("⚠️ TEST MODE: No OTP found for this phone. Using bypass mode.");
-      // Continue without OTP validation for development
+
+    if (!Object.values(ROLES).includes(role)) {
+      return errorResponse(res, "Invalid role", 400);
     }
-    
-    // Find existing user
+
+    const isOtpValid = await OTPService.verifyOTP(phone, otp);
+    if (!isOtpValid) {
+      return errorResponse(res, "Invalid or expired OTP", 400);
+    }
+
     let user = await User.findOne({ phone });
-    
-    // Handle different roles
+
     if (!user) {
-      // User doesn't exist - create new based on role
-      const userData: any = {
+      if (role === ROLES.ADMIN) {
+        return errorResponse(res, "Admin account not found", 403);
+      }
+
+      user = await User.create({
         phone,
-        role: role,
-        isActive: true
-      };
-      
-      // Set default name based on role
-      switch (role) {
-        case "customer":
-          userData.name = `Customer ${phone.substring(6)}`;
-          console.log("👤 Creating new customer user for phone:", phone);
-          break;
-        case "partner":
-          userData.name = `Partner ${phone.substring(6)}`;
-          console.log("👤 Creating new partner user for phone:", phone);
-          break;
-        case "admin":
-          userData.name = `Admin ${phone.substring(6)}`;
-          console.log("👤 Creating new admin user for phone:", phone);
-          break;
-        case "delivery":
-          userData.name = `Delivery ${phone.substring(6)}`;
-          console.log("🚚 Creating new delivery user for phone:", phone);
-          break;
-        default:
-          return res.status(400).json({
-            success: false,
-            message: "Invalid role"
-          });
+        role,
+        isActive: true,
+        name:
+          role === ROLES.CUSTOMER
+            ? `Customer ${phone.slice(-4)}`
+            : role === ROLES.PARTNER
+              ? `Partner ${phone.slice(-4)}`
+              : `Delivery ${phone.slice(-4)}`
+      });
+    } else if (user.role !== role) {
+      if (role === ROLES.ADMIN || user.role === ROLES.ADMIN) {
+        return errorResponse(res, "Role mismatch for this account", 403);
       }
-      
-      user = await User.create(userData);
-    } else {
-      // User exists - verify role matches
-      if (role === "admin" && user.role !== "admin") {
-        // If user exists but isn't admin, we can update them to admin
-        // (Remove or modify this based on your security needs)
-        console.log(`⚠️ User exists as ${user.role}, updating to admin for development`);
-        user.role = "admin";
-        user.name = `Admin ${phone.substring(6)}`;
-        await user.save();
-      }
-      
-      // For other roles, allow role mismatch for development
-      if ((role === "customer" && user.role !== "customer") || 
-          (role === "partner" && user.role !== "partner") ||
-          (role === "delivery" && user.role !== "delivery")) {
-        console.log(`⚠️ Role mismatch: User is ${user.role}, requested ${role}. Updating role.`);
-        user.role = role;
-        
-        // Update name based on new role
-        switch (role) {
-          case "customer":
-            user.name = `Customer ${phone.substring(6)}`;
-            break;
-          case "partner":
-            user.name = `Partner ${phone.substring(6)}`;
-            break;
-          case "delivery":
-            user.name = `Delivery ${phone.substring(6)}`;
-            break;
-        }
-        
-        await user.save();
-      }
+
+      user.role = role;
     }
-    
-    // Find partner if user is a partner
-    let partnerId = null;
-    let deliveryPartnerId = null;
-    
-    if (user.role === "partner") {
-      let partner = await Partner.findOne({ userId: user._id });
-      
-      if (!partner) {
-        partner = await Partner.findOne({ phone });
-        
-        if (partner && !partner.userId) {
-          partner.userId = user._id;
-          await partner.save();
-          console.log("✅ Updated partner userId");
-        }
-      }
-      
+
+    user.lastLogin = new Date();
+    await user.save();
+
+    if (user.role === ROLES.PARTNER) {
+      const partner = await Partner.findOne({ phone, userId: { $exists: false } });
       if (partner) {
-        partnerId = partner._id.toString();
-        console.log("✅ Found partner profile:", partnerId);
+        partner.userId = new Types.ObjectId(user._id);
+        await partner.save();
       }
     }
-    
-    // ✅ NEW: Find delivery partner if user is a delivery partner
-    if (user.role === "delivery") {
-      let deliveryPartner = await DeliveryPartner.findOne({ userId: user._id });
-      
-      if (!deliveryPartner) {
-        deliveryPartner = await DeliveryPartner.findOne({ phone });
-        
-        if (deliveryPartner && !deliveryPartner.userId) {
-          deliveryPartner.userId = user._id;
-          await deliveryPartner.save();
-          console.log("✅ Updated delivery partner userId");
-        } else if (!deliveryPartner) {
-          // Create a new delivery partner profile if doesn't exist
-          deliveryPartner = await DeliveryPartner.create({
-            userId: user._id,
-            phone: user.phone,
-            name: user.name,
-            isAvailable: true,
-            vehicleType: "Bike", // Default
-            status: "ACTIVE"
-          });
-          console.log("✅ Created new delivery partner profile");
-        }
-      }
-      
-      if (deliveryPartner) {
-        deliveryPartnerId = deliveryPartner._id.toString();
-        console.log("✅ Found delivery partner profile:", deliveryPartnerId);
-      }
-    }
-    
-    // Generate token
-    const tokenPayload: any = {
-      id: user._id.toString(),
-      phone: user.phone,
-      role: user.role,
-      name: user.name
-    };
-    
-    if (partnerId) {
-      tokenPayload.partnerId = partnerId;
-    }
-    
-    // ✅ NEW: Add deliveryPartnerId to token payload
-    if (deliveryPartnerId) {
-      tokenPayload.deliveryPartnerId = deliveryPartnerId;
-    }
-    
-    const token = jwt.sign(
-      tokenPayload,
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' }
-    );
-    
-    console.log("========================================");
-    console.log("✅ OTP Verified Successfully");
-    console.log(`👤 User ID: ${user._id.toString()}`);
-    console.log(`📱 Phone: ${user.phone}`);
-    console.log(`👥 Role: ${user.role}`);
-    console.log(`🔑 Token Generated`);
-    console.log("========================================");
-    
-    return res.json({
-      success: true,
-      token,
+
+    const { accessToken, refreshToken, partnerId, deliveryPartnerId } = await buildTokens(user);
+
+    return successResponse(res, {
+      token: accessToken,
+      refreshToken,
       user: {
         id: user._id.toString(),
         phone: user.phone,
         name: user.name,
         role: user.role,
-        partnerId: partnerId,
-        deliveryPartnerId: deliveryPartnerId // ✅ NEW: Include deliveryPartnerId
-      },
-      message: "Login successful"
-    });
-    
+        partnerId,
+        deliveryPartnerId
+      }
+    }, "Login successful");
   } catch (error: any) {
-    console.error("❌ OTP Verification Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error during OTP verification",
-      error: error.message
-    });
+    return errorResponse(res, error.message || "Server error during OTP verification");
   }
 };
 
-/**
- * Refresh token
- */
 export const refreshToken = async (req: Request, res: Response) => {
   try {
-    // Extract old token and verify
-    // Generate new token with same payload
-    // Return new token
-    
-    return res.json({
-      success: true,
-      token: "new-token-here",
-      message: "Token refreshed (TEST MODE)"
-    });
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return errorResponse(res, "Refresh token is required", 400);
+    }
+
+    const decoded = verifyRefreshToken(refreshToken);
+    const user = await User.findById(decoded.id);
+
+    if (!user || !user.isActive) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    if (user.sessionVersion !== decoded.sessionVersion) {
+      return errorResponse(res, "Refresh token expired", 401);
+    }
+
+    const tokens = await buildTokens(user);
+    return successResponse(res, {
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken
+    }, "Token refreshed");
   } catch (error: any) {
-    console.error("refreshToken error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to refresh token",
-      error: error.message
-    });
+    return errorResponse(res, error.message || "Failed to refresh token", 401);
+  }
+};
+
+export const logout = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    await User.findByIdAndUpdate(req.user.id, { $inc: { sessionVersion: 1 } });
+    return successResponse(res, null, "Logged out successfully");
+  } catch (error: any) {
+    return errorResponse(res, error.message || "Failed to logout");
   }
 };

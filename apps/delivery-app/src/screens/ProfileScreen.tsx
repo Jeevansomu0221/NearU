@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URLS } from "../api/client";
 import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
+import { getDeliveryStats, getTodaysEarnings, type DeliveryStats } from "../api/delivery.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
 const DRAFT_KEY = "delivery_registration_draft_v2";
@@ -300,9 +301,14 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [bankSaving, setBankSaving] = useState(false);
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const [uploading, setUploading] = useState<UploadField | null>(null);
   const [profile, setProfile] = useState<DeliveryProfile | null>(null);
   const [step, setStep] = useState(0);
+  const [editingBank, setEditingBank] = useState(false);
+  const [stats, setStats] = useState<DeliveryStats | null>(null);
+  const [todayEarnings, setTodayEarnings] = useState(0);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -335,12 +341,34 @@ export default function ProfileScreen({ navigation, route }: any) {
     setDocuments(normalizeDocuments(data.documents));
   };
 
+  const loadDashboardStats = async () => {
+    try {
+      const [statsResponse, earningsResponse] = await Promise.all([
+        getDeliveryStats(),
+        getTodaysEarnings()
+      ]);
+
+      if (statsResponse.success && statsResponse.data) {
+        setStats(statsResponse.data);
+      }
+
+      if (earningsResponse.success && earningsResponse.data) {
+        setTodayEarnings(earningsResponse.data.earnings);
+      }
+    } catch (error) {
+      console.log("Failed to load delivery dashboard stats", error);
+    }
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
         const response = await getDeliveryProfile();
         if (response.success && response.data) {
           syncProfile(response.data);
+          if (response.data.status === "ACTIVE") {
+            loadDashboardStats().catch(() => {});
+          }
           const draft = await AsyncStorage.getItem(DRAFT_KEY);
           if ((forceComplete || !response.data.isProfileComplete) && draft) {
             const parsed = JSON.parse(draft);
@@ -386,6 +414,264 @@ export default function ProfileScreen({ navigation, route }: any) {
       })
     ).catch(() => {});
   }, [name, email, formattedAddress, addressForm, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, documents, step]);
+
+  const isActiveDashboard = !forceComplete && profile?.status === "ACTIVE";
+
+  const formatCurrency = (amount?: number | null) => `Rs ${(amount || 0).toLocaleString("en-IN")}`;
+
+  const safeValue = (value?: string | null, fallback = "Not added") => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : fallback;
+  };
+
+  const employeeId = profile?._id ? `DLV-${profile._id.slice(-6).toUpperCase()}` : "Assigned after verification";
+
+  const verificationStatusLabel = profile?.status === "ACTIVE" ? "Approved" : statusTone[profile?.status || "INACTIVE"].label;
+
+  const documentStatusItems = [
+    { label: "Driving license", ready: Boolean(documents.drivingLicenseFrontUrl && documents.drivingLicenseBackUrl) },
+    { label: "Vehicle RC", ready: Boolean(documents.vehicleRcFrontUrl && documents.vehicleRcBackUrl) },
+    { label: "Insurance", ready: Boolean(documents.insuranceUrl) },
+    { label: "ID proof", ready: Boolean((documents.aadhaarFrontUrl && documents.aadhaarBackUrl) || documents.panFrontUrl) }
+  ];
+
+  const handleLogout = async () => {
+    await AsyncStorage.multiRemove(["token", "user"]);
+    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  };
+
+  const handleAvailabilityToggle = async () => {
+    const nextValue = !isAvailable;
+    setIsAvailable(nextValue);
+    setAvailabilitySaving(true);
+    try {
+      const response = await updateDeliveryProfile({ isAvailable: nextValue });
+      if (!response.success || !response.data) {
+        throw new Error(response.message || "Failed to update availability");
+      }
+      syncProfile(response.data);
+    } catch (error: any) {
+      setIsAvailable(!nextValue);
+      Alert.alert("Error", error.message || "Failed to update availability");
+    } finally {
+      setAvailabilitySaving(false);
+    }
+  };
+
+  const handleSaveBankDetails = async () => {
+    if (!documents.bankAccountHolderName?.trim()) {
+      Alert.alert("Missing details", "Account holder name is required.");
+      return;
+    }
+    if (!documents.bankAccountNumber?.trim()) {
+      Alert.alert("Missing details", "Bank account number is required.");
+      return;
+    }
+    if (!documents.bankIfsc?.trim()) {
+      Alert.alert("Missing details", "IFSC code is required.");
+      return;
+    }
+
+    setBankSaving(true);
+    try {
+      const response = await updateDeliveryProfile({
+        documents: {
+          ...documents,
+          bankAccountHolderName: documents.bankAccountHolderName?.trim(),
+          bankAccountNumber: documents.bankAccountNumber?.trim(),
+          bankIfsc: documents.bankIfsc?.trim().toUpperCase()
+        }
+      });
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || "Failed to update payout details");
+      }
+
+      syncProfile(response.data);
+      setEditingBank(false);
+      Alert.alert("Saved", "Payout details updated successfully.");
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to update payout details");
+    } finally {
+      setBankSaving(false);
+    }
+  };
+
+  const renderInfoRow = (label: string, value: string) => (
+    <View style={styles.infoRow} key={label}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+
+  const renderShortcut = (icon: keyof typeof Ionicons.glyphMap, title: string, subtitle: string, onPress: () => void) => (
+    <TouchableOpacity style={styles.shortcutCard} onPress={onPress} key={title}>
+      <View style={styles.shortcutIcon}>
+        <Ionicons name={icon} size={18} color="#C2410C" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.shortcutTitle}>{title}</Text>
+        <Text style={styles.shortcutSubtitle}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+    </TouchableOpacity>
+  );
+
+  const renderActiveProfile = () => (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 36 }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.dashboardHero}>
+        <View style={styles.dashboardHeaderRow}>
+          <View style={styles.dashboardAvatarWrap}>
+            {profilePhotoUrl ? (
+              <Image source={{ uri: profilePhotoUrl }} style={styles.dashboardAvatar} />
+            ) : (
+              <View style={styles.dashboardAvatarFallback}>
+                <Ionicons name="person" size={28} color="#C2410C" />
+              </View>
+            )}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dashboardName}>{name || profile?.name || "Delivery Partner"}</Text>
+            <Text style={styles.dashboardMeta}>{employeeId}</Text>
+            <View style={[styles.liveBadge, isAvailable && styles.liveBadgeActive]}>
+              <Text style={[styles.liveBadgeText, isAvailable && styles.liveBadgeTextActive]}>{isAvailable ? "Online for jobs" : "Offline right now"}</Text>
+            </View>
+          </View>
+        </View>
+        <Text style={styles.dashboardSubtitle}>Your rider profile is active. Manage payout details, work status, verification documents, and support from one place.</Text>
+      </View>
+
+      <View style={[styles.statusCard, { backgroundColor: currentStatus.bg }]}>
+        <Text style={[styles.statusLabel, { color: currentStatus.fg }]}>{currentStatus.label}</Text>
+        <Text style={styles.statusText}>You can now access jobs while keeping profile, payout, and support details updated.</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Basic Profile Details</Text>
+        {renderInfoRow("Full name", safeValue(name || profile?.name))}
+        {renderInfoRow("Phone number", safeValue(profile?.phone))}
+        {renderInfoRow("Partner / Employee ID", employeeId)}
+        {renderInfoRow("Vehicle type", safeValue(vehicleType))}
+        {renderInfoRow("Email", safeValue(email))}
+        {renderInfoRow("Delivery address", safeValue(formattedAddress))}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Documents and Verification</Text>
+        {documentStatusItems.map((item) => (
+          <View style={styles.docRow} key={item.label}>
+            <Text style={styles.infoLabel}>{item.label}</Text>
+            <View style={[styles.docBadge, item.ready ? styles.docBadgeReady : styles.docBadgePending]}>
+              <Text style={[styles.docBadgeText, item.ready ? styles.docBadgeTextReady : styles.docBadgeTextPending]}>{item.ready ? "Uploaded" : "Missing"}</Text>
+            </View>
+          </View>
+        ))}
+        {renderInfoRow("Verification status", verificationStatusLabel)}
+      </View>
+
+      <View style={styles.statsGrid}>
+        <View style={styles.statTile}>
+          <Text style={styles.statTileLabel}>Daily earnings</Text>
+          <Text style={styles.statTileValue}>{formatCurrency(todayEarnings)}</Text>
+        </View>
+        <View style={styles.statTile}>
+          <Text style={styles.statTileLabel}>Weekly earnings</Text>
+          <Text style={styles.statTileValue}>{formatCurrency((stats?.todaysEarnings || todayEarnings) * 7)}</Text>
+        </View>
+        <View style={styles.statTile}>
+          <Text style={styles.statTileLabel}>Wallet balance</Text>
+          <Text style={styles.statTileValue}>{formatCurrency(stats?.totalEarnings || profile?.totalEarnings)}</Text>
+        </View>
+        <View style={styles.statTile}>
+          <Text style={styles.statTileLabel}>Incentives and bonuses</Text>
+          <Text style={styles.statTileValue}>{formatCurrency(Math.max(0, (stats?.todaysEarnings || 0) - todayEarnings))}</Text>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Bank Account Details</Text>
+        {editingBank ? (
+          <>
+            <Text style={styles.label}>Account Holder Name</Text>
+            <TextInput style={styles.input} value={documents.bankAccountHolderName || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountHolderName: value }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+            <Text style={styles.label}>Bank Account Number</Text>
+            <TextInput style={styles.input} value={documents.bankAccountNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountNumber: value.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+            <Text style={styles.label}>IFSC Code</Text>
+            <TextInput style={styles.input} value={documents.bankIfsc || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankIfsc: value.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+            <Text style={styles.label}>UPI ID</Text>
+            <View style={styles.readOnly}><Text style={styles.readOnlyText}>UPI update support will be added soon.</Text></View>
+            <View style={styles.inlineActions}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setEditingBank(false)}>
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.primaryButton, bankSaving && styles.disabled]} onPress={handleSaveBankDetails} disabled={bankSaving}>
+                {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.primaryButtonText}>Save Payout</Text>}
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <>
+            {renderInfoRow("Account holder name", safeValue(documents.bankAccountHolderName))}
+            {renderInfoRow("Bank account number", safeValue(documents.bankAccountNumber ? `••••${documents.bankAccountNumber.slice(-4)}` : ""))}
+            {renderInfoRow("IFSC code", safeValue(documents.bankIfsc))}
+            {renderInfoRow("UPI ID", "Add in next update")}
+            <TouchableOpacity style={styles.primaryButton} onPress={() => setEditingBank(true)}>
+              <Text style={styles.primaryButtonText}>Edit Payout Details</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Work Stats and Performance</Text>
+        {renderInfoRow("Total deliveries completed", String(stats?.totalDeliveries || profile?.totalDeliveries || 0))}
+        {renderInfoRow("Customer ratings", `${(profile?.rating || 0).toFixed(1)} / 5 (${profile?.ratingCount || 0} ratings)`)}
+        {renderInfoRow("Acceptance rate", "Available soon")}
+        {renderInfoRow("On-time delivery percentage", "Available soon")}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Availability and Duty Status</Text>
+        <TouchableOpacity style={styles.availability} onPress={handleAvailabilityToggle} disabled={availabilitySaving}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.availabilityTitle}>Online / Offline toggle</Text>
+            <Text style={styles.availabilityText}>Control whether you want to receive delivery opportunities right now.</Text>
+          </View>
+          <View style={[styles.badge, isAvailable && styles.badgeActive]}>
+            {availabilitySaving ? <ActivityIndicator size="small" color={isAvailable ? "#fff" : "#475467"} /> : <Text style={[styles.badgeText, isAvailable && styles.badgeTextActive]}>{isAvailable ? "Online" : "Offline"}</Text>}
+          </View>
+        </TouchableOpacity>
+        {renderInfoRow("Shift selection", "Open shift")}
+        {renderInfoRow("Break mode", isAvailable ? "Off" : "Enabled while offline")}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Support and Help</Text>
+        {renderShortcut("help-circle-outline", "Help center", "Get answers for payouts, jobs, and verification.", () => Alert.alert("Help center", "Help center will be connected in the next update."))}
+        {renderShortcut("flag-outline", "Report an issue", "Tell us if something is broken or confusing.", () => Alert.alert("Report issue", "Issue reporting will be connected in the next update."))}
+        {renderShortcut("call-outline", "Emergency support", "Fast support access for rider safety situations.", () => Alert.alert("Emergency support", "Emergency support contact will be added here."))}
+        {renderShortcut("chatbubble-ellipses-outline", "Chat / call support", "Reach operations if you need quick help.", () => Alert.alert("Support", "Chat and call support will be connected soon."))}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Settings</Text>
+        {renderShortcut("notifications-outline", "Notification preferences", "Choose job and payout alerts.", () => Alert.alert("Notifications", "Notification preferences will be available soon."))}
+        {renderShortcut("language-outline", "Language settings", "Change your preferred app language.", () => Alert.alert("Language", "Language settings will be available soon."))}
+        {renderShortcut("options-outline", "App preferences", "Control app behavior and display options.", () => Alert.alert("Preferences", "App preferences will be available soon."))}
+        {renderShortcut("gift-outline", "Referral program", "Invite other riders and earn rewards.", () => Alert.alert("Referral program", "Referral tracking will be added soon."))}
+        {renderShortcut("trending-up-outline", "Incentive tracking", "See streaks, quests, and bonus targets.", () => Alert.alert("Incentive tracking", "Incentive tracking will be available soon."))}
+        {renderShortcut("school-outline", "Training and onboarding", "Refresh rider onboarding and app usage guidance.", () => Alert.alert("Training", "Training modules will be added soon."))}
+        {renderShortcut("shield-outline", "Safety guidelines", "Check rider safety practices and emergency tips.", () => Alert.alert("Safety guidelines", "Safety guidance will be available here soon."))}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
 
   const mandatoryDocsComplete = useMemo(() => {
     const normalized = normalizeDocuments(documents);
@@ -573,9 +859,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       syncProfile(response.data);
       await AsyncStorage.removeItem(DRAFT_KEY);
       Alert.alert("Submitted", "Your delivery profile is now pending admin verification.");
-      if (forceComplete) {
-        navigation.reset({ index: 0, routes: [{ name: resolveDeliveryRoute(response.data) }] });
-      }
+      navigation.reset({ index: 0, routes: [{ name: resolveDeliveryRoute(response.data) }] });
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to save profile");
     } finally {
@@ -728,6 +1012,10 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const currentStatus = statusTone[profile?.status || "INACTIVE"];
 
+  if (isActiveDashboard) {
+    return renderActiveProfile();
+  }
+
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 8}>
       <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 136 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -785,6 +1073,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8F5F0" },
   loading: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F8F5F0" },
   loadingText: { marginTop: 12, color: "#667085", fontSize: 15 },
+  dashboardHero: { margin: 16, padding: 20, borderRadius: 28, backgroundColor: "#FFF1E8", borderWidth: 1, borderColor: "#FFD7C2" },
+  dashboardHeaderRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  dashboardAvatarWrap: { width: 76, height: 76, borderRadius: 24, overflow: "hidden" },
+  dashboardAvatar: { width: "100%", height: "100%" },
+  dashboardAvatarFallback: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FFE5D9" },
+  dashboardName: { fontSize: 23, fontWeight: "800", color: "#1D2939" },
+  dashboardMeta: { marginTop: 4, fontSize: 13, fontWeight: "700", color: "#667085" },
+  liveBadge: { alignSelf: "flex-start", marginTop: 10, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: "#fff" },
+  liveBadgeActive: { backgroundColor: "#E8FFF3" },
+  liveBadgeText: { fontSize: 12, fontWeight: "800", color: "#667085" },
+  liveBadgeTextActive: { color: "#087443" },
+  dashboardSubtitle: { marginTop: 16, fontSize: 14, lineHeight: 22, color: "#475467" },
   hero: { margin: 16, padding: 20, borderRadius: 24, backgroundColor: "#FFF4EE", borderWidth: 1, borderColor: "#FFD9C9" },
   heroTag: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: "#fff" },
   heroTagText: { fontSize: 12, fontWeight: "700", color: "#C2410C" },
@@ -807,12 +1107,27 @@ const styles = StyleSheet.create({
   card: { marginHorizontal: 16, marginTop: 14, padding: 18, borderRadius: 22, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
   cardTitle: { fontSize: 21, fontWeight: "800", color: "#1D2939" },
   cardText: { marginTop: 6, fontSize: 13, lineHeight: 20, color: "#667085" },
+  infoRow: { marginTop: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "#F2F4F7" },
+  infoLabel: { fontSize: 12, fontWeight: "700", color: "#667085", textTransform: "uppercase" },
+  infoValue: { marginTop: 6, fontSize: 15, fontWeight: "700", color: "#101828" },
+  docRow: { marginTop: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  docBadge: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  docBadgeReady: { backgroundColor: "#ECFDF3" },
+  docBadgePending: { backgroundColor: "#FEF3F2" },
+  docBadgeText: { fontSize: 12, fontWeight: "800" },
+  docBadgeTextReady: { color: "#027A48" },
+  docBadgeTextPending: { color: "#B42318" },
+  statsGrid: { marginHorizontal: 16, marginTop: 14, flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  statTile: { width: "47%", padding: 18, borderRadius: 22, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#ECECEC" },
+  statTileLabel: { fontSize: 12, fontWeight: "700", color: "#667085" },
+  statTileValue: { marginTop: 12, fontSize: 20, fontWeight: "800", color: "#1D2939" },
   label: { marginTop: 16, marginBottom: 8, fontSize: 13, fontWeight: "700", color: "#344054" },
   input: { borderWidth: 1, borderColor: "#E4E7EC", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 14, fontSize: 15, color: "#101828", backgroundColor: "#fff" },
   area: { minHeight: 110 },
   stackedInput: { marginTop: 10 },
   readOnly: { borderWidth: 1, borderColor: "#E4E7EC", borderRadius: 16, padding: 14, backgroundColor: "#F8FAFC" },
   readOnlyText: { fontSize: 15, fontWeight: "700", color: "#101828" },
+  inlineActions: { marginTop: 18, flexDirection: "row", alignItems: "center", gap: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, backgroundColor: "#F2F4F7" },
   chipActive: { backgroundColor: "#FFE8DE" },
@@ -841,6 +1156,12 @@ const styles = StyleSheet.create({
   summary: { marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: "#F8FAFC" },
   summaryTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
   summaryItem: { marginTop: 6, fontSize: 13, color: "#667085" },
+  shortcutCard: { marginTop: 12, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  shortcutIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF4EE" },
+  shortcutTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
+  shortcutSubtitle: { marginTop: 4, fontSize: 12, lineHeight: 18, color: "#667085" },
+  logoutButton: { marginTop: 18, borderRadius: 18, paddingVertical: 15, alignItems: "center", backgroundColor: "#101828" },
+  logoutButtonText: { fontSize: 15, fontWeight: "800", color: "#FFFFFF" },
   footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 12, backgroundColor: "rgba(248,245,240,0.97)", borderTopWidth: 1, borderTopColor: "#EAECF0" },
   saveDraft: { alignSelf: "center", paddingHorizontal: 14, paddingVertical: 8 },
   saveDraftText: { fontSize: 13, fontWeight: "700", color: "#667085" },

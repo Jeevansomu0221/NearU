@@ -170,4 +170,11 @@ router.post(
   assignDelivery
 );
 
+router.post(
+  "/admin/orders/:orderId/assign-delivery",
+  authMiddleware,
+  roleMiddleware([ROLES.ADMIN]),
+  assignDelivery
+);
+
 export default router;

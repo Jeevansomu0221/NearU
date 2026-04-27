@@ -1,16 +1,17 @@
 import dotenv from "dotenv";
-dotenv.config(); // 👈 THIS LINE IS MANDATORY
+
+dotenv.config();
 
 import app from "./app";
 import connectDB from "./config/db";
-
-const PORT = process.env.PORT || 5000;
+import { config, validateEnv } from "./config/env";
 
 const startServer = async () => {
+  validateEnv();
   await connectDB();
 
-  app.listen(PORT, () => {
-    console.log(`NearU backend running on port ${PORT}`);
+  app.listen(config.port, () => {
+    console.log(`NearU backend running on port ${config.port}`);
   });
 };
 

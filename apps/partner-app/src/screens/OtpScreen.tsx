@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { verifyOtp } from "../api/auth.api";
 
 export default function OtpScreen({ route, navigation }: any) {
-  const { phone, role } = route.params; // ✅ RECEIVE ROLE
+  const { phone, role } = route.params;
   const [otp, setOtp] = useState("");
 
   const handleVerify = async () => {
@@ -14,28 +14,29 @@ export default function OtpScreen({ route, navigation }: any) {
     }
 
     try {
-      // ✅ SEND ROLE TO BACKEND
       const res = await verifyOtp(phone, otp, role);
-      const token = (res.data as any).token;
+      const data = res.data as any;
+      if (!data?.success || !data.token || !data.user) {
+        Alert.alert("Error", data?.message || "Invalid OTP");
+        return;
+      }
 
-      // ✅ SAVE TOKEN
-      await AsyncStorage.setItem("token", token);
-      await AsyncStorage.setItem("phone", phone);
+      await AsyncStorage.multiSet([
+        ["token", data.token],
+        ["refreshToken", data.refreshToken || ""],
+        ["phone", phone],
+        ["user", JSON.stringify(data.user)]
+      ]);
 
-
-      // ✅ MOVE TO ORDERS SCREEN
       navigation.replace("Orders");
-    } catch (err) {
+    } catch (_err) {
       Alert.alert("Error", "Invalid OTP");
     }
   };
 
   return (
     <View style={{ flex: 1, justifyContent: "center", padding: 20 }}>
-      <Text style={{ fontSize: 18, marginBottom: 10 }}>
-        OTP sent to {phone}
-      </Text>
-
+      <Text style={{ fontSize: 18, marginBottom: 10 }}>OTP sent to {phone}</Text>
       <TextInput
         placeholder="Enter OTP"
         keyboardType="number-pad"
@@ -51,7 +52,6 @@ export default function OtpScreen({ route, navigation }: any) {
           borderRadius: 6
         }}
       />
-
       <Button title="Verify OTP" onPress={handleVerify} />
     </View>
   );
