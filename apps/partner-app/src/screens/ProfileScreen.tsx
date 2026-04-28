@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import api from "../api/client";
+import api, { uploadMultipart } from "../api/client";
 
 interface PartnerProfile {
   _id: string;
@@ -56,6 +56,12 @@ interface UploadResponse {
   };
   message: string;
 }
+
+type PickerAsset = {
+  uri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+};
 
 const getUploadMimeType = (filename: string) => {
   const extension = filename.split(".").pop()?.toLowerCase();
@@ -154,26 +160,19 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
-  const uploadImageToCloudinary = async (selectedImageUri: string): Promise<string> => {
+  const uploadImageToCloudinary = async (asset: PickerAsset): Promise<string> => {
     const formData = new FormData();
-    const filename = selectedImageUri.split("/").pop() || "shop.jpg";
-    const type = getUploadMimeType(filename);
+    const filename = asset.fileName || asset.uri.split("/").pop() || "shop.jpg";
+    const type = asset.mimeType || getUploadMimeType(filename);
 
     // @ts-ignore React Native FormData file object
     formData.append("image", {
-      uri: selectedImageUri,
+      uri: asset.uri,
       type,
       name: filename
     });
 
-    const response = await api.post("/upload/image", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data"
-      },
-      timeout: 420000
-    });
-
-    const uploadData = response.data as UploadResponse;
+    const uploadData = await uploadMultipart<UploadResponse["data"]>("/upload/image", formData) as UploadResponse;
     if (!uploadData.success) {
       throw new Error(uploadData.message || "Upload failed");
     }
@@ -186,7 +185,9 @@ export default function ProfileScreen({ navigation }: any) {
       let shopImageUrl = profile?.shopImageUrl || "";
 
       if (imageUri && imageUri !== profile?.shopImageUrl) {
-        shopImageUrl = imageUri.startsWith("https://res.cloudinary.com") ? imageUri : await uploadImageToCloudinary(imageUri);
+        shopImageUrl = imageUri.startsWith("https://res.cloudinary.com")
+          ? imageUri
+          : await uploadImageToCloudinary({ uri: imageUri });
       }
 
       const updateData: any = {
@@ -220,7 +221,7 @@ export default function ProfileScreen({ navigation }: any) {
       setEditAddressMode(false);
       loadProfile();
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to update profile");
+      Alert.alert("Error", error.response?.data?.message || error.message || "Failed to update profile");
     } finally {
       setSaving(false);
     }

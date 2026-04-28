@@ -107,12 +107,7 @@ export default function AppNavigator() {
             hasCompletedSetup: partnerData.hasCompletedSetup, 
             menuItemsCount: partnerData.menuItemsCount 
           });
-          // Check if they've completed setup or have menu items
-          if (partnerData.hasCompletedSetup || (partnerData.menuItemsCount && partnerData.menuItemsCount > 0)) {
-            setInitialRoute("Dashboard");
-          } else {
-            setInitialRoute("WelcomeApproved");
-          }
+          setInitialRoute("Dashboard");
           break;
         case "REJECTED":
           console.log("❌ Status: REJECTED");

@@ -96,10 +96,10 @@ export default function DashboardScreen({ navigation }: any) {
   ];
 
   const quickActions = [
-    { title: "Manage Menu", description: "Add, edit, and organize your dishes", target: "Menu" },
-    { title: "View Orders", description: `${stats.pendingOrders} pending orders waiting right now`, target: "Orders" },
-    { title: "Shop Profile", description: "Update timings, shop image, and address", target: "Profile" },
-    { title: "Business Settings", description: "Adjust business preferences and hours", target: "Settings" }
+    { title: "Menu", target: "Menu" },
+    { title: "Orders", target: "Orders" },
+    { title: "Profile", target: "Profile" },
+    { title: "Settings", target: "Settings" }
   ];
 
   return (
@@ -111,17 +111,11 @@ export default function DashboardScreen({ navigation }: any) {
       <View style={styles.hero}>
         <Text style={styles.heroEyebrow}>Partner dashboard</Text>
         <Text style={styles.heroTitle}>{partner.restaurantName || partner.shopName || "Your Shop"}</Text>
-        <Text style={styles.heroSubtitle}>
-          Track live performance, manage availability, and stay on top of incoming orders.
-        </Text>
 
         <View style={styles.statusCard}>
           <View style={styles.statusCopy}>
             <Text style={styles.statusLabel}>Store visibility</Text>
             <Text style={styles.statusValue}>{shopOpen ? "Open for orders" : "Temporarily closed"}</Text>
-            <Text style={styles.statusHint}>
-              {shopOpen ? "Customers can discover and order from your store." : "Customers will not be able to place new orders."}
-            </Text>
           </View>
           <Switch
             value={shopOpen}
@@ -150,7 +144,6 @@ export default function DashboardScreen({ navigation }: any) {
           <TouchableOpacity key={action.title} style={styles.actionCard} onPress={() => navigation.navigate(action.target)}>
             <View style={styles.actionCopy}>
               <Text style={styles.actionTitle}>{action.title}</Text>
-              <Text style={styles.actionDescription}>{action.description}</Text>
             </View>
             <Text style={styles.actionArrow}>Open</Text>
           </TouchableOpacity>
@@ -204,7 +197,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     backgroundColor: "#FF6B35",
     borderRadius: 30,
-    padding: 18
+    padding: 16
   },
   heroEyebrow: {
     fontSize: 12,
@@ -215,22 +208,16 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   heroTitle: {
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: "800",
     color: "#FFFFFF"
   },
-  heroSubtitle: {
-    marginTop: 8,
-    fontSize: 13,
-    lineHeight: 19,
-    color: "#FFF4EE"
-  },
   statusCard: {
-    marginTop: 14,
+    marginTop: 12,
     backgroundColor: "#FFF6F1",
     borderRadius: 18,
-    padding: 13,
+    padding: 12,
     flexDirection: "row",
     alignItems: "center"
   },
@@ -249,12 +236,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#2C2018"
   },
-  statusHint: {
-    marginTop: 4,
-    fontSize: 11,
-    lineHeight: 16,
-    color: "#6B5E55"
-  },
   section: {
     marginHorizontal: 16,
     marginBottom: 14
@@ -266,7 +247,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
     color: "#2C2018",
     marginBottom: 10
@@ -287,17 +268,17 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "#EFE5DA",
-    padding: 13,
+    padding: 10,
     marginBottom: 8
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "800",
     color: "#FF6B35",
     marginBottom: 4
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     lineHeight: 16,
     color: "#7B6D63"
   },
@@ -306,7 +287,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "#EFE5DA",
-    padding: 13,
+    padding: 12,
     marginBottom: 8,
     flexDirection: "row",
     alignItems: "center"
@@ -319,12 +300,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#2C2018",
-    marginBottom: 3
-  },
-  actionDescription: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: "#6B5E55"
+    marginBottom: 0
   },
   actionArrow: {
     fontSize: 11,

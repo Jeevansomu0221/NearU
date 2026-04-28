@@ -48,17 +48,10 @@ export default function PendingApprovalScreen({ navigation }: any) {
         setPartnerData(data.data);
 
         if (data.data.status === "APPROVED") {
-          if (!data.data.hasCompletedSetup && (!data.data.menuItemsCount || data.data.menuItemsCount === 0)) {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "WelcomeApproved" }]
-            });
-          } else {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Dashboard" }]
-            });
-          }
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Dashboard" }]
+          });
         } else if (data.data.status === "REJECTED") {
           navigation.reset({
             index: 0,

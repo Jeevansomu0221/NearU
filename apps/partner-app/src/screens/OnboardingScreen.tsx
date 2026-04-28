@@ -16,7 +16,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import api from "../api/client";
+import api, { uploadMultipart } from "../api/client";
 
 const CATEGORIES = ["bakery", "mini-restaurant", "tiffin-center", "fast-food", "sweets", "ice-creams", "juice", "other"];
 
@@ -59,6 +59,12 @@ interface UploadResponse {
   };
   message?: string;
 }
+
+type PickerAsset = {
+  uri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+};
 
 type UploadingKey =
   | "fssaiUrl"
@@ -167,26 +173,19 @@ export default function OnboardingScreen({ navigation }: any) {
     return INDIAN_CITIES.filter((city) => city.toLowerCase().includes(address.city.toLowerCase())).slice(0, 6);
   }, [address.city]);
 
-  const uploadImageToCloudinary = async (imageUri: string): Promise<string> => {
+  const uploadImageToCloudinary = async (asset: PickerAsset): Promise<string> => {
     const formData = new FormData();
-    const filename = imageUri.split("/").pop() || "document.jpg";
-    const type = getUploadMimeType(filename);
+    const filename = asset.fileName || asset.uri.split("/").pop() || "document.jpg";
+    const type = asset.mimeType || getUploadMimeType(filename);
 
     // @ts-ignore React Native FormData file object
     formData.append("image", {
-      uri: imageUri,
+      uri: asset.uri,
       type,
       name: filename
     });
 
-    const response = await api.post<UploadResponse>("/upload/image", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data"
-      },
-      timeout: 420000
-    });
-
-    const uploadData = response.data;
+    const uploadData = await uploadMultipart<UploadResponse["data"]>("/upload/image", formData);
 
     if (!uploadData?.success || !uploadData?.data?.url) {
       throw new Error(uploadData?.message || "Upload failed");
@@ -216,11 +215,11 @@ export default function OnboardingScreen({ navigation }: any) {
       }
 
       setUploadingKey(docKey);
-      const uploadedUrl = await uploadImageToCloudinary(result.assets[0].uri);
+      const uploadedUrl = await uploadImageToCloudinary(result.assets[0]);
       setDocuments((prev) => ({ ...prev, [docKey]: uploadedUrl }));
     } catch (error: any) {
       console.error("Document upload failed:", error);
-      Alert.alert("Upload Failed", error.message || "Failed to upload document.");
+      Alert.alert("Upload Failed", error.response?.data?.message || error.message || "Failed to upload document.");
     } finally {
       setUploadingKey(null);
     }
@@ -241,14 +240,6 @@ export default function OnboardingScreen({ navigation }: any) {
     }
     if (!/^\d{6}$/.test(address.pincode)) {
       return "Pincode must be exactly 6 digits";
-    }
-    if (
-      !address.googleMapsLink.startsWith("https://maps.app.goo.gl/") &&
-      !address.googleMapsLink.startsWith("https://goo.gl/maps/") &&
-      !address.googleMapsLink.startsWith("https://www.google.com/maps/") &&
-      !address.googleMapsLink.startsWith("https://www.google.co.in/maps/")
-    ) {
-      return "Please provide a valid Google Maps link";
     }
     if (!/^\d{14}$/.test(documents.fssaiNumber.trim())) {
       return "FSSAI number must be 14 digits";

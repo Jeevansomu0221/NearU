@@ -73,16 +73,24 @@ export const parseGoogleMapsLink = (url: string): ParsedCoordinates | null => {
 };
 
 export const isValidGoogleMapsLink = (url: string): boolean => {
-  if (!url) return false;
-  
-  const patterns = [
-    /maps\.google/,
-    /google\.com\/maps/,
-    /goo\.gl\/maps/,
-    /maps\.app\.goo\.gl/
-  ];
-  
-  return patterns.some(pattern => pattern.test(url));
+  if (!url || typeof url !== "string") return false;
+
+  try {
+    const parsedUrl = new URL(url.trim());
+    const hostname = parsedUrl.hostname.toLowerCase().replace(/^www\./, "");
+    const pathname = parsedUrl.pathname.toLowerCase();
+
+    return (
+      hostname === "maps.app.goo.gl" ||
+      hostname === "goo.gl" ||
+      hostname === "maps.google.com" ||
+      hostname === "google.com" ||
+      hostname.endsWith(".google.com") ||
+      pathname.startsWith("/maps")
+    );
+  } catch {
+    return false;
+  }
 };
 
 const isValidCoordinate = (lat: number, lng: number): boolean => {

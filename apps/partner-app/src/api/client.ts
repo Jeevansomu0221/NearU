@@ -60,21 +60,70 @@ const resolveApiBaseUrls = () => {
 
 const API_BASE_URLS = resolveApiBaseUrls();
 
+const isFormDataPayload = (value: any) => {
+  if (!value || typeof value !== "object") return false;
+  if (typeof FormData !== "undefined" && value instanceof FormData) return true;
+  return typeof value.append === "function" && Array.isArray(value._parts);
+};
+
 const api = axios.create({
   baseURL: API_BASE_URLS[0],
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
+    "Accept": "application/json",
   },
 });
 
 console.log("Partner API base URL:", api.defaults.baseURL);
 console.log("Partner API fallback URLs:", API_BASE_URLS);
 
+export const uploadMultipart = async <T = any>(path: string, formData: FormData): Promise<ApiResponse<T>> => {
+  const token = await AsyncStorage.getItem("token");
+
+  for (const baseUrl of API_BASE_URLS) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data && typeof data === "object") {
+          return data;
+        }
+
+        return {
+          success: false,
+          message: `Request failed (${response.status})`,
+        };
+      }
+
+      return data;
+    } catch (error: any) {
+      console.log(`Upload failed for ${baseUrl}${path}:`, error?.message || error);
+    }
+  }
+
+  throw new Error("Network Error");
+};
+
 // Add token to requests
 api.interceptors.request.use(
   async (config: any) => {
     try {
+      if (isFormDataPayload(config.data)) {
+        config.headers = config.headers || {};
+        delete config.headers["Content-Type"];
+        delete config.headers["content-type"];
+      }
+
       const token = await AsyncStorage.getItem("token");
       if (token) {
         config.headers = config.headers || {};

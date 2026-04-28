@@ -28,6 +28,32 @@ const isRetryableUploadError = (error: any) => {
   );
 };
 
+const allowedMimeTypes = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "application/pdf",
+  "application/octet-stream"
+]);
+
+const allowedExtensions = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "heic",
+  "heif",
+  "pdf"
+]);
+
+const isAllowedUpload = (imageFile: UploadedFile) => {
+  const extension = imageFile.name.split(".").pop()?.toLowerCase() || "";
+  return allowedMimeTypes.has(imageFile.mimetype) && (extension ? allowedExtensions.has(extension) : true);
+};
+
 const uploadBufferToCloudinary = async (imageFile: UploadedFile) => {
   const uploadOptions: any = {
     folder: process.env.CLOUDINARY_UPLOAD_FOLDER || "nearu-app",
@@ -98,16 +124,7 @@ export const uploadImage = async (req: AuthRequest, res: Response) => {
       ? uploadedInput[0]
       : uploadedInput as UploadedFile;
 
-    const allowedMimeTypes = [
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-      "image/webp",
-      "image/heic",
-      "image/heif",
-      "application/pdf"
-    ];
-    if (!allowedMimeTypes.includes(imageFile.mimetype)) {
+    if (!isAllowedUpload(imageFile)) {
       return res.status(400).json({
         success: false,
         message: "Only JPG, PNG, WEBP, HEIC, or PDF files are allowed"

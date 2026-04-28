@@ -72,15 +72,7 @@ const PartnerSchema = new Schema(
       googleMapsLink: {
         type: String,
         required: true,
-        validate: {
-          validator: function(v: string) {
-            return v.startsWith('https://maps.app.goo.gl/') || 
-                   v.startsWith('https://goo.gl/maps/') ||
-                   v.startsWith('https://www.google.com/maps/') ||
-                   v.startsWith('https://www.google.co.in/maps/');
-          },
-          message: 'Please provide a valid Google Maps link'
-        }
+        trim: true
       }
     },
     location: {

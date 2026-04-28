@@ -101,24 +101,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
-    // Validate Google Maps link
-    if (!googleMapsLink.startsWith('https://maps.app.goo.gl/') && 
-        !googleMapsLink.startsWith('https://goo.gl/maps/') &&
-        !googleMapsLink.startsWith('https://www.google.com/maps/') &&
-        !googleMapsLink.startsWith('https://www.google.co.in/maps/')) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide a valid Google Maps link"
-      });
-    }
-
     const parsedCoordinates = parseGoogleMapsLink(googleMapsLink.trim());
-    if (!parsedCoordinates) {
-      return res.status(400).json({
-        success: false,
-        message: "Google Maps link must contain usable coordinates"
-      });
-    }
 
     const normalizedDocs = {
       fssaiNumber: firstString(documents?.fssaiNumber, documents?.fssai_number),
@@ -196,7 +179,9 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       },
       location: {
         type: "Point",
-        coordinates: [parsedCoordinates.longitude, parsedCoordinates.latitude]
+        coordinates: parsedCoordinates
+          ? [parsedCoordinates.longitude, parsedCoordinates.latitude]
+          : [0, 0]
       },
       category: category || "other",
       documents: {

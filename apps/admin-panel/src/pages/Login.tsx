@@ -5,6 +5,21 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { setToken } from "../utils/auth";
 
+interface AuthEnvelope {
+  success: boolean;
+  message?: string;
+  data?: {
+    token: string;
+    refreshToken?: string;
+    user: {
+      id: string;
+      phone: string;
+      name: string;
+      role: string;
+    };
+  };
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const [step, setStep] = useState<"phone" | "otp">("phone");
@@ -31,19 +46,25 @@ export default function Login() {
       setLoading(true);
       setError("");
 
-      const response = await api.post("/auth/verify-otp", {
+      const response = await api.post<AuthEnvelope>("/auth/verify-otp", {
         phone,
         otp,
         role: "admin"
       });
 
-      if (response.data.user?.role !== "admin") {
+      const payload = response.data?.data;
+      if (!response.data?.success || !payload?.token || !payload.user) {
+        setError(response.data?.message || "Invalid OTP");
+        return;
+      }
+
+      if (payload.user.role !== "admin") {
         setError("Admin access is required");
         return;
       }
 
-      setToken(response.data.token);
-      localStorage.setItem("adminUser", JSON.stringify(response.data.user));
+      setToken(payload.token);
+      localStorage.setItem("adminUser", JSON.stringify(payload.user));
       localStorage.setItem("adminPhone", phone);
       navigate("/", { replace: true });
     } catch (error: any) {

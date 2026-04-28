@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, Button, Alert } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { verifyOtp } from "../api/auth.api";
 
 export default function OtpScreen({ route, navigation }: any) {
@@ -14,23 +13,10 @@ export default function OtpScreen({ route, navigation }: any) {
     }
 
     try {
-      const res = await verifyOtp(phone, otp, role);
-      const data = res.data as any;
-      if (!data?.success || !data.token || !data.user) {
-        Alert.alert("Error", data?.message || "Invalid OTP");
-        return;
-      }
-
-      await AsyncStorage.multiSet([
-        ["token", data.token],
-        ["refreshToken", data.refreshToken || ""],
-        ["phone", phone],
-        ["user", JSON.stringify(data.user)]
-      ]);
-
+      await verifyOtp(phone, otp, role);
       navigation.replace("Orders");
-    } catch (_err) {
-      Alert.alert("Error", "Invalid OTP");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Invalid OTP");
     }
   };
 

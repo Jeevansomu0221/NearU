@@ -16,13 +16,18 @@ import api from "../api/client";
 
 interface AuthResponse {
   success: boolean;
-  token: string;
-  user: {
-    id: string;
-    phone: string;
-    name: string;
-    role: string;
+  data?: {
+    token: string;
+    refreshToken?: string;
+    user: {
+      id: string;
+      phone: string;
+      name: string;
+      role: string;
+      partnerId?: string;
+    };
   };
+  message?: string;
 }
 
 export default function LoginScreen({ navigation }: any) {
@@ -59,34 +64,55 @@ export default function LoginScreen({ navigation }: any) {
       const responseData = res.data as { success: boolean; data?: any };
 
       if (!responseData.success) {
-        navigation.replace("Onboarding");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Onboarding" }]
+        });
         return;
       }
 
       const partner = responseData.data;
       if (partner.status === "PENDING") {
-        navigation.replace("PendingApproval");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "PendingApproval" }]
+        });
       } else if (partner.status === "APPROVED") {
-        if (partner.menuItemsCount === 0) {
-          navigation.replace("WelcomeApproved");
-        } else {
-          navigation.replace("Dashboard");
-        }
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Dashboard" }]
+        });
       } else if (partner.status === "REJECTED") {
-        navigation.replace("Rejected");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Rejected" }]
+        });
       } else {
-        navigation.replace("Onboarding");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Onboarding" }]
+        });
       }
     } catch (error: any) {
       if (error.response?.status === 404) {
-        navigation.replace("Onboarding");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Onboarding" }]
+        });
       } else {
-        navigation.replace("Onboarding");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Onboarding" }]
+        });
       }
     }
   };
 
   const handleVerifyOtp = async () => {
+    if (loading) {
+      return;
+    }
+
     if (otp.length !== 6) {
       setFeedback({ type: "error", text: "Enter the 6-digit OTP." });
       return;
@@ -102,11 +128,26 @@ export default function LoginScreen({ navigation }: any) {
       });
 
       const data = res.data as AuthResponse;
+      const payload = data.data;
 
-      await AsyncStorage.setItem("token", data.token);
+      if (!data.success || !payload?.token || !payload.user) {
+        throw new Error(data.message || "Invalid response from server");
+      }
+
+      await AsyncStorage.setItem("token", payload.token);
       await AsyncStorage.setItem("phone", phone);
-      await AsyncStorage.setItem("userId", data.user.id);
-      await AsyncStorage.setItem("user", JSON.stringify(data.user));
+      await AsyncStorage.setItem("userId", payload.user.id);
+      await AsyncStorage.setItem("user", JSON.stringify(payload.user));
+      if (payload.user.partnerId) {
+        await AsyncStorage.setItem("partnerId", payload.user.partnerId);
+      } else {
+        await AsyncStorage.removeItem("partnerId");
+      }
+      if (payload.refreshToken) {
+        await AsyncStorage.setItem("refreshToken", payload.refreshToken);
+      } else {
+        await AsyncStorage.removeItem("refreshToken");
+      }
 
       await checkPartnerStatus(phone);
     } catch (error: any) {
