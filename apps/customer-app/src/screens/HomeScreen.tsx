@@ -172,10 +172,10 @@ export default function HomeScreen({ navigation }: Props) {
     <View style={[styles.headerWrap, { paddingTop: insets.top + 8 }]}>
       <View style={styles.heroRow}>
         <View style={styles.heroTextBlock}>
-          <Text style={styles.brandText}>NearU Food</Text>
+          <Text style={styles.brandText}>Vyaha Food</Text>
           <Text style={styles.heading}>Local shops</Text>
           <Text style={styles.heading}>near you</Text>
-          <Text style={styles.subheading}>Explore different kinds of food nearU.</Text>
+          <Text style={styles.subheading}>Explore different kinds of food near you.</Text>
         </View>
 
         <View style={styles.heroRight}>

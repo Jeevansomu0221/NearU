@@ -41,9 +41,9 @@ const defaultPreferences: PreferencesState = {
 };
 
 const legalItems = [
-  { icon: "file-document-outline", title: "Terms & Conditions", detail: "How NearU orders, payments, and delivery work." },
+  { icon: "file-document-outline", title: "Terms & Conditions", detail: "How Vyaha orders, payments, and delivery work." },
   { icon: "shield-lock-outline", title: "Privacy Policy", detail: "How profile, order, and location data are handled." },
-  { icon: "information-outline", title: "App Version", detail: "NearU Customer 1.0.0" }
+  { icon: "information-outline", title: "App Version", detail: "Vyaha Customer 1.0.0" }
 ];
 
 const supportItems = [
@@ -60,7 +60,7 @@ const settingsItems = [
 const paymentMethods = [
   { icon: "upi", title: "UPI ID", detail: "Add your preferred UPI for faster checkout", status: "Add" },
   { icon: "credit-card-outline", title: "Saved Cards", detail: "No cards saved yet", status: "Empty" },
-  { icon: "wallet-outline", title: "Wallet", detail: "NearU wallet support can be enabled later", status: "Preview" },
+  { icon: "wallet-outline", title: "Wallet", detail: "Vyaha wallet support can be enabled later", status: "Preview" },
   { icon: "cash-100", title: "Cash on Delivery", detail: "Available where partners allow COD", status: "Enabled" }
 ];
 
@@ -155,6 +155,16 @@ const buildAddressLines = (profile: UserProfile | null) => {
   ].filter(Boolean) as string[];
 };
 
+const isGeneratedCustomerName = (value?: string) => {
+  const normalized = (value || "").trim().toLowerCase();
+  return (
+    normalized === "customer" ||
+    normalized === "nearu customer" ||
+    /^customer\s*\d{4}$/.test(normalized) ||
+    /^customer\s+[0-9]+$/.test(normalized)
+  );
+};
+
 export default function ProfileScreen({ navigation, route }: any) {
   const forceComplete = Boolean(route?.params?.forceComplete);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -181,10 +191,11 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [country, setCountry] = useState("India");
 
   const hydrateForm = (userData: UserProfile) => {
+    const cleanName = isGeneratedCustomerName(userData.name) ? "" : userData.name || "";
     setProfile(userData);
-    setName(userData.name || "");
+    setName(cleanName);
     setEmail(userData.email || "");
-    setRecipientName(userData.address?.recipientName || userData.name || "");
+    setRecipientName(userData.address?.recipientName || cleanName);
     setHouseFlatDoorNo(userData.address?.houseFlatDoorNo || "");
     setBuildingApartmentName(userData.address?.buildingApartmentName || "");
     setStreetRoadName(userData.address?.streetRoadName || userData.address?.street || "");
@@ -201,7 +212,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const loadProfile = async () => {
     try {
       setLoading(true);
-      const [profileResponse, ordersResponse] = await Promise.all([getUserProfile(), getMyOrders()]);
+      const profileResponse = await getUserProfile();
 
       if (!profileResponse.success || !profileResponse.data) {
         Alert.alert("Error", profileResponse.message || "Failed to load profile");
@@ -209,10 +220,14 @@ export default function ProfileScreen({ navigation, route }: any) {
       }
 
       hydrateForm(profileResponse.data);
-      if (ordersResponse.success && ordersResponse.data) {
-        setOrders(ordersResponse.data);
-      } else {
-        setOrders([]);
+
+      if (!forceComplete) {
+        const ordersResponse = await getMyOrders();
+        if (ordersResponse.success && ordersResponse.data) {
+          setOrders(ordersResponse.data);
+        } else {
+          setOrders([]);
+        }
       }
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to load profile");
@@ -363,13 +378,6 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const addressLines = buildAddressLines(profile);
   const memberSince = profile ? formatDate(profile.createdAt) : "N/A";
-  const completedSections = [
-    Boolean(profile?.name && profile.name.trim().length >= 3),
-    Boolean(addressLines.length > 0),
-    Boolean(profile?.email)
-  ].filter(Boolean).length;
-  const completionPercent = Math.round((completedSections / 3) * 100);
-
   const ongoingOrders = orders.filter((order) => !["DELIVERED", "CANCELLED", "REJECTED"].includes(order.status)).slice(0, 3);
   const recentOrders = orders.slice(0, 5);
 
@@ -407,10 +415,172 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
   }
 
+  if (forceComplete) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+      >
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.registrationContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Your Details</Text>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={[styles.input, focusedField === "name" && styles.inputFocused]}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter your name"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("name")}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Phone Number</Text>
+              <Text style={styles.value}>{profile?.phone}</Text>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Email Address (optional)</Text>
+              <TextInput
+                style={[styles.input, focusedField === "email" && styles.inputFocused]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter email address"
+                placeholderTextColor="#98A2B3"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Delivery Address</Text>
+            <Text style={styles.sectionHint}>This address will be used for your orders.</Text>
+
+            <TextInput
+              style={[styles.input, focusedField === "recipientName" && styles.inputFocused]}
+              value={recipientName}
+              onChangeText={setRecipientName}
+              placeholder="Recipient name"
+              placeholderTextColor="#98A2B3"
+              onFocus={() => setFocusedField("recipientName")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
+              style={[styles.input, focusedField === "houseFlatDoorNo" && styles.inputFocused]}
+              value={houseFlatDoorNo}
+              onChangeText={setHouseFlatDoorNo}
+              placeholder="House / flat / door number"
+              placeholderTextColor="#98A2B3"
+              onFocus={() => setFocusedField("houseFlatDoorNo")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
+              style={[styles.input, focusedField === "buildingApartmentName" && styles.inputFocused]}
+              value={buildingApartmentName}
+              onChangeText={setBuildingApartmentName}
+              placeholder="Building / apartment name (optional)"
+              placeholderTextColor="#98A2B3"
+              onFocus={() => setFocusedField("buildingApartmentName")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
+              style={[styles.input, focusedField === "streetRoadName" && styles.inputFocused]}
+              value={streetRoadName}
+              onChangeText={setStreetRoadName}
+              placeholder="Street / colony"
+              placeholderTextColor="#98A2B3"
+              onFocus={() => setFocusedField("streetRoadName")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
+              style={[styles.input, focusedField === "area" && styles.inputFocused]}
+              value={area}
+              onChangeText={setArea}
+              placeholder="Area / locality"
+              placeholderTextColor="#98A2B3"
+              onFocus={() => setFocusedField("area")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <TextInput
+              style={[styles.input, focusedField === "landmark" && styles.inputFocused]}
+              value={landmark}
+              onChangeText={setLandmark}
+              placeholder="Landmark (optional)"
+              placeholderTextColor="#98A2B3"
+              onFocus={() => setFocusedField("landmark")}
+              onBlur={() => setFocusedField(null)}
+            />
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.halfInput, focusedField === "city" && styles.inputFocused]}
+                value={city}
+                onChangeText={setCity}
+                placeholder="City"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("city")}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TextInput
+                style={[styles.input, styles.halfInput, focusedField === "state" && styles.inputFocused]}
+                value={state}
+                onChangeText={setState}
+                placeholder="State"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("state")}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.halfInput, focusedField === "pincode" && styles.inputFocused]}
+                value={pincode}
+                onChangeText={(value) => setPincode(value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="Pincode"
+                placeholderTextColor="#98A2B3"
+                keyboardType="number-pad"
+                onFocus={() => setFocusedField("pincode")}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TextInput
+                style={[styles.input, styles.halfInput, focusedField === "country" && styles.inputFocused]}
+                value={country}
+                onChangeText={setCountry}
+                placeholder="Country"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("country")}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+          </View>
+        </ScrollView>
+
+        <View style={styles.footerBar}>
+          <TouchableOpacity style={styles.footerButton} onPress={handleSaveProfile} disabled={saving}>
+            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Complete Registration</Text>}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
     >
       <ScrollView
@@ -418,6 +588,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         contentContainerStyle={[styles.content, forceComplete && styles.contentWithFooter]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <View style={[styles.heroCard, forceComplete && styles.heroCardCompact]}>
           <View style={styles.heroRow}>
@@ -425,7 +596,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               <Text style={styles.avatarText}>{profile?.name?.charAt(0).toUpperCase() || "U"}</Text>
             </View>
             <View style={styles.heroMeta}>
-              <Text style={styles.heroName}>{profile?.name || "NearU Customer"}</Text>
+              <Text style={styles.heroName}>{isGeneratedCustomerName(profile?.name) ? "Your Profile" : profile?.name || "Your Profile"}</Text>
               <Text style={styles.heroSubtext}>{profile?.phone}</Text>
               <Text style={styles.heroSubtext}>{profile?.email || "Add your email for invoices and offers"}</Text>
             </View>
@@ -445,13 +616,6 @@ export default function ProfileScreen({ navigation, route }: any) {
               <MaterialCommunityIcons name="camera-outline" size={16} color="#FF6B35" />
               <Text style={styles.photoButtonText}>Profile photo</Text>
             </TouchableOpacity>
-          </View>
-
-          <View style={styles.progressRow}>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${completionPercent}%` }]} />
-            </View>
-            <Text style={styles.progressText}>{completionPercent}% complete</Text>
           </View>
 
           {!forceComplete && (
@@ -515,16 +679,16 @@ export default function ProfileScreen({ navigation, route }: any) {
             ) : null}
           </View>
 
-          <Text style={styles.sectionHint}>Photo, full name, phone number, email address, and delivery identity.</Text>
+          <Text style={styles.sectionHint}>Name, phone number, optional email, and delivery identity.</Text>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Full Name</Text>
+            <Text style={styles.label}>Name</Text>
             {editing ? (
               <TextInput
                 style={[styles.input, focusedField === "name" && styles.inputFocused]}
                 value={name}
                 onChangeText={setName}
-                placeholder="Enter your full name"
+                placeholder="Enter your name"
                 placeholderTextColor="#98A2B3"
                 onFocus={() => setFocusedField("name")}
                 onBlur={() => setFocusedField(null)}
@@ -603,7 +767,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 style={[styles.input, focusedField === "streetRoadName" && styles.inputFocused]}
                 value={streetRoadName}
                 onChangeText={setStreetRoadName}
-                placeholder="Street / road name"
+                placeholder="Street / colony"
                 placeholderTextColor="#98A2B3"
                 onFocus={() => setFocusedField("streetRoadName")}
                 onBlur={() => setFocusedField(null)}
@@ -1020,7 +1184,26 @@ const styles = StyleSheet.create({
     paddingBottom: 28
   },
   contentWithFooter: {
-    paddingBottom: 120
+    paddingBottom: 180
+  },
+  registrationContent: {
+    paddingTop: 16,
+    paddingBottom: 190
+  },
+  registrationHeader: {
+    marginHorizontal: 16,
+    marginBottom: 2
+  },
+  registrationTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#241D17"
+  },
+  registrationSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#7A6F65"
   },
   loadingContainer: {
     flex: 1,

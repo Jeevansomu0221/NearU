@@ -11,7 +11,7 @@ import {
   Platform,
   ScrollView
 } from "react-native";
-import { sendOtp } from "../api/auth.api";
+import { sendFirebaseOtp } from "../services/firebasePhoneAuth";
 
 export default function LoginScreen({ navigation }: any) {
   const [phone, setPhone] = useState("");
@@ -34,23 +34,10 @@ export default function LoginScreen({ navigation }: any) {
       setLoading(true);
       console.log("Sending OTP to:", phone, "with role: delivery");
       
-      const response = await sendOtp(phone);
+      await sendFirebaseOtp(phone);
       
-      console.log("🔍 Send OTP Response:", response);
-      
-      if (response.success) {
-        console.log("✅ OTP sent successfully");
-        
-        // Navigate immediately without showing OTP in Alert
-        navigation.navigate("Otp", { 
-          phone
-          // Don't pass testOtp to avoid auto-fill
-        });
-        
-      } else {
-        console.log("❌ Send OTP failed:", response.message);
-        Alert.alert("Error", response.message || "Failed to send OTP");
-      }
+      console.log("✅ OTP sent successfully");
+      navigation.navigate("Otp", { phone });
     } catch (error: any) {
       console.error("❌ Send OTP error:", error);
       Alert.alert("Error", error.message || "Failed to send OTP. Please try again.");
@@ -67,7 +54,7 @@ export default function LoginScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>🚚 NearU Delivery</Text>
+            <Text style={styles.title}>Vyaha Delivery</Text>
             <Text style={styles.subtitle}>Delivery Partner Login</Text>
           </View>
           
@@ -105,14 +92,6 @@ export default function LoginScreen({ navigation }: any) {
               <Text style={styles.buttonText}>Send OTP</Text>
             )}
           </TouchableOpacity>
-          
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>📱 Development Mode</Text>
-            <Text style={styles.infoText}>
-              OTP will be shown in console/server logs only.
-              Check your console for the test OTP.
-            </Text>
-          </View>
           
           <View style={styles.footer}>
             <Text style={styles.footerText}>By continuing, you agree to our</Text>

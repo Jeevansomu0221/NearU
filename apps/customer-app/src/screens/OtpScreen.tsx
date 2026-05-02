@@ -12,8 +12,9 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { verifyOtp } from '../api/auth.api';
+import { verifyFirebaseOtp } from '../api/auth.api';
 import { getUserProfile } from '../api/user.api';
+import { confirmFirebaseOtp, sendFirebaseOtp } from '../services/firebasePhoneAuth';
 
 type OtpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Otp'>;
 type OtpScreenRouteProp = RouteProp<RootStackParamList, 'Otp'>;
@@ -38,9 +39,16 @@ export default function OtpScreen({ navigation, route }: Props) {
       area?: string;
     };
   }) => {
+    const normalizedName = (profile.name || '').trim().toLowerCase();
+    const isGeneratedName =
+      normalizedName === 'customer' ||
+      normalizedName === 'nearu customer' ||
+      /^customer\s*\d{4}$/.test(normalizedName) ||
+      /^customer\s+[0-9]+$/.test(normalizedName);
+
     const hasRealName =
       !!profile.name &&
-      !/^Customer\s\d{4}$/.test(profile.name.trim()) &&
+      !isGeneratedName &&
       profile.name.trim().length >= 3;
 
     const address = profile.address;
@@ -62,18 +70,21 @@ export default function OtpScreen({ navigation, route }: Props) {
 
     setLoading(true);
     try {
-      const response = await verifyOtp(phone, otp);
+      const firebaseIdToken = await confirmFirebaseOtp(otp);
+      const response = await verifyFirebaseOtp(phone, firebaseIdToken);
 
       if (!response.success || !response.data?.token || !response.data?.user) {
         Alert.alert('Error', response.message || 'Invalid OTP');
         return;
       }
 
-      await AsyncStorage.multiSet([
-        ['token', response.data.token],
-        ['refreshToken', response.data.refreshToken],
-        ['user', JSON.stringify(response.data.user)]
-      ]);
+      await AsyncStorage.setItem('token', response.data.token);
+      await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+      if (response.data.refreshToken) {
+        await AsyncStorage.setItem('refreshToken', response.data.refreshToken);
+      } else {
+        await AsyncStorage.removeItem('refreshToken');
+      }
 
       const profileResponse = await getUserProfile();
       const nextRoute =
@@ -101,8 +112,7 @@ export default function OtpScreen({ navigation, route }: Props) {
   const handleResendOTP = async () => {
     setLoading(true);
     try {
-      const { sendOtp } = await import('../api/auth.api');
-      await sendOtp(phone);
+      await sendFirebaseOtp(phone);
       Alert.alert('OTP Sent', 'A new OTP has been sent to your phone.');
       setOtp('');
     } catch (error: any) {

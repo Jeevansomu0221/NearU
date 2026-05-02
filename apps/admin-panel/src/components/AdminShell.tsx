@@ -57,7 +57,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       >
         <div style={{ padding: 24 }}>
           <Typography.Title level={3} style={{ color: "#fff", margin: 0 }}>
-            NearU Admin
+            Vyaha Admin
           </Typography.Title>
           <Typography.Paragraph style={{ color: "rgba(255,255,255,0.65)", marginTop: 8, marginBottom: 0 }}>
             Operations console for approvals, orders, and launch health.

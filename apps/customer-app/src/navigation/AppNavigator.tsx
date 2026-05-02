@@ -102,13 +102,23 @@ export type RootStackParamList = {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
+const isGeneratedCustomerName = (value?: string) => {
+  const normalized = (value || "").trim().toLowerCase();
+  return (
+    normalized === "customer" ||
+    normalized === "nearu customer" ||
+    /^customer\s*\d{4}$/.test(normalized) ||
+    /^customer\s+[0-9]+$/.test(normalized)
+  );
+};
+
 const isCustomerProfileComplete = (profile: {
   name?: string;
   address?: Address;
 }) => {
   const hasRealName =
     !!profile.name &&
-    !/^Customer\s\d{4}$/.test(profile.name.trim()) &&
+    !isGeneratedCustomerName(profile.name) &&
     profile.name.trim().length >= 3;
 
   const address = profile.address;

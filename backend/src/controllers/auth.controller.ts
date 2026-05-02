@@ -4,6 +4,7 @@ import User from "../models/User.model";
 import Partner from "../models/Partner.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import { OTPService } from "../services/otp.service";
+import { verifyFirebasePhoneToken } from "../services/firebaseAuth.service";
 import { successResponse, errorResponse } from "../utils/response";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
 import { AuthRequest } from "../middlewares/auth.middleware";
@@ -100,9 +101,9 @@ export const sendOTP = async (req: Request, res: Response) => {
 
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
-    const { phone, otp, role } = req.body;
+    const { phone, otp, role, firebaseIdToken } = req.body;
 
-    if (!phone || !otp || !role) {
+    if (!phone || !role || (!otp && !firebaseIdToken)) {
       return errorResponse(res, "Phone, OTP, and role are required", 400);
     }
 
@@ -114,9 +115,13 @@ export const verifyOTP = async (req: Request, res: Response) => {
       return errorResponse(res, "Invalid role", 400);
     }
 
-    const isOtpValid = await OTPService.verifyOTP(phone, otp);
-    if (!isOtpValid) {
-      return errorResponse(res, "Invalid or expired OTP", 400);
+    if (firebaseIdToken) {
+      await verifyFirebasePhoneToken(firebaseIdToken, phone);
+    } else {
+      const isOtpValid = await OTPService.verifyOTP(phone, otp);
+      if (!isOtpValid) {
+        return errorResponse(res, "Invalid or expired OTP", 400);
+      }
     }
 
     let user = await User.findOne({ phone });
@@ -130,12 +135,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
         phone,
         role,
         isActive: true,
-        name:
-          role === ROLES.CUSTOMER
-            ? `Customer ${phone.slice(-4)}`
-            : role === ROLES.PARTNER
-              ? `Partner ${phone.slice(-4)}`
-              : `Delivery ${phone.slice(-4)}`
+        name: ""
       });
     } else if (user.role !== role) {
       if (role === ROLES.ADMIN || user.role === ROLES.ADMIN) {

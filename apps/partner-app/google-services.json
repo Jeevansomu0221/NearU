@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "337037297329",
+    "project_id": "vyaha-a24a7",
+    "storage_bucket": "vyaha-a24a7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:337037297329:android:4273c705e073a39bcc8490",
+        "android_client_info": {
+          "package_name": "com.vyaha.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA83E7WnJ-K0-XHsmMrdxgbTh5Cps5cwuM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:337037297329:android:e4df4b4dbf586addcc8490",
+        "android_client_info": {
+          "package_name": "com.vyaha.partner"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA83E7WnJ-K0-XHsmMrdxgbTh5Cps5cwuM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

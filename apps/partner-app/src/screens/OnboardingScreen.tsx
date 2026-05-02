@@ -373,7 +373,7 @@ export default function OnboardingScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          <Text style={styles.heroEyebrow}>NearU Partner</Text>
+          <Text style={styles.heroEyebrow}>Vyaha Partner</Text>
           <Text style={styles.heroTitle}>Set up your shop for approval</Text>
           <Text style={styles.heroSubtitle}>
             Submit your business details and the required restaurant documents in one place.

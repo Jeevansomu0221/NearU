@@ -33,6 +33,7 @@ export default function PaymentScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH_ON_DELIVERY");
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
+  const [successOrders, setSuccessOrders] = useState<any[] | null>(null);
 
   const paymentMethods = [
     { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
@@ -116,17 +117,27 @@ export default function PaymentScreen({ route, navigation }: any) {
 
   const handleSuccessfulCheckout = (createdOrders: any[]) => {
     clear();
+    setSuccessOrders(createdOrders);
+  };
 
-    if (createdOrders.length === 1) {
-      navigation.replace("OrderStatus", { orderId: createdOrders[0]._id });
+  const handleBrowseMore = () => {
+    setSuccessOrders(null);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Home" }]
+    });
+  };
+
+  const handleViewSuccessOrder = () => {
+    const orders = successOrders || [];
+    setSuccessOrders(null);
+
+    if (orders.length === 1) {
+      navigation.replace("OrderStatus", { orderId: orders[0]._id });
       return;
     }
 
-    Alert.alert(
-      "Orders Placed",
-      `${createdOrders.length} restaurant orders were placed successfully.`,
-      [{ text: "View Orders", onPress: () => navigation.replace("Orders") }]
-    );
+    navigation.replace("Orders");
   };
 
   const handlePayment = async () => {
@@ -148,11 +159,7 @@ export default function PaymentScreen({ route, navigation }: any) {
               onPress: async () => {
                 try {
                   const createdOrders = await placeOrders("UPI");
-                  Alert.alert(
-                    "Payment Successful",
-                    "Your UPI payment was processed successfully.",
-                    [{ text: "View Orders", onPress: () => handleSuccessfulCheckout(createdOrders) }]
-                  );
+                  handleSuccessfulCheckout(createdOrders);
                 } catch (error: any) {
                   Alert.alert("Payment Failed", error.message || "Failed to process payment");
                 } finally {
@@ -318,6 +325,32 @@ export default function PaymentScreen({ route, navigation }: any) {
           )}
         </TouchableOpacity>
       </View>
+
+      <Modal visible={Boolean(successOrders)} transparent animationType="fade">
+        <View style={styles.successOverlay}>
+          <View style={styles.successCard}>
+            <View style={styles.successPulse}>
+              <Text style={styles.successCheck}>✓</Text>
+            </View>
+            <Text style={styles.successTitle}>Order placed successfully</Text>
+            <Text style={styles.successText}>
+              {successOrders?.length === 1
+                ? "Your order is confirmed. Track the live status from here."
+                : `${successOrders?.length || 0} restaurant orders were placed. Track them from your orders.`}
+            </Text>
+            <View style={styles.successActions}>
+              <TouchableOpacity style={styles.successSecondaryButton} onPress={handleBrowseMore}>
+                <Text style={styles.successSecondaryText}>Browse More</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.successPrimaryButton} onPress={handleViewSuccessOrder}>
+                <Text style={styles.successPrimaryText}>
+                  {successOrders?.length === 1 ? "View Order Status" : "View Orders"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showPaymentMethods} transparent animationType="slide">
         <View style={styles.modalContainer}>
@@ -627,6 +660,84 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "800"
+  },
+  successOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(44, 32, 24, 0.38)",
+    padding: 22
+  },
+  successCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 22,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FFE1D2"
+  },
+  successPulse: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E8F8ED",
+    borderWidth: 8,
+    borderColor: "#F4FFF7",
+    marginBottom: 14
+  },
+  successCheck: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#216E39"
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#2C2018",
+    textAlign: "center"
+  },
+  successText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#6B5E55",
+    textAlign: "center"
+  },
+  successActions: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 20
+  },
+  successSecondaryButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    backgroundColor: "#FFF4EC",
+    borderWidth: 1,
+    borderColor: "#FFD7C3"
+  },
+  successPrimaryButton: {
+    flex: 1.2,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    backgroundColor: "#FF6B35"
+  },
+  successSecondaryText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#FF6B35"
+  },
+  successPrimaryText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#FFFFFF"
   },
   modalContainer: {
     flex: 1,

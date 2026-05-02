@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
     "test": "jest --runInBand",
     "dev": "ts-node src/server.ts",
     "mongo:dev": "\"C:\\Program Files\\MongoDB\\Server\\8.0\\bin\\mongod.exe\" --dbpath .mongo-data --port 27017 --bind_ip 127.0.0.1"
@@ -21,6 +23,7 @@
     "express": "^5.2.1",
     "express-fileupload": "^1.5.2",
     "express-rate-limit": "^8.4.1",
+    "firebase-admin": "^13.8.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.1.5",

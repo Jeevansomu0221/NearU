@@ -1,0 +1,3 @@
+*.apk
+backend/.mongo-data/
+backend/.mongo-logs/

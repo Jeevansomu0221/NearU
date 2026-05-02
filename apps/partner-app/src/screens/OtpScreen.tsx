@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, Button, Alert } from "react-native";
-import { verifyOtp } from "../api/auth.api";
+import { verifyFirebaseOtp } from "../api/auth.api";
+import { confirmFirebaseOtp } from "../services/firebasePhoneAuth";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone, role } = route.params;
@@ -13,7 +14,8 @@ export default function OtpScreen({ route, navigation }: any) {
     }
 
     try {
-      await verifyOtp(phone, otp, role);
+      const firebaseIdToken = await confirmFirebaseOtp(otp);
+      await verifyFirebaseOtp(phone, firebaseIdToken, role);
       navigation.replace("Orders");
     } catch (err: any) {
       Alert.alert("Error", err?.message || "Invalid OTP");

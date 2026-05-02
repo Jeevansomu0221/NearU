@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
+import { confirmFirebaseOtp, sendFirebaseOtp } from "../services/firebasePhoneAuth";
 
 interface AuthResponse {
   success: boolean;
@@ -47,9 +48,9 @@ export default function LoginScreen({ navigation }: any) {
     try {
       setLoading(true);
       setFeedback(null);
-      await api.post("/auth/send-otp", { phone, role: "partner" });
+      await sendFirebaseOtp(phone);
       setStep("otp");
-      setFeedback({ type: "success", text: "OTP sent. Enter the code below. Use 111111 for testing." });
+      setFeedback({ type: "success", text: "OTP sent. Enter the code below." });
     } catch (error: any) {
       console.error("Send OTP error:", error);
       setFeedback({ type: "error", text: error.response?.data?.message || "Failed to send OTP." });
@@ -121,9 +122,10 @@ export default function LoginScreen({ navigation }: any) {
     try {
       setLoading(true);
       setFeedback(null);
+      const firebaseIdToken = await confirmFirebaseOtp(otp);
       const res = await api.post("/auth/verify-otp", {
         phone,
-        otp,
+        firebaseIdToken,
         role: "partner"
       });
 
@@ -239,7 +241,7 @@ export default function LoginScreen({ navigation }: any) {
         </View>
 
         <View style={styles.hero}>
-          <Text style={styles.brand}>NearU Partner</Text>
+          <Text style={styles.brand}>Vyaha Partner</Text>
           <Text style={styles.title}>Run your shop with a cleaner, faster partner app</Text>
           <Text style={styles.subtitle}>
             Manage orders, menu items, and shop timings in one place.

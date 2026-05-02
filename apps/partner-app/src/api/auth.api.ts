@@ -81,6 +81,35 @@ export const verifyOtp = async (phone: string, otp: string, role: string) => {
   return payload;
 };
 
+export const verifyFirebaseOtp = async (phone: string, firebaseIdToken: string, role: string) => {
+  const response = await api.post<VerifyOtpResponse>("/auth/verify-otp", {
+    phone,
+    firebaseIdToken,
+    role
+  });
+
+  const payload = response.data?.data;
+  if (!response.data?.success || !payload?.token || !payload?.user) {
+    throw new Error(response.data?.message || "Invalid response from server");
+  }
+
+  await storeAuthData({
+    token: payload.token,
+    phone: payload.user.phone,
+    userId: payload.user.id,
+    partnerId: payload.user.partnerId
+  });
+
+  await AsyncStorage.setItem("user", JSON.stringify(payload.user));
+  if (payload.refreshToken) {
+    await AsyncStorage.setItem("refreshToken", payload.refreshToken);
+  } else {
+    await AsyncStorage.removeItem("refreshToken");
+  }
+
+  return payload;
+};
+
 export const getAuthToken = async (): Promise<string | null> => {
   return AsyncStorage.getItem("token");
 };

@@ -59,7 +59,7 @@ app.use("/api/upload", uploadRoutes);
 app.use("/api/payment", paymentRoutes);
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", message: "NearU backend is running", env: config.nodeEnv });
+  res.json({ status: "ok", message: "Vyaha backend is running", env: config.nodeEnv });
 });
 
 export default app;

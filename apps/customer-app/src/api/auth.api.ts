@@ -39,6 +39,14 @@ export const verifyOtp = (phone: string, otp: string): Promise<VerifyOtpResponse
   }) as Promise<VerifyOtpResponse>;
 };
 
+export const verifyFirebaseOtp = (phone: string, firebaseIdToken: string): Promise<VerifyOtpResponse> => {
+  return api.post("/auth/verify-otp", {
+    phone,
+    firebaseIdToken,
+    role: "customer"
+  }) as Promise<VerifyOtpResponse>;
+};
+
 export const logout = async () => {
   try {
     await api.post("/auth/logout");

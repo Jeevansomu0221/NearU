@@ -9,9 +9,10 @@ import {
   ActivityIndicator
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { verifyOtp, sendOtp } from "../api/auth.api";
+import { verifyFirebaseOtp } from "../api/auth.api";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
+import { confirmFirebaseOtp, sendFirebaseOtp } from "../services/firebasePhoneAuth";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone } = route.params;
@@ -43,7 +44,8 @@ export default function OtpScreen({ route, navigation }: any) {
 
     try {
       setLoading(true);
-      const response = await verifyOtp(phone, otp);
+      const firebaseIdToken = await confirmFirebaseOtp(otp);
+      const response = await verifyFirebaseOtp(phone, firebaseIdToken);
 
       if (!response.success || !response.data?.token || !response.data?.user) {
         Alert.alert("Error", response.message || "Invalid OTP. Please try again.");
@@ -80,11 +82,7 @@ export default function OtpScreen({ route, navigation }: any) {
       setTimer(60);
       setCanResend(false);
       setOtp("");
-      const response = await sendOtp(phone);
-      if (!response.success) {
-        Alert.alert("Error", response.message || "Failed to resend OTP");
-        setCanResend(true);
-      }
+      await sendFirebaseOtp(phone);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to resend OTP");
       setCanResend(true);

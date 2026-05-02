@@ -41,6 +41,9 @@ export const config = {
   msg91AuthKey: process.env.MSG91_AUTH_KEY || "",
   msg91TemplateId: process.env.MSG91_TEMPLATE_ID || "",
   msg91SenderId: process.env.MSG91_SENDER_ID || "",
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",
+  firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "",
+  firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "",
   razorpayKeyId: process.env.RAZORPAY_KEY_ID || "",
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || "",
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
@@ -75,6 +78,10 @@ export const validateEnv = (): void => {
 
     if (config.otpProvider === "msg91" && (!config.msg91AuthKey || !config.msg91TemplateId || !config.msg91SenderId)) {
       missing.push("MSG91_AUTH_KEY/MSG91_TEMPLATE_ID/MSG91_SENDER_ID");
+    }
+
+    if (config.otpProvider === "firebase" && !config.firebaseProjectId && !config.firebaseServiceAccountPath && !config.firebaseServiceAccountJson) {
+      missing.push("FIREBASE_PROJECT_ID/FIREBASE_SERVICE_ACCOUNT_PATH/FIREBASE_SERVICE_ACCOUNT_JSON");
     }
 
     if (!config.razorpayKeyId || !config.razorpayKeySecret || !config.razorpayWebhookSecret) {

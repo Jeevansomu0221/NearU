@@ -127,6 +127,21 @@ export default function OrderStatusScreen({ route, navigation }: any) {
     }
   };
 
+  const getPaymentStatusText = (status?: string) => {
+    switch (status) {
+      case "PAID":
+        return "Paid";
+      case "FAILED":
+        return "Failed";
+      case "REFUNDED":
+        return "Refunded";
+      case "PENDING":
+      case "PAYMENT_PENDING_DELIVERY":
+      default:
+        return "Pending";
+    }
+  };
+
   const getStatusDescription = (status: string) => {
     switch (status) {
       case "PENDING":
@@ -306,20 +321,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Contact</Text>
         <View style={styles.contactCard}>
-          <View style={styles.contactRow}>
-            <View style={styles.contactCopy}>
-              <Text style={styles.contactTitle}>Restaurant</Text>
-              <Text style={styles.contactValue}>{restaurantName}</Text>
-            </View>
-            {(order.partnerId as any)?.phone ? (
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => openPhone((order.partnerId as any)?.phone)}>
-                <Text style={styles.secondaryButtonText}>Call</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
           {deliveryPartner ? (
-            <View style={[styles.contactRow, styles.contactDivider]}>
+            <View style={styles.contactRow}>
               <View style={styles.contactCopy}>
                 <Text style={styles.contactTitle}>Delivery partner</Text>
                 <Text style={styles.contactValue}>{deliveryPartner?.name || "Assigned"}</Text>
@@ -331,7 +334,15 @@ export default function OrderStatusScreen({ route, navigation }: any) {
                 </TouchableOpacity>
               ) : null}
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.contactRow}>
+              <View style={styles.contactCopy}>
+                <Text style={styles.contactTitle}>Delivery partner</Text>
+                <Text style={styles.contactValue}>Not assigned yet</Text>
+                <Text style={styles.contactMeta}>Phone number will appear after assignment.</Text>
+              </View>
+            </View>
+          )}
         </View>
       </View>
 
@@ -378,11 +389,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Payment status</Text>
           <Text style={[styles.summaryValue, { color: statusTheme.pill }]}>
-            {order.paymentStatus === "PAID"
-              ? "Paid"
-              : order.paymentStatus === "PENDING"
-                ? "Pending"
-                : order.paymentStatus || "Pending"}
+            {getPaymentStatusText(order.paymentStatus)}
           </Text>
         </View>
         <View style={styles.totalRow}>

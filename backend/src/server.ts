@@ -11,11 +11,11 @@ const startServer = async () => {
   await connectDB();
 
   app.listen(config.port, () => {
-    console.log(`NearU backend running on port ${config.port}`);
+    console.log(`Vyaha backend running on port ${config.port}`);
   });
 };
 
 startServer().catch((error) => {
-  console.error("Failed to start NearU backend:", error);
+  console.error("Failed to start Vyaha backend:", error);
   process.exit(1);
 });

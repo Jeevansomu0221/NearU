@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "partner-app",
-    "slug": "partner-app",
+    "name": "Vyaha Partner",
+    "slug": "vyaha-partner",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,6 +16,8 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.vyaha.partner",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -25,6 +27,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "61203aa1-4f84-4edb-8e66-595df6a26a53"
+      }
+    },
+    "owner": "jeevansomu"
   }
 }

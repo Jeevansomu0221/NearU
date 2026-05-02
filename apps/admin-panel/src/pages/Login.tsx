@@ -80,7 +80,7 @@ export default function Login() {
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <div className="admin-login-badge">
             <SafetyCertificateOutlined />
-            <span>NearU Ops Console</span>
+            <span>Vyaha Ops Console</span>
           </div>
           <Typography.Title level={2} style={{ marginBottom: 0 }}>
             Admin Sign In

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { sendOtp } from '../api/auth.api';
+import { sendFirebaseOtp } from '../services/firebasePhoneAuth';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -35,10 +35,9 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       console.log('📱 Sending OTP to:', cleanedPhone);
       
-      // ✅ Use the sendOtp function from auth.api.ts
-      const response = await sendOtp(cleanedPhone);
+      await sendFirebaseOtp(cleanedPhone);
       
-      console.log('✅ OTP sent successfully:', response);
+      console.log('✅ OTP sent successfully');
       
       // Navigate to OTP screen with phone number ONLY
       // Type is { phone: string } so only pass phone
@@ -65,7 +64,7 @@ export default function LoginScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>NearU</Text>
+        <Text style={styles.title}>Vyaha</Text>
         <Text style={styles.subtitle}>Good food near you</Text>
         
         <View style={styles.inputContainer}>
