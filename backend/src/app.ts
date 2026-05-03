@@ -15,10 +15,11 @@ import { config } from "./config/env";
 
 const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
+const allowConfiguredWildcardOrigin = config.corsOrigins.includes("*");
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (allowAllOrigins || !origin || config.corsOrigins.includes(origin)) {
+    if (allowAllOrigins || allowConfiguredWildcardOrigin || !origin || config.corsOrigins.includes(origin)) {
       return callback(null, true);
     }
 
