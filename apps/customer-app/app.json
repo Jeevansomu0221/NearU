@@ -2,6 +2,7 @@
   "expo": {
     "name": "Vyaha",
     "slug": "vyaha-customer",
+    "scheme": "vyaha-customer",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo_vyaha-bg.png",
