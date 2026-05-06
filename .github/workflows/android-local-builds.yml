@@ -87,6 +87,10 @@ jobs:
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
         run: npx eas-cli build -p android --profile development --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-development.apk
 
+      - name: Print development APK signing certificate
+        if: ${{ (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && github.event.inputs.artifact == 'development-apk' }}
+        run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --print-certs ${{ matrix.artifact_prefix }}-development.apk
+
       - name: Build preview APK
         if: ${{ (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'apk') }}
         working-directory: ${{ matrix.app_dir }}
