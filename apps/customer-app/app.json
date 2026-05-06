@@ -4,7 +4,7 @@
     "slug": "vyaha-customer",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo_vyaha-bg.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -19,7 +19,7 @@
       "package": "com.vyaha.customer",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/logo_vyaha-bg.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,

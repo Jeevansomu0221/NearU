@@ -172,7 +172,7 @@ export default function HomeScreen({ navigation }: Props) {
     <View style={[styles.headerWrap, { paddingTop: insets.top + 8 }]}>
       <View style={styles.heroRow}>
         <View style={styles.heroTextBlock}>
-          <Text style={styles.brandText}>Vyaha Food</Text>
+          <Image source={require("../../assets/vyaha-wordmark.png")} style={styles.brandLogo} resizeMode="contain" />
           <Text style={styles.heading}>Local shops</Text>
           <Text style={styles.heading}>near you</Text>
           <Text style={styles.subheading}>Explore different kinds of food near you.</Text>
@@ -390,10 +390,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 10
   },
-  brandText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#FF6B35",
+  brandLogo: {
+    width: 104,
+    height: 36,
     marginBottom: 6
   },
   heading: {

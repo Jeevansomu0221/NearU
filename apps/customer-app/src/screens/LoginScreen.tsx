@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -64,7 +65,7 @@ export default function LoginScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Vyaha</Text>
+        <Image source={require('../../assets/vyaha-wordmark.png')} style={styles.logo} resizeMode="contain" />
         <Text style={styles.subtitle}>Good food near you</Text>
         
         <View style={styles.inputContainer}>
@@ -128,11 +129,10 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     justifyContent: 'center',
   },
-  title: {
-    fontSize: 42,
-    fontWeight: 'bold',
-    color: '#FF6B35',
-    textAlign: 'center',
+  logo: {
+    width: 210,
+    height: 92,
+    alignSelf: 'center',
     marginBottom: 8,
   },
   subtitle: {

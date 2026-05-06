@@ -41,9 +41,9 @@ const defaultPreferences: PreferencesState = {
 };
 
 const legalItems = [
-  { icon: "file-document-outline", title: "Terms & Conditions", detail: "How Vyaha orders, payments, and delivery work." },
+  { icon: "file-document-outline", title: "Terms & Conditions", detail: "How orders, payments, and delivery work." },
   { icon: "shield-lock-outline", title: "Privacy Policy", detail: "How profile, order, and location data are handled." },
-  { icon: "information-outline", title: "App Version", detail: "Vyaha Customer 1.0.0" }
+  { icon: "information-outline", title: "App Version", detail: "Customer App 1.0.0" }
 ];
 
 const supportItems = [
@@ -60,7 +60,7 @@ const settingsItems = [
 const paymentMethods = [
   { icon: "upi", title: "UPI ID", detail: "Add your preferred UPI for faster checkout", status: "Add" },
   { icon: "credit-card-outline", title: "Saved Cards", detail: "No cards saved yet", status: "Empty" },
-  { icon: "wallet-outline", title: "Wallet", detail: "Vyaha wallet support can be enabled later", status: "Preview" },
+  { icon: "wallet-outline", title: "Wallet", detail: "Wallet support can be enabled later", status: "Preview" },
   { icon: "cash-100", title: "Cash on Delivery", detail: "Available where partners allow COD", status: "Enabled" }
 ];
 
