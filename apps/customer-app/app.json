@@ -3,7 +3,7 @@
     "name": "Vyaha",
     "slug": "vyaha-customer",
     "scheme": "vyaha-customer",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/logo_vyaha-bg.png",
     "userInterfaceStyle": "light",
@@ -18,6 +18,7 @@
     },
     "android": {
       "package": "com.vyaha.customer",
+      "versionCode": 2,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo_vyaha-bg.png",

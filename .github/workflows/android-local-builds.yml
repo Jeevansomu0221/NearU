@@ -6,7 +6,7 @@ on:
       app:
         description: App to build
         required: true
-        default: all
+        default: customer
         type: choice
         options:
           - all
@@ -16,7 +16,7 @@ on:
       artifact:
         description: Artifact type
         required: true
-        default: development-apk
+        default: aab
         type: choice
         options:
           - both
