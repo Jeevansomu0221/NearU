@@ -26,6 +26,25 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:337037297329:android:eb9f149fd69055a1cc8490",
+        "android_client_info": {
+          "package_name": "com.vyaha.delivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA83E7WnJ-K0-XHsmMrdxgbTh5Cps5cwuM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:337037297329:android:e4df4b4dbf586addcc8490",
         "android_client_info": {
           "package_name": "com.vyaha.partner"
