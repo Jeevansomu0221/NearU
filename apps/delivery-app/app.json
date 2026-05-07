@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vyaha Delivery",
     "slug": "vyaha-delivery",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "com.vyaha.delivery",
+      "versionCode": 2,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
