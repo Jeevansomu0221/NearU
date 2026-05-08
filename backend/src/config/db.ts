@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { config } from "./env";
+import { ensureUserIndexes } from "../models/User.model";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,6 +51,7 @@ const connectDB = async (): Promise<void> => {
     }
     
     console.log(`MongoDB Connected: ${conn.connection.host}`);
+    await ensureUserIndexes();
     
     // Connection events
     mongoose.connection.on("error", (err) => {

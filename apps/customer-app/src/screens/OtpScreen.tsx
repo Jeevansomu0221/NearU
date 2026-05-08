@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,24 @@ export default function OtpScreen({ navigation, route }: Props) {
   const { phone } = route.params;
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const lastSubmittedOtp = useRef('');
+
+  const getOtpErrorMessage = (error: any) => {
+    const message = String(error?.message || '');
+    const code = String(error?.code || '');
+    const lowerMessage = message.toLowerCase();
+
+    if (code.includes('invalid-verification-code') || lowerMessage.includes('invalid')) {
+      return 'That code does not look right. Please check the SMS and try again.';
+    }
+
+    if (code.includes('session-expired') || lowerMessage.includes('expired')) {
+      return 'This SMS code has expired. Firebase controls the expiry time for security, so please resend a fresh OTP.';
+    }
+
+    return message || 'Something went wrong. Please try again.';
+  };
 
   const isCustomerProfileComplete = (profile: {
     name?: string;
@@ -68,6 +86,12 @@ export default function OtpScreen({ navigation, route }: Props) {
       return;
     }
 
+    if (loading || lastSubmittedOtp.current === otp) {
+      return;
+    }
+
+    lastSubmittedOtp.current = otp;
+    setOtpError('');
     setLoading(true);
     try {
       const firebaseIdToken = await confirmFirebaseOtp(otp);
@@ -97,7 +121,8 @@ export default function OtpScreen({ navigation, route }: Props) {
         routes: [nextRoute],
       });
     } catch (error: any) {
-      Alert.alert('Verification Failed', error.message || 'Something went wrong. Please try again.');
+      lastSubmittedOtp.current = '';
+      setOtpError(getOtpErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -113,8 +138,10 @@ export default function OtpScreen({ navigation, route }: Props) {
     setLoading(true);
     try {
       await sendFirebaseOtp(phone);
-      Alert.alert('OTP Sent', 'A new OTP has been sent to your phone.');
+      Alert.alert('Fresh OTP Sent', 'Please use the newest SMS code. Older codes will stop working.');
       setOtp('');
+      setOtpError('');
+      lastSubmittedOtp.current = '';
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to resend OTP. Please try again.');
     } finally {
@@ -140,7 +167,13 @@ export default function OtpScreen({ navigation, route }: Props) {
             value={otp}
             onChangeText={(text) => {
               const numbers = text.replace(/\D/g, '');
-              if (numbers.length <= 6) setOtp(numbers);
+              if (numbers.length <= 6) {
+                setOtp(numbers);
+                setOtpError('');
+                if (numbers.length < 6) {
+                  lastSubmittedOtp.current = '';
+                }
+              }
             }}
             maxLength={6}
             editable={!loading}
@@ -153,6 +186,12 @@ export default function OtpScreen({ navigation, route }: Props) {
             <View key={index} style={[styles.otpDot, index < otp.length && styles.otpDotFilled]} />
           ))}
         </View>
+        {otpError ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTitle}>Verification failed</Text>
+            <Text style={styles.errorText}>{otpError}</Text>
+          </View>
+        ) : null}
         <TouchableOpacity
           style={[styles.button, (loading || otp.length !== 6) && styles.buttonDisabled]}
           onPress={handleVerifyOTP}
@@ -185,6 +224,9 @@ const styles = StyleSheet.create({
   otpDots: { flexDirection: 'row', justifyContent: 'center', marginBottom: 40 },
   otpDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#E0E0E0', marginHorizontal: 6 },
   otpDotFilled: { backgroundColor: '#FF6B35' },
+  errorCard: { backgroundColor: '#FFF4EF', borderWidth: 1, borderColor: '#FFD2C0', borderRadius: 14, padding: 12, marginBottom: 18 },
+  errorTitle: { fontSize: 13, fontWeight: '800', color: '#B93815', marginBottom: 4 },
+  errorText: { fontSize: 12, lineHeight: 17, color: '#7A3A24' },
   button: { backgroundColor: '#FF6B35', paddingVertical: 18, borderRadius: 12, alignItems: 'center', shadowColor: '#FF6B35', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5, marginBottom: 24 },
   buttonDisabled: { backgroundColor: '#FFA285', shadowOpacity: 0.1 },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },

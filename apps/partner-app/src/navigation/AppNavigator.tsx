@@ -139,11 +139,11 @@ export default function AppNavigator() {
         // If partner not found (404), go to onboarding
         setInitialRoute("Onboarding");
       } else if (!error.response) {
-        console.log("🌐 Network error - check backend connection");
-        setInitialRoute("Login");
+        console.log("🌐 Network error - keeping previous signed-in session");
+        setInitialRoute("Dashboard");
       } else {
         console.log("⚠️ Other error, redirecting to Onboarding");
-        setInitialRoute("Onboarding");
+        setInitialRoute("Dashboard");
       }
     } finally {
       setLoading(false);

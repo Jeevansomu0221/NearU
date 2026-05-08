@@ -173,9 +173,17 @@ export default function HomeScreen({ navigation }: Props) {
       <View style={styles.heroRow}>
         <View style={styles.heroTextBlock}>
           <Image source={require("../../assets/vyaha-wordmark.png")} style={styles.brandLogo} resizeMode="contain" />
-          <Text style={styles.heading}>Local shops</Text>
-          <Text style={styles.heading}>near you</Text>
-          <Text style={styles.subheading}>Explore different kinds of food near you.</Text>
+          <Text style={styles.subheading}>Explore different kinds of food near you!</Text>
+          <View style={styles.heroStatsRow}>
+            <View style={styles.heroStatBox}>
+              <Text style={styles.heroStatValue}>{shops.length}</Text>
+              <Text style={styles.heroStatLabel}>Shops</Text>
+            </View>
+            <View style={[styles.heroStatBox, styles.heroStatBoxOpen]}>
+              <Text style={[styles.heroStatValue, styles.heroStatValueOpen]}>{openNowCount}</Text>
+              <Text style={styles.heroStatLabel}>Open</Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.heroRight}>
@@ -219,30 +227,6 @@ export default function HomeScreen({ navigation }: Props) {
         >
           <Feather name="sliders" size={16} color="#FF6B35" />
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.statsRow}>
-        <View style={[styles.statCard, styles.statCardWarm]}>
-          <View style={styles.statIconCircle}>
-            <MaterialCommunityIcons name="view-grid-outline" size={16} color="#FF6B35" />
-          </View>
-          <View style={styles.statTextWrap}>
-            <Text style={styles.statValue}>{shops.length}</Text>
-            <Text style={styles.statLabel}>Shops</Text>
-          </View>
-          <MaterialCommunityIcons name="storefront-outline" size={36} color="#F7DCC7" style={styles.statArt} />
-        </View>
-
-        <View style={[styles.statCard, styles.statCardCool]}>
-          <View style={[styles.statIconCircle, styles.statIconCircleCool]}>
-            <Feather name="clock" size={16} color="#2B9C4A" />
-          </View>
-          <View style={styles.statTextWrap}>
-            <Text style={styles.statValue}>{openNowCount}</Text>
-            <Text style={styles.statLabel}>Open</Text>
-          </View>
-          <MaterialCommunityIcons name="store-outline" size={36} color="#CDEECE" style={styles.statArt} />
-        </View>
       </View>
 
       <FlatList
@@ -388,25 +372,58 @@ const styles = StyleSheet.create({
   },
   heroTextBlock: {
     flex: 1,
-    paddingRight: 10
+    paddingRight: 10,
+    alignItems: "flex-start"
   },
   brandLogo: {
-    width: 104,
-    height: 36,
-    marginBottom: 6
-  },
-  heading: {
-    fontSize: 21,
-    lineHeight: 24,
-    fontWeight: "900",
-    color: "#1F1813"
+    width: 142,
+    height: 50,
+    marginLeft: -4,
+    marginBottom: 4
   },
   subheading: {
-    marginTop: 8,
-    fontSize: 12,
-    lineHeight: 16,
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
     color: "#6B625A",
-    maxWidth: 166
+    maxWidth: 178
+  },
+  heroStatsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+    width: "100%"
+  },
+  heroStatBox: {
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#F1DED0",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    justifyContent: "center"
+  },
+  heroStatBoxOpen: {
+    backgroundColor: "#F8FFF8",
+    borderColor: "#DDEFD8"
+  },
+  heroStatValue: {
+    fontSize: 18,
+    lineHeight: 20,
+    fontWeight: "900",
+    color: "#FF6B35"
+  },
+  heroStatValueOpen: {
+    color: "#2B9C4A"
+  },
+  heroStatLabel: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#554B43"
   },
   heroRight: {
     width: 162
@@ -606,60 +623,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF4EB",
     alignItems: "center",
     justifyContent: "center"
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 10
-  },
-  statCard: {
-    flex: 1,
-    height: 76,
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: "hidden",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "flex-start"
-  },
-  statCardWarm: {
-    backgroundColor: "#FFF8F2",
-    borderColor: "#F6E3D1"
-  },
-  statCardCool: {
-    backgroundColor: "#F8FFF8",
-    borderColor: "#DDEFD8"
-  },
-  statIconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFFFFF"
-  },
-  statIconCircleCool: {
-    backgroundColor: "#F0FFF1"
-  },
-  statTextWrap: {
-    marginLeft: 10
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#201914"
-  },
-  statLabel: {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#544C45"
-  },
-  statArt: {
-    position: "absolute",
-    right: 10,
-    bottom: 6
   },
   filtersRow: {
     paddingTop: 10,

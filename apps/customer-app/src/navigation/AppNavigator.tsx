@@ -140,6 +140,7 @@ export default function AppNavigator() {
     const checkSession = async () => {
       try {
         const token = await AsyncStorage.getItem('token');
+        const userJson = await AsyncStorage.getItem('user');
 
         if (!token) {
           setInitialRoute('Login');
@@ -152,11 +153,28 @@ export default function AppNavigator() {
           return;
         }
 
-        await AsyncStorage.multiRemove(['token', 'user']);
-        setInitialRoute('Login');
+        if (userJson) {
+          const cachedUser = JSON.parse(userJson);
+          setInitialRoute(isCustomerProfileComplete(cachedUser) ? 'Home' : 'Profile');
+          return;
+        }
+
+        // Keep existing session on temporary backend failures.
+        setInitialRoute('Home');
       } catch (error) {
-        await AsyncStorage.multiRemove(['token', 'user']);
-        setInitialRoute('Login');
+        try {
+          const userJson = await AsyncStorage.getItem('user');
+          if (userJson) {
+            const cachedUser = JSON.parse(userJson);
+            setInitialRoute(isCustomerProfileComplete(cachedUser) ? 'Home' : 'Profile');
+            return;
+          }
+        } catch (_parseError) {
+          // Ignore parse errors and keep user signed in by default route below.
+        }
+
+        // Do not force logout for transient network/API startup errors.
+        setInitialRoute('Home');
       }
     };
 

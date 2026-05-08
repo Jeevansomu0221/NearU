@@ -86,6 +86,7 @@ export default function AppNavigator() {
     const checkSession = async () => {
       try {
         const token = await AsyncStorage.getItem("token");
+        const cachedUser = await AsyncStorage.getItem("user");
         if (!token) {
           setInitialRoute("Login");
           return;
@@ -97,11 +98,16 @@ export default function AppNavigator() {
           return;
         }
 
-        await AsyncStorage.multiRemove(["token", "user"]);
-        setInitialRoute("Login");
+        if (cachedUser) {
+          // If profile fetch fails, keep user inside app using last known signed-in route.
+          setInitialRoute("Main");
+          return;
+        }
+
+        setInitialRoute("Main");
       } catch (error) {
-        await AsyncStorage.multiRemove(["token", "user"]);
-        setInitialRoute("Login");
+        // Do not force logout on startup network hiccups.
+        setInitialRoute("Main");
       }
     };
 

@@ -9,8 +9,8 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
-  Switch
+  Modal,
+  Platform
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
@@ -22,51 +22,10 @@ import {
 } from "../api/user.api";
 import { getMyOrders, type Order } from "../api/order.api";
 
-const PROFILE_PREFS_KEY = "customer_profile_preferences";
-
-type PreferencesState = {
-  pushNotifications: boolean;
-  smsUpdates: boolean;
-  emailUpdates: boolean;
-  darkMode: boolean;
-  locationPermission: boolean;
-};
-
-const defaultPreferences: PreferencesState = {
-  pushNotifications: true,
-  smsUpdates: true,
-  emailUpdates: false,
-  darkMode: false,
-  locationPermission: true
-};
-
-const legalItems = [
-  { icon: "file-document-outline", title: "Terms & Conditions", detail: "How orders, payments, and delivery work." },
-  { icon: "shield-lock-outline", title: "Privacy Policy", detail: "How profile, order, and location data are handled." },
-  { icon: "information-outline", title: "App Version", detail: "Customer App 1.0.0" }
-];
-
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Live chat and callback support from 8 AM to 11 PM." },
   { icon: "help-circle-outline", title: "FAQs", detail: "Delivery timings, cancellations, refunds, and account help." },
   { icon: "alert-circle-outline", title: "Report an Issue", detail: "Raise an issue for payment, order, or delivery problems." }
-];
-
-const settingsItems = [
-  { icon: "translate", title: "Language", detail: "English" },
-  { icon: "theme-light-dark", title: "Theme", detail: "System default" }
-];
-
-const paymentMethods = [
-  { icon: "upi", title: "UPI ID", detail: "Add your preferred UPI for faster checkout", status: "Add" },
-  { icon: "credit-card-outline", title: "Saved Cards", detail: "No cards saved yet", status: "Empty" },
-  { icon: "wallet-outline", title: "Wallet", detail: "Wallet support can be enabled later", status: "Preview" },
-  { icon: "cash-100", title: "Cash on Delivery", detail: "Available where partners allow COD", status: "Enabled" }
-];
-
-const couponItems = [
-  { icon: "ticket-percent-outline", title: "WELCOME50", detail: "Flat 50 off on your next first order above Rs 199" },
-  { icon: "sale", title: "FREESHIP", detail: "Free delivery on select stores during lunch hours" }
 ];
 
 const formatCurrency = (value?: number) => `Rs ${Number(value || 0).toFixed(0)}`;
@@ -172,8 +131,8 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(forceComplete);
   const [saving, setSaving] = useState(false);
+  const [registrationSuccessVisible, setRegistrationSuccessVisible] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [preferences, setPreferences] = useState<PreferencesState>(defaultPreferences);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -239,35 +198,6 @@ export default function ProfileScreen({ navigation, route }: any) {
   useEffect(() => {
     loadProfile();
   }, []);
-
-  useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const raw = await AsyncStorage.getItem(PROFILE_PREFS_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        setPreferences({ ...defaultPreferences, ...parsed });
-      } catch (error) {
-        console.warn("Failed to load profile preferences", error);
-      }
-    };
-
-    loadPreferences();
-  }, []);
-
-  const persistPreferences = async (nextState: PreferencesState) => {
-    setPreferences(nextState);
-    try {
-      await AsyncStorage.setItem(PROFILE_PREFS_KEY, JSON.stringify(nextState));
-    } catch (error) {
-      console.warn("Failed to save profile preferences", error);
-    }
-  };
-
-  const handleTogglePreference = (key: keyof PreferencesState) => {
-    const nextState = { ...preferences, [key]: !preferences[key] };
-    persistPreferences(nextState);
-  };
 
   const resetForm = () => {
     if (profile) {
@@ -336,16 +266,13 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
-      Alert.alert("Success", forceComplete ? "Registration completed successfully" : "Profile updated successfully");
-
       await loadProfile();
       setEditing(false);
 
       if (forceComplete) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Home" }]
-        });
+        setRegistrationSuccessVisible(true);
+      } else {
+        Alert.alert("Profile Saved", "Your profile details have been updated.");
       }
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to update profile");
@@ -376,6 +303,31 @@ export default function ProfileScreen({ navigation, route }: any) {
     Alert.alert(title, message);
   };
 
+  const goHomeAfterRegistration = () => {
+    setRegistrationSuccessVisible(false);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Home" }]
+    });
+  };
+
+  const renderRegistrationSuccessModal = () => (
+    <Modal visible={registrationSuccessVisible} transparent animationType="fade" onRequestClose={goHomeAfterRegistration}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.successModal}>
+          <View style={styles.successIconWrap}>
+            <MaterialCommunityIcons name="check" size={30} color="#FFFFFF" />
+          </View>
+          <Text style={styles.successTitle}>Registration Complete</Text>
+          <Text style={styles.successText}>Your Vyaha profile is ready. You can now explore nearby food shops and place your first order.</Text>
+          <TouchableOpacity style={styles.successButton} onPress={goHomeAfterRegistration} activeOpacity={0.85}>
+            <Text style={styles.successButtonText}>Start Exploring</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const addressLines = buildAddressLines(profile);
   const memberSince = profile ? formatDate(profile.createdAt) : "N/A";
   const ongoingOrders = orders.filter((order) => !["DELIVERED", "CANCELLED", "REJECTED"].includes(order.status)).slice(0, 3);
@@ -391,19 +343,6 @@ export default function ProfileScreen({ navigation, route }: any) {
       deduped.set(partnerName, partnerName);
     });
     return Array.from(deduped.values()).slice(0, 4);
-  }, [orders]);
-
-  const favoriteDishes = useMemo(() => {
-    const counts = new Map<string, number>();
-    orders.forEach((order) => {
-      order.items?.forEach((item) => {
-        counts.set(item.name, (counts.get(item.name) || 0) + item.quantity);
-      });
-    });
-
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4);
   }, [orders]);
 
   if (loading) {
@@ -573,6 +512,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Complete Registration</Text>}
           </TouchableOpacity>
         </View>
+        {renderRegistrationSuccessModal()}
       </KeyboardAvoidingView>
     );
   }
@@ -638,7 +578,9 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         <View style={styles.shortcutRow}>
           <TouchableOpacity style={styles.shortcutCard} onPress={() => navigation.navigate("Orders")}>
-            <MaterialCommunityIcons name="truck-fast-outline" size={20} color="#FF6B35" />
+            <View style={styles.shortcutIconWrap}>
+              <MaterialCommunityIcons name="receipt-text-outline" size={20} color="#FF6B35" />
+            </View>
             <Text style={styles.shortcutTitle}>My Orders</Text>
             <Text style={styles.shortcutDetail}>{ongoingOrders.length > 0 ? `${ongoingOrders.length} ongoing` : "View history"}</Text>
           </TouchableOpacity>
@@ -646,7 +588,9 @@ export default function ProfileScreen({ navigation, route }: any) {
             style={styles.shortcutCard}
             onPress={() => setEditing(true)}
           >
-            <MaterialCommunityIcons name="map-marker-outline" size={20} color="#FF6B35" />
+            <View style={styles.shortcutIconWrap}>
+              <MaterialCommunityIcons name="map-marker-radius-outline" size={20} color="#2B9C4A" />
+            </View>
             <Text style={styles.shortcutTitle}>Addresses</Text>
             <Text style={styles.shortcutDetail}>{addressLines.length > 0 ? "Primary saved" : "Add now"}</Text>
           </TouchableOpacity>
@@ -654,7 +598,9 @@ export default function ProfileScreen({ navigation, route }: any) {
             style={styles.shortcutCard}
             onPress={() => handlePlaceholderAction("Payments", "Saved cards, UPI, and wallet UI are ready to connect to payment storage next.")}
           >
-            <MaterialCommunityIcons name="credit-card-outline" size={20} color="#FF6B35" />
+            <View style={styles.shortcutIconWrap}>
+              <MaterialCommunityIcons name="wallet-outline" size={20} color="#7C3AED" />
+            </View>
             <Text style={styles.shortcutTitle}>Payments</Text>
             <Text style={styles.shortcutDetail}>Manage methods</Text>
           </TouchableOpacity>
@@ -933,7 +879,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                           {(order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant"}
                         </Text>
                         <Text style={styles.orderHistorySubtext}>
-                          {formatDate(order.createdAt)} • {getStatusLabel(order.status)}
+                          {formatDate(order.createdAt)} - {getStatusLabel(order.status)}
                         </Text>
                       </View>
                       <View style={styles.orderHistoryActions}>
@@ -958,181 +904,8 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Payment Methods</Text>
-              <Text style={styles.sectionHint}>Saved cards, UPI IDs, wallet support, and COD visibility.</Text>
-              {paymentMethods.map((item) => (
-                <TouchableOpacity
-                  key={item.title}
-                  style={styles.listRow}
-                  onPress={() => handlePlaceholderAction(item.title, item.detail)}
-                >
-                  <View style={styles.listRowLeft}>
-                    <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
-                    <View style={styles.listRowTextWrap}>
-                      <Text style={styles.listRowTitle}>{item.title}</Text>
-                      <Text style={styles.listRowDetail}>{item.detail}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.rowTag}>{item.status}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Favorites & Saved Items</Text>
-              <Text style={styles.sectionHint}>Favorite restaurants and dishes based on your order history.</Text>
-              <View style={styles.favoriteBlock}>
-                <Text style={styles.favoriteTitle}>Favorite Restaurants</Text>
-                {favoriteRestaurants.length > 0 ? (
-                  favoriteRestaurants.map((name) => (
-                    <View key={name} style={styles.favoriteChip}>
-                      <MaterialCommunityIcons name="heart-outline" size={16} color="#C7362E" />
-                      <Text style={styles.favoriteChipText}>{name}</Text>
-                    </View>
-                  ))
-                ) : (
-                  <Text style={styles.emptyText}>Order a few times and your favorite restaurants will show up here.</Text>
-                )}
-              </View>
-              <View style={styles.favoriteBlock}>
-                <Text style={styles.favoriteTitle}>Saved Dishes</Text>
-                {favoriteDishes.length > 0 ? (
-                  favoriteDishes.map(([dishName, count]) => (
-                    <View key={dishName} style={styles.favoriteChip}>
-                      <MaterialCommunityIcons name="silverware-fork-knife" size={16} color="#FF6B35" />
-                      <Text style={styles.favoriteChipText}>{dishName}</Text>
-                      <Text style={styles.favoriteChipCount}>{count}x</Text>
-                    </View>
-                  ))
-                ) : (
-                  <Text style={styles.emptyText}>Your most repeated dishes will appear here.</Text>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Offers & Coupons</Text>
-              <Text style={styles.sectionHint}>Available coupons, applied offers, and promo support.</Text>
-              {couponItems.map((coupon) => (
-                <TouchableOpacity
-                  key={coupon.title}
-                  style={styles.offerCard}
-                  onPress={() => handlePlaceholderAction(coupon.title, coupon.detail)}
-                >
-                  <MaterialCommunityIcons name={coupon.icon} size={22} color="#FF6B35" />
-                  <View style={styles.offerContent}>
-                    <Text style={styles.offerTitle}>{coupon.title}</Text>
-                    <Text style={styles.offerDetail}>{coupon.detail}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Notifications & Preferences</Text>
-              <Text style={styles.sectionHint}>Push, SMS, and email communication controls.</Text>
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleTextWrap}>
-                  <Text style={styles.toggleTitle}>Push Notifications</Text>
-                  <Text style={styles.toggleDetail}>Order status, offers, and delivery updates</Text>
-                </View>
-                <Switch value={preferences.pushNotifications} onValueChange={() => handleTogglePreference("pushNotifications")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.pushNotifications ? "#FF6B35" : "#fff"} />
-              </View>
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleTextWrap}>
-                  <Text style={styles.toggleTitle}>SMS Updates</Text>
-                  <Text style={styles.toggleDetail}>OTP, order, and driver arrival updates</Text>
-                </View>
-                <Switch value={preferences.smsUpdates} onValueChange={() => handleTogglePreference("smsUpdates")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.smsUpdates ? "#FF6B35" : "#fff"} />
-              </View>
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleTextWrap}>
-                  <Text style={styles.toggleTitle}>Email Preferences</Text>
-                  <Text style={styles.toggleDetail}>Invoices, receipts, and new offers</Text>
-                </View>
-                <Switch value={preferences.emailUpdates} onValueChange={() => handleTogglePreference("emailUpdates")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.emailUpdates ? "#FF6B35" : "#fff"} />
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Security & Privacy</Text>
-              <Text style={styles.sectionHint}>Manage sessions, password flow, and privacy settings.</Text>
-              <TouchableOpacity style={styles.listRow} onPress={() => handlePlaceholderAction("Change Password", "OTP login is active now. Password-based login can be added later if you want it.")}>
-                <View style={styles.listRowLeft}>
-                  <MaterialCommunityIcons name="lock-reset" size={20} color="#FF6B35" />
-                  <View style={styles.listRowTextWrap}>
-                    <Text style={styles.listRowTitle}>Change Password</Text>
-                    <Text style={styles.listRowDetail}>Currently OTP-based login only</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.listRow} onPress={() => handlePlaceholderAction("Manage Sessions", "Session/device management can be connected to the refresh token session list next.")}>
-                <View style={styles.listRowLeft}>
-                  <MaterialCommunityIcons name="devices" size={20} color="#FF6B35" />
-                  <View style={styles.listRowTextWrap}>
-                    <Text style={styles.listRowTitle}>Manage Sessions & Devices</Text>
-                    <Text style={styles.listRowDetail}>View active sessions and sign out of old devices</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.listRow} onPress={() => handlePlaceholderAction("Privacy Settings", "Data export, consent, and privacy switches can be connected next.")}>
-                <View style={styles.listRowLeft}>
-                  <MaterialCommunityIcons name="shield-account-outline" size={20} color="#FF6B35" />
-                  <View style={styles.listRowTextWrap}>
-                    <Text style={styles.listRowTitle}>Privacy Settings</Text>
-                    <Text style={styles.listRowDetail}>Control data visibility and data-sharing permissions</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.section}>
               <Text style={styles.sectionTitle}>Help & Support</Text>
               {supportItems.map((item) => (
-                <TouchableOpacity key={item.title} style={styles.listRow} onPress={() => handlePlaceholderAction(item.title, item.detail)}>
-                  <View style={styles.listRowLeft}>
-                    <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
-                    <View style={styles.listRowTextWrap}>
-                      <Text style={styles.listRowTitle}>{item.title}</Text>
-                      <Text style={styles.listRowDetail}>{item.detail}</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>App Settings</Text>
-              {settingsItems.map((item) => (
-                <TouchableOpacity key={item.title} style={styles.listRow} onPress={() => handlePlaceholderAction(item.title, item.detail)}>
-                  <View style={styles.listRowLeft}>
-                    <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
-                    <View style={styles.listRowTextWrap}>
-                      <Text style={styles.listRowTitle}>{item.title}</Text>
-                      <Text style={styles.listRowDetail}>{item.detail}</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleTextWrap}>
-                  <Text style={styles.toggleTitle}>Dark Mode</Text>
-                  <Text style={styles.toggleDetail}>Stored locally for now</Text>
-                </View>
-                <Switch value={preferences.darkMode} onValueChange={() => handleTogglePreference("darkMode")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.darkMode ? "#FF6B35" : "#fff"} />
-              </View>
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleTextWrap}>
-                  <Text style={styles.toggleTitle}>Location Permission</Text>
-                  <Text style={styles.toggleDetail}>Needed for nearby delivery and better address accuracy</Text>
-                </View>
-                <Switch value={preferences.locationPermission} onValueChange={() => handleTogglePreference("locationPermission")} trackColor={{ true: "#FFB08F" }} thumbColor={preferences.locationPermission ? "#FF6B35" : "#fff"} />
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Legal & About</Text>
-              {legalItems.map((item) => (
                 <TouchableOpacity key={item.title} style={styles.listRow} onPress={() => handlePlaceholderAction(item.title, item.detail)}>
                   <View style={styles.listRowLeft}>
                     <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
@@ -1170,6 +943,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
       )}
+      {renderRegistrationSuccessModal()}
     </KeyboardAvoidingView>
   );
 }
@@ -1180,8 +954,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F6F2EC"
   },
   content: {
-    paddingTop: 12,
-    paddingBottom: 28
+    paddingTop: 10,
+    paddingBottom: 22
   },
   contentWithFooter: {
     paddingBottom: 180
@@ -1217,9 +991,9 @@ const styles = StyleSheet.create({
     color: "#6B5E55"
   },
   heroCard: {
-    marginHorizontal: 16,
-    padding: 18,
-    borderRadius: 24,
+    marginHorizontal: 14,
+    padding: 14,
+    borderRadius: 18,
     backgroundColor: "#FFF7EF",
     borderWidth: 1,
     borderColor: "#F3D7BF"
@@ -1232,16 +1006,16 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   avatarWrap: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: "#FF6B35",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 14
+    marginRight: 12
   },
   avatarText: {
-    fontSize: 28,
+    fontSize: 23,
     fontWeight: "800",
     color: "#FFFFFF"
   },
@@ -1249,7 +1023,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   heroName: {
-    fontSize: 21,
+    fontSize: 19,
     fontWeight: "800",
     color: "#2C2018",
     marginBottom: 4
@@ -1263,8 +1037,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 14,
-    gap: 10
+    marginTop: 12,
+    gap: 8
   },
   heroPill: {
     flexDirection: "row",
@@ -1320,15 +1094,15 @@ const styles = StyleSheet.create({
   },
   quickStats: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 16
+    gap: 8,
+    marginTop: 12
   },
   quickStatCard: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: "#F1E1D5"
   },
@@ -1345,22 +1119,30 @@ const styles = StyleSheet.create({
   },
   shortcutRow: {
     flexDirection: "row",
-    gap: 10,
-    marginHorizontal: 16,
-    marginTop: 12
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 10
   },
   shortcutCard: {
     flex: 1,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#ECE3D9",
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 12
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10
+  },
+  shortcutIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FFF4EB",
+    alignItems: "center",
+    justifyContent: "center"
   },
   shortcutTitle: {
-    marginTop: 10,
-    fontSize: 14,
+    marginTop: 8,
+    fontSize: 13,
     fontWeight: "800",
     color: "#2C2018"
   },
@@ -1370,10 +1152,10 @@ const styles = StyleSheet.create({
     color: "#7A6F65"
   },
   section: {
-    marginHorizontal: 16,
-    marginTop: 14,
-    padding: 18,
-    borderRadius: 24,
+    marginHorizontal: 14,
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 16,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#ECE3D9"
@@ -1385,13 +1167,13 @@ const styles = StyleSheet.create({
     gap: 10
   },
   sectionTitle: {
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: "800",
     color: "#241D17"
   },
   sectionHint: {
-    marginTop: 6,
-    marginBottom: 14,
+    marginTop: 4,
+    marginBottom: 10,
     fontSize: 12,
     lineHeight: 18,
     color: "#7A6F65"
@@ -1432,7 +1214,7 @@ const styles = StyleSheet.create({
     color: "#FF6B35"
   },
   fieldGroup: {
-    marginBottom: 14
+    marginBottom: 10
   },
   label: {
     fontSize: 12,
@@ -1447,13 +1229,13 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: "#D9D0C5",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 15,
     color: "#1A120B",
     backgroundColor: "#FFFFFF",
-    marginBottom: 12
+    marginBottom: 10
   },
   inputFocused: {
     borderColor: "#FF6B35",
@@ -1468,8 +1250,8 @@ const styles = StyleSheet.create({
   },
   addressCard: {
     backgroundColor: "#FBF6EF",
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#F3E4D4"
   },
@@ -1530,11 +1312,11 @@ const styles = StyleSheet.create({
   },
   orderCard: {
     backgroundColor: "#FBF7F1",
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#F1E5D8",
-    padding: 14,
-    marginBottom: 10
+    padding: 12,
+    marginBottom: 8
   },
   orderTopRow: {
     flexDirection: "row",
@@ -1629,7 +1411,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: "#F2ECE5"
   },
@@ -1768,6 +1550,58 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: "#98A2B3"
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(31, 24, 19, 0.42)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24
+  },
+  successModal: {
+    width: "100%",
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    padding: 22,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F2D8C6"
+  },
+  successIconWrap: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: "#22A45D",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#241D17",
+    textAlign: "center"
+  },
+  successText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#6B5E55",
+    textAlign: "center"
+  },
+  successButton: {
+    marginTop: 20,
+    width: "100%",
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: "#FF6B35",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  successButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900"
   },
   footerBar: {
     paddingHorizontal: 16,

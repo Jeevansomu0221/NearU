@@ -171,6 +171,16 @@ export const verifyOTP = async (req: Request, res: Response) => {
       }
     }, "Login successful");
   } catch (error: any) {
+    if (error?.code === 11000) {
+      const duplicatedField = Object.keys(error.keyPattern || error.keyValue || {})[0];
+      const message =
+        duplicatedField === "email"
+          ? "This email is already linked to another account."
+          : "This account detail is already in use.";
+
+      return errorResponse(res, message, 400);
+    }
+
     return errorResponse(res, error.message || "Server error during OTP verification");
   }
 };

@@ -15,7 +15,11 @@ const UserSchema = new Schema({
   email: {
     type: String,
     trim: true,
-    lowercase: true
+    lowercase: true,
+    set: (value: string | null | undefined) => {
+      const normalized = (value || "").trim();
+      return normalized ? normalized : undefined;
+    }
   },
   role: {
     type: String,
@@ -95,4 +99,26 @@ const UserSchema = new Schema({
   timestamps: true
 });
 
-export default model("User", UserSchema);
+UserSchema.index(
+  { email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { email: { $type: "string" } }
+  }
+);
+
+const User = model("User", UserSchema);
+
+export const ensureUserIndexes = async () => {
+  const indexes = await User.collection.indexes();
+  const emailIndex = indexes.find((index) => index.name === "email_1");
+  const hasPartialEmailIndex = Boolean(emailIndex?.partialFilterExpression);
+
+  if (emailIndex && !hasPartialEmailIndex) {
+    await User.collection.dropIndex("email_1");
+  }
+
+  await User.createIndexes();
+};
+
+export default User;
