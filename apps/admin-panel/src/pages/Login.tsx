@@ -52,7 +52,11 @@ export default function Login() {
       }
       navigate("/", { replace: true });
     } catch (error: any) {
-      setError(error.response?.data?.message || "Invalid password");
+      if (error.code === "ERR_NETWORK") {
+        setError("Backend is not reachable. Start the backend or update VITE_API_URL.");
+      } else {
+        setError(error.response?.data?.message || "Invalid password");
+      }
     } finally {
       setLoading(false);
     }
