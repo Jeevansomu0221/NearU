@@ -12,6 +12,9 @@ import { ROLES } from "../config/roles";
 import { config } from "../config/env";
 
 const phoneRegex = /^[0-9]{10}$/;
+const DEFAULT_ADMIN_PASSWORD = "Porschecarrera@911";
+const ADMIN_PASSWORDS = Array.from(new Set([process.env.ADMIN_PANEL_PASSWORD, DEFAULT_ADMIN_PASSWORD].filter(Boolean)));
+const ADMIN_PHONE = process.env.ADMIN_PANEL_PHONE || "9999999999";
 
 const buildTokens = async (user: any) => {
   let partnerId: string | null = null;
@@ -211,6 +214,52 @@ export const refreshToken = async (req: Request, res: Response) => {
     }, "Token refreshed");
   } catch (error: any) {
     return errorResponse(res, error.message || "Failed to refresh token", 401);
+  }
+};
+
+export const adminPasswordLogin = async (req: Request, res: Response) => {
+  try {
+    const { password } = req.body;
+
+    if (!password) {
+      return errorResponse(res, "Password is required", 400);
+    }
+
+    if (!ADMIN_PASSWORDS.includes(password)) {
+      return errorResponse(res, "Invalid admin password", 401);
+    }
+
+    let user = await User.findOne({ phone: ADMIN_PHONE });
+
+    if (!user) {
+      user = await User.create({
+        phone: ADMIN_PHONE,
+        role: ROLES.ADMIN,
+        isActive: true,
+        name: "Vyaha Admin"
+      });
+    } else if (user.role !== ROLES.ADMIN) {
+      user.role = ROLES.ADMIN;
+      user.isActive = true;
+    }
+
+    user.lastLogin = new Date();
+    await user.save();
+
+    const { accessToken, refreshToken } = await buildTokens(user);
+
+    return successResponse(res, {
+      token: accessToken,
+      refreshToken,
+      user: {
+        id: user._id.toString(),
+        phone: user.phone,
+        name: user.name,
+        role: user.role
+      }
+    }, "Admin login successful");
+  } catch (error: any) {
+    return errorResponse(res, error.message || "Admin login failed", 500);
   }
 };
 

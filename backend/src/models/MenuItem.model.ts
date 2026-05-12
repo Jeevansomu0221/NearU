@@ -19,7 +19,8 @@ const MenuItemSchema = new Schema(
     category: {
       type: String,
       required: true,
-      enum: ["Restaurant", "Bakery", "Tiffins", "Fast Food", "Unique Foods", "Other"],
+      trim: true,
+      maxlength: 60,
       default: "Other"
     },
     imageUrl: {

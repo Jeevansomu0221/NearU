@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   Alert,
   ActivityIndicator
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../api/client";
+import NotificationButton from "../components/NotificationButton";
 
 interface Order {
   _id: string;
@@ -39,6 +41,8 @@ export default function OrdersScreen({ navigation }: any) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const knownOrderIds = useRef<Set<string>>(new Set());
+  const firstLoadDone = useRef(false);
 
   const loadOrders = async () => {
     try {
@@ -46,6 +50,23 @@ export default function OrdersScreen({ navigation }: any) {
       const response = res.data as OrdersResponse;
 
       if (response.success) {
+        const incomingOrders = response.data || [];
+        const newOrders = incomingOrders.filter((order) => !knownOrderIds.current.has(order._id));
+        knownOrderIds.current = new Set(incomingOrders.map((order) => order._id));
+
+        if (firstLoadDone.current && newOrders.length > 0) {
+          const newestOrder = newOrders[0];
+          Alert.alert(
+            "New order received",
+            `Order #${newestOrder._id.slice(-6)} is waiting in your queue.`,
+            [
+              { text: "Later", style: "cancel" },
+              { text: "Open", onPress: () => navigation.navigate("OrderDetails", { orderId: newestOrder._id }) }
+            ]
+          );
+        }
+
+        firstLoadDone.current = true;
         setOrders(response.data);
       } else {
         Alert.alert("Error", response.message || "Failed to load orders");
@@ -176,13 +197,19 @@ export default function OrdersScreen({ navigation }: any) {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <View>
-          <Text style={styles.title}>Orders</Text>
-          <Text style={styles.subtitle}>Track every incoming order from one clean queue.</Text>
-        </View>
-        <TouchableOpacity onPress={loadOrders}>
-          <Text style={styles.refreshText}>Refresh</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color="#143A66" />
         </TouchableOpacity>
+        <View style={styles.headerCopy}>
+          <Text style={styles.title}>Orders</Text>
+          <Text style={styles.subtitle}>Incoming order queue</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.refreshButton} onPress={loadOrders}>
+            <Ionicons name="refresh" size={21} color="#C4541C" />
+          </TouchableOpacity>
+          <NotificationButton count={orders.filter((order) => ["CONFIRMED", "PENDING"].includes(order.status)).length} onPress={loadOrders} />
+        </View>
       </View>
 
       <FlatList
@@ -224,25 +251,50 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end"
+    alignItems: "center"
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    marginRight: 10
+  },
+  headerCopy: {
+    flex: 1,
+    marginRight: 10
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "800",
     color: "#2C2018"
   },
   subtitle: {
-    marginTop: 4,
-    fontSize: 13,
+    marginTop: 2,
+    fontSize: 12,
     color: "#7B6D63"
   },
-  refreshText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#C4541C"
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  refreshButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFE5DA"
   },
   orderCard: {
     backgroundColor: "#FFFFFF",

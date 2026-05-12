@@ -13,6 +13,37 @@ interface AuthRequest extends Request {
   };
 }
 
+const withCommonCategories = (categories: string[]) => [...categories, "Hots", "Other"];
+
+const CATEGORY_BY_SHOP_TYPE: Record<string, string[]> = {
+  bakery: withCommonCategories(["Breads", "Cakes", "Pastries", "Cookies", "Puffs", "Buns"]),
+  "mini-restaurant": withCommonCategories(["Veg Meals", "Non Veg Meals", "Biryani", "Curries", "Rice", "Combos"]),
+  "tiffin-center": withCommonCategories(["Idli", "Dosa", "Poori", "Uttapam", "Meals", "Snacks"]),
+  "fast-food": withCommonCategories(["Pizza", "Burgers", "Fries", "Wraps", "Sandwiches", "Combos"]),
+  sweets: withCommonCategories(["Milk Sweets", "Dry Sweets", "Namkeen", "Festival Specials", "Sugar-Free"]),
+  "ice-creams": withCommonCategories(["Scoops", "Cups", "Family Packs", "Sundaes", "Shakes"]),
+  juice: withCommonCategories(["Fresh Juice", "Milkshakes", "Smoothies", "Mocktails", "Fruit Bowls"]),
+  other: withCommonCategories(["Main Items", "Snacks", "Beverages", "Desserts", "Specials"])
+};
+
+const normalizeCategoryInput = (value: unknown) => {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw.replace(/\s+/g, " ").slice(0, 60);
+};
+
+const resolveMenuCategory = (shopCategory: string, requestedCategory: unknown) => {
+  const normalized = normalizeCategoryInput(requestedCategory);
+  const allowed = CATEGORY_BY_SHOP_TYPE[shopCategory] || CATEGORY_BY_SHOP_TYPE.other;
+  if (!normalized) {
+    return allowed[0] || "Main Items";
+  }
+  const match = allowed.find((item) => item.toLowerCase() === normalized.toLowerCase());
+  if (!match) {
+    return null;
+  }
+  return match;
+};
+
 /**
  * GET PUBLIC PARTNER MENU (for customers)
  * No authentication required
@@ -191,12 +222,20 @@ export const addMenuItem = async (req: Request, res: Response) => {
       });
     }
 
+    const resolvedCategory = resolveMenuCategory(partner.category, category);
+    if (!resolvedCategory) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category for this shop type"
+      });
+    }
+
     const menuItem = await MenuItem.create({
       partnerId: partner._id,
       name,
       description: description || "",
       price: parseFloat(price),
-      category: category || "Other",
+      category: resolvedCategory,
       imageUrl: imageUrl || "",
       isVegetarian: isVegetarian !== false, // Default to true
       preparationTime: preparationTime || 15,
@@ -266,7 +305,18 @@ export const updateMenuItem = async (req: Request, res: Response) => {
       });
     }
 
-    const updateData = req.body;
+    const updateData = { ...req.body } as Record<string, any>;
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "category")) {
+      const resolvedCategory = resolveMenuCategory(partner.category, updateData.category);
+      if (!resolvedCategory) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid category for this shop type"
+        });
+      }
+      updateData.category = resolvedCategory;
+    }
 
     // Find and update menu item
     const menuItem = await MenuItem.findOneAndUpdate(

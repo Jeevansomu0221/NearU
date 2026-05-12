@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
+import NotificationButton from "../components/NotificationButton";
 
 export default function DashboardScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -74,7 +75,7 @@ export default function DashboardScreen({ navigation }: any) {
   if (loading && !partner) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
+        <ActivityIndicator size="large" color="#2F80ED" />
         <Text style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
@@ -108,6 +109,14 @@ export default function DashboardScreen({ navigation }: any) {
       contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }}
       showsVerticalScrollIndicator={false}
     >
+      <View style={styles.topBar}>
+        <View>
+          <Text style={styles.screenTitle}>Dashboard</Text>
+          <Text style={styles.screenSubtitle}>Today at a glance</Text>
+        </View>
+        <NotificationButton count={stats.pendingOrders} onPress={() => navigation.navigate("Orders")} />
+      </View>
+
       <View style={styles.hero}>
         <Text style={styles.heroEyebrow}>Partner dashboard</Text>
         <Text style={styles.heroTitle}>{partner.restaurantName || partner.shopName || "Your Shop"}</Text>
@@ -120,8 +129,8 @@ export default function DashboardScreen({ navigation }: any) {
           <Switch
             value={shopOpen}
             onValueChange={toggleShopStatus}
-            trackColor={{ false: "#E8DDD2", true: "#FFB08F" }}
-            thumbColor={shopOpen ? "#FF6B35" : "#BCA99B"}
+            trackColor={{ false: "#D3E3F7", true: "#9FC5F8" }}
+            thumbColor={shopOpen ? "#2F80ED" : "#9AB3CC"}
           />
         </View>
       </View>
@@ -179,13 +188,13 @@ export default function DashboardScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F3EE"
+    backgroundColor: "#F4F8FF"
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F7F3EE"
+    backgroundColor: "#F4F8FF"
   },
   loadingText: {
     marginTop: 12,
@@ -195,9 +204,26 @@ const styles = StyleSheet.create({
   hero: {
     marginHorizontal: 16,
     marginBottom: 14,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#2F80ED",
     borderRadius: 30,
     padding: 16
+  },
+  topBar: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#143A66"
+  },
+  screenSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#5E7897"
   },
   heroEyebrow: {
     fontSize: 12,
@@ -234,7 +260,7 @@ const styles = StyleSheet.create({
   statusValue: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#2C2018"
+    color: "#143A66"
   },
   section: {
     marginHorizontal: 16,
@@ -249,13 +275,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#2C2018",
+    color: "#143A66",
     marginBottom: 10
   },
   linkText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#C4541C"
+    color: "#2F80ED"
   },
   statsGrid: {
     flexDirection: "row",
@@ -267,26 +293,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: "#D9E6F7",
     padding: 10,
     marginBottom: 8
   },
   statValue: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#FF6B35",
+    color: "#2F80ED",
     marginBottom: 4
   },
   statLabel: {
     fontSize: 10,
     lineHeight: 16,
-    color: "#7B6D63"
+    color: "#5E7897"
   },
   actionCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: "#D9E6F7",
     padding: 12,
     marginBottom: 8,
     flexDirection: "row",
@@ -299,19 +325,19 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#2C2018",
+    color: "#143A66",
     marginBottom: 0
   },
   actionArrow: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#C4541C"
+    color: "#2F80ED"
   },
   snapshotCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: "#D9E6F7",
     padding: 13
   },
   snapshotRow: {
@@ -324,11 +350,11 @@ const styles = StyleSheet.create({
   },
   snapshotLabel: {
     fontSize: 12,
-    color: "#7B6D63"
+    color: "#5E7897"
   },
   snapshotValue: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#2C2018"
+    color: "#143A66"
   }
 });

@@ -11,7 +11,8 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  Image
+  Image,
+  Modal
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -81,6 +82,12 @@ type UploadingKey =
   | "menuProofUrl"
   | null;
 
+type PendingDocument = {
+  docKey: Exclude<UploadingKey, null>;
+  asset: PickerAsset;
+  title: string;
+};
+
 const mandatoryDocs: Array<{ key: keyof DocumentState; title: string; subtitle: string }> = [
   { key: "fssaiUrl", title: "FSSAI License", subtitle: "Single PDF/image document" },
   { key: "panFrontUrl", title: "PAN Card - Upload Front Side", subtitle: "Mandatory owner PAN proof" },
@@ -111,6 +118,8 @@ export default function OnboardingScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [submitting, setSubmitting] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<UploadingKey>(null);
+  const [pickerBusy, setPickerBusy] = useState(false);
+  const [pendingDocument, setPendingDocument] = useState<PendingDocument | null>(null);
   const [form, setForm] = useState({
     ownerName: "",
     restaurantName: "",
@@ -194,10 +203,23 @@ export default function OnboardingScreen({ navigation }: any) {
     return uploadData.data.url;
   };
 
-  const pickAndUploadDocument = async (docKey: UploadingKey) => {
+  const getDocumentTitle = (docKey: Exclude<UploadingKey, null>) => {
+    const doc = [...mandatoryDocs, ...optionalDocs].find((item) => item.key === docKey);
+    if (doc) {
+      return doc.title.replace(" - Upload Front Side", "");
+    }
+    if (docKey === "cancelledChequeUrl") return "Cancelled Cheque";
+    if (docKey === "bankPassbookUrl") return "Bank Passbook";
+    if (docKey === "bankStatementUrl") return "Bank Statement";
+    return "Document";
+  };
+
+  const pickAndPreviewDocument = async (docKey: UploadingKey) => {
     if (!docKey) return;
+    if (pickerBusy || uploadingKey) return;
 
     try {
+      setPickerBusy(true);
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission needed", "Please allow gallery access to upload your documents.");
@@ -206,7 +228,6 @@ export default function OnboardingScreen({ navigation }: any) {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
         quality: 0.6
       });
 
@@ -214,9 +235,31 @@ export default function OnboardingScreen({ navigation }: any) {
         return;
       }
 
+      setPendingDocument({
+        docKey,
+        asset: result.assets[0],
+        title: getDocumentTitle(docKey)
+      });
+    } catch (error: any) {
+      console.error("Document picker failed:", error);
+      Alert.alert(
+        "Picker Failed",
+        error.response?.data?.message || error.message || "Could not open your gallery. Please try again."
+      );
+    } finally {
+      setPickerBusy(false);
+    }
+  };
+
+  const uploadPendingDocument = async () => {
+    if (!pendingDocument) return;
+
+    try {
+      const { docKey, asset } = pendingDocument;
       setUploadingKey(docKey);
-      const uploadedUrl = await uploadImageToCloudinary(result.assets[0]);
+      const uploadedUrl = await uploadImageToCloudinary(asset);
       setDocuments((prev) => ({ ...prev, [docKey]: uploadedUrl }));
+      setPendingDocument(null);
     } catch (error: any) {
       console.error("Document upload failed:", error);
       Alert.alert("Upload Failed", error.response?.data?.message || error.message || "Failed to upload document.");
@@ -357,8 +400,8 @@ export default function OnboardingScreen({ navigation }: any) {
 
         {previewUrl ? <Image source={{ uri: previewUrl }} style={styles.docPreview} resizeMode="cover" /> : null}
 
-        <TouchableOpacity style={styles.docButton} onPress={() => pickAndUploadDocument(docKey as UploadingKey)} disabled={isUploading}>
-          {isUploading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.docButtonText}>{uploaded ? "Replace Document" : "Upload Document"}</Text>}
+        <TouchableOpacity style={styles.docButton} onPress={() => pickAndPreviewDocument(docKey as UploadingKey)} disabled={isUploading || pickerBusy}>
+          {isUploading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.docButtonText}>{uploaded ? "Replace Document" : "Choose Document"}</Text>}
         </TouchableOpacity>
       </View>
     );
@@ -372,6 +415,64 @@ export default function OnboardingScreen({ navigation }: any) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        <Modal
+          visible={Boolean(pendingDocument)}
+          transparent
+          animationType="slide"
+          onRequestClose={() => {
+            if (!uploadingKey) setPendingDocument(null);
+          }}
+        >
+          <View style={styles.previewOverlay}>
+            <View style={styles.previewSheet}>
+              <View style={styles.previewHeader}>
+                <View style={styles.previewTitleWrap}>
+                  <Text style={styles.previewEyebrow}>Ready to upload</Text>
+                  <Text style={styles.previewTitle}>{pendingDocument?.title || "Document"}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.previewCloseButton}
+                  onPress={() => setPendingDocument(null)}
+                  disabled={uploadingKey !== null}
+                >
+                  <Text style={styles.previewCloseText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+
+              {pendingDocument ? (
+                <Image source={{ uri: pendingDocument.asset.uri }} style={styles.previewImage} resizeMode="contain" />
+              ) : null}
+
+              <Text style={styles.previewHelp}>
+                Make sure the full document is visible, clear, and readable before uploading.
+              </Text>
+
+              <View style={styles.previewActions}>
+                <TouchableOpacity
+                  style={styles.previewSecondaryButton}
+                  onPress={async () => {
+                    const docKey = pendingDocument?.docKey || null;
+                    setPendingDocument(null);
+                    if (docKey) {
+                      await pickAndPreviewDocument(docKey);
+                    }
+                  }}
+                  disabled={uploadingKey !== null}
+                >
+                  <Text style={styles.previewSecondaryText}>Choose Again</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.previewPrimaryButton}
+                  onPress={uploadPendingDocument}
+                  disabled={uploadingKey !== null}
+                >
+                  {uploadingKey ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.previewPrimaryText}>Upload</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         <View style={styles.hero}>
           <Text style={styles.heroEyebrow}>Vyaha Partner</Text>
           <Text style={styles.heroTitle}>Set up your shop for approval</Text>
@@ -585,25 +686,116 @@ export default function OnboardingScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   keyboard: {
     flex: 1,
-    backgroundColor: "#F7F3EE"
+    backgroundColor: "#F4F8FF"
+  },
+  previewOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(26, 18, 11, 0.56)"
+  },
+  previewSheet: {
+    maxHeight: "88%",
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    padding: 16
+  },
+  previewHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12
+  },
+  previewTitleWrap: {
+    flex: 1,
+    marginRight: 12
+  },
+  previewEyebrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    color: "#2F80ED",
+    marginBottom: 4
+  },
+  previewTitle: {
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  previewCloseButton: {
+    borderRadius: 14,
+    backgroundColor: "#ECF4FF",
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  previewCloseText: {
+    color: "#44678E",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  previewImage: {
+    width: "100%",
+    height: 360,
+    borderRadius: 18,
+    backgroundColor: "#2C2018"
+  },
+  previewHelp: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#6B5E55"
+  },
+  previewActions: {
+    flexDirection: "row",
+    marginTop: 14
+  },
+  previewSecondaryButton: {
+    flex: 1,
+    marginRight: 10,
+    borderRadius: 16,
+    backgroundColor: "#ECF4FF",
+    alignItems: "center",
+    paddingVertical: 14
+  },
+  previewSecondaryText: {
+    color: "#44678E",
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  previewPrimaryButton: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: "#2F80ED",
+    alignItems: "center",
+    paddingVertical: 14
+  },
+  previewPrimaryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800"
   },
   container: {
     flex: 1,
-    backgroundColor: "#F7F3EE"
+    backgroundColor: "#F4F8FF"
   },
   hero: {
     marginHorizontal: 16,
     marginBottom: 12,
     padding: 22,
     borderRadius: 28,
-    backgroundColor: "#FF6B35"
+    backgroundColor: "#2F80ED"
   },
   heroEyebrow: {
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.7,
     textTransform: "uppercase",
-    color: "#FFE4D7",
+    color: "#DDEBFF",
     marginBottom: 10
   },
   heroTitle: {
@@ -616,14 +808,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 14,
     lineHeight: 21,
-    color: "#FFF3EC"
+    color: "#EAF3FF"
   },
   card: {
     marginHorizontal: 16,
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: "#D9E6F7",
     padding: 16
   },
   sectionTitle: {
@@ -641,13 +833,13 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: "#D9D0C5",
+    borderColor: "#D5E3F5",
     borderRadius: 16,
     paddingHorizontal: 15,
     paddingVertical: 13,
     fontSize: 15,
-    color: "#1A120B",
-    backgroundColor: "#FFFCF8",
+    color: "#123456",
+    backgroundColor: "#F9FCFF",
     marginBottom: 12
   },
   disabledInput: {
@@ -688,23 +880,23 @@ const styles = StyleSheet.create({
   },
   utilityButton: {
     alignSelf: "flex-start",
-    backgroundColor: "#FDE9DE",
+    backgroundColor: "#ECF4FF",
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 10,
     marginBottom: 12
   },
   utilityButtonText: {
-    color: "#C4541C",
+    color: "#2F80ED",
     fontWeight: "700",
     fontSize: 13
   },
   tipCard: {
-    backgroundColor: "#FFF6EF",
+    backgroundColor: "#F1F7FF",
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#F3DED0",
+    borderColor: "#D9E6F7",
     marginBottom: 14
   },
   tipTitle: {
@@ -727,26 +919,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "#F8EFE7",
+    backgroundColor: "#ECF4FF",
     marginRight: 8,
     marginBottom: 8
   },
   categoryChipSelected: {
-    backgroundColor: "#FF6B35"
+    backgroundColor: "#2F80ED"
   },
   categoryChipText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#7A5640"
+    color: "#44678E"
   },
   categoryChipTextSelected: {
     color: "#FFFFFF"
   },
   docCard: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "#F9FCFF",
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: "#D9E6F7",
     padding: 14,
     marginBottom: 12
   },
@@ -776,7 +968,7 @@ const styles = StyleSheet.create({
     borderRadius: 999
   },
   docBadgePending: {
-    backgroundColor: "#FFF2D9"
+    backgroundColor: "#EAF3FF"
   },
   docBadgeDone: {
     backgroundColor: "#DDF8E5"
@@ -786,7 +978,7 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   docBadgePendingText: {
-    color: "#A15C00"
+    color: "#44678E"
   },
   docBadgeDoneText: {
     color: "#216E39"
@@ -799,7 +991,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   docButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#2F80ED",
     borderRadius: 14,
     alignItems: "center",
     paddingVertical: 12,
@@ -811,7 +1003,7 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   submitButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#2F80ED",
     borderRadius: 18,
     alignItems: "center",
     paddingVertical: 16,

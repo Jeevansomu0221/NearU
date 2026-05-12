@@ -1,6 +1,7 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeModules, Platform } from "react-native";
+import { AUTH_STORAGE_KEYS } from "../utils/storage";
 
 // Define generic API response type
 export interface ApiResponse<T = any> {
@@ -59,6 +60,10 @@ const resolveApiBaseUrls = () => {
 };
 
 const API_BASE_URLS = resolveApiBaseUrls();
+const REFRESH_BUFFER_MS = 60_000;
+const MIN_REFRESH_DELAY_MS = 30_000;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let inFlightRefresh: Promise<string | null> | null = null;
 
 const isFormDataPayload = (value: any) => {
   if (!value || typeof value !== "object") return false;
@@ -78,21 +83,147 @@ const api = axios.create({
 console.log("Partner API base URL:", api.defaults.baseURL);
 console.log("Partner API fallback URLs:", API_BASE_URLS);
 
-export const uploadMultipart = async <T = any>(path: string, formData: FormData): Promise<ApiResponse<T>> => {
-  const token = await AsyncStorage.getItem("token");
+const persistAuthPayload = async (payload: any) => {
+  if (payload?.token) {
+    await AsyncStorage.setItem("token", payload.token);
+  }
+
+  if (payload?.refreshToken) {
+    await AsyncStorage.setItem("refreshToken", payload.refreshToken);
+  }
+
+  if (payload?.user) {
+    await AsyncStorage.setItem("user", JSON.stringify(payload.user));
+    if (payload.user.id) {
+      await AsyncStorage.setItem("userId", payload.user.id);
+    }
+    if (payload.user.phone) {
+      await AsyncStorage.setItem("phone", payload.user.phone);
+    }
+    if (payload.user.partnerId) {
+      await AsyncStorage.setItem("partnerId", payload.user.partnerId);
+    }
+  }
+};
+
+const clearStoredSession = async () => {
+  await AsyncStorage.multiRemove([...AUTH_STORAGE_KEYS]);
+};
+
+const decodeJwtExpiry = (token: string): number | null => {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    if (!globalThis.atob) {
+      return null;
+    }
+    const decoded = JSON.parse(globalThis.atob(padded));
+    if (typeof decoded?.exp !== "number") return null;
+    return decoded.exp * 1000;
+  } catch {
+    return null;
+  }
+};
+
+const clearRefreshTimer = () => {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+};
+
+export const scheduleProactiveRefresh = async (token?: string | null) => {
+  clearRefreshTimer();
+  const currentToken = token ?? (await AsyncStorage.getItem("token"));
+  if (!currentToken) return;
+  const expiresAt = decodeJwtExpiry(currentToken);
+  if (!expiresAt) return;
+  const delay = Math.max(expiresAt - Date.now() - REFRESH_BUFFER_MS, MIN_REFRESH_DELAY_MS);
+  refreshTimer = setTimeout(() => {
+    refreshAccessToken().catch((error) => {
+      console.log("Proactive token refresh failed:", error?.message || error);
+    });
+  }, delay);
+};
+
+const refreshAccessToken = async () => {
+  if (inFlightRefresh) {
+    return inFlightRefresh;
+  }
+
+  inFlightRefresh = (async () => {
+  const savedRefreshToken = await AsyncStorage.getItem("refreshToken");
+  if (!savedRefreshToken) {
+    await clearStoredSession();
+    return null;
+  }
 
   for (const baseUrl of API_BASE_URLS) {
     try {
-      const response = await fetch(`${baseUrl}${path}`, {
+      const response = await fetch(`${baseUrl}/auth/refresh`, {
         method: "POST",
         headers: {
           Accept: "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "Content-Type": "application/json",
         },
-        body: formData,
+        body: JSON.stringify({ refreshToken: savedRefreshToken }),
       });
 
       const data = await response.json();
+      const payload = data?.data;
+
+      if (response.ok && data?.success && payload?.token) {
+        await persistAuthPayload(payload);
+        await scheduleProactiveRefresh(payload.token);
+        return payload.token as string;
+      }
+    } catch (error: any) {
+      console.log(`Token refresh failed for ${baseUrl}:`, error?.message || error);
+    }
+  }
+
+  await clearStoredSession();
+  return null;
+  })();
+
+  try {
+    return await inFlightRefresh;
+  } finally {
+    inFlightRefresh = null;
+  }
+};
+
+export const uploadMultipart = async <T = any>(path: string, formData: FormData): Promise<ApiResponse<T>> => {
+  let token = await AsyncStorage.getItem("token");
+  let didRefresh = false;
+
+  const makeRequest = async (baseUrl: string, authToken?: string | null) => {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: formData,
+    });
+    const data = await response.json();
+    return { response, data };
+  };
+
+  for (const baseUrl of API_BASE_URLS) {
+    try {
+      let { response, data } = await makeRequest(baseUrl, token);
+
+      if (response.status === 401 && !didRefresh) {
+        const refreshedToken = await refreshAccessToken();
+        if (refreshedToken) {
+          token = refreshedToken;
+          didRefresh = true;
+          ({ response, data } = await makeRequest(baseUrl, token));
+        }
+      }
 
       if (!response.ok) {
         if (data && typeof data === "object") {
@@ -159,6 +290,19 @@ api.interceptors.response.use(
       return api.request(requestConfig);
     }
 
+    if (error.response?.status === 401 && requestConfig && !requestConfig._tokenRefreshRetry && !requestConfig.url?.includes("/auth/refresh")) {
+      const refreshedToken = await refreshAccessToken();
+
+      if (refreshedToken) {
+        requestConfig._tokenRefreshRetry = true;
+        requestConfig.headers = requestConfig.headers || {};
+        requestConfig.headers.Authorization = `Bearer ${refreshedToken}`;
+        return api.request(requestConfig);
+      }
+
+      await clearStoredSession();
+    }
+
     if (error.response) {
       const url = error.config?.url || '';
       const method = error.config?.method?.toUpperCase() || 'GET';
@@ -184,3 +328,7 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+export const bootstrapSessionRefresh = async () => {
+  await scheduleProactiveRefresh();
+};

@@ -5,16 +5,15 @@ import fileUpload from "express-fileupload";
 
 const router = Router();
 
-// Apply file upload middleware
-router.use(fileUpload({
+const uploadMiddleware = fileUpload({
   limits: { fileSize: 15 * 1024 * 1024 },
   abortOnLimit: true,
   createParentPath: true,
   useTempFiles: false
-}));
+});
 
-// Upload image (authenticated users only)
-router.post("/image", authMiddleware, uploadImage as any);
+// Authenticate before parsing multipart to avoid long uploads failing late on expired token.
+router.post("/image", authMiddleware, uploadMiddleware, uploadImage as any);
 
 // Delete image (optional)
 router.delete("/image", authMiddleware, deleteImage as any);

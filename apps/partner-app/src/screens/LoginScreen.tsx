@@ -172,10 +172,18 @@ export default function LoginScreen({ navigation }: any) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.hero}>
+          <Text style={styles.brand}>Vyaha Partner</Text>
+          <Text style={styles.title}>No extra commission. Genuine pricing for your customers.</Text>
+          <Text style={styles.subtitle}>
+            Register now, upload documents once, and start receiving trusted local orders after approval.
+          </Text>
+        </View>
+
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{step === "phone" ? "Partner login" : "Verify OTP"}</Text>
           <Text style={styles.cardHint}>
-            {step === "phone" ? "Enter the phone number linked to your shop account." : `We sent an OTP to ${phone}.`}
+            {step === "phone" ? "Register now or continue with the phone number linked to your shop." : `We sent an OTP to ${phone}.`}
           </Text>
 
           {feedback ? (
@@ -239,14 +247,6 @@ export default function LoginScreen({ navigation }: any) {
             </>
           )}
         </View>
-
-        <View style={styles.hero}>
-          <Text style={styles.brand}>Vyaha Partner</Text>
-          <Text style={styles.title}>Run your shop with a cleaner, faster partner app</Text>
-          <Text style={styles.subtitle}>
-            Manage orders, menu items, and shop timings in one place.
-          </Text>
-        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -255,27 +255,29 @@ export default function LoginScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F3EE"
+    backgroundColor: "#F4F8FF"
   },
   scroll: {
     flex: 1
   },
   content: {
     paddingHorizontal: 20,
-    flexGrow: 1
+    flexGrow: 1,
+    justifyContent: "space-between"
   },
   hero: {
-    marginTop: 10,
-    backgroundColor: "#FF6B35",
+    marginTop: 6,
+    marginBottom: 16,
+    backgroundColor: "#2F80ED",
     borderRadius: 28,
-    padding: 20
+    padding: 22
   },
   brand: {
     fontSize: 14,
     fontWeight: "800",
     letterSpacing: 0.8,
     textTransform: "uppercase",
-    color: "#FFE4D7",
+    color: "#DDEBFF",
     marginBottom: 12
   },
   title: {
@@ -288,43 +290,43 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
-    color: "#FFF3EC"
+    color: "#EAF3FF"
   },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 26,
     padding: 20,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
-    marginBottom: 12
+    borderColor: "#D9E6F7",
+    marginBottom: 20
   },
   cardTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#2C2018",
+    color: "#143A66",
     marginBottom: 6
   },
   cardHint: {
     fontSize: 14,
     lineHeight: 20,
-    color: "#7B6D63",
+    color: "#5E7897",
     marginBottom: 18
   },
   label: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#6B5E55",
+    color: "#486887",
     marginBottom: 8
   },
   input: {
     borderWidth: 1,
-    borderColor: "#D9D0C5",
+    borderColor: "#CFE0F5",
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#1A120B",
-    backgroundColor: "#FFFCF8",
+    color: "#123456",
+    backgroundColor: "#F9FCFF",
     marginBottom: 16
   },
   feedbackCard: {
@@ -355,7 +357,7 @@ const styles = StyleSheet.create({
     color: "#B42318"
   },
   primaryButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#2F80ED",
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: "center"
@@ -370,7 +372,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14
   },
   secondaryButtonText: {
-    color: "#C4541C",
+    color: "#2F80ED",
     fontSize: 14,
     fontWeight: "700"
   }

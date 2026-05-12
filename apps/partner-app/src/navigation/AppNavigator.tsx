@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import api from "../api/client";
+import api, { bootstrapSessionRefresh } from "../api/client";
+import { clearAuthData } from "../utils/storage";
 
 // Import screens
 import LoginScreen from "../screens/LoginScreen";
@@ -65,7 +66,7 @@ export default function AppNavigator() {
         setLoading(false);
         return;
       }
-      
+      await bootstrapSessionRefresh();
       // Check partner status
       await checkPartnerStatus();
     } catch (error) {
@@ -150,19 +151,11 @@ export default function AppNavigator() {
     }
   };
 
-  const clearAuthData = async () => {
-    try {
-      await AsyncStorage.multiRemove(["token", "phone", "userId", "partnerId"]);
-    } catch (error) {
-      console.error("Error clearing auth data:", error);
-    }
-  };
-
   if (loading || initialRoute === "Loading") {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F7F3EE" }}>
-        <ActivityIndicator size="large" color="#FF6B35" />
-        <Text style={{ marginTop: 20, fontSize: 16, color: "#6B5E55" }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F8FF" }}>
+        <ActivityIndicator size="large" color="#2F80ED" />
+        <Text style={{ marginTop: 20, fontSize: 16, color: "#5E7897" }}>
           Loading your account...
         </Text>
       </View>
@@ -174,16 +167,16 @@ export default function AppNavigator() {
       initialRouteName={initialRoute}
       screenOptions={{
         headerStyle: {
-          backgroundColor: "#FFF8F1",
+          backgroundColor: "#F4F8FF",
         },
-        headerTintColor: "#2C2018",
+        headerTintColor: "#143A66",
         headerTitleStyle: {
           fontWeight: "700",
         },
         headerBackTitle: "Back",
         headerShadowVisible: false,
         contentStyle: {
-          backgroundColor: "#F7F3EE"
+          backgroundColor: "#F4F8FF"
         }
       }}
     >
@@ -215,12 +208,12 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Dashboard" 
         component={DashboardScreen} 
-        options={{ title: "Dashboard" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen 
         name="Orders" 
         component={OrdersScreen} 
-        options={{ title: "Orders" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen 
         name="OrderDetails" 
@@ -230,7 +223,7 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Menu" 
         component={MenuScreen} 
-        options={{ title: "Menu Management" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen 
         name="Profile" 

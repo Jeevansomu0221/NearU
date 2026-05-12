@@ -1,10 +1,21 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+export const AUTH_STORAGE_KEYS = [
+  "token",
+  "refreshToken",
+  "phone",
+  "userId",
+  "partnerId",
+  "user"
+] as const;
+
 export interface AuthData {
   token: string;
+  refreshToken?: string;
   phone: string;
   userId: string;
   partnerId?: string;
+  user?: Record<string, unknown>;
 }
 
 export const getToken = async (): Promise<string | null> => {
@@ -27,7 +38,7 @@ export const setToken = async (token: string): Promise<void> => {
 
 export const clearAuthData = async (): Promise<void> => {
   try {
-    await AsyncStorage.multiRemove(["token", "phone", "userId", "partnerId"]);
+    await AsyncStorage.multiRemove([...AUTH_STORAGE_KEYS]);
   } catch (error) {
     console.error("Error clearing auth data:", error);
   }
@@ -57,12 +68,18 @@ export const getUserData = async (): Promise<{
 // Store all auth data after login
 export const storeAuthData = async (data: AuthData): Promise<void> => {
   try {
-    const { token, phone, userId, partnerId } = data;
+    const { token, refreshToken, phone, userId, partnerId, user } = data;
     await AsyncStorage.setItem("token", token);
+    if (refreshToken) {
+      await AsyncStorage.setItem("refreshToken", refreshToken);
+    }
     await AsyncStorage.setItem("phone", phone);
     await AsyncStorage.setItem("userId", userId);
     if (partnerId) {
       await AsyncStorage.setItem("partnerId", partnerId);
+    }
+    if (user) {
+      await AsyncStorage.setItem("user", JSON.stringify(user));
     }
     console.log("✅ Auth data stored successfully");
   } catch (error) {

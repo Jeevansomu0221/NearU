@@ -15,7 +15,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
 import api, { uploadMultipart } from "../api/client";
+import NotificationButton from "../components/NotificationButton";
 
 interface MenuItem {
   _id: string;
@@ -50,7 +52,18 @@ type PickerAsset = {
   mimeType?: string | null;
 };
 
-const CATEGORIES = ["Restaurant", "Bakery", "Tiffins", "Fast Food", "Unique Foods", "Other"];
+const withCommonCategories = (categories: string[]) => [...categories, "Hots", "Other"];
+
+const CATEGORY_BY_SHOP_TYPE: Record<string, string[]> = {
+  bakery: withCommonCategories(["Breads", "Cakes", "Pastries", "Cookies", "Puffs", "Buns"]),
+  "mini-restaurant": withCommonCategories(["Veg Meals", "Non Veg Meals", "Biryani", "Curries", "Rice", "Combos"]),
+  "tiffin-center": withCommonCategories(["Idli", "Dosa", "Poori", "Uttapam", "Meals", "Snacks"]),
+  "fast-food": withCommonCategories(["Pizza", "Burgers", "Fries", "Wraps", "Sandwiches", "Combos"]),
+  sweets: withCommonCategories(["Milk Sweets", "Dry Sweets", "Namkeen", "Festival Specials", "Sugar-Free"]),
+  "ice-creams": withCommonCategories(["Scoops", "Cups", "Family Packs", "Sundaes", "Shakes"]),
+  juice: withCommonCategories(["Fresh Juice", "Milkshakes", "Smoothies", "Mocktails", "Fruit Bowls"]),
+  other: withCommonCategories(["Main Items", "Snacks", "Beverages", "Desserts", "Specials"])
+};
 
 const getUploadMimeType = (filename: string) => {
   const extension = filename.split(".").pop()?.toLowerCase();
@@ -63,28 +76,48 @@ const getUploadMimeType = (filename: string) => {
   return "image/jpeg";
 };
 
-export default function MenuScreen() {
+export default function MenuScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pickerBusy, setPickerBusy] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [partnerCategory, setPartnerCategory] = useState<string>("other");
   const [form, setForm] = useState({
     name: "",
     description: "",
     price: "",
-    category: "Other",
+    category: "Main Items",
     isVegetarian: true,
     preparationTime: "15",
     isAvailable: true
   });
 
   useEffect(() => {
+    loadPartnerProfile();
     loadMenuItems();
   }, []);
+
+  const availableCategories = CATEGORY_BY_SHOP_TYPE[partnerCategory] || CATEGORY_BY_SHOP_TYPE.other;
+
+  const loadPartnerProfile = async () => {
+    try {
+      const response = await api.get("/partners/profile");
+      const responseData = response.data as ApiResponse<any>;
+      const type = responseData?.data?.category || "other";
+      setPartnerCategory(type);
+      setForm((prev) => ({
+        ...prev,
+        category: CATEGORY_BY_SHOP_TYPE[type]?.[0] || CATEGORY_BY_SHOP_TYPE.other[0]
+      }));
+    } catch (error) {
+      setPartnerCategory("other");
+    }
+  };
 
   const filteredItems = useMemo(() => {
     if (!search.trim()) return menuItems;
@@ -128,7 +161,9 @@ export default function MenuScreen() {
   };
 
   const pickImage = async () => {
+    if (pickerBusy || saving) return;
     try {
+      setPickerBusy(true);
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission needed", "Please grant gallery permission to add images");
@@ -137,8 +172,6 @@ export default function MenuScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
         quality: 0.6
       });
 
@@ -147,6 +180,8 @@ export default function MenuScreen() {
       }
     } catch (error) {
       Alert.alert("Error", "Failed to pick image");
+    } finally {
+      setPickerBusy(false);
     }
   };
 
@@ -156,7 +191,7 @@ export default function MenuScreen() {
       name: "",
       description: "",
       price: "",
-      category: "Other",
+      category: availableCategories[0] || "Main Items",
       isVegetarian: true,
       preparationTime: "15",
       isAvailable: true
@@ -171,7 +206,7 @@ export default function MenuScreen() {
         name: item.name,
         description: item.description,
         price: item.price.toString(),
-        category: item.category || "Other",
+        category: item.category || availableCategories[0] || "Main Items",
         isVegetarian: item.isVegetarian !== false,
         preparationTime: item.preparationTime?.toString() || "15",
         isAvailable: item.isAvailable
@@ -267,6 +302,14 @@ export default function MenuScreen() {
     ]);
   };
 
+  const renderPill = (label: string, tone: "neutral" | "veg" | "available" | "unavailable" = "neutral") => (
+    <View style={[styles.pill, styles[`${tone}Pill`]]}>
+      <Text style={[styles.pillText, styles[`${tone}PillText`]]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+
   const renderItem = ({ item }: { item: MenuItem }) => (
     <View style={styles.menuItem}>
       {item.imageUrl ? (
@@ -288,20 +331,19 @@ export default function MenuScreen() {
           <Text style={styles.itemPrice}>Rs {item.price}</Text>
         </View>
         <View style={styles.badgeRow}>
-          <Text style={styles.badge}>{item.category || "Other"}</Text>
-          <Text style={styles.badge}>{item.preparationTime || 15} min</Text>
-          {item.isVegetarian ? <Text style={styles.vegBadge}>Veg</Text> : null}
+          {renderPill(item.category || "Other")}
+          {renderPill(`${item.preparationTime || 15} min`)}
+          {item.isVegetarian ? renderPill("Veg", "veg") : null}
         </View>
         <View style={styles.itemFooter}>
           <View style={styles.switchRow}>
-            <Text style={[styles.availabilityPill, item.isAvailable ? styles.availablePill : styles.unavailablePill]}>
-              {item.isAvailable ? "Available" : "Unavailable"}
-            </Text>
+            {renderPill(item.isAvailable ? "Available" : "Unavailable", item.isAvailable ? "available" : "unavailable")}
             <Switch
               value={item.isAvailable}
               onValueChange={() => toggleAvailability(item)}
               trackColor={{ false: "#E8DDD2", true: "#FFB08F" }}
-              thumbColor={item.isAvailable ? "#FF6B35" : "#BCA99B"}
+              thumbColor={item.isAvailable ? "#2F80ED" : "#9AB3CC"}
+              style={styles.itemSwitch}
             />
           </View>
           <View style={styles.actionButtons}>
@@ -320,7 +362,7 @@ export default function MenuScreen() {
   if (loading && menuItems.length === 0) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
+        <ActivityIndicator size="large" color="#2F80ED" />
         <Text style={styles.loadingText}>Loading menu...</Text>
       </View>
     );
@@ -329,10 +371,14 @@ export default function MenuScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <View>
-          <Text style={styles.title}>Menu</Text>
-          <Text style={styles.subtitle}>Keep your dishes clear, compact, and easy to manage.</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color="#143A66" />
+        </TouchableOpacity>
+        <View style={styles.headerCopy}>
+          <Text style={styles.title}>Menu Management</Text>
+          <Text style={styles.subtitle}>Dishes, prices, and availability</Text>
         </View>
+        <NotificationButton onPress={() => navigation.navigate("Orders")} />
       </View>
 
       <View style={styles.searchWrap}>
@@ -374,25 +420,19 @@ export default function MenuScreen() {
         />
       )}
 
-      {filteredItems.length > 0 ? (
-        <TouchableOpacity style={[styles.floatingAddButton, { bottom: insets.bottom + 16 }]} onPress={() => openEditor()}>
-          <Text style={styles.floatingAddButtonText}>Add Menu Item</Text>
-        </TouchableOpacity>
-      ) : null}
-
       <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => !saving && setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
 
-              <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving}>
+              <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving || pickerBusy}>
                 {imageUri ? (
                   <Image source={{ uri: imageUri }} style={styles.selectedImage} />
                 ) : (
                   <View style={styles.imagePlaceholder}>
-                    <Text style={styles.imagePlaceholderText}>Add Image</Text>
-                    <Text style={styles.imagePlaceholderSubtext}>Tap to select from gallery</Text>
+                    <Ionicons name="image-outline" size={24} color="#2F80ED" />
+                    <Text style={styles.imagePlaceholderText}>Add photo</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -427,7 +467,7 @@ export default function MenuScreen() {
 
               <Text style={styles.modalLabel}>Category</Text>
               <View style={styles.categoryWrap}>
-                {CATEGORIES.map((category) => {
+                {availableCategories.map((category) => {
                   const selected = form.category === category;
                   return (
                     <TouchableOpacity
@@ -490,38 +530,56 @@ export default function MenuScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F3EE"
+    backgroundColor: "#F4F8FF"
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F7F3EE"
+    backgroundColor: "#F4F8FF"
   },
   loadingText: {
     marginTop: 12,
-    color: "#6B5E55",
+    color: "#5C6F87",
     fontSize: 15
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 10
+    paddingBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    marginRight: 10
+  },
+  headerCopy: {
+    flex: 1,
+    marginRight: 10
   },
   title: {
-    fontSize: 28,
+    fontSize: 23,
     fontWeight: "800",
-    color: "#2C2018"
+    color: "#143A66"
   },
   subtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#7B6D63"
+    marginTop: 2,
+    fontSize: 12,
+    color: "#5E7897"
   },
   addButton: {
-    backgroundColor: "#FF6B35",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12
+    backgroundColor: "#2F80ED",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   addButtonText: {
     color: "#FFFFFF",
@@ -539,38 +597,38 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: "#D9E6F7",
     paddingHorizontal: 16,
-    paddingVertical: 13,
-    fontSize: 14,
-    color: "#1A120B",
+    paddingVertical: 10,
+    fontSize: 13,
+    color: "#123456",
     marginRight: 10
   },
   menuItem: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
-    padding: 10,
-    marginBottom: 10
+    borderColor: "#D9E6F7",
+    padding: 9,
+    marginBottom: 8
   },
   itemImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 16,
-    marginRight: 10
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    marginRight: 8
   },
   placeholderImage: {
-    backgroundColor: "#FFE4D7",
+    backgroundColor: "#EAF3FF",
     justifyContent: "center",
     alignItems: "center"
   },
   placeholderText: {
     fontSize: 11,
-    color: "#8B6A54"
+    color: "#5D7698"
   },
   itemInfo: {
     flex: 1
@@ -588,45 +646,68 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#2C2018"
+    color: "#143A66"
   },
   itemPrice: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#2F80ED"
   },
   itemDescription: {
     fontSize: 11,
     lineHeight: 16,
-    color: "#6B5E55",
+    color: "#5E7897",
     marginTop: 3
   },
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
+    alignItems: "center",
+    marginTop: 2,
     marginBottom: 8
   },
-  badge: {
-    backgroundColor: "#F8EFE7",
-    color: "#7A5640",
-    fontSize: 10,
-    fontWeight: "700",
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: "hidden",
+  pill: {
+    minHeight: 28,
+    minWidth: 58,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 6,
-    marginBottom: 4
+    marginBottom: 6
   },
-  vegBadge: {
+  pillText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "800",
+    textAlign: "center"
+  },
+  neutralPill: {
+    backgroundColor: "#ECF4FF"
+  },
+  neutralPillText: {
+    color: "#44678E"
+  },
+  vegPill: {
     backgroundColor: "#E8F5E9",
-    color: "#216E39",
-    fontSize: 10,
-    fontWeight: "700",
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: "hidden"
+    minWidth: 50
+  },
+  vegPillText: {
+    color: "#216E39"
+  },
+  availablePill: {
+    backgroundColor: "#E8F5E9",
+    minWidth: 78
+  },
+  availablePillText: {
+    color: "#216E39"
+  },
+  unavailablePill: {
+    backgroundColor: "#FDECEC",
+    minWidth: 88
+  },
+  unavailablePillText: {
+    color: "#B42318"
   },
   itemFooter: {
     flexDirection: "row",
@@ -637,22 +718,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center"
   },
-  availabilityPill: {
-    overflow: "hidden",
-    fontSize: 10,
-    fontWeight: "800",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    marginRight: 8
-  },
-  availablePill: {
-    backgroundColor: "#E8F5E9",
-    color: "#216E39"
-  },
-  unavailablePill: {
-    backgroundColor: "#FDECEC",
-    color: "#B42318"
+  itemSwitch: {
+    transform: [{ scaleX: 0.82 }, { scaleY: 0.82 }],
+    marginLeft: -2
   },
   actionButtons: {
     flexDirection: "row"
@@ -663,32 +731,13 @@ const styles = StyleSheet.create({
   editText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#C4541C",
+    color: "#2F80ED",
     marginRight: 10
   },
   deleteText: {
     fontSize: 11,
     fontWeight: "800",
     color: "#B42318"
-  },
-  floatingAddButton: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    backgroundColor: "#FF6B35",
-    borderRadius: 18,
-    alignItems: "center",
-    paddingVertical: 15,
-    shadowColor: "#FF6B35",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 18,
-    elevation: 8
-  },
-  floatingAddButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "800"
   },
   emptyState: {
     flex: 1,
@@ -699,18 +748,18 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#2C2018",
+    color: "#143A66",
     marginBottom: 8
   },
   emptySubtext: {
     fontSize: 14,
     lineHeight: 20,
-    color: "#7B6D63",
+    color: "#5E7897",
     textAlign: "center",
     marginBottom: 18
   },
   emptyButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#2F80ED",
     borderRadius: 16,
     paddingHorizontal: 18,
     paddingVertical: 12
@@ -727,70 +776,77 @@ const styles = StyleSheet.create({
   modalScroll: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: 16
+    padding: 14
   },
   modalContent: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 26,
-    padding: 18,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
-    borderColor: "#EFE5DA"
+    borderColor: "#D9E6F7"
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: "800",
-    color: "#2C2018",
-    marginBottom: 16,
+    color: "#143A66",
+    marginBottom: 12,
     textAlign: "center"
+  },
+  modalHint: {
+    fontSize: 12,
+    color: "#5E7897",
+    textAlign: "center",
+    marginBottom: 12
   },
   imagePicker: {
     alignItems: "center",
-    marginBottom: 16
+    marginBottom: 12
   },
   selectedImage: {
-    width: 132,
+    width: "100%",
     height: 132,
-    borderRadius: 22
+    borderRadius: 14
   },
   imagePlaceholder: {
-    width: 132,
-    height: 132,
-    borderRadius: 22,
-    backgroundColor: "#FFF6EF",
+    width: "100%",
+    height: 92,
+    borderRadius: 14,
+    backgroundColor: "#EEF5FF",
     borderWidth: 1,
-    borderColor: "#F3DED0",
+    borderColor: "#D9E6F7",
     justifyContent: "center",
     alignItems: "center"
   },
   imagePlaceholderText: {
-    fontSize: 15,
+    marginTop: 6,
+    fontSize: 13,
     fontWeight: "700",
-    color: "#C4541C"
+    color: "#2F80ED"
   },
   imagePlaceholderSubtext: {
     fontSize: 12,
-    color: "#8B6A54",
+    color: "#6A86A8",
     marginTop: 5
   },
   input: {
     borderWidth: 1,
-    borderColor: "#D9D0C5",
-    borderRadius: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: "#1A120B",
-    backgroundColor: "#FFFCF8",
-    marginBottom: 12
+    borderColor: "#D9E6F7",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: "#123456",
+    backgroundColor: "#F9FCFF",
+    marginBottom: 10
   },
   textArea: {
-    minHeight: 88,
+    minHeight: 72,
     textAlignVertical: "top"
   },
   modalLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#6B5E55",
+    color: "#486887",
     marginBottom: 8
   },
   categoryWrap: {
@@ -801,18 +857,18 @@ const styles = StyleSheet.create({
   categoryChip: {
     paddingHorizontal: 12,
     paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: "#F8EFE7",
+    borderRadius: 12,
+    backgroundColor: "#ECF4FF",
     marginRight: 8,
     marginBottom: 8
   },
   categoryChipSelected: {
-    backgroundColor: "#FF6B35"
+    backgroundColor: "#2F80ED"
   },
   categoryChipText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#7A5640"
+    color: "#44678E"
   },
   categoryChipTextSelected: {
     color: "#FFFFFF"
@@ -825,7 +881,7 @@ const styles = StyleSheet.create({
   },
   formSwitchLabel: {
     fontSize: 14,
-    color: "#2C2018",
+    color: "#143A66",
     fontWeight: "700"
   },
   modalButtons: {
@@ -834,20 +890,20 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: "#F5EDE6",
+    backgroundColor: "#EEF5FF",
     borderRadius: 16,
     alignItems: "center",
     paddingVertical: 15,
     marginRight: 8
   },
   cancelButtonText: {
-    color: "#7B6D63",
+    color: "#5E7897",
     fontSize: 14,
     fontWeight: "800"
   },
   saveButton: {
     flex: 1,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#2F80ED",
     borderRadius: 16,
     alignItems: "center",
     paddingVertical: 15,

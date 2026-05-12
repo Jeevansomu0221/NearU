@@ -80,6 +80,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [pickerBusy, setPickerBusy] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editAddressMode, setEditAddressMode] = useState(false);
   const [form, setForm] = useState({
@@ -138,7 +139,9 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const pickImage = async () => {
+    if (pickerBusy || saving) return;
     try {
+      setPickerBusy(true);
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission needed", "Please grant gallery permission");
@@ -147,8 +150,6 @@ export default function ProfileScreen({ navigation }: any) {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
         quality: 0.6
       });
 
@@ -157,6 +158,8 @@ export default function ProfileScreen({ navigation }: any) {
       }
     } catch (error) {
       Alert.alert("Error", "Failed to pick image");
+    } finally {
+      setPickerBusy(false);
     }
   };
 
@@ -281,7 +284,7 @@ export default function ProfileScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={!editMode}>
+        <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={!editMode || pickerBusy || saving}>
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.shopImage} />
           ) : (

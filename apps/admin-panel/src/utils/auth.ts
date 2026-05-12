@@ -15,6 +15,7 @@ export const clearToken = () => {
   localStorage.removeItem("adminToken");
   localStorage.removeItem("adminUser");
   localStorage.removeItem("adminPhone");
+  localStorage.removeItem("adminRefreshToken");
 };
 
 export const isAuthenticated = () => {

@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Form, Input, Space, Typography } from "antd";
-import { LockOutlined, MobileOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { LockOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client";
@@ -22,39 +22,20 @@ interface AuthEnvelope {
 
 export default function Login() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<"phone" | "otp">("phone");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const sendOtp = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      await api.post("/auth/send-otp", { phone, role: "admin" });
-      setStep("otp");
-    } catch (error: any) {
-      setError(error.response?.data?.message || "Failed to send OTP");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const verifyOtp = async () => {
+  const loginWithPassword = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const response = await api.post<AuthEnvelope>("/auth/verify-otp", {
-        phone,
-        otp,
-        role: "admin"
-      });
+      const response = await api.post<AuthEnvelope>("/auth/admin-password-login", { password });
 
       const payload = response.data?.data;
       if (!response.data?.success || !payload?.token || !payload.user) {
-        setError(response.data?.message || "Invalid OTP");
+        setError(response.data?.message || "Invalid password");
         return;
       }
 
@@ -65,10 +46,13 @@ export default function Login() {
 
       setToken(payload.token);
       localStorage.setItem("adminUser", JSON.stringify(payload.user));
-      localStorage.setItem("adminPhone", phone);
+      localStorage.setItem("adminPhone", payload.user.phone);
+      if (payload.refreshToken) {
+        localStorage.setItem("adminRefreshToken", payload.refreshToken);
+      }
       navigate("/", { replace: true });
     } catch (error: any) {
-      setError(error.response?.data?.message || "Invalid OTP");
+      setError(error.response?.data?.message || "Invalid password");
     } finally {
       setLoading(false);
     }
@@ -91,27 +75,16 @@ export default function Login() {
 
           {error ? <Alert type="error" showIcon message={error} /> : null}
 
-          <Form layout="vertical" onFinish={step === "phone" ? sendOtp : verifyOtp}>
-            <Form.Item label="Admin Phone Number" required>
-              <Input
-                prefix={<MobileOutlined />}
-                placeholder="10-digit mobile number"
-                value={phone}
-                disabled={step === "otp" || loading}
-                onChange={(event) => setPhone(event.target.value.replace(/\D/g, "").slice(0, 10))}
+          <Form layout="vertical" onFinish={loginWithPassword}>
+            <Form.Item label="Admin Password" required>
+              <Input.Password
+                prefix={<LockOutlined />}
+                placeholder="Enter admin password"
+                value={password}
+                disabled={loading}
+                onChange={(event) => setPassword(event.target.value)}
               />
             </Form.Item>
-
-            {step === "otp" ? (
-              <Form.Item label="One-Time Password" required>
-                <Input
-                  prefix={<LockOutlined />}
-                  placeholder="Enter 6-digit OTP"
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                />
-              </Form.Item>
-            ) : null}
 
             <Space direction="vertical" style={{ width: "100%" }} size={12}>
               <Button
@@ -119,23 +92,16 @@ export default function Login() {
                 htmlType="submit"
                 size="large"
                 loading={loading}
-                disabled={step === "phone" ? phone.length !== 10 : otp.length !== 6}
+                disabled={!password}
                 block
               >
-                {step === "phone" ? "Send OTP" : "Verify and Continue"}
+                Sign In
               </Button>
-
-              {step === "otp" ? (
-                <Button size="large" block onClick={() => setStep("phone")} disabled={loading}>
-                  Change Number
-                </Button>
-              ) : null}
             </Space>
           </Form>
 
           <Typography.Text type="secondary">
-            This panel is for admin users only. OTP is still in development mode, so security hardening is still needed
-            before production.
+            This panel is for admin users only. Keep the password private and rotate it from the backend environment when needed.
           </Typography.Text>
         </Space>
       </Card>
