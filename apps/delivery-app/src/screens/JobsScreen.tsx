@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Platform,
   RefreshControl,
-  Platform
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions
 } from "react-native";
-import { getAvailableJobs, acceptJob, DeliveryJob, calculateDistance, updateLocation } from "../api/delivery.api";
-import * as Location from 'expo-location';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
+import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, updateLocation } from "../api/delivery.api";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
@@ -23,14 +26,16 @@ interface CalculatedJob extends DeliveryJob {
 }
 
 export default function JobsScreen({ navigation }: any) {
+  const { width } = useWindowDimensions();
   const [jobs, setJobs] = useState<CalculatedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [acceptingJobId, setAcceptingJobId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [isAvailable, setIsAvailable] = useState(true);
 
-  const ensureAccountCanAccessJobs = async () => {
+  const ensureAccountCanAccessJobs = useCallback(async () => {
     const profileResponse = await getDeliveryProfile();
     if (!profileResponse.success || !profileResponse.data) {
       return false;
@@ -46,146 +51,128 @@ export default function JobsScreen({ navigation }: any) {
     }
 
     return true;
-  };
+  }, [navigation]);
 
-  // Get user location
-  useEffect(() => {
-    (async () => {
-      try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setLocationError('Permission to access location was denied');
-          return;
-        }
-
-        let location = await Location.getCurrentPositionAsync({});
-        setUserLocation(location);
-      } catch (error) {
-        console.error("Error getting location:", error);
-        setLocationError('Failed to get location');
+  const refreshLocation = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocationError("Location permission is off. Turn it on to see nearby jobs.");
+        return null;
       }
-    })();
+
+      const location = await Location.getCurrentPositionAsync({});
+      setUserLocation(location);
+      setLocationError(null);
+      return location;
+    } catch {
+      setLocationError("Unable to get your current location.");
+      return null;
+    }
   }, []);
 
-  const checkTokenStorage = async () => {};
-
-  const calculateJobDetails = async (job: DeliveryJob): Promise<CalculatedJob> => {
-    if (typeof job.distanceToRestaurant === "number") {
-      return {
-        ...job,
-        distance: parseFloat(job.distanceToRestaurant.toFixed(1))
-      };
-    }
-
-    if (!userLocation || !job.partnerId?.location?.coordinates) {
-      return job;
-    }
-
-    try {
-      // Calculate distance to restaurant
-      const origin = {
-        latitude: userLocation.coords.latitude,
-        longitude: userLocation.coords.longitude
-      };
-
-      const destination = {
-        latitude: job.partnerId.location.coordinates[1],
-        longitude: job.partnerId.location.coordinates[0]
-      };
-
-      const response = await calculateDistance(origin, destination);
-      
-      if (response.success && response.data) {
-        const distance = response.data.distance; // in km
-        const travelTime = response.data.duration; // in minutes
-        
-        // Calculate estimated earnings
-        // Base delivery fee: ₹49 + ₹10 per km beyond 2km
-        const baseFee = 49;
-        const perKmRate = 10;
-        const freeKm = 2;
-        
-        let estimatedEarnings = baseFee;
-        if (distance > freeKm) {
-          estimatedEarnings += (distance - freeKm) * perKmRate;
-        }
-        
-        // Add tip if order value is high
-        if (job.grandTotal > 500) {
-          estimatedEarnings += 20; // ₹20 tip for high-value orders
-        }
-
+  const calculateJobDetails = useCallback(
+    async (job: DeliveryJob): Promise<CalculatedJob> => {
+      if (typeof job.distanceToRestaurant === "number") {
         return {
           ...job,
-          distance: parseFloat(distance.toFixed(1)),
-          travelTime: Math.round(travelTime),
-          estimatedEarnings: Math.round(estimatedEarnings)
+          distance: Number(job.distanceToRestaurant.toFixed(1))
         };
       }
-    } catch (error) {
-      console.error("Error calculating distance:", error);
-    }
 
-    return job;
-  };
+      if (!userLocation || !job.partnerId?.location?.coordinates) {
+        return job;
+      }
 
-  const loadAvailableJobs = async () => {
+      try {
+        const response = await calculateDistance(
+          {
+            latitude: userLocation.coords.latitude,
+            longitude: userLocation.coords.longitude
+          },
+          {
+            latitude: job.partnerId.location.coordinates[1],
+            longitude: job.partnerId.location.coordinates[0]
+          }
+        );
+
+        if (response.success && response.data) {
+          const distance = response.data.distance;
+          const travelTime = response.data.duration;
+          const baseFee = 49;
+          const extraDistance = Math.max(distance - 2, 0);
+          const estimatedEarnings = baseFee + extraDistance * 10 + (job.grandTotal > 500 ? 20 : 0);
+
+          return {
+            ...job,
+            distance: Number(distance.toFixed(1)),
+            travelTime: Math.round(travelTime),
+            estimatedEarnings: Math.round(estimatedEarnings)
+          };
+        }
+      } catch {
+        return job;
+      }
+
+      return job;
+    },
+    [userLocation]
+  );
+
+  const loadAvailableJobs = useCallback(async () => {
     try {
       const canAccessJobs = await ensureAccountCanAccessJobs();
       if (!canAccessJobs) {
         setJobs([]);
-        setLoading(false);
-        setRefreshing(false);
         return;
       }
 
-      // First check token storage
-      await checkTokenStorage();
-      
-      setLoading(true);
-      console.log("🔍 Loading available jobs...");
-      
       const response = await getAvailableJobs();
-      
-      console.log("🔍 Jobs API Response:", {
-        success: response.success,
-        message: response.message,
-        dataLength: response.data?.length || 0
-      });
-      
       if (response.success && response.data) {
-        // Calculate distances and earnings for each job
-        const jobsWithCalculations = await Promise.all(
-          response.data.map(job => calculateJobDetails(job))
-        );
+        const jobsWithCalculations = await Promise.all(response.data.map((job) => calculateJobDetails(job)));
         setJobs(jobsWithCalculations);
-        console.log(`✅ Loaded ${jobsWithCalculations.length} jobs`);
       } else {
-        Alert.alert("Error", response.message || "Failed to load available jobs");
         setJobs([]);
       }
-    } catch (error: any) {
-      console.error("❌ Error loading jobs:", error);
-      Alert.alert("Error", "Failed to load available jobs");
+    } catch {
       setJobs([]);
+      Alert.alert("Could not load jobs", "Please check your connection and try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  }, [calculateJobDetails, ensureAccountCanAccessJobs]);
+
+  useEffect(() => {
+    refreshLocation().catch(() => {});
+    loadAvailabilityPreference();
+  }, [refreshLocation]);
+
+  const loadAvailabilityPreference = async () => {
+    try {
+      const saved = await AsyncStorage.getItem("driverAvailability");
+      if (saved !== null) {
+        setIsAvailable(saved === "true");
+      }
+    } catch (error) {
+      console.error("Failed to load availability preference", error);
+    }
+  };
+
+  const toggleAvailability = async (value: boolean) => {
+    setIsAvailable(value);
+    try {
+      await AsyncStorage.setItem("driverAvailability", value.toString());
+    } catch (error) {
+      console.error("Failed to save availability preference", error);
     }
   };
 
   useEffect(() => {
     loadAvailableJobs();
-    
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      if (!loading && !refreshing) {
-        loadAvailableJobs();
-      }
-    }, 30000);
-    
+    const interval = setInterval(loadAvailableJobs, 30000);
     return () => clearInterval(interval);
-  }, [userLocation]);
+  }, [loadAvailableJobs]);
 
   useEffect(() => {
     if (!userLocation) return;
@@ -193,236 +180,153 @@ export default function JobsScreen({ navigation }: any) {
     updateLocation({
       latitude: userLocation.coords.latitude,
       longitude: userLocation.coords.longitude
-    }).catch((error) => {
-      console.log("Failed to sync rider location", error);
-    });
+    }).catch(() => {});
   }, [userLocation]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Refresh location first
-    try {
-      let location = await Location.getCurrentPositionAsync({});
-      setUserLocation(location);
-    } catch (error) {
-      console.error("Error refreshing location:", error);
-    }
+    await refreshLocation();
     await loadAvailableJobs();
   };
 
   const handleAcceptJob = async (orderId: string, job: CalculatedJob) => {
-    try {
-      setAcceptingJobId(orderId);
-      
-      Alert.alert(
-        "Accept Delivery Job",
-        `Are you sure you want to accept this delivery job?\n\n` +
-        `📍 Distance: ${job.distance || 'N/A'} km\n` +
-        `⏱️ Estimated Time: ${job.travelTime || 'N/A'} min\n` +
-        `💰 Estimated Earnings: ₹${job.estimatedEarnings || job.deliveryFee}`,
-        [
-          { 
-            text: "Cancel", 
-            style: "cancel",
-            onPress: () => setAcceptingJobId(null)
-          },
-          {
-            text: "Accept Job",
-            style: "default",
-            onPress: async () => {
-              try {
-                const response = await acceptJob(orderId);
-                
-                if (response.success) {
-                  Alert.alert(
-                    "Success!", 
-                    "Job accepted successfully!\n\nYou can now pick up the order from the restaurant.",
-                    [
-                      {
-                        text: "View Details",
-                        onPress: () => navigation.getParent()?.navigate("JobDetails", { 
-                          orderId: orderId,
-                          job: job
-                        })
-                      },
-                      {
-                        text: "OK",
-                        style: "default"
-                      }
-                    ]
-                  );
-                  loadAvailableJobs(); // Refresh the list
-                } else {
-                  Alert.alert("Error", response.message || "Failed to accept job");
-                  setAcceptingJobId(null);
-                }
-              } catch (error) {
-                console.error("Error accepting job:", error);
-                Alert.alert("Error", "Failed to accept job");
-                setAcceptingJobId(null);
-              }
+    setAcceptingJobId(orderId);
+
+    Alert.alert(
+      "Accept Delivery Job",
+      `Distance: ${job.distance || "N/A"} km\nEstimated time: ${job.travelTime || "N/A"} min\nEstimated earnings: Rs ${
+        job.estimatedEarnings || job.deliveryFee || 49
+      }`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => setAcceptingJobId(null)
+        },
+        {
+          text: "Accept",
+          onPress: async () => {
+            const response = await acceptJob(orderId);
+            setAcceptingJobId(null);
+
+            if (response.success) {
+              navigation.getParent()?.navigate("JobDetails", { orderId, job });
+              loadAvailableJobs();
+            } else {
+              Alert.alert("Could not accept job", response.message || "Please try again.");
             }
           }
-        ]
-      );
-    } catch (error) {
-      console.error("Error in handleAcceptJob:", error);
-      setAcceptingJobId(null);
-    }
+        }
+      ]
+    );
   };
 
   const formatTime = (dateString: string) => {
-  try {
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      return "Invalid time";
-    }
-    return date.toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  } catch (error) {
-    return "Invalid time";
-  }
-};
+    if (Number.isNaN(date.getTime())) return "Time unavailable";
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
 
   const formatAddress = (address: any) => {
-  // Handle all cases: undefined, null, not a string
-  if (!address || typeof address !== 'string') {
-    return "Address not available";
-  }
-  
-  // Show only first part of address for job list
-  const parts = address.split(',');
-  return parts.length > 0 ? parts[0] : address;
-};
+    if (!address || typeof address !== "string") return "Address not available";
+    return address.split(",")[0]?.trim() || address;
+  };
 
   const getItemsSummary = (items: any[]) => {
-  if (!items || !Array.isArray(items) || items.length === 0) return "No items";
-  const totalItems = items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
-  return `${totalItems} item${totalItems !== 1 ? 's' : ''}`;
-};
-
-  const renderJobItem = ({ item }: { item: CalculatedJob }) => (
-  <TouchableOpacity
-    style={styles.jobCard}
-    onPress={() => navigation.getParent()?.navigate("JobDetails", { 
-      orderId: item._id,
-      job: item
-    })}
-    activeOpacity={0.9}
-    >
-    <View style={styles.jobHeader}>
-      <View>
-        <Text style={styles.orderId}>Order #{item._id?.slice(-6).toUpperCase() || "N/A"}</Text>
-        <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
-      </View>
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusText}>READY FOR PICKUP</Text>
-      </View>
-    </View>
-
-    <View style={styles.restaurantInfo}>
-      <Text style={styles.restaurantName}>
-        🏪 {item.partnerId?.restaurantName || item.partnerId?.shopName || "Restaurant"}
-      </Text>
-      <Text style={styles.restaurantAddress}>
-        📍 {formatAddress(item.partnerId?.address)}
-      </Text>
-    </View>
-
-    <View style={styles.deliveryInfo}>
-      <Text style={styles.deliveryLabel}>Deliver to:</Text>
-      <Text style={styles.customerName}>
-        👤 {item.customerId?.name || "Customer"}
-      </Text>
-      <Text style={styles.deliveryAddress}>
-        🏠 {formatAddress(item.deliveryAddress)}
-      </Text>
-    </View>
-
-    {/* Distance and Earnings Info */}
-    <View style={styles.distanceInfo}>
-      <View style={styles.distanceItem}>
-        <Ionicons name="location" size={16} color="#666" />
-        <Text style={styles.distanceText}>
-          {item.distance ? `${item.distance} km` : "Distance: --"}
-        </Text>
-      </View>
-      <View style={styles.distanceItem}>
-        <Ionicons name="time" size={16} color="#666" />
-        <Text style={styles.distanceText}>
-          {item.travelTime ? `${item.travelTime} min` : "Time: --"}
-        </Text>
-      </View>
-      <View style={styles.distanceItem}>
-        <Ionicons name="cash" size={16} color="#666" />
-        <Text style={styles.distanceText}>
-          ₹{item.estimatedEarnings || item.deliveryFee || 49}
-        </Text>
-      </View>
-    </View>
-
-    <View style={styles.itemsInfo}>
-      <Text style={styles.itemsLabel}>Order Summary:</Text>
-      <Text style={styles.itemsText}>
-        {getItemsSummary(item.items || [])} • ₹{item.grandTotal || 0}
-      </Text>
-      {item.note && (
-        <Text style={styles.noteText}>Note: {item.note}</Text>
-      )}
-    </View>
-
-    <View style={styles.footer}>
-      <View style={styles.paymentInfo}>
-        <Text style={styles.paymentMethod}>
-          {item.paymentMethod === "CASH_ON_DELIVERY" ? "💰 Cash on Delivery" : "💳 Online Paid"}
-        </Text>
-        <Text style={styles.totalAmount}>₹{item.grandTotal || 0}</Text>
-      </View>
-      <TouchableOpacity
-        style={[
-          styles.acceptButton,
-          acceptingJobId === item._id && styles.acceptButtonDisabled
-        ]}
-        onPress={() => handleAcceptJob(item._id, item)}
-        disabled={acceptingJobId === item._id}
-      >
-        {acceptingJobId === item._id ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
-        ) : (
-          <Text style={styles.acceptButtonText}>Accept Delivery</Text>
-        )}
-      </TouchableOpacity>
-    </View>
-  </TouchableOpacity>
-);
+    if (!Array.isArray(items) || items.length === 0) return "No items";
+    const totalItems = items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
+    return `${totalItems} item${totalItems === 1 ? "" : "s"}`;
+  };
 
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.headerTop}>
-        <Text style={styles.title}>Available Delivery Jobs</Text>
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+        <View style={styles.headerCopy}>
+          <Text style={[styles.title, width < 380 && styles.titleCompact]} numberOfLines={2}>
+            Available Delivery Jobs
+          </Text>
+          <Text style={styles.locationText}>
+            {locationError || (userLocation ? "Showing jobs near your location" : "Checking your location")}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton} accessibilityLabel="Refresh jobs">
           <Ionicons name="refresh" size={22} color="#4CAF50" />
         </TouchableOpacity>
       </View>
-      {locationError && (
-        <Text style={styles.locationError}>⚠️ {locationError}</Text>
-      )}
-      {userLocation && (
-        <Text style={styles.locationText}>
-          📍 Showing jobs near your location
-        </Text>
-      )}
-      
-      {/* Debug button */}
-      <TouchableOpacity 
-        style={styles.debugButton}
-        onPress={checkTokenStorage}
-      >
-        <Text style={styles.debugButtonText}>🔍 Debug Token</Text>
-      </TouchableOpacity>
+      <View style={styles.availabilityRow}>
+        <View style={styles.availabilityText}>
+          <Text style={styles.availabilityLabel}>Available for deliveries</Text>
+          <Text style={styles.availabilitySubLabel}>{isAvailable ? "You will receive job notifications" : "You won't receive job notifications"}</Text>
+        </View>
+        <Switch
+          value={isAvailable}
+          onValueChange={toggleAvailability}
+          trackColor={{ false: "#E5E7EB", true: "#4CAF50" }}
+          thumbColor={isAvailable ? "#FFFFFF" : "#FFFFFF"}
+          ios_backgroundColor="#E5E7EB"
+        />
+      </View>
     </View>
+  );
+
+  const renderJobItem = ({ item }: { item: CalculatedJob }) => (
+    <TouchableOpacity
+      style={styles.jobCard}
+      onPress={() => navigation.getParent()?.navigate("JobDetails", { orderId: item._id, job: item })}
+      activeOpacity={0.9}
+    >
+      <View style={styles.jobHeader}>
+        <View style={styles.jobTitleBlock}>
+          <Text style={styles.orderId}>Order #{item._id?.slice(-6).toUpperCase() || "N/A"}</Text>
+          <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
+        </View>
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusText}>READY</Text>
+        </View>
+      </View>
+
+      <View style={styles.routeCard}>
+        <View style={styles.routeRow}>
+          <Ionicons name="storefront-outline" size={18} color="#2E7D32" />
+          <View style={styles.routeTextBlock}>
+            <Text style={styles.restaurantName}>{item.partnerId?.restaurantName || item.partnerId?.shopName || "Restaurant"}</Text>
+            <Text style={styles.routeSubText}>{formatAddress(item.partnerId?.address)}</Text>
+          </View>
+        </View>
+        <View style={styles.routeDivider} />
+        <View style={styles.routeRow}>
+          <Ionicons name="home-outline" size={18} color="#1565C0" />
+          <View style={styles.routeTextBlock}>
+            <Text style={styles.customerName}>{item.customerId?.name || "Customer"}</Text>
+            <Text style={styles.routeSubText}>{formatAddress(item.deliveryAddress)}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.metricsRow}>
+        <Metric icon="location-outline" label={item.distance ? `${item.distance} km` : "-- km"} />
+        <Metric icon="time-outline" label={item.travelTime ? `${item.travelTime} min` : "-- min"} />
+        <Metric icon="cash-outline" label={`Rs ${item.estimatedEarnings || item.deliveryFee || 49}`} />
+      </View>
+
+      <View style={styles.footer}>
+        <View style={styles.paymentInfo}>
+          <Text style={styles.itemsText}>{getItemsSummary(item.items || [])}</Text>
+          <Text style={styles.totalAmount}>Rs {item.grandTotal || 0}</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.acceptButton, acceptingJobId === item._id && styles.acceptButtonDisabled]}
+          onPress={() => handleAcceptJob(item._id, item)}
+          disabled={acceptingJobId === item._id}
+        >
+          {acceptingJobId === item._id ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.acceptButtonText}>Accept</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
   );
 
   if (loading) {
@@ -430,9 +334,6 @@ export default function JobsScreen({ navigation }: any) {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={styles.loadingText}>Finding available jobs...</Text>
-        {!userLocation && (
-          <Text style={styles.locationLoadingText}>Getting your location...</Text>
-        )}
       </View>
     );
   }
@@ -440,303 +341,299 @@ export default function JobsScreen({ navigation }: any) {
   return (
     <View style={styles.container}>
       {renderHeader()}
-      
       <FlatList
         data={jobs}
-        keyExtractor={item => item._id}
+        keyExtractor={(item) => item._id}
         renderItem={renderJobItem}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#4CAF50"]}
-            tintColor="#4CAF50"
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#4CAF50"]} tintColor="#4CAF50" />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="basket-outline" size={80} color="#CCCCCC" />
+            <Ionicons name="basket-outline" size={72} color="#CCCCCC" />
             <Text style={styles.emptyText}>No available jobs</Text>
-            <Text style={styles.emptySubText}>
-              When restaurants mark orders as READY, they'll appear here for delivery
-            </Text>
-            <TouchableOpacity 
-              style={styles.refreshButtonLarge}
-              onPress={onRefresh}
-            >
+            <Text style={styles.emptySubText}>When restaurants mark orders as READY, they will appear here for delivery.</Text>
+            <TouchableOpacity style={styles.refreshButtonLarge} onPress={onRefresh}>
               <Ionicons name="refresh" size={20} color="#FFFFFF" />
               <Text style={styles.refreshButtonText}>Refresh Jobs</Text>
             </TouchableOpacity>
           </View>
         }
-        contentContainerStyle={jobs.length === 0 ? { flex: 1 } : styles.listContent}
+        contentContainerStyle={jobs.length === 0 ? styles.emptyListContent : styles.listContent}
       />
     </View>
   );
 }
 
+function Metric({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+  return (
+    <View style={styles.metricItem}>
+      <Ionicons name={icon} size={16} color="#666" />
+      <Text style={styles.metricText}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#f5f5f5' 
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F7FA"
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F5F7FA"
   },
   loadingText: {
     fontSize: 16,
-    color: '#666',
-    marginTop: 12,
-  },
-  locationLoadingText: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 8,
+    color: "#666",
+    marginTop: 12
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: Platform.OS === "ios" ? 50 : 30,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: "#E5E7EB"
   },
   headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#333',
+    color: "#222222",
+    fontSize: 24,
+    fontWeight: "800",
+    lineHeight: 30
   },
-  refreshButton: {
-    padding: 4,
-  },
-  locationError: {
-    fontSize: 12,
-    color: '#FF6B6B',
-    backgroundColor: '#FFEBEE',
-    padding: 8,
-    borderRadius: 6,
-    marginTop: 4,
+  titleCompact: {
+    fontSize: 21,
+    lineHeight: 27
   },
   locationText: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 4,
-  },
-  debugButton: {
-    backgroundColor: '#2196F3',
-    padding: 8,
-    borderRadius: 6,
     marginTop: 8,
-    alignItems: 'center',
+    color: "#667085",
+    fontSize: 15,
+    lineHeight: 22
   },
-  debugButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '500',
+  refreshButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0FDF4"
+  },
+  availabilityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6"
+  },
+  availabilityText: {
+    flex: 1,
+    minWidth: 0
+  },
+  availabilityLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#222222"
+  },
+  availabilitySubLabel: {
+    fontSize: 13,
+    color: "#667085",
+    marginTop: 2
   },
   jobCard: {
-    backgroundColor: 'white',
+    backgroundColor: "#FFFFFF",
     marginHorizontal: 16,
-    marginVertical: 8,
+    marginTop: 14,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOpacity: 0.08,
+        shadowRadius: 5
       },
       android: {
-        elevation: 3,
-      },
-    }),
+        elevation: 2
+      }
+    })
   },
   jobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 12
+  },
+  jobTitleBlock: {
+    flex: 1,
+    minWidth: 0
   },
   orderId: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: "800",
+    color: "#333333"
   },
   timeText: {
     fontSize: 13,
-    color: '#888',
-    marginTop: 4,
+    color: "#888888",
+    marginTop: 4
   },
   statusBadge: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: "#4CAF50",
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 20
   },
   statusText: {
-    color: 'white',
+    color: "#FFFFFF",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "800"
   },
-  restaurantInfo: {
-    backgroundColor: '#E8F5E9',
+  routeCard: {
+    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    marginBottom: 12
+  },
+  routeRow: {
+    flexDirection: "row",
+    gap: 10
+  },
+  routeTextBlock: {
+    flex: 1,
+    minWidth: 0
   },
   restaurantName: {
+    color: "#1F2937",
     fontSize: 15,
-    fontWeight: '600',
-    color: '#2E7D32',
-    marginBottom: 4,
-  },
-  restaurantAddress: {
-    fontSize: 13,
-    color: '#2E7D32',
-    opacity: 0.9,
-  },
-  deliveryInfo: {
-    backgroundColor: '#E3F2FD',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  deliveryLabel: {
-    fontSize: 12,
-    color: '#1565C0',
-    fontWeight: '600',
-    marginBottom: 6,
+    fontWeight: "700"
   },
   customerName: {
+    color: "#1F2937",
     fontSize: 15,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
+    fontWeight: "700"
   },
-  deliveryAddress: {
+  routeSubText: {
+    marginTop: 4,
+    color: "#667085",
     fontSize: 13,
-    color: '#333',
-    opacity: 0.9,
+    lineHeight: 18
   },
-  distanceInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#FFF3E0',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+  routeDivider: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginVertical: 12
   },
-  distanceItem: {
-    alignItems: 'center',
+  metricsRow: {
+    flexDirection: "row",
+    backgroundColor: "#FFF7ED",
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 12
+  },
+  metricItem: {
     flex: 1,
+    alignItems: "center",
+    gap: 4
   },
-  distanceText: {
+  metricText: {
+    color: "#666666",
     fontSize: 13,
-    color: '#666',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  itemsInfo: {
-    marginBottom: 12,
-  },
-  itemsLabel: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  itemsText: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  noteText: {
-    fontSize: 13,
-    color: '#FF9800',
-    fontStyle: 'italic',
-    marginTop: 4,
+    fontWeight: "700"
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: "#EEEEEE"
   },
   paymentInfo: {
     flex: 1,
+    minWidth: 0
   },
-  paymentMethod: {
+  itemsText: {
+    color: "#667085",
     fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
+    fontWeight: "600"
   },
   totalAmount: {
+    color: "#333333",
     fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: "800",
+    marginTop: 3
   },
   acceptButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 24,
+    minWidth: 112,
+    backgroundColor: "#4CAF50",
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 140,
-    alignItems: 'center',
+    borderRadius: 10,
+    alignItems: "center"
   },
   acceptButtonDisabled: {
-    backgroundColor: '#81C784',
+    backgroundColor: "#81C784"
   },
   acceptButtonText: {
-    color: 'white',
+    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "800"
+  },
+  emptyListContent: {
+    flexGrow: 1
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+    paddingBottom: 80
   },
   emptyText: {
-    fontSize: 18,
-    color: '#666',
+    fontSize: 20,
+    color: "#555555",
     marginTop: 16,
     marginBottom: 8,
-    fontWeight: '600',
+    fontWeight: "800"
   },
   emptySubText: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
+    fontSize: 15,
+    color: "#888888",
+    textAlign: "center",
     marginBottom: 24,
-    lineHeight: 20,
+    lineHeight: 22
   },
   refreshButtonLarge: {
-    backgroundColor: '#4CAF50',
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: "#4CAF50",
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 13,
+    borderRadius: 10,
+    gap: 8
   },
   refreshButtonText: {
-    color: 'white',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+    fontWeight: "800"
   },
   listContent: {
-    paddingBottom: 20,
-  },
+    paddingBottom: 24
+  }
 });
