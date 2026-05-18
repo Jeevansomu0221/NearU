@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { warmApi } from '../api/client';
 import { sendFirebaseOtp } from '../services/firebasePhoneAuth';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
@@ -36,6 +37,7 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       console.log('📱 Sending OTP to:', cleanedPhone);
       
+      void warmApi();
       await sendFirebaseOtp(cleanedPhone);
       
       console.log('✅ OTP sent successfully');
