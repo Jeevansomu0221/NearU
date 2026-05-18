@@ -12,6 +12,7 @@ export interface ApiResponse<T = any> {
 const DEV_LAN_HOST = "10.3.8.130";
 const ANDROID_EMULATOR_HOST = "10.0.2.2";
 const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
+const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
 
 const isPrivateIp = (hostname: string) => {
   return (
@@ -34,6 +35,11 @@ const resolveApiBaseUrls = () => {
   }
 
   const urls: string[] = [];
+
+  if (!__DEV__) {
+    return [PRODUCTION_API_URL];
+  }
+
   const scriptURL = NativeModules.SourceCode?.scriptURL;
   if (scriptURL) {
     try {
@@ -54,6 +60,7 @@ const resolveApiBaseUrls = () => {
 
   addUnique(urls, `http://${DEV_LAN_HOST}:5000/api`);
   addUnique(urls, "http://127.0.0.1:5000/api");
+  addUnique(urls, PRODUCTION_API_URL);
 
   return urls;
 };
