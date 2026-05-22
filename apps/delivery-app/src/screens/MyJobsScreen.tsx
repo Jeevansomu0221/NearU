@@ -11,8 +11,10 @@ import {
 } from "react-native";
 import { getMyDeliveryOrders, DeliveryOrder } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function MyJobsScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const [jobs, setJobs] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -169,7 +171,7 @@ export default function MyJobsScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
         <Text style={styles.title}>My Delivery Jobs</Text>
         <TouchableOpacity onPress={onRefresh}>
           <Ionicons name="refresh" size={24} color="#4CAF50" />
@@ -229,7 +231,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingBottom: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',

@@ -6,18 +6,37 @@
   "build": {
     "development": {
       "developmentClient": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "preview": {
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com"
+      },
       "android": {
         "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "track": "internal"
       }
     }
   }

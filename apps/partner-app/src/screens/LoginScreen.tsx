@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 import { confirmFirebaseOtp, sendFirebaseOtp } from "../services/firebasePhoneAuth";
+
+const TEST_LOGIN_PHONE = "1010101010";
+const TEST_LOGIN_OTP = "000000";
 
 interface AuthResponse {
   success: boolean;
@@ -37,10 +40,13 @@ export default function LoginScreen({ navigation }: any) {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const lastSubmittedOtp = useRef("");
   const insets = useSafeAreaInsets();
 
   const handleSendOtp = async () => {
-    if (phone.length !== 10) {
+    const cleanedPhone = phone.replace(/\D/g, "");
+
+    if (cleanedPhone.length !== 10) {
       setFeedback({ type: "error", text: "Enter a valid 10-digit phone number." });
       return;
     }
@@ -48,9 +54,17 @@ export default function LoginScreen({ navigation }: any) {
     try {
       setLoading(true);
       setFeedback(null);
-      await sendFirebaseOtp(phone);
+      setPhone(cleanedPhone);
+      setOtp("");
+      lastSubmittedOtp.current = "";
+
+      await sendFirebaseOtp(cleanedPhone);
+
       setStep("otp");
-      setFeedback({ type: "success", text: "OTP sent. Enter the code below." });
+      setFeedback({
+        type: "success",
+        text: cleanedPhone === TEST_LOGIN_PHONE ? "Use test OTP 000000 to continue." : "OTP sent. Enter the code below."
+      });
     } catch (error: any) {
       console.error("Send OTP error:", error);
       setFeedback({ type: "error", text: error.response?.data?.message || "Failed to send OTP." });
@@ -110,7 +124,7 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const handleVerifyOtp = async () => {
-    if (loading) {
+    if (loading || lastSubmittedOtp.current === otp) {
       return;
     }
 
@@ -122,12 +136,24 @@ export default function LoginScreen({ navigation }: any) {
     try {
       setLoading(true);
       setFeedback(null);
-      const firebaseIdToken = await confirmFirebaseOtp(otp);
-      const res = await api.post("/auth/verify-otp", {
-        phone,
-        firebaseIdToken,
-        role: "partner"
-      });
+      lastSubmittedOtp.current = otp;
+
+      let verificationPayload: { phone: string; role: string; firebaseIdToken?: string; otp?: string };
+      try {
+        verificationPayload = {
+          phone,
+          firebaseIdToken: await confirmFirebaseOtp(otp),
+          role: "partner"
+        };
+      } catch (firebaseError) {
+        if (phone !== TEST_LOGIN_PHONE || otp !== TEST_LOGIN_OTP) {
+          throw firebaseError;
+        }
+
+        verificationPayload = { phone, otp, role: "partner" };
+      }
+
+      const res = await api.post("/auth/verify-otp", verificationPayload);
 
       const data = res.data as AuthResponse;
       const payload = data.data;
@@ -154,6 +180,7 @@ export default function LoginScreen({ navigation }: any) {
       await checkPartnerStatus(phone);
     } catch (error: any) {
       console.error("OTP verification error:", error);
+      lastSubmittedOtp.current = "";
       setFeedback({ type: "error", text: error.response?.data?.message || "Invalid OTP. Please try again." });
     } finally {
       setLoading(false);
@@ -204,7 +231,7 @@ export default function LoginScreen({ navigation }: any) {
                 keyboardType="phone-pad"
                 value={phone}
                 onChangeText={(value) => {
-                  setPhone(value);
+                  setPhone(value.replace(/\D/g, ""));
                   if (feedback) setFeedback(null);
                 }}
                 maxLength={10}
@@ -224,8 +251,10 @@ export default function LoginScreen({ navigation }: any) {
                 keyboardType="number-pad"
                 value={otp}
                 onChangeText={(value) => {
-                  setOtp(value);
+                  const numbers = value.replace(/\D/g, "");
+                  setOtp(numbers);
                   if (feedback?.type === "error") setFeedback(null);
+                  if (numbers.length < 6) lastSubmittedOtp.current = "";
                 }}
                 maxLength={6}
               />
@@ -263,11 +292,10 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     flexGrow: 1,
-    justifyContent: "space-between"
+    justifyContent: "center"
   },
   hero: {
-    marginTop: 6,
-    marginBottom: 16,
+    marginBottom: 42,
     backgroundColor: "#2F80ED",
     borderRadius: 28,
     padding: 22
@@ -281,8 +309,8 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   title: {
-    fontSize: 25,
-    lineHeight: 31,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: "800",
     color: "#FFFFFF"
   },
@@ -298,7 +326,11 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: "#D9E6F7",
-    marginBottom: 20
+    shadowColor: "#143A66",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 3
   },
   cardTitle: {
     fontSize: 22,

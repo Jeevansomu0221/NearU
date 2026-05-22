@@ -2,6 +2,7 @@ import { Response } from "express";
 import { UploadedFile } from "express-fileupload";
 import cloudinary from "../config/cloudinary";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import { config } from "../config/env";
 
 const MAX_CLOUDINARY_UPLOAD_ATTEMPTS = 2;
 const CLOUDINARY_UPLOAD_TIMEOUT_MS = 180000;
@@ -49,14 +50,45 @@ const allowedExtensions = new Set([
   "pdf"
 ]);
 
-const isAllowedUpload = (imageFile: UploadedFile) => {
-  const extension = imageFile.name.split(".").pop()?.toLowerCase() || "";
-  return allowedMimeTypes.has(imageFile.mimetype) && (extension ? allowedExtensions.has(extension) : true);
+const getFileExtension = (name: string): string => {
+  if (!name) return "";
+  const lastDot = name.lastIndexOf(".");
+  if (lastDot < 0 || lastDot === name.length - 1) return "";
+  return name.slice(lastDot + 1).toLowerCase();
 };
 
-const uploadBufferToCloudinary = async (imageFile: UploadedFile) => {
+const isAllowedUpload = (imageFile: UploadedFile) => {
+  const mimeType = (imageFile.mimetype || "").toLowerCase();
+  const extension = getFileExtension(imageFile.name);
+
+  // Accept if the mime type is in our allow list (most common, reliable signal from the client).
+  if (mimeType && allowedMimeTypes.has(mimeType)) {
+    return true;
+  }
+
+  // Accept if the file extension is in our allow list (covers cases where the OS sends
+  // a generic mime type like application/octet-stream but the file is clearly an image/PDF).
+  if (extension && allowedExtensions.has(extension)) {
+    return true;
+  }
+
+  // Accept image/* mime types we did not explicitly enumerate (e.g. image/jpg, image/x-png)
+  // because Cloudinary will handle them and reject if truly invalid.
+  if (mimeType.startsWith("image/")) {
+    return true;
+  }
+
+  return false;
+};
+
+const normalizePublicId = (value: string) => value.replace(/^\/+/, "").replace(/\.[a-z0-9]+$/i, "");
+
+const getUserUploadFolder = (userId: string) =>
+  `${config.cloudinaryUploadFolder.replace(/\/+$/, "")}/users/${userId}`;
+
+const uploadBufferToCloudinary = async (imageFile: UploadedFile, ownerId: string) => {
   const uploadOptions: any = {
-    folder: process.env.CLOUDINARY_UPLOAD_FOLDER || "nearu-app",
+    folder: getUserUploadFolder(ownerId),
     resource_type: "auto",
     timeout: CLOUDINARY_UPLOAD_TIMEOUT_MS
   };
@@ -109,7 +141,12 @@ const uploadBufferToCloudinary = async (imageFile: UploadedFile) => {
 
 export const uploadImage = async (req: AuthRequest, res: Response) => {
   try {
-    console.log("Upload image request received");
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
 
     const uploadedInput = req.files?.image || req.files?.file;
 
@@ -125,21 +162,18 @@ export const uploadImage = async (req: AuthRequest, res: Response) => {
       : uploadedInput as UploadedFile;
 
     if (!isAllowedUpload(imageFile)) {
+      console.warn("Rejected upload due to file type:", {
+        name: imageFile.name,
+        mimetype: imageFile.mimetype,
+        size: imageFile.size
+      });
       return res.status(400).json({
         success: false,
         message: "Only JPG, PNG, WEBP, HEIC, or PDF files are allowed"
       });
     }
 
-    console.log("Uploading to Cloudinary...", {
-      name: imageFile.name,
-      mimetype: imageFile.mimetype,
-      size: imageFile.size
-    });
-
-    const uploadResult = await uploadBufferToCloudinary(imageFile);
-
-    console.log("Upload successful:", uploadResult.secure_url);
+    const uploadResult = await uploadBufferToCloudinary(imageFile, req.user.id);
 
     res.json({
       success: true,
@@ -152,11 +186,26 @@ export const uploadImage = async (req: AuthRequest, res: Response) => {
       message: "Image uploaded successfully"
     });
   } catch (error: any) {
-    console.error("Upload error:", error);
-    res.status(500).json({
+    const cloudinaryMessage = error?.error?.message || error?.message;
+    console.error("Upload error:", {
+      message: cloudinaryMessage,
+      http_code: error?.http_code,
+      code: error?.code,
+      name: error?.name
+    });
+
+    const statusCode =
+      typeof error?.http_code === "number"
+        ? error.http_code
+        : typeof error?.statusCode === "number"
+          ? error.statusCode
+          : 500;
+
+    res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
       success: false,
-      message: "Failed to upload image",
-      error: error.message
+      message: cloudinaryMessage
+        ? `Upload failed: ${cloudinaryMessage}`
+        : "Failed to upload image. Please try again."
     });
   }
 };
@@ -165,6 +214,13 @@ export const deleteImage = async (req: AuthRequest, res: Response) => {
   try {
     const { publicId } = req.body;
 
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
     if (!publicId) {
       return res.status(400).json({
         success: false,
@@ -172,7 +228,18 @@ export const deleteImage = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const result = await cloudinary.uploader.destroy(publicId);
+    const normalizedPublicId = normalizePublicId(publicId);
+    const ownerFolder = getUserUploadFolder(req.user.id);
+    const isAdmin = req.user.role === "admin";
+
+    if (!isAdmin && !normalizedPublicId.startsWith(`${ownerFolder}/`)) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete files uploaded by your account"
+      });
+    }
+
+    const result = await cloudinary.uploader.destroy(normalizedPublicId);
 
     res.json({
       success: true,
@@ -183,8 +250,7 @@ export const deleteImage = async (req: AuthRequest, res: Response) => {
     console.error("Delete error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to delete image",
-      error: error.message
+      message: "Failed to delete image"
     });
   }
 };

@@ -11,11 +11,14 @@ import adminRoutes from "./routes/admin.routes";
 import deliveryRoutes from "./routes/delivery.routes";
 import uploadRoutes from "./routes/upload.routes";
 import paymentRoutes from "./routes/payment.routes";
+import legalRoutes from "./routes/legal.routes";
+import supportRoutes from "./routes/support.routes";
 import { config } from "./config/env";
+import { errorMiddleware } from "./middlewares/error.middleware";
 
 const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
-const allowConfiguredWildcardOrigin = config.corsOrigins.includes("*");
+const allowConfiguredWildcardOrigin = !config.isProduction && config.corsOrigins.includes("*");
 
 const isLocalDevelopmentOrigin = (origin: string) => {
   try {
@@ -39,7 +42,7 @@ app.use(cors({
       allowConfiguredWildcardOrigin ||
       !origin ||
       config.corsOrigins.includes(origin) ||
-      isLocalDevelopmentOrigin(origin)
+      (!config.isProduction && isLocalDevelopmentOrigin(origin))
     ) {
       return callback(null, true);
     }
@@ -79,9 +82,13 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/support", supportRoutes);
+app.use("/legal", legalRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", message: "Vyaha backend is running", env: config.nodeEnv });
 });
+
+app.use(errorMiddleware);
 
 export default app;

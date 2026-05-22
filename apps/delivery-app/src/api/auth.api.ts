@@ -42,3 +42,12 @@ export const logout = async () => {
     await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
   }
 };
+
+export const deleteAccount = async () => {
+  try {
+    const response = await api.delete("/users/me");
+    return response;
+  } finally {
+    await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+  }
+};

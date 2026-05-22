@@ -11,7 +11,8 @@
     "start": "node dist/server.js",
     "test": "jest --runInBand",
     "dev": "ts-node src/server.ts",
-    "mongo:dev": "\"C:\\Program Files\\MongoDB\\Server\\8.0\\bin\\mongod.exe\" --dbpath .mongo-data --port 27017 --bind_ip 127.0.0.1"
+    "mongo:dev": "\"C:\\Program Files\\MongoDB\\Server\\8.0\\bin\\mongod.exe\" --dbpath .mongo-data --port 27017 --bind_ip 127.0.0.1",
+    "seed:partner-mock-menus": "ts-node scripts/seedMockPartnerMenus.ts"
   },
   "keywords": [],
   "author": "",

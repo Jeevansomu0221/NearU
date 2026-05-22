@@ -1,5 +1,25 @@
 // apps/customer-app/src/api/user.api.ts
-import { apiGet, apiPut, apiDelete, ApiResponse } from "./client";
+import { apiGet, apiPut, apiPost, apiDelete, ApiResponse } from "./client";
+
+export interface SavedAddress {
+  _id?: string;
+  label?: string;
+  recipientName?: string;
+  houseFlatDoorNo?: string;
+  buildingApartmentName?: string;
+  streetRoadName?: string;
+  street?: string;
+  city?: string;
+  cityTownVillage?: string;
+  state?: string;
+  pincode?: string;
+  area?: string;
+  areaLocality?: string;
+  landmark?: string;
+  district?: string;
+  country?: string;
+  isDefault?: boolean;
+}
 
 // Define UserProfile interface here - MAKE IT EXPORTED
 export interface UserProfile {
@@ -7,22 +27,8 @@ export interface UserProfile {
   name: string;
   phone: string;
   email?: string;
-  address?: {
-    recipientName?: string;
-    houseFlatDoorNo?: string;
-    buildingApartmentName?: string;
-    streetRoadName?: string;
-    street: string;
-    city: string;
-    cityTownVillage?: string;
-    state: string;
-    pincode: string;
-    area: string;
-    areaLocality?: string;
-    landmark?: string;
-    district?: string;
-    country?: string;
-  };
+  address?: SavedAddress;
+  addresses?: SavedAddress[];
   createdAt: string;
 }
 
@@ -47,6 +53,8 @@ export const updateUserProfile = (profileData: {
  * UPDATE USER ADDRESS
  */
 export const updateUserAddress = (addressData: {
+  addressId?: string;
+  label?: string;
   recipientName?: string;
   houseFlatDoorNo?: string;
   buildingApartmentName?: string;
@@ -61,6 +69,7 @@ export const updateUserAddress = (addressData: {
   landmark?: string;
   district?: string;
   country?: string;
+  isDefault?: boolean;
 }): Promise<ApiResponse<UserProfile>> => {
   return apiPut<UserProfile>("/users/address", addressData);
 };
@@ -68,27 +77,31 @@ export const updateUserAddress = (addressData: {
 /**
  * GET SAVED ADDRESSES
  */
-export const getSavedAddresses = (): Promise<ApiResponse<any>> => {
-  return apiGet<any>("/users/addresses");
+export const getSavedAddresses = (): Promise<ApiResponse<SavedAddress[]>> => {
+  return apiGet<SavedAddress[]>("/users/addresses");
 };
 
 /**
  * ADD NEW ADDRESS
  */
-export const addAddress = (addressData: any): Promise<ApiResponse<any>> => {
-  return apiPut<any>("/users/address", addressData);
+export const addAddress = (addressData: SavedAddress): Promise<ApiResponse<UserProfile>> => {
+  return apiPost<UserProfile>("/users/addresses", addressData);
 };
 
 /**
  * SET DEFAULT ADDRESS
  */
-export const setDefaultAddress = (addressId: string): Promise<ApiResponse<any>> => {
-  return apiPut<any>(`/users/address/${addressId}/default`);
+export const setDefaultAddress = (addressId: string): Promise<ApiResponse<UserProfile>> => {
+  return apiPut<UserProfile>(`/users/address/${addressId}/default`);
 };
 
 /**
  * DELETE ADDRESS
  */
-export const deleteAddress = (addressId: string): Promise<ApiResponse<any>> => {
-  return apiDelete<any>(`/users/address/${addressId}`);
+export const deleteAddress = (addressId: string): Promise<ApiResponse<UserProfile>> => {
+  return apiDelete<UserProfile>(`/users/address/${addressId}`);
+};
+
+export const deleteMyAccount = (): Promise<ApiResponse<null>> => {
+  return apiDelete<null>("/users/me");
 };

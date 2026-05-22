@@ -2,9 +2,7 @@
 import { apiPost, ApiResponse } from "./client";
 
 interface RazorpayOrderRequest {
-  amount: number;
-  currency?: string;
-  receipt?: string;
+  orderId: string;
 }
 
 interface RazorpayOrderResponse {
@@ -12,21 +10,15 @@ interface RazorpayOrderResponse {
   amount: number;
   currency: string;
   receipt: string;
+  keyId: string;
+  orderId: string;
 }
 
 interface VerifyPaymentRequest {
+  orderId: string;
   razorpay_order_id: string;
   razorpay_payment_id: string;
   razorpay_signature: string;
-}
-
-interface PaymentUpdateData {
-  paymentId?: string;
-  razorpayOrderId?: string;
-  razorpayPaymentId?: string;
-  razorpaySignature?: string;
-  paymentMethod?: string;
-  paymentStatus?: string;
 }
 
 /**
@@ -45,14 +37,4 @@ export const verifyPayment = (
   data: VerifyPaymentRequest
 ): Promise<ApiResponse<any>> => {
   return apiPost<any>("/payment/verify", data);
-};
-
-/**
- * Update Order Payment Status
- */
-export const updateOrderPayment = (
-  orderId: string,
-  paymentData: PaymentUpdateData
-): Promise<ApiResponse<any>> => {
-  return apiPost<any>(`/payment/order/${orderId}/update-payment`, paymentData);
 };

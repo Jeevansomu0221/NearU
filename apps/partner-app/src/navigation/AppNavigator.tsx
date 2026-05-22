@@ -12,6 +12,7 @@ import OrderDetailsScreen from "../screens/OrderDetailsScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
 import MenuScreen from "../screens/MenuScreen";
 import PendingApprovalScreen from "../screens/PendingApprovalScreen";
+import ApplicationSubmittedScreen from "../screens/ApplicationSubmittedScreen";
 import RejectedScreen from "../screens/RejectedScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import WelcomeApprovedScreen from "../screens/WelcomeApprovedScreen";
@@ -188,6 +189,11 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Onboarding" 
         component={OnboardingScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="ApplicationSubmitted"
+        component={ApplicationSubmittedScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen 

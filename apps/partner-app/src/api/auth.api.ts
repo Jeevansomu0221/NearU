@@ -141,3 +141,14 @@ export const logout = async () => {
     return false;
   }
 };
+
+export const deleteAccount = async () => {
+  try {
+    await api.delete("/users/me");
+    await clearAuthData();
+    return true;
+  } catch (error) {
+    await clearAuthData();
+    throw error;
+  }
+};

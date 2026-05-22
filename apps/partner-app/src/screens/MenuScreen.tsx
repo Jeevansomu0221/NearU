@@ -57,6 +57,7 @@ const withCommonCategories = (categories: string[]) => [...categories, "Hots", "
 const CATEGORY_BY_SHOP_TYPE: Record<string, string[]> = {
   bakery: withCommonCategories(["Breads", "Cakes", "Pastries", "Cookies", "Puffs", "Buns"]),
   "mini-restaurant": withCommonCategories(["Veg Meals", "Non Veg Meals", "Biryani", "Curries", "Rice", "Combos"]),
+  grocery: withCommonCategories(["Staples", "Snacks", "Dairy", "Beverages", "Personal Care", "Household"]),
   "tiffin-center": withCommonCategories(["Idli", "Dosa", "Poori", "Uttapam", "Meals", "Snacks"]),
   "fast-food": withCommonCategories(["Pizza", "Burgers", "Fries", "Wraps", "Sandwiches", "Combos"]),
   sweets: withCommonCategories(["Milk Sweets", "Dry Sweets", "Namkeen", "Festival Specials", "Sugar-Free"]),
@@ -76,6 +77,18 @@ const getUploadMimeType = (filename: string) => {
   return "image/jpeg";
 };
 
+const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
+  const fromUri = asset.uri.split(/[\\/]/).pop()?.split("?")[0];
+  const baseName = (asset.fileName || fromUri || fallbackName).replace(/[^a-zA-Z0-9._-]/g, "_");
+
+  if (/\.[a-z0-9]+$/i.test(baseName)) {
+    return baseName;
+  }
+
+  const mimeExtension = asset.mimeType?.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+  return `${baseName}.${mimeExtension}`;
+};
+
 export default function MenuScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -85,6 +98,7 @@ export default function MenuScreen({ navigation }: any) {
   const [saving, setSaving] = useState(false);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [selectedImageAsset, setSelectedImageAsset] = useState<PickerAsset | null>(null);
   const [search, setSearch] = useState("");
   const [partnerCategory, setPartnerCategory] = useState<string>("other");
   const [form, setForm] = useState({
@@ -143,7 +157,7 @@ export default function MenuScreen({ navigation }: any) {
 
   const uploadImageToCloudinary = async (asset: PickerAsset): Promise<string> => {
     const formData = new FormData();
-    const filename = asset.fileName || asset.uri.split("/").pop() || "image.jpg";
+    const filename = getUploadFilename(asset, "menu-image.jpg");
     const type = asset.mimeType || getUploadMimeType(filename);
 
     // @ts-ignore React Native FormData file object
@@ -153,8 +167,8 @@ export default function MenuScreen({ navigation }: any) {
       name: filename
     });
 
-    const uploadData = await uploadMultipart<UploadResponse["data"]>("/upload/image", formData) as UploadResponse;
-    if (!uploadData.success) {
+    const uploadData = await uploadMultipart<UploadResponse["data"]>("/upload/image", formData);
+    if (!uploadData?.success || !uploadData?.data?.url) {
       throw new Error(uploadData.message || "Upload failed");
     }
     return uploadData.data.url;
@@ -175,8 +189,9 @@ export default function MenuScreen({ navigation }: any) {
         quality: 0.6
       });
 
-      if (!result.canceled && result.assets[0].uri) {
+      if (!result.canceled && result.assets[0]?.uri) {
         setImageUri(result.assets[0].uri);
+        setSelectedImageAsset(result.assets[0]);
       }
     } catch (error) {
       Alert.alert("Error", "Failed to pick image");
@@ -197,6 +212,7 @@ export default function MenuScreen({ navigation }: any) {
       isAvailable: true
     });
     setImageUri(null);
+    setSelectedImageAsset(null);
   };
 
   const openEditor = (item?: MenuItem) => {
@@ -212,6 +228,7 @@ export default function MenuScreen({ navigation }: any) {
         isAvailable: item.isAvailable
       });
       setImageUri(item.imageUrl || null);
+      setSelectedImageAsset(null);
     } else {
       resetForm();
     }
@@ -234,7 +251,7 @@ export default function MenuScreen({ navigation }: any) {
       if (imageUri && imageUri !== editingItem?.imageUrl) {
         imageUrl = imageUri.startsWith("https://res.cloudinary.com")
           ? imageUri
-          : await uploadImageToCloudinary({ uri: imageUri });
+          : await uploadImageToCloudinary(selectedImageAsset || { uri: imageUri });
       }
 
       const menuData = {
@@ -341,7 +358,7 @@ export default function MenuScreen({ navigation }: any) {
             <Switch
               value={item.isAvailable}
               onValueChange={() => toggleAvailability(item)}
-              trackColor={{ false: "#E8DDD2", true: "#FFB08F" }}
+              trackColor={{ false: "#D9E6F7", true: "#9FC8FF" }}
               thumbColor={item.isAvailable ? "#2F80ED" : "#9AB3CC"}
               style={styles.itemSwitch}
             />
@@ -910,7 +927,7 @@ const styles = StyleSheet.create({
     marginLeft: 8
   },
   saveButtonDisabled: {
-    backgroundColor: "#FFB08F"
+    backgroundColor: "#9FC8FF"
   },
   saveButtonText: {
     color: "#FFFFFF",

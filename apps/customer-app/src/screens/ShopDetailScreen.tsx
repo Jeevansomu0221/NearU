@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -82,6 +83,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const { items, addItem, updateQuantity, getItemCount, getCartTotal } = useCart();
 
   useEffect(() => {
@@ -137,15 +139,6 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     const activeSection = groupedMenu.find(([title]) => title === selectedCategory);
     return activeSection?.[1] || groupedMenu[0]?.[1] || [];
   }, [groupedMenu, selectedCategory]);
-
-  const formatAddress = (address: any) => {
-    if (!address) return "Address not available";
-    if (typeof address === "string") return address;
-
-    return [address.roadStreet, address.colony, address.area, address.city, address.state, address.pincode]
-      .filter(Boolean)
-      .join(", ");
-  };
 
   const getShopName = () => shop?.restaurantName || shop?.shopName || "Restaurant";
 
@@ -241,15 +234,15 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
             <Text style={styles.topBarTitle}>Restaurant Details</Text>
             <TouchableOpacity
               style={styles.topBarButton}
-              onPress={() => Alert.alert("Favorites", "Favorite restaurants can be connected next.")}
+              onPress={() => Alert.alert("Favorites", "Favorites are not available in this release.")}
             >
               <Feather name="heart" size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.bannerCard}>
+          <TouchableOpacity style={styles.bannerCard} activeOpacity={0.9} onPress={() => setPreviewImage(bannerImage)}>
             <Image source={{ uri: bannerImage }} style={styles.bannerImage} resizeMode="cover" />
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.infoCard}>
@@ -260,9 +253,17 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
           <View style={styles.infoTopRow}>
             <View style={styles.infoTextBlock}>
               <Text style={styles.shopName}>{getShopName()}</Text>
-              <View style={styles.categoryChip}>
-                <MaterialCommunityIcons name={getShopCategoryIcon()} size={13} color="#C96C2F" />
-                <Text style={styles.categoryChipText}>{getShopCategoryLabel()}</Text>
+              <View style={styles.categoryTimeRow}>
+                <View style={styles.categoryChip}>
+                  <MaterialCommunityIcons name={getShopCategoryIcon()} size={13} color="#C96C2F" />
+                  <Text style={styles.categoryChipText}>{getShopCategoryLabel()}</Text>
+                </View>
+                <View style={styles.timeChip}>
+                  <Feather name="clock" size={13} color="#2F7553" />
+                  <Text style={styles.timeValue}>
+                    {shop.openingTime && shop.closingTime ? `${shop.openingTime} - ${shop.closingTime}` : "08:00 - 22:00"}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -280,19 +281,6 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
             </View>
           </View>
 
-          <View style={styles.detailRow}>
-            <Feather name="map-pin" size={14} color="#7B7067" />
-            <Text style={styles.detailText} numberOfLines={2}>
-              {formatAddress(shop.address)}
-            </Text>
-          </View>
-
-          <View style={styles.detailRow}>
-            <Feather name="clock" size={14} color="#3F7657" />
-            <Text style={styles.timeValue}>
-              {shop.openingTime && shop.closingTime ? `${shop.openingTime} - ${shop.closingTime}` : "08:00 - 22:00"}
-            </Text>
-          </View>
         </View>
 
         <View style={styles.menuHeader}>
@@ -307,7 +295,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
           </View>
         ) : menu.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Menu coming soon</Text>
+            <Text style={styles.emptyTitle}>Menu unavailable</Text>
             <Text style={styles.emptyBody}>This restaurant has not added any available items yet.</Text>
           </View>
         ) : (
@@ -352,7 +340,9 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                     ) : null}
 
                     <View style={styles.menuCardRow}>
-                      <Image source={{ uri: getMenuImage(item, index) }} style={styles.menuImage} resizeMode="cover" />
+                      <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImage(getMenuImage(item, index))}>
+                        <Image source={{ uri: getMenuImage(item, index) }} style={styles.menuImage} resizeMode="cover" />
+                      </TouchableOpacity>
 
                       <View style={styles.menuInfo}>
                         <View style={styles.menuInfoTop}>
@@ -360,20 +350,8 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                             <Text style={styles.itemName}>{item.name}</Text>
                             <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
                           </View>
-                          <Text style={styles.itemPrice}>Rs {item.price}</Text>
-                        </View>
-
-                        <Text style={styles.itemDescription} numberOfLines={3}>
-                          {item.description || "Freshly prepared in-store with quality ingredients."}
-                        </Text>
-
-                        <View style={styles.menuInfoBottom}>
-                          <View style={styles.readyRow}>
-                            <Feather name="clock" size={12} color="#7C7168" />
-                            <Text style={styles.readyText}>Ready in a few minutes</Text>
-                          </View>
-
-                          <View style={styles.actionsColumn}>
+                          <View style={styles.priceActionBlock}>
+                            <Text style={styles.itemPrice}>Rs {item.price}</Text>
                             <View style={styles.stepper}>
                               <TouchableOpacity
                                 style={styles.stepperButton}
@@ -387,12 +365,19 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                                 <Text style={styles.stepperButtonText}>+</Text>
                               </TouchableOpacity>
                             </View>
-
-                            <TouchableOpacity style={styles.addButton} onPress={() => handleIncrement(item)}>
-                              <Feather name="shopping-cart" size={13} color="#FFFFFF" />
-                              <Text style={styles.addButtonText}>{quantity > 0 ? "Add More" : "Add"}</Text>
-                            </TouchableOpacity>
                           </View>
+                        </View>
+
+                        <Text style={styles.itemDescription} numberOfLines={3}>
+                          {item.description || "Freshly prepared in-store with quality ingredients."}
+                        </Text>
+
+                        <View style={styles.menuInfoBottom}>
+                          <View style={styles.readyRow}>
+                            <Feather name="clock" size={12} color="#7C7168" />
+                            <Text style={styles.readyText}>Ready in a few minutes</Text>
+                          </View>
+
                         </View>
                       </View>
                     </View>
@@ -434,6 +419,17 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
           <Feather name="chevron-right" size={16} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      <Modal visible={Boolean(previewImage)} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
+        <View style={styles.imagePreviewOverlay}>
+          <TouchableOpacity style={styles.imagePreviewClose} onPress={() => setPreviewImage(null)} activeOpacity={0.85}>
+            <Feather name="x" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          {previewImage ? (
+            <Image source={{ uri: previewImage }} style={styles.imagePreview} resizeMode="contain" />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -458,9 +454,9 @@ const styles = StyleSheet.create({
   },
   headerBackground: {
     backgroundColor: "#FF6B35",
-    paddingBottom: 48,
-    borderBottomLeftRadius: 34,
-    borderBottomRightRadius: 34
+    paddingBottom: 38,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28
   },
   topBar: {
     paddingHorizontal: 14,
@@ -482,10 +478,10 @@ const styles = StyleSheet.create({
     color: "#FFFFFF"
   },
   bannerCard: {
-    marginTop: 12,
+    marginTop: 10,
     marginHorizontal: 14,
-    height: 158,
-    borderRadius: 24,
+    height: 148,
+    borderRadius: 22,
     overflow: "hidden",
     backgroundColor: "#F4D9C7"
   },
@@ -494,14 +490,14 @@ const styles = StyleSheet.create({
     height: "100%"
   },
   infoCard: {
-    marginTop: -32,
+    marginTop: -28,
     marginHorizontal: 14,
     backgroundColor: "#FFFFFF",
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "#EFE7DE",
-    padding: 14,
-    paddingTop: 18,
+    padding: 12,
+    paddingTop: 14,
     shadowColor: "#E4D7CB",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.14,
@@ -511,21 +507,21 @@ const styles = StyleSheet.create({
   shopIconBubble: {
     position: "absolute",
     left: 18,
-    top: -34,
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    top: -28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: "#FF6B35",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 5,
+    borderWidth: 4,
     borderColor: "#FFFFFF"
   },
   infoTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    paddingTop: 12
+    paddingTop: 8
   },
   infoTextBlock: {
     flex: 1,
@@ -541,17 +537,31 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
     backgroundColor: "#FFF1E6"
+  },
+  categoryTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8
   },
   categoryChipText: {
     marginLeft: 5,
     fontSize: 11,
     fontWeight: "700",
     color: "#C96C2F"
+  },
+  timeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#F0FAF3"
   },
   infoMetaBlock: {
     alignItems: "flex-end"
@@ -576,7 +586,7 @@ const styles = StyleSheet.create({
   ratingBlock: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 10
+    marginTop: 8
   },
   ratingValue: {
     marginLeft: 5,
@@ -592,7 +602,7 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginTop: 10
+    marginTop: 8
   },
   detailText: {
     flex: 1,
@@ -602,14 +612,18 @@ const styles = StyleSheet.create({
     color: "#71655C"
   },
   timeValue: {
-    marginLeft: 7,
+    marginLeft: 5,
     fontSize: 12,
     fontWeight: "800",
     color: "#2F7553"
   },
   menuHeader: {
-    marginTop: 18,
-    marginHorizontal: 14
+    marginTop: 14,
+    marginHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 12
   },
   menuTitle: {
     fontSize: 19,
@@ -617,13 +631,15 @@ const styles = StyleSheet.create({
     color: "#201914"
   },
   menuSubtitle: {
-    marginTop: 4,
     fontSize: 12,
-    color: "#7A7067"
+    color: "#7A7067",
+    textAlign: "right",
+    flexShrink: 1,
+    paddingBottom: 2
   },
   categoryTabs: {
     paddingHorizontal: 14,
-    paddingTop: 10,
+    paddingTop: 8,
     paddingBottom: 2
   },
   categoryTab: {
@@ -654,15 +670,15 @@ const styles = StyleSheet.create({
   },
   menuList: {
     paddingHorizontal: 14,
-    paddingTop: 8
+    paddingTop: 6
   },
   menuCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "#EEE8E0",
-    padding: 10,
-    marginBottom: 10,
+    padding: 9,
+    marginBottom: 8,
     shadowColor: "#E7DCCF",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -677,7 +693,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     backgroundColor: "#FFF3E5",
-    marginBottom: 8
+    marginBottom: 6
   },
   bestSellerText: {
     marginLeft: 4,
@@ -689,9 +705,9 @@ const styles = StyleSheet.create({
     flexDirection: "row"
   },
   menuImage: {
-    width: 88,
-    height: 88,
-    borderRadius: 16,
+    width: 76,
+    height: 76,
+    borderRadius: 14,
     backgroundColor: "#F4E7DB"
   },
   menuInfo: {
@@ -724,14 +740,18 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#FF6B35"
   },
+  priceActionBlock: {
+    alignItems: "flex-end",
+    minWidth: 92
+  },
   itemDescription: {
-    marginTop: 7,
+    marginTop: 5,
     fontSize: 11,
     lineHeight: 16,
     color: "#72675E"
   },
   menuInfoBottom: {
-    marginTop: 9
+    marginTop: 7
   },
   readyRow: {
     flexDirection: "row",
@@ -743,7 +763,7 @@ const styles = StyleSheet.create({
     color: "#7C7168"
   },
   actionsColumn: {
-    marginTop: 10,
+    marginTop: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
@@ -755,7 +775,8 @@ const styles = StyleSheet.create({
     borderColor: "#F1C3AA",
     borderRadius: 999,
     paddingHorizontal: 2,
-    height: 34
+    height: 32,
+    marginTop: 9
   },
   stepperButton: {
     width: 28,
@@ -902,5 +923,28 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
     marginRight: 3
+  },
+  imagePreviewOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 18
+  },
+  imagePreview: {
+    width: "100%",
+    height: "82%"
+  },
+  imagePreviewClose: {
+    position: "absolute",
+    top: 44,
+    right: 18,
+    zIndex: 2,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)"
   }
 });

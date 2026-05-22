@@ -9,8 +9,14 @@ import {
   getPartnerDetails,
   getOrderDetails,
   updateOrderStatus,
-  getDashboardStats
+  getDashboardStats,
+  requestPartnerDocumentReupload
 } from "../controllers/admin.controller";
+import {
+  getAllSupportTickets,
+  replyToSupportTicket,
+  updateSupportTicketStatus
+} from "../controllers/support.controller";
 
 const router = Router();
 
@@ -30,5 +36,11 @@ router.put("/orders/:orderId/status", updateOrderStatus);
 router.get("/partners", getPartnerRequests);
 router.get("/partners/:partnerId", getPartnerDetails);
 router.put("/partners/:partnerId/status", updatePartnerStatus);
+router.put("/partners/:partnerId/documents/reupload", requestPartnerDocumentReupload);
+
+// Customer Support
+router.get("/support/tickets", getAllSupportTickets);
+router.post("/support/tickets/:ticketId/reply", replyToSupportTicket);
+router.put("/support/tickets/:ticketId/status", updateSupportTicketStatus);
 
 export default router;

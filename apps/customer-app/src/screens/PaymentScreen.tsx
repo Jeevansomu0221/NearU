@@ -10,8 +10,10 @@ import {
   Modal
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import RazorpayCheckout from "react-native-razorpay";
 import { useCart } from "../context/CartContext";
 import { createShopOrder } from "../api/order.api";
+import { createRazorpayOrder, verifyPayment } from "../api/payment.api";
 
 interface CheckoutGroup {
   shopId: string;
@@ -37,7 +39,7 @@ export default function PaymentScreen({ route, navigation }: any) {
 
   const paymentMethods = [
     { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
-    { id: "UPI", name: "UPI Payment", icon: "UPI" }
+    { id: "RAZORPAY", name: "Online Payment", icon: "UPI" }
   ];
 
   const groupedShops = useMemo<CheckoutGroup[]>(() => {
@@ -86,33 +88,90 @@ export default function PaymentScreen({ route, navigation }: any) {
     return parts.join(", ");
   };
 
+  const createOrderForGroup = async (group: CheckoutGroup, selectedMethod: string) => {
+    const orderItems = group.items.map((item: any) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      menuItemId: item.menuItemId || item._id || "temp-id"
+    }));
+
+    const response = await createShopOrder(
+      group.shopId,
+      orderSummary.address,
+      orderItems,
+      orderSummary.note || "",
+      selectedMethod
+    );
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message || `Failed to place order for ${group.shopName}`);
+    }
+
+    return response.data;
+  };
+
   const placeOrders = async (selectedMethod: string) => {
     const createdOrders = [];
 
     for (const group of groupedShops) {
-      const orderItems = group.items.map((item: any) => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        menuItemId: item.menuItemId || item._id || "temp-id"
-      }));
-
-      const response = await createShopOrder(
-        group.shopId,
-        orderSummary.address,
-        orderItems,
-        orderSummary.note || "",
-        selectedMethod
-      );
-
-      if (!response.success || !response.data) {
-        throw new Error(response.message || `Failed to place order for ${group.shopName}`);
-      }
-
-      createdOrders.push(response.data);
+      createdOrders.push(await createOrderForGroup(group, selectedMethod));
     }
 
     return createdOrders;
+  };
+
+  const placeOnlineOrders = async () => {
+    const paidOrders = [];
+
+    for (const group of groupedShops) {
+      const createdOrder = await createOrderForGroup(group, "RAZORPAY");
+      const paymentOrderResponse = await createRazorpayOrder({ orderId: createdOrder._id });
+
+      if (!paymentOrderResponse.success || !paymentOrderResponse.data) {
+        throw new Error(paymentOrderResponse.message || `Failed to create payment for ${group.shopName}`);
+      }
+
+      const paymentOrder = paymentOrderResponse.data;
+      if (!paymentOrder.keyId) {
+        throw new Error("Payment gateway key is not configured");
+      }
+
+      const paymentResult: any = await RazorpayCheckout.open({
+        key: paymentOrder.keyId,
+        amount: paymentOrder.amount,
+        currency: paymentOrder.currency || "INR",
+        name: "Vyaha",
+        description: `Order from ${group.shopName}`,
+        order_id: paymentOrder.id,
+        prefill: {
+          name: userProfile.name,
+          contact: userProfile.phone
+        },
+        theme: { color: "#FF6B35" },
+        method: {
+          upi: true,
+          card: true,
+          netbanking: true,
+          wallet: true
+        }
+      });
+
+      const verifyResponse = await verifyPayment({
+        orderId: createdOrder._id,
+        razorpay_order_id: paymentResult.razorpay_order_id,
+        razorpay_payment_id: paymentResult.razorpay_payment_id,
+        razorpay_signature: paymentResult.razorpay_signature
+      });
+
+      if (!verifyResponse.success) {
+        throw new Error(verifyResponse.message || `Payment verification failed for ${group.shopName}`);
+      }
+
+      paidOrders.push(verifyResponse.data || createdOrder);
+    }
+
+    return paidOrders;
   };
 
   const handleSuccessfulCheckout = (createdOrders: any[]) => {
@@ -144,36 +203,13 @@ export default function PaymentScreen({ route, navigation }: any) {
     try {
       setLoading(true);
 
-      if (paymentMethod === "UPI") {
-        Alert.alert(
-          "UPI Payment",
-          "Continue to simulate the UPI payment and confirm all restaurant orders.",
-          [
-            {
-              text: "Cancel",
-              style: "cancel",
-              onPress: () => setLoading(false)
-            },
-            {
-              text: "Pay Now",
-              onPress: async () => {
-                try {
-                  const createdOrders = await placeOrders("UPI");
-                  handleSuccessfulCheckout(createdOrders);
-                } catch (error: any) {
-                  Alert.alert("Payment Failed", error.message || "Failed to process payment");
-                } finally {
-                  setLoading(false);
-                }
-              }
-            }
-          ]
-        );
-        return;
+      if (paymentMethod === "RAZORPAY") {
+        const paidOrders = await placeOnlineOrders();
+        handleSuccessfulCheckout(paidOrders);
+      } else {
+        const createdOrders = await placeOrders("CASH_ON_DELIVERY");
+        handleSuccessfulCheckout(createdOrders);
       }
-
-      const createdOrders = await placeOrders("CASH_ON_DELIVERY");
-      handleSuccessfulCheckout(createdOrders);
     } catch (error: any) {
       let errorMessage = "Failed to place order";
 
@@ -204,7 +240,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         <View style={styles.methodBody}>
           <Text style={styles.methodName}>{method?.name}</Text>
           <Text style={styles.methodHint}>
-            {paymentMethod === "CASH_ON_DELIVERY" ? "Pay when your order arrives" : "Pay now and confirm instantly"}
+            {paymentMethod === "CASH_ON_DELIVERY" ? "Pay when your order arrives" : "Pay securely with UPI, card, wallet, or netbanking"}
           </Text>
         </View>
         <TouchableOpacity onPress={() => setShowPaymentMethods(true)}>
@@ -300,8 +336,8 @@ export default function PaymentScreen({ route, navigation }: any) {
           </View>
         ) : (
           <View style={styles.infoSection}>
-            <Text style={styles.infoTitle}>UPI payment</Text>
-            <Text style={styles.infoText}>You will confirm payment first, and then all restaurant orders will be placed together.</Text>
+            <Text style={styles.infoTitle}>Online payment</Text>
+            <Text style={styles.infoText}>Your order is confirmed only after Razorpay verifies the payment signature.</Text>
           </View>
         )}
       </ScrollView>
@@ -320,7 +356,7 @@ export default function PaymentScreen({ route, navigation }: any) {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.payButtonText}>
-              {paymentMethod === "CASH_ON_DELIVERY" ? "Place Order" : "Pay and Place Order"}
+              {paymentMethod === "CASH_ON_DELIVERY" ? "Place Order" : "Pay Securely"}
             </Text>
           )}
         </TouchableOpacity>
@@ -370,7 +406,7 @@ export default function PaymentScreen({ route, navigation }: any) {
                 <View style={styles.methodInfo}>
                   <Text style={styles.methodOptionName}>{method.name}</Text>
                   <Text style={styles.methodDescription}>
-                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "Pay immediately using UPI"}
+                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "UPI, card, wallet, and netbanking via Razorpay"}
                   </Text>
                 </View>
                 {paymentMethod === method.id ? <Text style={styles.selectedIndicator}>Selected</Text> : null}

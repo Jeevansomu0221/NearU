@@ -14,6 +14,17 @@ const PartnerSchema = new Schema(
     shopName: {
       type: String
     },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: ""
+    },
+    shopDescription: {
+      type: String,
+      trim: true,
+      default: ""
+    },
     phone: {
       type: String,
       required: true,
@@ -22,6 +33,10 @@ const PartnerSchema = new Schema(
     
     // ADD THIS: Shop profile image
     shopImageUrl: {
+      type: String,
+      default: ""
+    },
+    bannerImageUrl: {
       type: String,
       default: ""
     },
@@ -68,10 +83,12 @@ const PartnerSchema = new Schema(
         type: String,
         trim: true
       }],
-      // Google Maps link is now compulsory
+      // Google Maps link is optional. Partners can either paste a maps share
+      // link (we'll parse lat/lng out of it) or use the in-app "Use my shop
+      // location" button which sends coordinates directly.
       googleMapsLink: {
         type: String,
-        required: true,
+        default: "",
         trim: true
       }
     },
@@ -94,6 +111,7 @@ const PartnerSchema = new Schema(
       enum: [
         "bakery", 
         "mini-restaurant", 
+        "grocery",
         "tiffin-center", 
         "fast-food", 
         "sweets",       // ADDED
@@ -121,6 +139,10 @@ const PartnerSchema = new Schema(
     closingTime: {
       type: String,
       default: "22:00"
+    },
+    weeklyHolidays: {
+      type: [String],
+      default: []
     },
     rating: {
       type: Number,
@@ -153,7 +175,21 @@ const PartnerSchema = new Schema(
       operatingHoursNote: String,
       // ADD THIS: Document submission tracking
       submittedAt: Date,
-      isComplete: { type: Boolean, default: false }
+      isComplete: { type: Boolean, default: false },
+      // Per-document re-upload flags set by admin; partner app shows "Re-upload required" when true.
+      reuploadFlags: {
+        fssaiUrl: { type: Boolean, default: false },
+        panFrontUrl: { type: Boolean, default: false },
+        aadhaarFrontUrl: { type: Boolean, default: false },
+        aadhaarBackUrl: { type: Boolean, default: false },
+        bankProofUrl: { type: Boolean, default: false },
+        addressProofUrl: { type: Boolean, default: false },
+        gstUrl: { type: Boolean, default: false },
+        shopLicenseUrl: { type: Boolean, default: false },
+        ownerPanUrl: { type: Boolean, default: false },
+        menuProofUrl: { type: Boolean, default: false }
+      },
+      reuploadNotes: { type: String, default: "" }
     },
     status: {
       type: String,
@@ -177,6 +213,24 @@ const PartnerSchema = new Schema(
     menuItemsCount: {
       type: Number,
       default: 0
+    },
+    settings: {
+      autoAcceptOrders: { type: Boolean, default: false },
+      estimatedPrepTime: { type: Number, default: 20, min: 1 },
+      deliveryMode: { type: String, enum: ["self", "platform"], default: "platform" },
+      deliveryRadiusKm: { type: Number, default: 3, min: 0.5 },
+      minimumOrderAmount: { type: Number, default: 0, min: 0 },
+      upiId: { type: String, default: "" }
+    },
+    notifications: {
+      newOrderAlerts: { type: Boolean, default: true },
+      paymentAlerts: { type: Boolean, default: true },
+      promotionalNotifications: { type: Boolean, default: false }
+    },
+    language: {
+      type: String,
+      enum: ["en", "hi", "ta", "te", "kn", "ml", "mr"],
+      default: "en"
     }
   },
   { timestamps: true }

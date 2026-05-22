@@ -15,6 +15,13 @@ const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
 const API_TIMEOUT_MS = 60000;
 const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
 const PRODUCTION_HEALTH_URL = "https://vyaha-app-backend.onrender.com/health";
+const isDev = typeof __DEV__ !== "undefined" && __DEV__;
+
+const logDebug = (...args: any[]) => {
+  if (isDev) {
+    console.log(...args);
+  }
+};
 
 const isPrivateIp = (hostname: string) => {
   return (
@@ -69,8 +76,8 @@ const resolveApiBaseUrls = () => {
 
 const API_BASE_URLS = resolveApiBaseUrls();
 const API_BASE_URL = API_BASE_URLS[0];
-console.log("Customer API base URL:", API_BASE_URL);
-console.log("Customer API fallback URLs:", API_BASE_URLS);
+logDebug("Customer API base URL:", API_BASE_URL);
+logDebug("Customer API fallback URLs:", API_BASE_URLS);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -100,6 +107,8 @@ api.interceptors.response.use(
   (response: any) => response,
   async (error: any) => {
     const requestConfig = error.config;
+    const statusCode = error.response?.status;
+    const serverMessage = error.response?.data?.message || "";
     const currentRetryIndex = requestConfig?._baseUrlRetryIndex || 0;
     const nextBaseUrl = requestConfig ? API_BASE_URLS[currentRetryIndex + 1] : undefined;
     const isTimeoutError =
@@ -115,7 +124,7 @@ api.interceptors.response.use(
     });
 
     if (isNetworkError && requestConfig && nextBaseUrl) {
-      console.log(`Trying fallback API base URL: ${nextBaseUrl}`);
+      logDebug(`Trying fallback API base URL: ${nextBaseUrl}`);
       requestConfig._baseUrlRetryIndex = currentRetryIndex + 1;
       requestConfig.baseURL = nextBaseUrl;
       api.defaults.baseURL = nextBaseUrl;
@@ -124,6 +133,53 @@ api.interceptors.response.use(
 
     if (isNetworkError) {
       return Promise.reject(new Error("The server is taking longer than usual. Please wait a moment and try again."));
+    }
+
+    if (
+      statusCode === 401 &&
+      requestConfig &&
+      !requestConfig._retryAuth &&
+      requestConfig.url !== "/auth/refresh" &&
+      String(serverMessage).toLowerCase().includes("token expired")
+    ) {
+      try {
+        const refreshToken = await AsyncStorage.getItem("refreshToken");
+        if (!refreshToken) {
+          throw new Error("Missing refresh token");
+        }
+
+        requestConfig._retryAuth = true;
+        const refreshResponse = await axios.post(
+          "/auth/refresh",
+          { refreshToken },
+          {
+            baseURL: requestConfig.baseURL || api.defaults.baseURL || API_BASE_URL,
+            timeout: API_TIMEOUT_MS,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+        const refreshData = (refreshResponse as any).data;
+        const refreshedToken = refreshData?.data?.token;
+        const refreshedRefreshToken = refreshData?.data?.refreshToken;
+
+        if (!refreshedToken) {
+          throw new Error("Refresh response did not include a token");
+        }
+
+        await AsyncStorage.multiSet([
+          ["token", refreshedToken],
+          ["refreshToken", refreshedRefreshToken || refreshToken]
+        ]);
+        requestConfig.headers = {
+          ...(requestConfig.headers || {}),
+          Authorization: `Bearer ${refreshedToken}`
+        };
+
+        return api.request(requestConfig);
+      } catch (refreshError) {
+        await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+        return Promise.reject(new Error("Your session expired. Please log in again."));
+      }
     }
 
     return Promise.reject(error.response?.data || error);

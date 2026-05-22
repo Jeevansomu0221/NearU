@@ -44,9 +44,15 @@ export const config = {
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",
   firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "",
   firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "",
+  adminPanelPhone: process.env.ADMIN_PANEL_PHONE || "",
+  adminPanelPassword: process.env.ADMIN_PANEL_PASSWORD || "",
   razorpayKeyId: process.env.RAZORPAY_KEY_ID || "",
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || "",
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
+  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || "",
+  cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || "",
+  cloudinaryUploadFolder: process.env.CLOUDINARY_UPLOAD_FOLDER || "nearu-app",
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
   deliveryRadiusKm: Number.parseFloat(process.env.DELIVERY_RADIUS_KM || "8"),
   deliveryLocationFreshnessMinutes: parsePositiveInt(process.env.DELIVERY_LOCATION_FRESHNESS_MINUTES, 10)
@@ -68,6 +74,14 @@ export const validateEnv = (): void => {
       missing.push("CORS_ORIGINS");
     }
 
+    if (config.corsOrigins.includes("*")) {
+      missing.push("CORS_ORIGINS must not contain * in production");
+    }
+
+    if (!config.adminPanelPhone || !config.adminPanelPassword) {
+      missing.push("ADMIN_PANEL_PHONE/ADMIN_PANEL_PASSWORD");
+    }
+
     if (!config.otpProvider) {
       missing.push("OTP_PROVIDER");
     }
@@ -86,6 +100,10 @@ export const validateEnv = (): void => {
 
     if (!config.razorpayKeyId || !config.razorpayKeySecret || !config.razorpayWebhookSecret) {
       missing.push("RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET/RAZORPAY_WEBHOOK_SECRET");
+    }
+
+    if (!config.cloudinaryCloudName || !config.cloudinaryApiKey || !config.cloudinaryApiSecret) {
+      missing.push("CLOUDINARY_CLOUD_NAME/CLOUDINARY_API_KEY/CLOUDINARY_API_SECRET");
     }
   }
 

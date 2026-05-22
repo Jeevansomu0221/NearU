@@ -55,6 +55,8 @@ export interface DeliveryOrder {
   paymentStatus: string;
   estimatedDistance?: number;
   estimatedEarnings?: number;
+  deliveryEarnings?: number;
+  collectedAmount?: number;
 }
 
 export interface DeliveryJob extends DeliveryOrder {

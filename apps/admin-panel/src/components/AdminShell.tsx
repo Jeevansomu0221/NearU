@@ -4,6 +4,7 @@ import {
   ShopOutlined,
   CarOutlined,
   ShoppingCartOutlined,
+  CustomerServiceOutlined,
   LogoutOutlined
 } from "@ant-design/icons";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -31,6 +32,11 @@ const menuItems = [
     key: "/orders",
     icon: <ShoppingCartOutlined />,
     label: <Link to="/orders">Orders</Link>
+  },
+  {
+    key: "/support",
+    icon: <CustomerServiceOutlined />,
+    label: <Link to="/support">Support</Link>
   }
 ];
 
@@ -39,6 +45,26 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const navigate = useNavigate();
   const user = getAdminUser();
   const activeKey = location.pathname.startsWith("/orders/") ? "/orders" : location.pathname;
+  const pageTitle =
+    activeKey === "/"
+      ? "Dashboard"
+      : activeKey === "/partners"
+        ? "Partner Management"
+        : activeKey === "/delivery-partners"
+          ? "Delivery Verification"
+          : activeKey === "/support"
+            ? "Customer Support"
+            : "Order Management";
+  const pageSubtitle =
+    activeKey === "/"
+      ? "Track platform health and launch readiness"
+      : activeKey === "/partners"
+        ? "Review registrations and partner quality"
+        : activeKey === "/delivery-partners"
+          ? "Verify rider documents and activation status"
+          : activeKey === "/support"
+            ? "Reply to customer chats and reported issues"
+            : "Monitor live orders and fulfillment";
 
   const handleLogout = () => {
     clearToken();
@@ -86,23 +112,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         >
           <div>
             <Typography.Title level={4} style={{ margin: 0, color: "#101828" }}>
-              {activeKey === "/"
-                ? "Dashboard"
-                : activeKey === "/partners"
-                  ? "Partner Management"
-                  : activeKey === "/delivery-partners"
-                    ? "Delivery Verification"
-                    : "Order Management"}
+              {pageTitle}
             </Typography.Title>
-            <Typography.Text type="secondary">
-              {activeKey === "/"
-                ? "Track platform health and launch readiness"
-                : activeKey === "/partners"
-                  ? "Review registrations and partner quality"
-                  : activeKey === "/delivery-partners"
-                    ? "Verify rider documents and activation status"
-                  : "Monitor live orders and fulfillment"}
-            </Typography.Text>
+            <Typography.Text type="secondary">{pageSubtitle}</Typography.Text>
           </div>
 
           <Space size={16}>

@@ -410,7 +410,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
     const { orderId } = req.params;
-    const { status } = req.body;
+    const { status, collectedAmount } = req.body;
 
     if (!user) {
       return errorResponse(res, "Unauthorized", 401);
@@ -444,6 +444,13 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Order must be PICKED_UP before being delivered", 400);
     }
 
+    if (status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY") {
+      const amount = Number(collectedAmount);
+      if (!Number.isFinite(amount) || amount < order.grandTotal) {
+        return errorResponse(res, `Collect Rs ${order.grandTotal} before marking this order as delivered`, 400);
+      }
+    }
+
     order.status = status;
     
     // If delivered, update payment status for COD orders
@@ -453,7 +460,13 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
     await order.save();
 
-    return successResponse(res, order, `Order ${status.toLowerCase()} successfully`);
+    const responseOrder = order.toObject() as any;
+    if (status === "DELIVERED") {
+      responseOrder.deliveryEarnings = order.deliveryFee || 49;
+      responseOrder.collectedAmount = collectedAmount ? Number(collectedAmount) : undefined;
+    }
+
+    return successResponse(res, responseOrder, `Order ${status.toLowerCase()} successfully`);
   } catch (err: any) {
     console.error("updateDeliveryStatus error:", err);
     return errorResponse(res, "Failed to update delivery status");
@@ -645,6 +658,19 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
       return errorResponse(res, "Delivery profile not found", 404);
     }
 
+    const activeOrder = await Order.findOne({
+      deliveryPartnerId: user.id,
+      status: { $in: ["ASSIGNED", "PICKED_UP"] }
+    }).select("_id status").lean();
+
+    if (activeOrder) {
+      return successResponse(
+        res,
+        [],
+        "Complete your current delivery before accepting another job"
+      );
+    }
+
     // Allow both VERIFIED and ACTIVE delivery partners to see jobs.
     // Admin moves PENDING -> VERIFIED after document review; ACTIVE is the
     // "currently working" promotion. We also accept VERIFIED to avoid the
@@ -744,6 +770,15 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
     const acceptStatuses = ["ACTIVE", "VERIFIED"];
     if (!deliveryPartner || !acceptStatuses.includes(deliveryPartner.status) || !deliveryPartner.isAvailable) {
       return errorResponse(res, "Delivery partner is not eligible to accept jobs", 403);
+    }
+
+    const activeOrder = await Order.findOne({
+      deliveryPartnerId: user.id,
+      status: { $in: ["ASSIGNED", "PICKED_UP"] }
+    }).select("_id").lean();
+
+    if (activeOrder) {
+      return errorResponse(res, "Complete your current delivery before accepting another job", 409);
     }
 
     const order = await Order.findOneAndUpdate(

@@ -10,25 +10,42 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
-  Platform
+  Platform,
+  Linking
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   getUserProfile,
   updateUserProfile,
   updateUserAddress,
+  addAddress,
+  setDefaultAddress,
+  deleteAddress,
+  deleteMyAccount,
+  type SavedAddress,
   type UserProfile
 } from "../api/user.api";
 import { getMyOrders, type Order } from "../api/order.api";
+import {
+  createSupportTicket,
+  getMySupportTickets,
+  getSupportFAQs,
+  sendSupportMessage,
+  type FAQEntry,
+  type SupportTicket
+} from "../api/support.api";
 
 const supportItems = [
-  { icon: "headset", title: "Customer Support", detail: "Live chat and callback support from 8 AM to 11 PM." },
+  { icon: "headset", title: "Customer Support", detail: "Start a support chat connected to Vyaha admin." },
   { icon: "help-circle-outline", title: "FAQs", detail: "Delivery timings, cancellations, refunds, and account help." },
-  { icon: "alert-circle-outline", title: "Report an Issue", detail: "Raise an issue for payment, order, or delivery problems." }
-];
+  { icon: "alert-circle-outline", title: "Report an Issue", detail: "Report payment, order, delivery, or account problems." }
+] as const;
 
 const formatCurrency = (value?: number) => `Rs ${Number(value || 0).toFixed(0)}`;
+const PRIVACY_URL = "https://www.vyaha.com/privacy";
+const TERMS_URL = "https://www.vyaha.com/terms";
+type AddressFormMode = "edit" | "add";
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return "N/A";
@@ -93,12 +110,11 @@ const getStatusTone = (status: string) => {
   }
 };
 
-const buildAddressLines = (profile: UserProfile | null) => {
-  const address = profile?.address;
+const buildAddressLines = (address?: SavedAddress | null, fallbackName?: string) => {
   if (!address) return [];
 
   return [
-    address.recipientName || profile?.name,
+    address.recipientName || fallbackName,
     [address.houseFlatDoorNo, address.buildingApartmentName].filter(Boolean).join(", ") || address.street,
     address.streetRoadName,
     address.areaLocality || address.area,
@@ -133,9 +149,18 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [saving, setSaving] = useState(false);
   const [registrationSuccessVisible, setRegistrationSuccessVisible] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [addressFormMode, setAddressFormMode] = useState<AddressFormMode>("edit");
+  const [editingAddressId, setEditingAddressId] = useState<string | undefined>(undefined);
+  const [supportModal, setSupportModal] = useState<"chat" | "faq" | "report" | null>(null);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [faqs, setFaqs] = useState<FAQEntry[]>([]);
+  const [supportSubject, setSupportSubject] = useState("Customer support");
+  const [supportMessage, setSupportMessage] = useState("");
+  const [supportSending, setSupportSending] = useState(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [addressLabel, setAddressLabel] = useState("Home");
   const [recipientName, setRecipientName] = useState("");
   const [houseFlatDoorNo, setHouseFlatDoorNo] = useState("");
   const [buildingApartmentName, setBuildingApartmentName] = useState("");
@@ -149,23 +174,40 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [district, setDistrict] = useState("");
   const [country, setCountry] = useState("India");
 
+  const hydrateAddressForm = (address?: SavedAddress | null, fallbackName = "") => {
+    setAddressLabel(address?.label || "Home");
+    setRecipientName(address?.recipientName || fallbackName);
+    setHouseFlatDoorNo(address?.houseFlatDoorNo || "");
+    setBuildingApartmentName(address?.buildingApartmentName || "");
+    setStreetRoadName(address?.streetRoadName || address?.street || "");
+    setStreet(address?.street || "");
+    setCity(address?.cityTownVillage || address?.city || "");
+    setState(address?.state || "");
+    setPincode(address?.pincode || "");
+    setArea(address?.areaLocality || address?.area || "");
+    setLandmark(address?.landmark || "");
+    setDistrict(address?.district || "");
+    setCountry(address?.country || "India");
+    setEditingAddressId(address?._id);
+  };
+
+  const getSavedAddressesFromProfile = (userData: UserProfile | null) => {
+    if (!userData) return [];
+    if (Array.isArray(userData.addresses) && userData.addresses.length > 0) {
+      return userData.addresses;
+    }
+    return userData.address ? [{ ...userData.address, label: "Home", isDefault: true }] : [];
+  };
+
   const hydrateForm = (userData: UserProfile) => {
     const cleanName = isGeneratedCustomerName(userData.name) ? "" : userData.name || "";
+    const savedAddresses = getSavedAddressesFromProfile(userData);
+    const defaultAddress = savedAddresses.find((entry) => entry.isDefault) || savedAddresses[0] || null;
     setProfile(userData);
     setName(cleanName);
     setEmail(userData.email || "");
-    setRecipientName(userData.address?.recipientName || cleanName);
-    setHouseFlatDoorNo(userData.address?.houseFlatDoorNo || "");
-    setBuildingApartmentName(userData.address?.buildingApartmentName || "");
-    setStreetRoadName(userData.address?.streetRoadName || userData.address?.street || "");
-    setStreet(userData.address?.street || "");
-    setCity(userData.address?.cityTownVillage || userData.address?.city || "");
-    setState(userData.address?.state || "");
-    setPincode(userData.address?.pincode || "");
-    setArea(userData.address?.areaLocality || userData.address?.area || "");
-    setLandmark(userData.address?.landmark || "");
-    setDistrict(userData.address?.district || "");
-    setCountry(userData.address?.country || "India");
+    setAddressFormMode("edit");
+    hydrateAddressForm(defaultAddress, cleanName);
   };
 
   const loadProfile = async () => {
@@ -206,6 +248,65 @@ export default function ProfileScreen({ navigation, route }: any) {
     setEditing(forceComplete);
   };
 
+  const startAddAddress = () => {
+    setAddressFormMode("add");
+    setEditingAddressId(undefined);
+    setAddressLabel("Home");
+    hydrateAddressForm(null, name);
+    setEditing(true);
+  };
+
+  const startEditAddress = (address: SavedAddress) => {
+    setAddressFormMode("edit");
+    hydrateAddressForm(address, name);
+    setEditing(true);
+  };
+
+  const handleSetDefaultAddress = async (address: SavedAddress) => {
+    if (!address._id) return;
+
+    try {
+      setSaving(true);
+      const response = await setDefaultAddress(address._id);
+      if (!response.success) {
+        Alert.alert("Error", response.message || "Failed to set default address");
+        return;
+      }
+      await loadProfile();
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to set default address");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAddress = (address: SavedAddress) => {
+    if (!address._id) return;
+
+    Alert.alert("Delete Address", `Remove ${address.label || "this address"} from saved addresses?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setSaving(true);
+            const response = await deleteAddress(address._id!);
+            if (!response.success) {
+              Alert.alert("Error", response.message || "Failed to delete address");
+              return;
+            }
+            await loadProfile();
+          } catch (error: any) {
+            Alert.alert("Error", error.message || "Failed to delete address");
+          } finally {
+            setSaving(false);
+          }
+        }
+      }
+    ]);
+  };
+
   const handleSaveProfile = async () => {
     try {
       setSaving(true);
@@ -243,7 +344,9 @@ export default function ProfileScreen({ navigation, route }: any) {
           name: name.trim(),
           email: email.trim() || undefined
         }),
-        updateUserAddress({
+        addressFormMode === "add"
+          ? addAddress({
+          label: addressLabel.trim() || "Home",
           recipientName: recipientName.trim(),
           houseFlatDoorNo: houseFlatDoorNo.trim(),
           buildingApartmentName: buildingApartmentName.trim() || undefined,
@@ -257,7 +360,28 @@ export default function ProfileScreen({ navigation, route }: any) {
           area: area.trim(),
           landmark: landmark.trim() || undefined,
           district: district.trim() || undefined,
-          country: country.trim()
+          country: country.trim(),
+          isDefault: getSavedAddressesFromProfile(profile).length === 0
+        })
+          : updateUserAddress({
+          addressId: editingAddressId,
+          label: addressLabel.trim() || "Home",
+          recipientName: recipientName.trim(),
+          houseFlatDoorNo: houseFlatDoorNo.trim(),
+          buildingApartmentName: buildingApartmentName.trim() || undefined,
+          streetRoadName: streetRoadName.trim(),
+          areaLocality: area.trim(),
+          street: legacyStreet || street.trim(),
+          city: city.trim(),
+          cityTownVillage: city.trim(),
+          state: state.trim(),
+          pincode: pincode.trim(),
+          area: area.trim(),
+          landmark: landmark.trim() || undefined,
+          district: district.trim() || undefined,
+          country: country.trim(),
+          isDefault: getSavedAddressesFromProfile(profile).length === 0 ||
+            getSavedAddressesFromProfile(profile).some((entry) => entry._id === editingAddressId && entry.isDefault)
         })
       ]);
 
@@ -299,8 +423,100 @@ export default function ProfileScreen({ navigation, route }: any) {
     ]);
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This will deactivate your login and remove or anonymize your profile details. Order records may be retained where required for payments, disputes, or legal compliance.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setSaving(true);
+              const response = await deleteMyAccount();
+              if (!response.success) {
+                Alert.alert("Error", response.message || "Failed to delete account");
+                return;
+              }
+
+              await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "Login" }]
+              });
+            } catch (error: any) {
+              Alert.alert("Error", error.message || "Failed to delete account");
+            } finally {
+              setSaving(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handlePlaceholderAction = (title: string, message: string) => {
     Alert.alert(title, message);
+  };
+
+  const openSupportModal = async (mode: "chat" | "faq" | "report") => {
+    setSupportModal(mode);
+    if (mode === "report") {
+      setSupportSubject((current) => current && current !== "Customer support" ? current : "Report an issue");
+    } else if (mode === "chat") {
+      setSupportSubject("Customer support");
+    }
+
+    try {
+      if (mode === "faq") {
+        const response = await getSupportFAQs();
+        setFaqs(response.data || []);
+      } else {
+        const response = await getMySupportTickets();
+        setSupportTickets(response.data || []);
+      }
+    } catch (error: any) {
+      Alert.alert("Support", error.message || "Failed to load support details");
+    }
+  };
+
+  const handleSendSupportRequest = async (category: "CUSTOMER_SUPPORT" | "REPORT_ISSUE") => {
+    const message = supportMessage.trim();
+    if (!message) {
+      Alert.alert("Support", "Please write a message so the admin team has enough context.");
+      return;
+    }
+
+    try {
+      setSupportSending(true);
+      const openTicket = category === "CUSTOMER_SUPPORT"
+        ? supportTickets.find((ticket) => !["RESOLVED", "CLOSED"].includes(ticket.status))
+        : undefined;
+      const response = openTicket
+        ? await sendSupportMessage(openTicket._id, message)
+        : await createSupportTicket({
+          subject: supportSubject.trim() || (category === "REPORT_ISSUE" ? "Report an issue" : "Customer support"),
+          message,
+          category,
+          priority: category === "REPORT_ISSUE" ? "HIGH" : "NORMAL"
+        });
+
+      if (!response.success || !response.data) {
+        Alert.alert("Support", response.message || "Failed to send support request");
+        return;
+      }
+
+      setSupportMessage("");
+      const ticketsResponse = await getMySupportTickets();
+      setSupportTickets(ticketsResponse.data || []);
+      Alert.alert("Support", "Your message has been sent to the Vyaha admin panel.");
+    } catch (error: any) {
+      Alert.alert("Support", error.message || "Failed to send support request");
+    } finally {
+      setSupportSending(false);
+    }
   };
 
   const goHomeAfterRegistration = () => {
@@ -328,7 +544,103 @@ export default function ProfileScreen({ navigation, route }: any) {
     </Modal>
   );
 
-  const addressLines = buildAddressLines(profile);
+  const renderSupportModal = () => {
+    const activeTicket = supportTickets.find((ticket) => !["RESOLVED", "CLOSED"].includes(ticket.status)) || supportTickets[0];
+    const isReport = supportModal === "report";
+
+    return (
+      <Modal visible={Boolean(supportModal)} transparent animationType="slide" onRequestClose={() => setSupportModal(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.supportModal}>
+            <View style={styles.supportHeader}>
+              <Text style={styles.supportTitle}>
+                {supportModal === "faq" ? "FAQs" : isReport ? "Report an Issue" : "Customer Support"}
+              </Text>
+              <TouchableOpacity onPress={() => setSupportModal(null)}>
+                <MaterialCommunityIcons name="close" size={22} color="#475467" />
+              </TouchableOpacity>
+            </View>
+
+            {supportModal === "faq" ? (
+              <ScrollView style={styles.supportScroll} showsVerticalScrollIndicator={false}>
+                {(faqs.length > 0 ? faqs : [
+                  {
+                    question: "How do I get support?",
+                    answer: "Open Customer Support or Report an Issue from this page. Your message goes directly to the Vyaha admin panel."
+                  }
+                ]).map((faq) => (
+                  <View key={faq.question} style={styles.faqCard}>
+                    <Text style={styles.faqQuestion}>{faq.question}</Text>
+                    <Text style={styles.faqAnswer}>{faq.answer}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <>
+                <Text style={styles.supportIntro}>
+                  {isReport
+                    ? "Tell us what went wrong. This creates a high-priority support ticket for the admin team."
+                    : "Send a message to Vyaha support. Admin replies will appear in this conversation."}
+                </Text>
+
+                {activeTicket ? (
+                  <ScrollView style={styles.chatHistory} showsVerticalScrollIndicator={false}>
+                    <Text style={styles.ticketStatus}>Ticket: {activeTicket.subject} - {activeTicket.status}</Text>
+                    {activeTicket.messages?.map((message, index) => (
+                      <View
+                        key={`${message.createdAt || index}-${index}`}
+                        style={[
+                          styles.chatBubble,
+                          message.senderRole === "customer" ? styles.chatBubbleCustomer : styles.chatBubbleAdmin
+                        ]}
+                      >
+                        <Text style={styles.chatSender}>{message.senderRole === "customer" ? "You" : "Vyaha Admin"}</Text>
+                        <Text style={styles.chatText}>{message.message}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : null}
+
+                {isReport ? (
+                  <TextInput
+                    style={[styles.input, focusedField === "supportSubject" && styles.inputFocused]}
+                    value={supportSubject}
+                    onChangeText={setSupportSubject}
+                    placeholder="Issue subject"
+                    placeholderTextColor="#98A2B3"
+                    onFocus={() => setFocusedField("supportSubject")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                ) : null}
+                <TextInput
+                  style={[styles.supportInput, focusedField === "supportMessage" && styles.inputFocused]}
+                  value={supportMessage}
+                  onChangeText={setSupportMessage}
+                  placeholder={isReport ? "Describe the issue, order ID, payment reference, or delivery problem..." : "Type your message..."}
+                  placeholderTextColor="#98A2B3"
+                  multiline
+                  textAlignVertical="top"
+                  onFocus={() => setFocusedField("supportMessage")}
+                  onBlur={() => setFocusedField(null)}
+                />
+                <TouchableOpacity
+                  style={styles.supportSendButton}
+                  onPress={() => handleSendSupportRequest(isReport ? "REPORT_ISSUE" : "CUSTOMER_SUPPORT")}
+                  disabled={supportSending}
+                >
+                  {supportSending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.supportSendText}>Send to Support</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const savedAddresses = getSavedAddressesFromProfile(profile);
+  const defaultAddress = savedAddresses.find((entry) => entry.isDefault) || savedAddresses[0];
+  const addressLines = buildAddressLines(defaultAddress, profile?.name);
   const memberSince = profile ? formatDate(profile.createdAt) : "N/A";
   const ongoingOrders = orders.filter((order) => !["DELIVERED", "CANCELLED", "REJECTED"].includes(order.status)).slice(0, 3);
   const recentOrders = orders.slice(0, 5);
@@ -409,6 +721,15 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={styles.sectionTitle}>Delivery Address</Text>
             <Text style={styles.sectionHint}>This address will be used for your orders.</Text>
 
+            <TextInput
+              style={[styles.input, focusedField === "addressLabel" && styles.inputFocused]}
+              value={addressLabel}
+              onChangeText={setAddressLabel}
+              placeholder="Address label (Home, Work, Home 2)"
+              placeholderTextColor="#98A2B3"
+              onFocus={() => setFocusedField("addressLabel")}
+              onBlur={() => setFocusedField(null)}
+            />
             <TextInput
               style={[styles.input, focusedField === "recipientName" && styles.inputFocused]}
               value={recipientName}
@@ -513,6 +834,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
         {renderRegistrationSuccessModal()}
+        {renderSupportModal()}
       </KeyboardAvoidingView>
     );
   }
@@ -550,7 +872,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <TouchableOpacity
               style={styles.photoButton}
               onPress={() =>
-                handlePlaceholderAction("Profile Photo", "Profile photo upload can be connected next with Cloudinary.")
+                handlePlaceholderAction("Profile Photo", "Profile photo updates are currently handled by Vyaha support.")
               }
             >
               <MaterialCommunityIcons name="camera-outline" size={16} color="#FF6B35" />
@@ -579,7 +901,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         <View style={styles.shortcutRow}>
           <TouchableOpacity style={styles.shortcutCard} onPress={() => navigation.navigate("Orders")}>
             <View style={styles.shortcutIconWrap}>
-              <MaterialCommunityIcons name="receipt-text-outline" size={20} color="#FF6B35" />
+              <MaterialCommunityIcons name="file-document-outline" size={20} color="#FF6B35" />
             </View>
             <Text style={styles.shortcutTitle}>My Orders</Text>
             <Text style={styles.shortcutDetail}>{ongoingOrders.length > 0 ? `${ongoingOrders.length} ongoing` : "View history"}</Text>
@@ -596,7 +918,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.shortcutCard}
-            onPress={() => handlePlaceholderAction("Payments", "Saved cards, UPI, and wallet UI are ready to connect to payment storage next.")}
+            onPress={() => handlePlaceholderAction("Payments", "Payments are handled securely during checkout. Saved payment methods are not stored in this release.")}
           >
             <View style={styles.shortcutIconWrap}>
               <MaterialCommunityIcons name="wallet-outline" size={20} color="#7C3AED" />
@@ -673,15 +995,24 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Saved Addresses</Text>
             {!editing ? (
-              <TouchableOpacity style={styles.inlineLink} onPress={() => setEditing(true)}>
-                <Text style={styles.inlineLinkText}>{addressLines.length > 0 ? "Edit" : "Add New"}</Text>
+              <TouchableOpacity style={styles.inlineLink} onPress={startAddAddress}>
+                <Text style={styles.inlineLinkText}>Add New</Text>
               </TouchableOpacity>
             ) : null}
           </View>
-          <Text style={styles.sectionHint}>Home, work, and other labels can be layered in next. One primary delivery address is live now.</Text>
+          <Text style={styles.sectionHint}>Save Home, Work, Home 2, or any delivery location and mark one as default for checkout.</Text>
 
           {editing ? (
             <>
+              <TextInput
+                style={[styles.input, focusedField === "addressLabel" && styles.inputFocused]}
+                value={addressLabel}
+                onChangeText={setAddressLabel}
+                placeholder="Address label (Home, Work, Home 2)"
+                placeholderTextColor="#98A2B3"
+                onFocus={() => setFocusedField("addressLabel")}
+                onBlur={() => setFocusedField(null)}
+              />
               <TextInput
                 style={[styles.input, focusedField === "recipientName" && styles.inputFocused]}
                 value={recipientName}
@@ -789,24 +1120,48 @@ export default function ProfileScreen({ navigation, route }: any) {
 
               {!forceComplete && (
                 <TouchableOpacity style={styles.fullSaveButton} onPress={handleSaveProfile} disabled={saving}>
-                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.fullSaveButtonText}>Save Address</Text>}
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.fullSaveButtonText}>{addressFormMode === "add" ? "Add Address" : "Save Address"}</Text>
+                  )}
                 </TouchableOpacity>
               )}
             </>
-          ) : addressLines.length > 0 ? (
-            <View style={styles.addressCard}>
-              <View style={styles.addressBadgeRow}>
-                <View style={styles.addressBadge}>
-                  <Text style={styles.addressBadgeText}>Home</Text>
+          ) : savedAddresses.length > 0 ? (
+            savedAddresses.map((savedAddress, index) => {
+              const lines = buildAddressLines(savedAddress, profile?.name);
+              return (
+                <View key={savedAddress._id || `${savedAddress.label}-${index}`} style={styles.addressCard}>
+                  <View style={styles.addressBadgeRow}>
+                    <View style={styles.addressBadge}>
+                      <Text style={styles.addressBadgeText}>{savedAddress.label || "Address"}</Text>
+                    </View>
+                    <Text style={styles.addressDefaultText}>{savedAddress.isDefault ? "Default address" : "Saved address"}</Text>
+                  </View>
+                  {lines.map((line) => (
+                    <Text key={line} style={styles.addressLine}>
+                      {line}
+                    </Text>
+                  ))}
+                  <View style={styles.addressActions}>
+                    {!savedAddress.isDefault && savedAddress._id ? (
+                      <TouchableOpacity onPress={() => handleSetDefaultAddress(savedAddress)} disabled={saving}>
+                        <Text style={styles.addressActionText}>Use as default</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity onPress={() => startEditAddress(savedAddress)}>
+                      <Text style={styles.addressActionText}>Edit</Text>
+                    </TouchableOpacity>
+                    {savedAddresses.length > 1 && savedAddress._id ? (
+                      <TouchableOpacity onPress={() => handleDeleteAddress(savedAddress)} disabled={saving}>
+                        <Text style={[styles.addressActionText, styles.addressDeleteText]}>Delete</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 </View>
-                <Text style={styles.addressDefaultText}>Default address</Text>
-              </View>
-              {addressLines.map((line) => (
-                <Text key={line} style={styles.addressLine}>
-                  {line}
-                </Text>
-              ))}
-            </View>
+              );
+            })
           ) : (
             <Text style={styles.emptyText}>No address saved yet.</Text>
           )}
@@ -849,7 +1204,10 @@ export default function ProfileScreen({ navigation, route }: any) {
                             <Text style={styles.orderActionLink}>Live tracking</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
-                            onPress={() => handlePlaceholderAction("Report Issue", "Issue reporting UI is ready to connect to support tickets next.")}
+                            onPress={() => {
+                              setSupportSubject(`Issue with order #${order._id.slice(-6)}`);
+                              openSupportModal("report");
+                            }}
                           >
                             <Text style={styles.orderActionLink}>Report issue</Text>
                           </TouchableOpacity>
@@ -906,14 +1264,21 @@ export default function ProfileScreen({ navigation, route }: any) {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Help & Support</Text>
               {supportItems.map((item) => (
-                <TouchableOpacity key={item.title} style={styles.listRow} onPress={() => handlePlaceholderAction(item.title, item.detail)}>
+                <TouchableOpacity
+                  key={item.title}
+                  style={styles.listRow}
+                  onPress={() =>
+                    openSupportModal(item.title === "FAQs" ? "faq" : item.title === "Report an Issue" ? "report" : "chat")
+                  }
+                >
                   <View style={styles.listRowLeft}>
-                    <MaterialCommunityIcons name={item.icon} size={20} color="#FF6B35" />
+                    <MaterialCommunityIcons name={item.icon as any} size={20} color="#FF6B35" />
                     <View style={styles.listRowTextWrap}>
                       <Text style={styles.listRowTitle}>{item.title}</Text>
                       <Text style={styles.listRowDetail}>{item.detail}</Text>
                     </View>
                   </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#98A2B3" />
                 </TouchableOpacity>
               ))}
             </View>
@@ -926,10 +1291,18 @@ export default function ProfileScreen({ navigation, route }: any) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.accountActionRow, styles.deleteRow]}
-                onPress={() => handlePlaceholderAction("Delete Account", "Delete account flow should be connected to backend account removal and policy checks before release.")}
+                onPress={handleDeleteAccount}
               >
                 <MaterialCommunityIcons name="delete-outline" size={20} color="#B42318" />
                 <Text style={styles.deleteRowText}>Delete Account</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.accountActionRow} onPress={() => Linking.openURL(PRIVACY_URL)}>
+                <MaterialCommunityIcons name="shield-lock-outline" size={20} color="#475467" />
+                <Text style={styles.legalRowText}>Privacy Policy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.accountActionRow} onPress={() => Linking.openURL(TERMS_URL)}>
+                <MaterialCommunityIcons name="file-document-outline" size={20} color="#475467" />
+                <Text style={styles.legalRowText}>Terms of Service</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -944,6 +1317,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         </View>
       )}
       {renderRegistrationSuccessModal()}
+      {renderSupportModal()}
     </KeyboardAvoidingView>
   );
 }
@@ -1253,7 +1627,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#F3E4D4"
+    borderColor: "#F3E4D4",
+    marginBottom: 10
   },
   addressBadgeRow: {
     flexDirection: "row",
@@ -1281,6 +1656,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#344054",
     marginBottom: 5
+  },
+  addressActions: {
+    flexDirection: "row",
+    gap: 14,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F0E0D3"
+  },
+  addressActionText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FF6B35"
+  },
+  addressDeleteText: {
+    color: "#B42318"
   },
   fullSaveButton: {
     marginTop: 4,
@@ -1547,6 +1938,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#B42318"
   },
+  legalRowText: {
+    marginLeft: 12,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#475467"
+  },
   emptyText: {
     fontSize: 14,
     color: "#98A2B3"
@@ -1566,6 +1963,110 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#F2D8C6"
+  },
+  supportModal: {
+    width: "100%",
+    maxHeight: "86%",
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#F2D8C6"
+  },
+  supportHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12
+  },
+  supportTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#241D17"
+  },
+  supportIntro: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#6B5E55",
+    marginBottom: 12
+  },
+  supportScroll: {
+    maxHeight: 440
+  },
+  faqCard: {
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F2ECE5"
+  },
+  faqQuestion: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#241D17"
+  },
+  faqAnswer: {
+    marginTop: 5,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#6B5E55"
+  },
+  chatHistory: {
+    maxHeight: 250,
+    marginBottom: 12
+  },
+  ticketStatus: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#8B6A54",
+    marginBottom: 8
+  },
+  chatBubble: {
+    padding: 10,
+    borderRadius: 14,
+    marginBottom: 8,
+    maxWidth: "88%"
+  },
+  chatBubbleCustomer: {
+    alignSelf: "flex-end",
+    backgroundColor: "#FFF1E6"
+  },
+  chatBubbleAdmin: {
+    alignSelf: "flex-start",
+    backgroundColor: "#F2F4F7"
+  },
+  chatSender: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#8B6A54",
+    marginBottom: 3
+  },
+  chatText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#241D17"
+  },
+  supportInput: {
+    minHeight: 96,
+    borderWidth: 1,
+    borderColor: "#D9D0C5",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#1A120B",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 12
+  },
+  supportSendButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "#FF6B35",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  supportSendText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "900"
   },
   successIconWrap: {
     width: 62,

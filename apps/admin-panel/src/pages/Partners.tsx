@@ -1,7 +1,26 @@
-import { Button, Card, Drawer, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, SearchOutlined } from "@ant-design/icons";
+import { Button, Card, Checkbox, Drawer, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
+import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
-import { getPartners, updatePartnerStatus, type PartnerRecord } from "../api/admin.api";
+import {
+  getPartners,
+  requestPartnerDocumentReupload,
+  updatePartnerStatus,
+  type DocumentReuploadKey,
+  type PartnerRecord
+} from "../api/admin.api";
+
+const REUPLOAD_OPTIONS: Array<{ key: DocumentReuploadKey; label: string }> = [
+  { key: "fssaiUrl", label: "FSSAI license" },
+  { key: "panFrontUrl", label: "PAN card" },
+  { key: "aadhaarFrontUrl", label: "Aadhaar front" },
+  { key: "aadhaarBackUrl", label: "Aadhaar back" },
+  { key: "bankProofUrl", label: "Bank proof" },
+  { key: "addressProofUrl", label: "Address proof" },
+  { key: "gstUrl", label: "GST certificate" },
+  { key: "shopLicenseUrl", label: "Shop & establishment license" },
+  { key: "ownerPanUrl", label: "Owner PAN copy" },
+  { key: "menuProofUrl", label: "Menu list / proof" }
+];
 
 export default function Partners() {
   const [loading, setLoading] = useState(true);
@@ -11,6 +30,10 @@ export default function Partners() {
   const [selectedPartner, setSelectedPartner] = useState<PartnerRecord | null>(null);
   const [rejectingPartner, setRejectingPartner] = useState<PartnerRecord | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [reuploadPartner, setReuploadPartner] = useState<PartnerRecord | null>(null);
+  const [reuploadKeys, setReuploadKeys] = useState<DocumentReuploadKey[]>([]);
+  const [reuploadNote, setReuploadNote] = useState("");
+  const [reuploadSubmitting, setReuploadSubmitting] = useState(false);
 
   const loadPartners = async () => {
     setLoading(true);
@@ -72,18 +95,71 @@ export default function Partners() {
     loadPartners();
   };
 
-  const documentItems = selectedPartner
+  const openReuploadModal = (partner: PartnerRecord) => {
+    const flags = (partner.documents?.reuploadFlags || {}) as Partial<Record<DocumentReuploadKey, boolean>>;
+    setReuploadPartner(partner);
+    setReuploadKeys(REUPLOAD_OPTIONS.filter((option) => flags[option.key]).map((option) => option.key));
+    setReuploadNote(partner.documents?.reuploadNotes || "");
+  };
+
+  const closeReuploadModal = () => {
+    setReuploadPartner(null);
+    setReuploadKeys([]);
+    setReuploadNote("");
+    setReuploadSubmitting(false);
+  };
+
+  const handleSubmitReupload = async () => {
+    if (!reuploadPartner) return;
+    if (!reuploadKeys.length) {
+      message.warning("Select at least one document the partner should re-upload.");
+      return;
+    }
+    try {
+      setReuploadSubmitting(true);
+      await requestPartnerDocumentReupload(reuploadPartner._id, {
+        keys: reuploadKeys,
+        note: reuploadNote.trim()
+      });
+      message.success(`Re-upload request sent to ${reuploadPartner.restaurantName}`);
+      closeReuploadModal();
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to request re-upload");
+    } finally {
+      setReuploadSubmitting(false);
+    }
+  };
+
+  const handleClearReupload = async () => {
+    if (!reuploadPartner) return;
+    try {
+      setReuploadSubmitting(true);
+      await requestPartnerDocumentReupload(reuploadPartner._id, { keys: [], clear: true, note: "" });
+      message.success(`Re-upload requirements cleared for ${reuploadPartner.restaurantName}`);
+      closeReuploadModal();
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to clear re-upload request");
+    } finally {
+      setReuploadSubmitting(false);
+    }
+  };
+
+  const reuploadFlags = (selectedPartner?.documents?.reuploadFlags || {}) as Partial<Record<DocumentReuploadKey, boolean>>;
+
+  const documentItems: Array<{ label: string; url?: string; required: boolean; reuploadKey: DocumentReuploadKey }> = selectedPartner
     ? [
-        { label: `FSSAI License${selectedPartner.documents?.fssaiNumber ? ` (${selectedPartner.documents.fssaiNumber})` : ""}`, url: selectedPartner.documents?.fssaiUrl, required: true },
-        { label: `PAN Front${selectedPartner.documents?.panNumber ? ` (${selectedPartner.documents.panNumber})` : ""}`, url: selectedPartner.documents?.panFrontUrl || selectedPartner.documents?.ownerPanUrl, required: true },
-        { label: `Aadhaar Front${selectedPartner.documents?.aadhaarNumber ? ` (${selectedPartner.documents.aadhaarNumber})` : ""}`, url: selectedPartner.documents?.aadhaarFrontUrl || selectedPartner.documents?.ownerIdProofUrl, required: true },
-        { label: "Aadhaar Back", url: selectedPartner.documents?.aadhaarBackUrl, required: true },
-        { label: `Bank Proof${selectedPartner.documents?.bankDocumentType ? ` (${selectedPartner.documents.bankDocumentType})` : ""}`, url: selectedPartner.documents?.bankProofUrl, required: true },
-        { label: "Address Proof", url: selectedPartner.documents?.addressProofUrl, required: true },
-        { label: "GST Certificate", url: selectedPartner.documents?.gstUrl, required: false },
-        { label: "Shop License", url: selectedPartner.documents?.shopLicenseUrl, required: false },
-        { label: "Owner PAN", url: selectedPartner.documents?.ownerPanUrl, required: false },
-        { label: "Menu Proof", url: selectedPartner.documents?.menuProofUrl, required: false }
+        { label: `FSSAI License${selectedPartner.documents?.fssaiNumber ? ` (${selectedPartner.documents.fssaiNumber})` : ""}`, url: selectedPartner.documents?.fssaiUrl, required: true, reuploadKey: "fssaiUrl" },
+        { label: `PAN Front${selectedPartner.documents?.panNumber ? ` (${selectedPartner.documents.panNumber})` : ""}`, url: selectedPartner.documents?.panFrontUrl || selectedPartner.documents?.ownerPanUrl, required: true, reuploadKey: "panFrontUrl" },
+        { label: `Aadhaar Front${selectedPartner.documents?.aadhaarNumber ? ` (${selectedPartner.documents.aadhaarNumber})` : ""}`, url: selectedPartner.documents?.aadhaarFrontUrl || selectedPartner.documents?.ownerIdProofUrl, required: true, reuploadKey: "aadhaarFrontUrl" },
+        { label: "Aadhaar Back", url: selectedPartner.documents?.aadhaarBackUrl, required: true, reuploadKey: "aadhaarBackUrl" },
+        { label: `Bank Proof${selectedPartner.documents?.bankDocumentType ? ` (${selectedPartner.documents.bankDocumentType})` : ""}`, url: selectedPartner.documents?.bankProofUrl, required: true, reuploadKey: "bankProofUrl" },
+        { label: "Address Proof", url: selectedPartner.documents?.addressProofUrl, required: true, reuploadKey: "addressProofUrl" },
+        { label: "GST Certificate", url: selectedPartner.documents?.gstUrl, required: false, reuploadKey: "gstUrl" },
+        { label: "Shop License", url: selectedPartner.documents?.shopLicenseUrl, required: false, reuploadKey: "shopLicenseUrl" },
+        { label: "Owner PAN", url: selectedPartner.documents?.ownerPanUrl, required: false, reuploadKey: "ownerPanUrl" },
+        { label: "Menu Proof", url: selectedPartner.documents?.menuProofUrl, required: false, reuploadKey: "menuProofUrl" }
       ]
     : [];
 
@@ -220,6 +296,13 @@ export default function Partners() {
         title={selectedPartner?.restaurantName}
         open={Boolean(selectedPartner)}
         onClose={() => setSelectedPartner(null)}
+        extra={
+          selectedPartner ? (
+            <Button icon={<ReloadOutlined />} onClick={() => openReuploadModal(selectedPartner)}>
+              Request re-upload
+            </Button>
+          ) : null
+        }
       >
         {selectedPartner ? (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -272,22 +355,37 @@ export default function Partners() {
             <div>
               <Typography.Text type="secondary">Documents</Typography.Text>
               <Space direction="vertical" size={8} style={{ width: "100%", marginTop: 8 }}>
-                {documentItems.map((doc) => (
-                  <Card key={doc.label} size="small">
-                    <Space direction="vertical" size={4}>
-                      <Typography.Text strong>
-                        {doc.label} {doc.required ? "(Mandatory)" : "(If applicable)"}
-                      </Typography.Text>
-                      {doc.url ? (
-                        <Typography.Link href={doc.url} target="_blank" rel="noreferrer">
-                          Open uploaded document
-                        </Typography.Link>
-                      ) : (
-                        <Typography.Text type="secondary">Not uploaded</Typography.Text>
-                      )}
-                    </Space>
+                {documentItems.map((doc) => {
+                  const reupload = Boolean(reuploadFlags[doc.reuploadKey]);
+                  return (
+                    <Card key={doc.label} size="small">
+                      <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                        <Space size={8} wrap>
+                          <Typography.Text strong>
+                            {doc.label} {doc.required ? "(Mandatory)" : "(If applicable)"}
+                          </Typography.Text>
+                          {doc.url ? <Tag color="green">Verified</Tag> : <Tag color="default">Not uploaded</Tag>}
+                          {reupload ? <Tag color="red">Re-upload requested</Tag> : null}
+                        </Space>
+                        {doc.url ? (
+                          <Typography.Link href={doc.url} target="_blank" rel="noreferrer">
+                            Open uploaded document
+                          </Typography.Link>
+                        ) : (
+                          <Typography.Text type="secondary">Not uploaded</Typography.Text>
+                        )}
+                      </Space>
+                    </Card>
+                  );
+                })}
+                {selectedPartner.documents?.reuploadNotes ? (
+                  <Card size="small" style={{ borderColor: "#fca5a5" }}>
+                    <Typography.Text type="warning" strong>
+                      Re-upload note to partner:{" "}
+                    </Typography.Text>
+                    <Typography.Text>{selectedPartner.documents.reuploadNotes}</Typography.Text>
                   </Card>
-                ))}
+                ) : null}
               </Space>
             </div>
             <div>
@@ -320,6 +418,54 @@ export default function Partners() {
           value={rejectReason}
           onChange={(event) => setRejectReason(event.target.value)}
           placeholder="Share a clear reason so the partner knows what to fix."
+        />
+      </Modal>
+
+      <Modal
+        title={`Request re-upload from ${reuploadPartner?.restaurantName || "partner"}`}
+        open={Boolean(reuploadPartner)}
+        onCancel={closeReuploadModal}
+        onOk={handleSubmitReupload}
+        okText="Send request"
+        confirmLoading={reuploadSubmitting}
+        footer={[
+          <Button key="clear" onClick={handleClearReupload} disabled={reuploadSubmitting}>
+            Clear existing request
+          </Button>,
+          <Button key="cancel" onClick={closeReuploadModal} disabled={reuploadSubmitting}>
+            Cancel
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={reuploadSubmitting}
+            onClick={handleSubmitReupload}
+          >
+            Send request
+          </Button>
+        ]}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          Select which documents the partner must re-upload. The partner app will show a "Re-upload required"
+          badge for these items until they submit new files.
+        </Typography.Paragraph>
+        <Checkbox.Group
+          value={reuploadKeys}
+          onChange={(values) => setReuploadKeys(values as DocumentReuploadKey[])}
+          style={{ display: "flex", flexDirection: "column", gap: 8 }}
+        >
+          {REUPLOAD_OPTIONS.map((option) => (
+            <Checkbox key={option.key} value={option.key}>
+              {option.label}
+            </Checkbox>
+          ))}
+        </Checkbox.Group>
+        <Input.TextArea
+          rows={3}
+          value={reuploadNote}
+          onChange={(event) => setReuploadNote(event.target.value)}
+          placeholder="Optional note to the partner (e.g. PAN scan was blurred)."
+          style={{ marginTop: 16 }}
         />
       </Modal>
     </>

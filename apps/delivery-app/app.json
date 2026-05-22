@@ -3,7 +3,7 @@
     "name": "Vyaha Delivery",
     "slug": "vyaha-delivery",
     "scheme": "vyaha-delivery",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.vyaha.delivery",
-      "versionCode": 2,
+      "versionCode": 3,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -35,7 +35,19 @@
     },
     "plugins": [
       "@react-native-firebase/app",
-      "@react-native-firebase/auth"
+      "@react-native-firebase/auth",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Vyaha Delivery uses your location while you are working to show nearby jobs, calculate distance, and update delivery progress."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vyaha Delivery needs photo access so you can upload identity, vehicle, and bank verification documents."
+        }
+      ]
     ],
     "extra": {
       "eas": {

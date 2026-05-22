@@ -4,3 +4,14 @@ backend/node_modules/
 backend/.env
 backend/.mongo-data/
 backend/.mongo-logs/
+
+# Ignore env files in apps
+apps/*/.env
+apps/*/.env*.local
+
+# Ignore logs
+*.log
+*.err.log
+backend/*.log
+apps/**/*.log
+apps/**/*.err.log

@@ -3,6 +3,7 @@ import Order from "../models/Order.model";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { successResponse, errorResponse } from "../utils/response";
 import { PaymentService } from "../services/payment.service";
+import { config } from "../config/env";
 
 export const createPaymentOrder = async (req: AuthRequest, res: Response) => {
   try {
@@ -25,6 +26,10 @@ export const createPaymentOrder = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized to create payment for this order", 403);
     }
 
+    if (order.paymentStatus === "PAID") {
+      return errorResponse(res, "Order is already paid", 400);
+    }
+
     const paymentOrder = await PaymentService.createOrder({
       amount: Math.round(order.grandTotal * 100),
       receipt: `nearu_${order._id.toString()}`,
@@ -39,7 +44,11 @@ export const createPaymentOrder = async (req: AuthRequest, res: Response) => {
     order.paymentStatus = "PENDING";
     await order.save();
 
-    return successResponse(res, paymentOrder, "Payment order created successfully");
+    return successResponse(res, {
+      ...paymentOrder,
+      keyId: config.razorpayKeyId,
+      orderId: order._id.toString()
+    }, "Payment order created successfully");
   } catch (error: any) {
     return errorResponse(res, error.message || "Failed to create payment order");
   }
@@ -64,6 +73,10 @@ export const verifyPayment = async (req: AuthRequest, res: Response) => {
 
     if (order.customerId.toString() !== req.user.id) {
       return errorResponse(res, "Unauthorized to verify this payment", 403);
+    }
+
+    if (order.razorpayOrderId && order.razorpayOrderId !== razorpay_order_id) {
+      return errorResponse(res, "Payment order does not match this order", 400);
     }
 
     const isValidSignature = PaymentService.verifyCheckoutSignature(
@@ -122,7 +135,8 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
           paymentStatus: "PAID",
           paymentMethod: "RAZORPAY",
           paymentId: paymentEntity?.id,
-          razorpayPaymentId: paymentEntity?.id
+          razorpayPaymentId: paymentEntity?.id,
+          status: "CONFIRMED"
         });
       }
     }

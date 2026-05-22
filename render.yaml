@@ -15,6 +15,30 @@ services:
         value: firebase
       - key: FIREBASE_PROJECT_ID
         value: vyaha-a24a7
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_PANEL_PHONE
+        sync: false
+      - key: ADMIN_PANEL_PASSWORD
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_UPLOAD_FOLDER
+        value: nearu-app
       - key: JWT_EXPIRY
         value: 15m
       - key: REFRESH_JWT_EXPIRY
@@ -22,7 +46,7 @@ services:
       - key: REQUEST_BODY_LIMIT
         value: 5mb
       - key: CORS_ORIGINS
-        value: "*"
+        sync: false
       - key: RATE_LIMIT_WINDOW_MS
         value: 900000
       - key: RATE_LIMIT_MAX

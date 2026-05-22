@@ -51,8 +51,22 @@ export interface PartnerRecord {
     operatingHoursNote?: string;
     isComplete?: boolean;
     submittedAt?: string;
+    reuploadFlags?: Partial<Record<DocumentReuploadKey, boolean>>;
+    reuploadNotes?: string;
   };
 }
+
+export type DocumentReuploadKey =
+  | "fssaiUrl"
+  | "panFrontUrl"
+  | "aadhaarFrontUrl"
+  | "aadhaarBackUrl"
+  | "bankProofUrl"
+  | "addressProofUrl"
+  | "gstUrl"
+  | "shopLicenseUrl"
+  | "ownerPanUrl"
+  | "menuProofUrl";
 
 export interface OrderRecord {
   _id: string;
@@ -139,6 +153,36 @@ export interface DeliveryPartnerRecord {
   };
 }
 
+export interface SupportMessageRecord {
+  _id?: string;
+  senderRole: "customer" | "admin";
+  message: string;
+  createdAt?: string;
+}
+
+export interface SupportTicketRecord {
+  _id: string;
+  userId?: {
+    _id: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+  };
+  orderId?: {
+    _id: string;
+    status?: string;
+    grandTotal?: number;
+    createdAt?: string;
+  };
+  category: "CUSTOMER_SUPPORT" | "ORDER" | "PAYMENT" | "DELIVERY" | "ACCOUNT" | "REPORT_ISSUE" | "OTHER";
+  subject: string;
+  status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+  priority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  messages: SupportMessageRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ApiEnvelope<T> {
   success: boolean;
   data: T;
@@ -169,6 +213,17 @@ export const updatePartnerStatus = async (
     status,
     rejectionReason
   });
+  return response.data;
+};
+
+export const requestPartnerDocumentReupload = async (
+  partnerId: string,
+  payload: { keys: DocumentReuploadKey[]; note?: string; clear?: boolean }
+) => {
+  const response = await api.put<ApiEnvelope<{
+    reuploadFlags: Partial<Record<DocumentReuploadKey, boolean>>;
+    reuploadNotes: string;
+  }>>(`/admin/partners/${partnerId}/documents/reupload`, payload);
   return response.data;
 };
 
@@ -207,6 +262,28 @@ export const updateOrderStatus = async (orderId: string, status: string) => {
 export const assignDeliveryPartnerToOrder = async (orderId: string, deliveryPartnerId: string) => {
   const response = await api.post<ApiEnvelope<OrderRecord>>(`/orders/admin/orders/${orderId}/assign-delivery`, {
     deliveryPartnerId
+  });
+  return response.data;
+};
+
+export const getSupportTickets = async (status?: string) => {
+  const response = await api.get<ApiEnvelope<SupportTicketRecord[]>>("/admin/support/tickets", {
+    params: status && status !== "ALL" ? { status } : undefined
+  });
+  return response.data.data;
+};
+
+export const replyToSupportTicket = async (ticketId: string, message: string, status?: SupportTicketRecord["status"]) => {
+  const response = await api.post<ApiEnvelope<SupportTicketRecord>>(`/admin/support/tickets/${ticketId}/reply`, {
+    message,
+    status
+  });
+  return response.data;
+};
+
+export const updateSupportTicketStatus = async (ticketId: string, status: SupportTicketRecord["status"]) => {
+  const response = await api.put<ApiEnvelope<SupportTicketRecord>>(`/admin/support/tickets/${ticketId}/status`, {
+    status
   });
   return response.data;
 };

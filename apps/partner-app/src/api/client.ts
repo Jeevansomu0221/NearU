@@ -14,6 +14,14 @@ export interface ApiResponse<T = any> {
 const DEV_LAN_HOST = "10.3.8.130";
 const ANDROID_EMULATOR_HOST = "10.0.2.2";
 const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
+const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
+const isDev = typeof __DEV__ !== "undefined" && __DEV__;
+
+const logDebug = (...args: any[]) => {
+  if (isDev) {
+    console.log(...args);
+  }
+};
 
 const isPrivateIp = (hostname: string) => {
   return (
@@ -35,6 +43,10 @@ const resolveApiBaseUrls = () => {
     return [envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`];
   }
 
+  if (!isDev) {
+    return [PRODUCTION_API_URL];
+  }
+
   const urls: string[] = [];
   const scriptURL = NativeModules.SourceCode?.scriptURL;
   if (scriptURL) {
@@ -46,7 +58,7 @@ const resolveApiBaseUrls = () => {
         addUnique(urls, `http://${hostname}:5000/api`);
       }
     } catch (error) {
-      console.warn("Failed to parse bundle URL for API host detection:", error);
+      logDebug("Failed to parse bundle URL for API host detection:", error);
     }
   }
 
@@ -80,8 +92,8 @@ const api = axios.create({
   },
 });
 
-console.log("Partner API base URL:", api.defaults.baseURL);
-console.log("Partner API fallback URLs:", API_BASE_URLS);
+logDebug("Partner API base URL:", api.defaults.baseURL);
+logDebug("Partner API fallback URLs:", API_BASE_URLS);
 
 const persistAuthPayload = async (payload: any) => {
   if (payload?.token) {
@@ -208,7 +220,16 @@ export const uploadMultipart = async <T = any>(path: string, formData: FormData)
       },
       body: formData,
     });
-    const data = await response.json();
+    const responseText = await response.text();
+    const data = responseText
+      ? (() => {
+          try {
+            return JSON.parse(responseText);
+          } catch {
+            return { success: false, message: responseText };
+          }
+        })()
+      : null;
     return { response, data };
   };
 

@@ -13,6 +13,7 @@ import {
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Location from "expo-location";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import { getPartners } from "../api/menu.api";
 import { useCart } from "../context/CartContext";
@@ -38,6 +39,7 @@ interface Shop {
   shopImageUrl?: string;
   openingTime?: string;
   closingTime?: string;
+  distanceKm?: number;
 }
 
 interface Props {
@@ -63,6 +65,8 @@ const filterOptions = [
   { key: "fast-food", label: "Fast Food", icon: "hamburger" }
 ];
 
+const NEARBY_RADIUS_KM = 3;
+
 const shopPlaceholders: Record<string, string> = {
   bakery:
     "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=240&q=80",
@@ -84,6 +88,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [locationMessage, setLocationMessage] = useState(`Showing shops within ${NEARBY_RADIUS_KM} km`);
 
   useEffect(() => {
     loadNearbyShops();
@@ -97,12 +102,26 @@ export default function HomeScreen({ navigation }: Props) {
         setLoading(true);
       }
 
-      const response = await getPartners();
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setLocationMessage("Enable location to show shops within 3 km.");
+        setShops([]);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const response = await getPartners({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        radiusKm: NEARBY_RADIUS_KM
+      });
 
       if (response?.success && Array.isArray(response.data)) {
         setShops(response.data);
+        setLocationMessage(`Showing shops within ${NEARBY_RADIUS_KM} km of your current location`);
       } else if (Array.isArray((response as any)?.data)) {
         setShops((response as any).data);
+        setLocationMessage(`Showing shops within ${NEARBY_RADIUS_KM} km of your current location`);
       } else {
         setShops([]);
       }
@@ -173,15 +192,14 @@ export default function HomeScreen({ navigation }: Props) {
       <View style={styles.heroRow}>
         <View style={styles.heroTextBlock}>
           <Image source={require("../../assets/vyaha-wordmark.png")} style={styles.brandLogo} resizeMode="contain" />
-          <Text style={styles.subheading}>Explore different kinds of food near you!</Text>
           <View style={styles.heroStatsRow}>
             <View style={styles.heroStatBox}>
               <Text style={styles.heroStatValue}>{shops.length}</Text>
-              <Text style={styles.heroStatLabel}>Shops</Text>
+              <Text style={styles.heroStatLabel}>Nearby Shops</Text>
             </View>
             <View style={[styles.heroStatBox, styles.heroStatBoxOpen]}>
               <Text style={[styles.heroStatValue, styles.heroStatValueOpen]}>{openNowCount}</Text>
-              <Text style={styles.heroStatLabel}>Open</Text>
+              <Text style={styles.heroStatLabel}>Open Now</Text>
             </View>
           </View>
         </View>
@@ -305,6 +323,9 @@ export default function HomeScreen({ navigation }: Props) {
               {address}
             </Text>
           </View>
+          {typeof item.distanceKm === "number" ? (
+            <Text style={styles.distanceText}>{item.distanceKm.toFixed(1)} km away</Text>
+          ) : null}
 
           <View style={styles.shopBottom}>
             <View style={styles.ratingRow}>
@@ -330,8 +351,8 @@ export default function HomeScreen({ navigation }: Props) {
 
   const renderEmpty = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyTitle}>No shops found</Text>
-      <Text style={styles.emptyText}>Try another category or adjust your search.</Text>
+      <Text style={styles.emptyTitle}>No nearby shops found</Text>
+      <Text style={styles.emptyText}>{locationMessage || "Try another category or adjust your search."}</Text>
     </View>
   );
 
@@ -379,7 +400,7 @@ const styles = StyleSheet.create({
     width: 142,
     height: 50,
     marginLeft: -4,
-    marginBottom: 4
+    marginBottom: 8
   },
   subheading: {
     marginTop: 2,
@@ -389,10 +410,18 @@ const styles = StyleSheet.create({
     color: "#6B625A",
     maxWidth: 178
   },
+  locationHint: {
+    marginTop: 5,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "700",
+    color: "#8A6B54",
+    maxWidth: 188
+  },
   heroStatsRow: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 12,
+    marginTop: 2,
     width: "100%"
   },
   heroStatBox: {
@@ -720,6 +749,12 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontSize: 10,
     color: "#7A7168"
+  },
+  distanceText: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#2B9C4A"
   },
   shopBottom: {
     marginTop: 7,

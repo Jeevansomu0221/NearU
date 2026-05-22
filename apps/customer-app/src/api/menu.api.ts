@@ -11,8 +11,12 @@ export const getPartnerMenu = (partnerId: string) => {
 /**
  * GET ALL APPROVED PARTNERS/SHOPS (for HomeScreen)
  */
-export const getPartners = () => {
-  return api.get("/partners/shops");
+export const getPartners = (params?: {
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+}) => {
+  return api.get("/partners/shops", { params });
 };
 
 /**

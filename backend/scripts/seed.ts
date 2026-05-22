@@ -13,6 +13,10 @@ import Order from '../src/models/Order.model';
 
 const seedDatabase = async () => {
   try {
+    if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DESTRUCTIVE_SEED !== 'true') {
+      throw new Error('Refusing to run destructive seed. Set ALLOW_DESTRUCTIVE_SEED=true outside production.');
+    }
+
     // Connect to MongoDB
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/nearu';
     await mongoose.connect(mongoURI);

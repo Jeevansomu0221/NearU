@@ -17,6 +17,8 @@ import { getUserProfile } from '../api/user.api';
 
 // Define Address interface
 export interface Address {
+  _id?: string;
+  label?: string;
   recipientName?: string;
   houseFlatDoorNo?: string;
   buildingApartmentName?: string;
@@ -35,6 +37,7 @@ export interface Address {
   country?: string;
   nearbyPlaces?: string[];
   googleMapsLink?: string;
+  isDefault?: boolean;
 }
 
 // Define Shop interface based on actual API response
@@ -115,13 +118,14 @@ const isGeneratedCustomerName = (value?: string) => {
 const isCustomerProfileComplete = (profile: {
   name?: string;
   address?: Address;
+  addresses?: Address[];
 }) => {
   const hasRealName =
     !!profile.name &&
     !isGeneratedCustomerName(profile.name) &&
     profile.name.trim().length >= 3;
 
-  const address = profile.address;
+  const address = profile.address || profile.addresses?.find((entry) => entry.isDefault) || profile.addresses?.[0];
   const hasAddress =
     !!(address?.houseFlatDoorNo || address?.street) &&
     !!(address?.streetRoadName || address?.street) &&
@@ -161,7 +165,12 @@ export default function AppNavigator() {
 
         // Keep existing session on temporary backend failures.
         setInitialRoute('Home');
-      } catch (error) {
+      } catch (error: any) {
+        if (String(error?.message || "").toLowerCase().includes("session expired")) {
+          setInitialRoute("Login");
+          return;
+        }
+
         try {
           const userJson = await AsyncStorage.getItem('user');
           if (userJson) {

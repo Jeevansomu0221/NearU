@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,18 +15,21 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, updateLocation } from "../api/delivery.api";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
+import NewJobBanner from "../components/NewJobBanner";
 
 interface CalculatedJob extends DeliveryJob {
-  distance?: number;
-  travelTime?: number;
+  distance?: number | null;
+  travelTime?: number | null;
   estimatedEarnings?: number;
 }
 
 export default function JobsScreen({ navigation }: any) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [jobs, setJobs] = useState<CalculatedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -34,6 +37,10 @@ export default function JobsScreen({ navigation }: any) {
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isAvailable, setIsAvailable] = useState(true);
+  const [newJobAlert, setNewJobAlert] = useState<CalculatedJob | null>(null);
+  const [emptyMessage, setEmptyMessage] = useState("When restaurants mark orders as READY, they will appear here for delivery.");
+  const knownJobIds = useRef<Set<string>>(new Set());
+  const firstLoadDone = useRef(false);
 
   const ensureAccountCanAccessJobs = useCallback(async () => {
     const profileResponse = await getDeliveryProfile();
@@ -78,6 +85,11 @@ export default function JobsScreen({ navigation }: any) {
           ...job,
           distance: Number(job.distanceToRestaurant.toFixed(1))
         };
+      }
+
+      if (job.distanceToRestaurant === null) {
+        // Backend told us the shop hasn't pinned its location yet.
+        return { ...job, distance: null, travelTime: null };
       }
 
       if (!userLocation || !job.partnerId?.location?.coordinates) {
@@ -129,9 +141,19 @@ export default function JobsScreen({ navigation }: any) {
 
       const response = await getAvailableJobs();
       if (response.success && response.data) {
+        setEmptyMessage(response.message || "When restaurants mark orders as READY, they will appear here for delivery.");
         const jobsWithCalculations = await Promise.all(response.data.map((job) => calculateJobDetails(job)));
+        const incomingIds = new Set(jobsWithCalculations.map((job) => job._id));
+        const newlyAdded = jobsWithCalculations.filter((job) => !knownJobIds.current.has(job._id));
+        knownJobIds.current = incomingIds;
+
+        if (firstLoadDone.current && newlyAdded.length > 0) {
+          setNewJobAlert(newlyAdded[0]);
+        }
+        firstLoadDone.current = true;
         setJobs(jobsWithCalculations);
       } else {
+        setEmptyMessage(response.message || "When restaurants mark orders as READY, they will appear here for delivery.");
         setJobs([]);
       }
     } catch {
@@ -170,7 +192,8 @@ export default function JobsScreen({ navigation }: any) {
 
   useEffect(() => {
     loadAvailableJobs();
-    const interval = setInterval(loadAvailableJobs, 30000);
+    // Poll every 10s so new READY orders surface quickly with a banner alert.
+    const interval = setInterval(loadAvailableJobs, 10000);
     return () => clearInterval(interval);
   }, [loadAvailableJobs]);
 
@@ -192,9 +215,12 @@ export default function JobsScreen({ navigation }: any) {
   const handleAcceptJob = async (orderId: string, job: CalculatedJob) => {
     setAcceptingJobId(orderId);
 
+    const distanceLabel = typeof job.distance === "number" ? `${job.distance} km` : "Distance pending";
+    const timeLabel = typeof job.travelTime === "number" ? `${job.travelTime} min` : "Time pending";
+
     Alert.alert(
       "Accept Delivery Job",
-      `Distance: ${job.distance || "N/A"} km\nEstimated time: ${job.travelTime || "N/A"} min\nEstimated earnings: Rs ${
+      `Distance: ${distanceLabel}\nEstimated time: ${timeLabel}\nEstimated earnings: Rs ${
         job.estimatedEarnings || job.deliveryFee || 49
       }`,
       [
@@ -221,6 +247,28 @@ export default function JobsScreen({ navigation }: any) {
     );
   };
 
+  const handleBannerAccept = async () => {
+    if (!newJobAlert) return;
+    const job = newJobAlert;
+    setNewJobAlert(null);
+    setAcceptingJobId(job._id);
+    const response = await acceptJob(job._id);
+    setAcceptingJobId(null);
+    if (response.success) {
+      navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job });
+      loadAvailableJobs();
+    } else {
+      Alert.alert("Could not accept job", response.message || "Please try again.");
+    }
+  };
+
+  const handleBannerOpen = () => {
+    if (!newJobAlert) return;
+    const job = newJobAlert;
+    setNewJobAlert(null);
+    navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job });
+  };
+
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     if (Number.isNaN(date.getTime())) return "Time unavailable";
@@ -239,7 +287,7 @@ export default function JobsScreen({ navigation }: any) {
   };
 
   const renderHeader = () => (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
       <View style={styles.headerTop}>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, width < 380 && styles.titleCompact]} numberOfLines={2}>
@@ -304,8 +352,14 @@ export default function JobsScreen({ navigation }: any) {
       </View>
 
       <View style={styles.metricsRow}>
-        <Metric icon="location-outline" label={item.distance ? `${item.distance} km` : "-- km"} />
-        <Metric icon="time-outline" label={item.travelTime ? `${item.travelTime} min` : "-- min"} />
+        <Metric
+          icon="location-outline"
+          label={typeof item.distance === "number" ? `${item.distance} km` : "Distance pending"}
+        />
+        <Metric
+          icon="time-outline"
+          label={typeof item.travelTime === "number" ? `${item.travelTime} min` : "-- min"}
+        />
         <Metric icon="cash-outline" label={`Rs ${item.estimatedEarnings || item.deliveryFee || 49}`} />
       </View>
 
@@ -340,6 +394,13 @@ export default function JobsScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <NewJobBanner
+        visible={Boolean(newJobAlert)}
+        job={newJobAlert}
+        onOpen={handleBannerOpen}
+        onAccept={handleBannerAccept}
+        onDismiss={() => setNewJobAlert(null)}
+      />
       {renderHeader()}
       <FlatList
         data={jobs}
@@ -350,7 +411,7 @@ export default function JobsScreen({ navigation }: any) {
           <View style={styles.emptyContainer}>
             <Ionicons name="basket-outline" size={72} color="#CCCCCC" />
             <Text style={styles.emptyText}>No available jobs</Text>
-            <Text style={styles.emptySubText}>When restaurants mark orders as READY, they will appear here for delivery.</Text>
+            <Text style={styles.emptySubText}>{emptyMessage}</Text>
             <TouchableOpacity style={styles.refreshButtonLarge} onPress={onRefresh}>
               <Ionicons name="refresh" size={20} color="#FFFFFF" />
               <Text style={styles.refreshButtonText}>Refresh Jobs</Text>
@@ -391,7 +452,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === "ios" ? 50 : 30,
+    paddingTop: 14,
     paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB"

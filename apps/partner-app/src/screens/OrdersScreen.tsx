@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../api/client";
 import NotificationButton from "../components/NotificationButton";
+import NewOrderBanner from "../components/NewOrderBanner";
 
 interface Order {
   _id: string;
@@ -30,6 +31,9 @@ interface Order {
   grandTotal?: number;
 }
 
+const isAwaitingPartnerAction = (status: string) =>
+  status === "CONFIRMED" || status === "PENDING";
+
 interface OrdersResponse {
   success: boolean;
   data: Order[];
@@ -41,6 +45,7 @@ export default function OrdersScreen({ navigation }: any) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
   const knownOrderIds = useRef<Set<string>>(new Set());
   const firstLoadDone = useRef(false);
 
@@ -51,19 +56,13 @@ export default function OrdersScreen({ navigation }: any) {
 
       if (response.success) {
         const incomingOrders = response.data || [];
-        const newOrders = incomingOrders.filter((order) => !knownOrderIds.current.has(order._id));
+        const newActionable = incomingOrders.filter(
+          (order) => !knownOrderIds.current.has(order._id) && isAwaitingPartnerAction(order.status)
+        );
         knownOrderIds.current = new Set(incomingOrders.map((order) => order._id));
 
-        if (firstLoadDone.current && newOrders.length > 0) {
-          const newestOrder = newOrders[0];
-          Alert.alert(
-            "New order received",
-            `Order #${newestOrder._id.slice(-6)} is waiting in your queue.`,
-            [
-              { text: "Later", style: "cancel" },
-              { text: "Open", onPress: () => navigation.navigate("OrderDetails", { orderId: newestOrder._id }) }
-            ]
-          );
+        if (firstLoadDone.current && newActionable.length > 0) {
+          setNewOrderAlert(newActionable[0]);
         }
 
         firstLoadDone.current = true;
@@ -82,13 +81,19 @@ export default function OrdersScreen({ navigation }: any) {
 
   useEffect(() => {
     loadOrders();
+    // Faster polling so new orders pop within ~10s instead of 30s.
     const interval = setInterval(() => {
       if (!loading) {
         loadOrders();
       }
-    }, 30000);
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const openNewOrder = (orderId: string) => {
+    setNewOrderAlert(null);
+    navigation.navigate("OrderDetails", { orderId });
+  };
 
   const getStatusTheme = (status: string) => {
     switch (status) {
@@ -194,8 +199,19 @@ export default function OrdersScreen({ navigation }: any) {
     );
   }
 
+  const pendingCount = orders.filter((order) => isAwaitingPartnerAction(order.status)).length;
+  const bannerItemCount = newOrderAlert?.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+
   return (
     <View style={styles.container}>
+      <NewOrderBanner
+        visible={Boolean(newOrderAlert)}
+        orderId={newOrderAlert?._id || ""}
+        itemCount={bannerItemCount}
+        grandTotal={newOrderAlert?.grandTotal || 0}
+        onOpen={() => newOrderAlert && openNewOrder(newOrderAlert._id)}
+        onDismiss={() => setNewOrderAlert(null)}
+      />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#143A66" />
@@ -208,7 +224,7 @@ export default function OrdersScreen({ navigation }: any) {
           <TouchableOpacity style={styles.refreshButton} onPress={loadOrders}>
             <Ionicons name="refresh" size={21} color="#C4541C" />
           </TouchableOpacity>
-          <NotificationButton count={orders.filter((order) => ["CONFIRMED", "PENDING"].includes(order.status)).length} onPress={loadOrders} />
+          <NotificationButton count={pendingCount} onPress={loadOrders} />
         </View>
       </View>
 

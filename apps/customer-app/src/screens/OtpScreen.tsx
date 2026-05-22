@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Linking
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -15,6 +16,9 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { verifyFirebaseOtp } from '../api/auth.api';
 import { getUserProfile } from '../api/user.api';
 import { confirmFirebaseOtp, sendFirebaseOtp } from '../services/firebasePhoneAuth';
+
+const TERMS_URL = "https://vyaha-app-backend.onrender.com/legal/terms";
+const PRIVACY_URL = "https://vyaha-app-backend.onrender.com/legal/privacy";
 
 type OtpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Otp'>;
 type OtpScreenRouteProp = RouteProp<RootStackParamList, 'Otp'>;
@@ -204,7 +208,12 @@ export default function OtpScreen({ navigation, route }: Props) {
           <Text style={styles.resendText}>Didn't receive code? <Text style={styles.resendLink}>Resend OTP</Text></Text>
         </TouchableOpacity>
         <View style={styles.footer}>
-          <Text style={styles.footerText}>By verifying, you agree to our Terms of Service and Privacy Policy</Text>
+          <Text style={styles.footerText}>
+            By verifying, you agree to our{" "}
+            <Text style={styles.footerLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Service</Text>
+            {" "}and{" "}
+            <Text style={styles.footerLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
+          </Text>
         </View>
       </View>
     </View>
@@ -235,4 +244,5 @@ const styles = StyleSheet.create({
   resendLink: { color: '#FF6B35', fontWeight: '600' },
   footer: { paddingHorizontal: 20 },
   footerText: { fontSize: 12, color: '#888', textAlign: 'center', lineHeight: 18 },
+  footerLink: { color: '#FF6B35', fontWeight: '700' },
 });

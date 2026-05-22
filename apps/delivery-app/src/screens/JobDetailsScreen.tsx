@@ -35,13 +35,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     if (!initialJob) {
       loadJobDetails();
     }
-    
-    // Get current location
-    (async () => {
-      let location = await Location.getCurrentPositionAsync({});
-      setUserLocation(location);
-    })();
+
+    getCurrentLocation().then(setUserLocation).catch(() => {});
   }, []);
+
+  const getCurrentLocation = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      return null;
+    }
+
+    return Location.getCurrentPositionAsync({});
+  };
 
   const loadJobDetails = async () => {
     try {
@@ -86,9 +91,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       setUpdating(true);
       
       // Get current location
-      let location;
+      let location: Location.LocationObject | null = null;
       try {
-        location = await Location.getCurrentPositionAsync({});
+        location = await getCurrentLocation();
       } catch (error) {
         console.error("Error getting location:", error);
       }
@@ -128,22 +133,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const handleDeliver = async () => {
     if (job?.paymentMethod === "CASH_ON_DELIVERY") {
-      // For COD orders, show amount collection dialog
-      Alert.prompt(
-        "Collect Payment",
-        `Please collect ₹${job.grandTotal} from the customer`,
+      Alert.alert(
+        "Collect Cash",
+        `Collect Rs ${job.grandTotal} from the customer before completing this delivery.`,
         [
           { text: "Cancel", style: "cancel" },
           {
-            text: "Collected",
-            onPress: async (amount: string | undefined) => {
-              const collectedAmount = amount ? parseFloat(amount) : job.grandTotal;
-              await confirmDelivery(collectedAmount);
-            }
+            text: `Collected Rs ${job.grandTotal}`,
+            onPress: () => confirmDelivery(job.grandTotal)
           }
-        ],
-        "plain-text",
-        job.grandTotal.toString()
+        ]
       );
     } else {
       // For pre-paid orders, just confirm delivery
@@ -156,9 +155,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       setUpdating(true);
       
       // Get current location
-      let location;
+      let location: Location.LocationObject | null = null;
       try {
-        location = await Location.getCurrentPositionAsync({});
+        location = await getCurrentLocation();
       } catch (error) {
         console.error("Error getting location:", error);
       }
@@ -173,18 +172,21 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       );
 
       if (response.success) {
+        const earnedAmount = response.data?.deliveryEarnings || response.data?.deliveryFee || job?.deliveryFee || 49;
+        const collectedText = collectedAmount
+          ? `\nCash collected: Rs ${collectedAmount}`
+          : "";
+
         Alert.alert(
           "Delivery Complete!",
-          `Order delivered successfully!\n\n` +
-          `💰 Earned: ₹${job?.deliveryFee || 49}\n` +
-          `🎉 Thank you for the delivery!`,
+          `Successfully completed 1 delivery.${collectedText}\nAmount added to earnings: Rs ${earnedAmount}`,
           [
             {
-              text: "Done",
+              text: "Go Home",
               onPress: () => {
                 navigation.reset({
                   index: 0,
-                  routes: [{ name: "Jobs" }],
+                  routes: [{ name: "Main", params: { screen: "Jobs" } }],
                 });
               }
             }

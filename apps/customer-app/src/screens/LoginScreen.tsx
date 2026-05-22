@@ -7,12 +7,16 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Image
+  Image,
+  Linking
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { warmApi } from '../api/client';
 import { sendFirebaseOtp } from '../services/firebasePhoneAuth';
+
+const TERMS_URL = "https://www.vyaha.com/terms";
+const PRIVACY_URL = "https://www.vyaha.com/privacy";
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -112,7 +116,10 @@ export default function LoginScreen({ navigation }: Props) {
         
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            By continuing, you agree to our Terms of Service and Privacy Policy
+            By continuing, you agree to our{" "}
+            <Text style={styles.footerLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Service</Text>
+            {" "}and{" "}
+            <Text style={styles.footerLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
           </Text>
         </View>
       </View>
@@ -214,5 +221,9 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  footerLink: {
+    color: '#FF6B35',
+    fontWeight: '700',
   },
 });

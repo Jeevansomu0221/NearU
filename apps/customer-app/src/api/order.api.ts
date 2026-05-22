@@ -84,20 +84,3 @@ export const getOrderDetails = (orderId: string): Promise<ApiResponse<Order>> =>
 export const cancelOrder = (orderId: string): Promise<ApiResponse<any>> => {
   return apiPost<any>(`/orders/${orderId}/cancel`);
 };
-
-/**
- * UPDATE ORDER PAYMENT STATUS
- */
-export const updateOrderPaymentStatus = (
-  orderId: string,
-  paymentData: {
-    paymentId?: string;
-    razorpayOrderId?: string;
-    razorpayPaymentId?: string;
-    razorpaySignature?: string;
-    paymentMethod?: string;
-    paymentStatus?: string;
-  }
-): Promise<ApiResponse<Order>> => {
-  return apiPost<Order>(`/orders/${orderId}/update-payment`, paymentData);
-};

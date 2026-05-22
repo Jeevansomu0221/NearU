@@ -1,10 +1,16 @@
 import axios from "axios";
 import { clearToken } from "../utils/auth";
 
+const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
+
 const resolveApiBaseUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL?.trim();
   if (envUrl) {
     return envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`;
+  }
+
+  if (import.meta.env.PROD) {
+    return PRODUCTION_API_URL;
   }
 
   const host = window.location.hostname;

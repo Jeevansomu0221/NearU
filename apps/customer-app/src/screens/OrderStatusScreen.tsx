@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -36,35 +36,35 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadOrderDetails = async () => {
+  const loadOrderDetails = useCallback(async (options?: { silent?: boolean }) => {
     try {
       const response = await getOrderDetails(orderId);
 
       if (response.success && response.data) {
         setOrder(response.data);
-      } else {
+      } else if (!options?.silent) {
         Alert.alert("Error", response.message || "Failed to load order details");
       }
     } catch (error) {
       console.error("Error loading order:", error);
-      Alert.alert("Error", "Failed to load order details");
+      if (!options?.silent) {
+        Alert.alert("Error", "Failed to load order details");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [orderId]);
 
   useEffect(() => {
     loadOrderDetails();
 
     const interval = setInterval(() => {
-      if (!loading) {
-        loadOrderDetails();
-      }
-    }, 30000);
+      loadOrderDetails({ silent: true });
+    }, 10000);
 
     return () => clearInterval(interval);
-  }, [orderId]);
+  }, [loadOrderDetails]);
 
   const onRefresh = () => {
     setRefreshing(true);
