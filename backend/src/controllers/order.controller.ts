@@ -13,6 +13,26 @@ import { config } from "../config/env";
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
 
+const resolvePartnerForUser = async (user?: AuthRequest["user"]) => {
+  if (!user) return null;
+
+  if (user.partnerId) {
+    const partnerByToken = await Partner.findById(user.partnerId);
+    if (partnerByToken) return partnerByToken;
+  }
+
+  let partner = await Partner.findOne({ userId: user.id });
+  if (!partner && user.phone) {
+    partner = await Partner.findOne({ phone: user.phone });
+    if (partner && !partner.userId) {
+      partner.userId = new mongoose.Types.ObjectId(user.id);
+      await partner.save();
+    }
+  }
+
+  return partner;
+};
+
 // Define interface for masked customer
 interface MaskedCustomer {
   _id: mongoose.Types.ObjectId | string;
@@ -300,20 +320,9 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Check if user is the partner for this order
-    const userId = new mongoose.Types.ObjectId(user.id);
-    let isPartner = false;
-    
-    if (user.role === ROLES.PARTNER) {
-      if (user.partnerId) {
-        isPartner = order.partnerId.equals(new mongoose.Types.ObjectId(user.partnerId));
-      } else {
-        const partner = await Partner.findOne({ userId: user.id });
-        if (partner) {
-          isPartner = order.partnerId.equals(partner._id);
-        }
-      }
-    }
+    // Check if this account owns the partner profile for this order.
+    const partner = await resolvePartnerForUser(user);
+    const isPartner = Boolean(partner && order.partnerId.equals(partner._id));
 
     if (!isPartner && user.role !== ROLES.ADMIN) {
       return errorResponse(res, "Unauthorized to update this order", 401);
@@ -403,7 +412,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     const { orderId } = req.params;
     const { status } = req.body;
 
-    if (!user || user.role !== ROLES.DELIVERY) {
+    if (!user) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
@@ -466,29 +475,30 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
 
     let filter: any = {};
     const isCustomerOrdersRoute = req.path === "/my";
+    const isPartnerOrdersRoute = req.path.startsWith("/partner");
+    const isDeliveryOrdersRoute = req.path.startsWith("/delivery");
+    const isAdminOrdersRoute = req.path.startsWith("/admin");
 
     if (isCustomerOrdersRoute) {
       filter.customerId = user.id;
-    } else if (user.role === ROLES.CUSTOMER) {
-      filter.customerId = user.id;
-    } else if (user.role === ROLES.DELIVERY) {
+    } else if (isAdminOrdersRoute) {
+      filter = {};
+    } else if (isDeliveryOrdersRoute) {
       filter.deliveryPartnerId = user.id;
-    } else if (user.role === ROLES.PARTNER) {
-      if (user.partnerId) {
-        filter.partnerId = user.partnerId;
+    } else if (isPartnerOrdersRoute) {
+      const partner = await resolvePartnerForUser(user);
+      if (partner) {
+        filter.partnerId = partner._id;
       } else {
-        const partner = await Partner.findOne({ userId: user.id });
-        if (partner) {
-          filter.partnerId = partner._id;
-        } else {
-          return successResponse(res, [], "No partner found");
-        }
+        return successResponse(res, [], "No partner found");
       }
+    } else {
+      filter.customerId = user.id;
     }
 
     let orders;
     
-    if (user.role === ROLES.PARTNER && !isCustomerOrdersRoute) {
+    if (isPartnerOrdersRoute) {
       // For partners: don't show customer details, only delivery partner details
       orders = await Order.find(filter)
         .sort({ createdAt: -1 })
@@ -562,23 +572,14 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
       ? new mongoose.Types.ObjectId(orderObj.deliveryPartnerId._id.toString()).equals(userId)
       : false;
     
-    // Check if user is the partner
-    let isPartner = false;
-    if (user.role === ROLES.PARTNER) {
-      if (user.partnerId) {
-        const partnerId = new mongoose.Types.ObjectId(user.partnerId);
-        isPartner = orderObj.partnerId && orderObj.partnerId._id
-          ? new mongoose.Types.ObjectId(orderObj.partnerId._id.toString()).equals(partnerId)
-          : false;
-      } else {
-        const partner = await Partner.findOne({ userId: user.id });
-        if (partner) {
-          isPartner = orderObj.partnerId && orderObj.partnerId._id
-            ? new mongoose.Types.ObjectId(orderObj.partnerId._id.toString()).equals(partner._id)
-            : false;
-        }
-      }
-    }
+    // Check if the account owns the partner profile, regardless of its primary role.
+    const partner = await resolvePartnerForUser(user);
+    const isPartner = Boolean(
+      partner &&
+        orderObj.partnerId &&
+        orderObj.partnerId._id &&
+        new mongoose.Types.ObjectId(orderObj.partnerId._id.toString()).equals(partner._id)
+    );
 
     const isAdmin = user.role === ROLES.ADMIN;
 
@@ -587,7 +588,7 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
     }
 
     // For partners: mask customer details
-    if (user.role === ROLES.PARTNER) {
+    if (isPartner) {
       // Create a masked customer object
       const maskedCustomer: MaskedCustomer = {
         _id: orderObj.customerId ? orderObj.customerId._id || "masked" : "masked",
@@ -635,7 +636,7 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
   try {
     const user = req.user;
 
-    if (!user || user.role !== ROLES.DELIVERY) {
+    if (!user) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
@@ -735,7 +736,7 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
     const user = req.user;
     const { orderId } = req.params;
 
-    if (!user || user.role !== ROLES.DELIVERY) {
+    if (!user) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
@@ -844,7 +845,7 @@ export const getPartnerOrderDetails = async (req: AuthRequest, res: Response) =>
     const user = req.user;
     const { orderId } = req.params;
 
-    if (!user || user.role !== ROLES.PARTNER) {
+    if (!user) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
@@ -857,16 +858,8 @@ export const getPartnerOrderDetails = async (req: AuthRequest, res: Response) =>
     }
 
     // Check if user is the partner for this order
-    let isPartner = false;
-    if (user.partnerId) {
-      const partnerId = new mongoose.Types.ObjectId(user.partnerId);
-      isPartner = order.partnerId.equals(partnerId);
-    } else {
-      const partner = await Partner.findOne({ userId: user.id });
-      if (partner) {
-        isPartner = order.partnerId.equals(partner._id);
-      }
-    }
+    const partner = await resolvePartnerForUser(user);
+    const isPartner = Boolean(partner && order.partnerId.equals(partner._id));
 
     if (!isPartner) {
       return errorResponse(res, "Unauthorized to view this order", 401);

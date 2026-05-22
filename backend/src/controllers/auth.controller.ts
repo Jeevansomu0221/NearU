@@ -17,31 +17,37 @@ const ADMIN_PHONE = process.env.ADMIN_PANEL_PHONE || "";
 const TEST_LOGIN_PHONE = process.env.TEST_LOGIN_PHONE || "1010101010";
 const TEST_LOGIN_OTP = process.env.TEST_LOGIN_OTP || "000000";
 
-const buildTokens = async (user: any) => {
+const buildTokens = async (user: any, requestedRole?: string) => {
   let partnerId: string | null = null;
   let deliveryPartnerId: string | null = null;
 
-  if (user.role === ROLES.PARTNER) {
-    const partner = await Partner.findOne({ userId: user._id }).select("_id").lean();
-    partnerId = partner?._id?.toString() || null;
-  }
+  let partner = await Partner.findOne({ userId: user._id }).select("_id").lean();
+  if (!partner) {
+    const unlinkedPartner = await Partner.findOne({
+      phone: user.phone,
+      $or: [{ userId: { $exists: false } }, { userId: null }]
+    }).select("_id");
 
-  if (user.role === ROLES.DELIVERY) {
-    let deliveryPartner = await DeliveryPartner.findOne({ userId: user._id }).select("_id").lean();
-
-    if (!deliveryPartner) {
-      const created = await DeliveryPartner.create({
-        userId: user._id,
-        phone: user.phone,
-        name: user.name,
-        isAvailable: false,
-        status: "PENDING"
-      });
-      deliveryPartner = { _id: created._id } as any;
+    if (unlinkedPartner) {
+      unlinkedPartner.userId = new Types.ObjectId(user._id);
+      await unlinkedPartner.save();
+      partner = { _id: unlinkedPartner._id } as any;
     }
-
-    deliveryPartnerId = deliveryPartner?._id?.toString() || null;
   }
+  partnerId = partner?._id?.toString() || null;
+
+  let deliveryPartner = await DeliveryPartner.findOne({ userId: user._id }).select("_id").lean();
+  if (!deliveryPartner && requestedRole === ROLES.DELIVERY) {
+    const created = await DeliveryPartner.create({
+      userId: user._id,
+      phone: user.phone,
+      name: user.name || `Delivery ${String(user.phone).slice(-4)}`,
+      isAvailable: false,
+      status: "PENDING"
+    });
+    deliveryPartner = { _id: created._id } as any;
+  }
+  deliveryPartnerId = deliveryPartner?._id?.toString() || null;
 
   const sessionVersion = user.sessionVersion || 0;
   const accessToken = generateAccessToken({
@@ -152,7 +158,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
     user.lastLogin = new Date();
     await user.save();
 
-    if (user.role === ROLES.PARTNER) {
+    if (role === ROLES.PARTNER) {
       const partner = await Partner.findOne({
         phone,
         $or: [{ userId: { $exists: false } }, { userId: null }]
@@ -163,7 +169,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
       }
     }
 
-    const { accessToken, refreshToken, partnerId, deliveryPartnerId } = await buildTokens(user);
+    const { accessToken, refreshToken, partnerId, deliveryPartnerId } = await buildTokens(user, role);
 
     return successResponse(res, {
       token: accessToken,

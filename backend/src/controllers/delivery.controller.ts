@@ -18,7 +18,7 @@ interface AuthRequest extends Request {
 const ensureDeliveryUser = (req: AuthRequest, res: Response) => {
   const user = req.user;
 
-  if (!user || user.role !== "delivery") {
+  if (!user) {
     errorResponse(res, "Unauthorized", 401);
     return null;
   }

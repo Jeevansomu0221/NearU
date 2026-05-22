@@ -13,7 +13,7 @@ import {
   updatePartnerProfile
 } from "../controllers/partner.controller";
 
-import { getShopsWithImages } from "../controllers/shop.controller";  // ADD THIS IMPORT
+import { getShopsWithImages } from "../controllers/shop.controller";
 
 import menuRoutes from "./menu.routes";
 import { authMiddleware } from "../middlewares/auth.middleware";
@@ -24,7 +24,7 @@ const router = Router();
 /* ======================================================
    PUBLIC ROUTES
 ====================================================== */
-router.post("/onboard", submitPartnerProfile);
+router.post("/onboard", authMiddleware, submitPartnerProfile);
 router.get("/status/:phone", getPartnerStatus);
 
 /* ======================================================
@@ -35,18 +35,16 @@ router.post("/complete-setup", authMiddleware, completeSetup);
 
 /* ======================================================
    PARTNER-ONLY ROUTES (approved partners)
-   router.put("/profile", updatePartnerProfile);
 ====================================================== */
-router.put("/profile", updatePartnerProfile);
-router.put("/shop-status", authMiddleware, roleMiddleware(["partner"]), updateShopStatus);
-router.get("/stats", authMiddleware, roleMiddleware(["partner"]), getPartnerStats);
+router.put("/shop-status", authMiddleware, updateShopStatus);
+router.get("/stats", authMiddleware, getPartnerStats);
 
 // Profile Management
-router.get("/profile", authMiddleware, roleMiddleware(["partner"]), getPartnerProfile);
-router.put("/profile", authMiddleware, roleMiddleware(["partner"]), updatePartnerProfile);
+router.get("/profile", authMiddleware, getPartnerProfile);
+router.put("/profile", authMiddleware, updatePartnerProfile);
 
 // Menu Management
-router.use("/menu", authMiddleware, roleMiddleware(["partner"]), menuRoutes);
+router.use("/menu", menuRoutes);
 
 /* ======================================================
    ADMIN ROUTES
@@ -72,7 +70,6 @@ router.put("/admin/:partnerId/status",
 /* ======================================================
    PUBLIC SHOP ROUTES (for customers)
 ====================================================== */
-// ADD THIS ROUTE - For customers to get all shops
 router.get("/shops", getShopsWithImages);
 
 export default router;

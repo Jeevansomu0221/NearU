@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 import Partner from "../models/Partner.model";
-import User from "../models/User.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
 
 // Define AuthRequest interface
@@ -46,11 +45,29 @@ const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
 
+const resolvePartnerForAuth = async (authReq: AuthRequest) => {
+  const objectId = toObjectId(authReq.user?.id);
+  if (!objectId) return null;
+
+  let partner = await Partner.findOne({ userId: objectId });
+  if (!partner && authReq.user?.phone) {
+    partner = await Partner.findOne({ phone: authReq.user.phone });
+    if (partner && !partner.userId) {
+      partner.userId = objectId;
+      await partner.save();
+    }
+  }
+
+  return partner;
+};
+
 /**
  * CREATE / UPDATE PARTNER PROFILE
  */
 export const submitPartnerProfile = async (req: Request, res: Response) => {
   try {
+    const authReq = req as AuthRequest;
+    const tokenUserId = authReq.user?.id;
     const {
       ownerName,
       restaurantName,
@@ -61,7 +78,8 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       address: addressData,
       category,
       documents,
-      userId
+      userId,
+      location: incomingLocation
     } = req.body;
 
     console.log("📝 Submitting partner profile for phone:", phone);
@@ -74,22 +92,23 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
-    const { 
-      state, 
+    const {
+      state,
       city,
-      pincode, 
-      area, 
-      colony, 
-      roadStreet, 
-      nearbyPlaces, 
-      googleMapsLink 
+      pincode,
+      area,
+      colony,
+      roadStreet,
+      nearbyPlaces,
+      googleMapsLink
     } = addressData;
 
-    // Validate required fields
-    if (!state || !city || !pincode || !area || !colony || !roadStreet || !googleMapsLink) {
+    // Validate required fields (googleMapsLink is no longer required: partners
+    // can capture shop location via GPS in the app instead).
+    if (!state || !city || !pincode || !area || !colony || !roadStreet) {
       return res.status(400).json({
         success: false,
-        message: "All address fields (state, city, pincode, area, colony, roadStreet, googleMapsLink) are required"
+        message: "Address fields (state, city, pincode, area, colony, roadStreet) are required"
       });
     }
 
@@ -101,7 +120,42 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
-    const parsedCoordinates = parseGoogleMapsLink(googleMapsLink.trim());
+    // Resolve shop coordinates from either direct payload, an address-level
+    // coords field, or by parsing the Google Maps share link.
+    const rawLat = Number(
+      incomingLocation?.latitude ?? addressData?.latitude ?? addressData?.coordinates?.latitude
+    );
+    const rawLng = Number(
+      incomingLocation?.longitude ?? addressData?.longitude ?? addressData?.coordinates?.longitude
+    );
+
+    let resolvedCoordinates: [number, number] | null = null;
+    if (
+      Number.isFinite(rawLat) &&
+      Number.isFinite(rawLng) &&
+      rawLat >= -90 &&
+      rawLat <= 90 &&
+      rawLng >= -180 &&
+      rawLng <= 180 &&
+      !(rawLat === 0 && rawLng === 0)
+    ) {
+      resolvedCoordinates = [rawLng, rawLat];
+    }
+
+    const trimmedMapsLink = typeof googleMapsLink === "string" ? googleMapsLink.trim() : "";
+    if (!resolvedCoordinates && trimmedMapsLink) {
+      const parsed = parseGoogleMapsLink(trimmedMapsLink);
+      if (parsed) {
+        resolvedCoordinates = [parsed.longitude, parsed.latitude];
+      }
+    }
+
+    if (!resolvedCoordinates) {
+      return res.status(400).json({
+        success: false,
+        message: "Shop location is required. Tap 'Use my shop location' or paste a Google Maps share link that includes coordinates."
+      });
+    }
 
     const normalizedDocs = {
       fssaiNumber: firstString(documents?.fssaiNumber, documents?.fssai_number),
@@ -175,13 +229,11 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         colony: colony.trim(),
         roadStreet: roadStreet.trim(),
         nearbyPlaces: Array.isArray(nearbyPlaces) ? nearbyPlaces.map(p => p.trim()) : [],
-        googleMapsLink: googleMapsLink.trim()
+        googleMapsLink: trimmedMapsLink
       },
       location: {
         type: "Point",
-        coordinates: parsedCoordinates
-          ? [parsedCoordinates.longitude, parsedCoordinates.latitude]
-          : [0, 0]
+        coordinates: resolvedCoordinates
       },
       category: category || "other",
       documents: {
@@ -218,8 +270,9 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       shopImageUrl: "" // Initialize empty
     };
 
-    // Only add userId if it's valid
-    const objectId = toObjectId(userId);
+    // Prefer authenticated user id; fallback to body userId only if present.
+    const resolvedUserId = tokenUserId || userId;
+    const objectId = toObjectId(resolvedUserId);
     if (objectId) {
       partnerData.userId = objectId;
     }
@@ -229,10 +282,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         partner = await Partner.create(partnerData);
         console.log("✅ Created new partner:", partner._id);
         
-        // Update user role to partner
-        if (objectId) {
-          await User.findByIdAndUpdate(objectId, { role: "partner" });
-        }
       } catch (createError: any) {
         if (createError.code === 11000) {
           partner = await Partner.findOne({ phone });
@@ -374,10 +423,6 @@ export const updatePartnerStatus = async (req: Request, res: Response) => {
     if (status === "APPROVED") {
       partner.approvedBy = adminId;
       partner.approvedAt = new Date();
-      
-      if (partner.userId) {
-        await User.findByIdAndUpdate(partner.userId, { role: "partner" });
-      }
     } else if (status === "REJECTED") {
       partner.rejectionReason = rejectionReason;
     }
@@ -485,12 +530,12 @@ export const getMyStatus = async (req: Request, res: Response) => {
     const objectId = toObjectId(userId);
     if (objectId) {
       partner = await Partner.findOne({ userId: objectId })
-        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason");
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason userId");
     }
     
     if (!partner && userPhone) {
       partner = await Partner.findOne({ phone: userPhone })
-        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason");
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason userId");
     }
     
     if (!partner) {
@@ -534,22 +579,7 @@ export const completeSetup = async (req: Request, res: Response) => {
       });
     }
     
-    const objectId = toObjectId(userId);
-    if (!objectId) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user ID format"
-      });
-    }
-    
-    const partner = await Partner.findOneAndUpdate(
-      { userId: objectId },
-      { 
-        hasCompletedSetup: true,
-        setupCompletedAt: new Date()
-      },
-      { new: true }
-    ).select("_id restaurantName hasCompletedSetup menuItemsCount");
+    const partner = await resolvePartnerForAuth(authReq);
     
     if (!partner) {
       return res.status(404).json({
@@ -557,6 +587,10 @@ export const completeSetup = async (req: Request, res: Response) => {
         message: "Partner not found"
       });
     }
+
+    partner.hasCompletedSetup = true;
+    partner.setupCompletedAt = new Date();
+    await partner.save();
     
     res.json({
       success: true,
@@ -596,19 +630,7 @@ export const updateShopStatus = async (req: Request, res: Response) => {
       });
     }
 
-    const objectId = toObjectId(userId);
-    if (!objectId) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user ID format"
-      });
-    }
-
-    const partner = await Partner.findOneAndUpdate(
-      { userId: objectId },
-      { isOpen },
-      { new: true }
-    );
+    const partner = await resolvePartnerForAuth(authReq);
 
     if (!partner) {
       return res.status(404).json({
@@ -616,6 +638,9 @@ export const updateShopStatus = async (req: Request, res: Response) => {
         message: "Partner not found"
       });
     }
+
+    partner.isOpen = isOpen;
+    await partner.save();
 
     return res.json({
       success: true,
@@ -647,15 +672,7 @@ export const getPartnerStats = async (req: Request, res: Response) => {
       });
     }
 
-    const objectId = toObjectId(userId);
-    if (!objectId) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user ID format"
-      });
-    }
-
-    const partner = await Partner.findOne({ userId: objectId });
+    const partner = await resolvePartnerForAuth(authReq);
     
     if (!partner) {
       return res.status(404).json({
@@ -712,17 +729,7 @@ export const getPartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
-    const objectId = toObjectId(userId);
-    if (!objectId) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user ID format"
-      });
-    }
-
-    const partner = await Partner.findOne({ userId: objectId })
-      .select('-documents')
-      .lean();
+    const partner = await resolvePartnerForAuth(authReq);
     
     if (!partner) {
       return res.status(404).json({
@@ -735,7 +742,7 @@ export const getPartnerProfile = async (req: Request, res: Response) => {
     
     return res.json({
       success: true,
-      data: partner
+      data: partner.toObject()
     });
   } catch (error: any) {
     console.error("❌ Error getting partner profile:", error);
@@ -775,10 +782,25 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
       });
     }
 
-    const { shopImageUrl, restaurantName, openingTime, closingTime, isOpen, address } = req.body;
+    const {
+      ownerName,
+      email,
+      shopDescription,
+      shopImageUrl,
+      bannerImageUrl,
+      openingTime,
+      closingTime,
+      weeklyHolidays,
+      isOpen,
+      address,
+      location: incomingLocation,
+      documents,
+      settings,
+      notifications,
+      language
+    } = req.body;
     
-    // Find partner by userId
-    const partner = await Partner.findOne({ userId: objectId });
+    const partner = await resolvePartnerForAuth(authReq);
     
     if (!partner) {
       return res.status(404).json({
@@ -788,10 +810,26 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     }
 
     const updates: any = {};
+
+    if (ownerName !== undefined) {
+      updates.ownerName = String(ownerName).trim();
+    }
+
+    if (email !== undefined) {
+      updates.email = String(email || "").trim().toLowerCase();
+    }
+
+    if (shopDescription !== undefined) {
+      updates.shopDescription = String(shopDescription || "").trim();
+    }
     
     // Update shop image if provided
     if (shopImageUrl !== undefined) {
       updates.shopImageUrl = shopImageUrl;
+    }
+
+    if (bannerImageUrl !== undefined) {
+      updates.bannerImageUrl = bannerImageUrl;
     }
     
     // DO NOT ALLOW restaurant name change - remove this
@@ -808,6 +846,10 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     if (closingTime !== undefined) {
       updates.closingTime = closingTime;
     }
+
+    if (Array.isArray(weeklyHolidays)) {
+      updates.weeklyHolidays = weeklyHolidays;
+    }
     
     if (isOpen !== undefined) {
       updates.isOpen = isOpen;
@@ -821,12 +863,114 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
 
       const currentAddress = (partner.address || {}) as any;
       const mapsLink = updates.address.googleMapsLink || currentAddress.googleMapsLink;
-      const parsedCoordinates = parseGoogleMapsLink(mapsLink);
+      const parsedCoordinates = parseGoogleMapsLink(mapsLink || "");
       if (parsedCoordinates) {
         updates.location = {
           type: "Point",
           coordinates: [parsedCoordinates.longitude, parsedCoordinates.latitude]
         };
+      }
+    }
+
+    // Direct GPS pin (from "Use my shop location" button) always wins.
+    if (incomingLocation && typeof incomingLocation === "object") {
+      const lat = Number(incomingLocation.latitude);
+      const lng = Number(incomingLocation.longitude);
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180 &&
+        !(lat === 0 && lng === 0)
+      ) {
+        updates.location = {
+          type: "Point",
+          coordinates: [lng, lat]
+        };
+      }
+    }
+
+    if (documents && typeof documents === "object") {
+      const existingDocs = (partner.documents || {}) as Record<string, any>;
+      const incomingDocs = documents as Record<string, any>;
+      const mergedDocs: Record<string, any> = { ...existingDocs, ...incomingDocs };
+
+      // Auto-clear any re-upload flags for keys whose URL changed in this update.
+      const reuploadFlags = { ...(existingDocs.reuploadFlags || {}) } as Record<string, boolean>;
+      const docUrlKeys = [
+        "fssaiUrl",
+        "panFrontUrl",
+        "aadhaarFrontUrl",
+        "aadhaarBackUrl",
+        "bankProofUrl",
+        "addressProofUrl",
+        "gstUrl",
+        "shopLicenseUrl",
+        "ownerPanUrl",
+        "menuProofUrl"
+      ];
+      let flagsChanged = false;
+      docUrlKeys.forEach((key) => {
+        const newUrl = incomingDocs[key];
+        if (typeof newUrl === "string" && newUrl && newUrl !== existingDocs[key] && reuploadFlags[key]) {
+          reuploadFlags[key] = false;
+          flagsChanged = true;
+        }
+      });
+      if (flagsChanged) {
+        mergedDocs.reuploadFlags = reuploadFlags;
+      }
+
+      updates.documents = mergedDocs;
+    }
+
+    if (settings && typeof settings === "object") {
+      const currentSettings = ((partner as any).settings || {}) as Record<string, any>;
+      const merged: Record<string, any> = { ...currentSettings };
+
+      if (settings.autoAcceptOrders !== undefined) {
+        merged.autoAcceptOrders = Boolean(settings.autoAcceptOrders);
+      }
+      if (settings.estimatedPrepTime !== undefined) {
+        const value = Number(settings.estimatedPrepTime);
+        if (Number.isFinite(value) && value > 0) merged.estimatedPrepTime = Math.round(value);
+      }
+      if (settings.deliveryMode !== undefined && ["self", "platform"].includes(settings.deliveryMode)) {
+        merged.deliveryMode = settings.deliveryMode;
+      }
+      if (settings.deliveryRadiusKm !== undefined) {
+        const value = Number(settings.deliveryRadiusKm);
+        if (Number.isFinite(value) && value > 0) merged.deliveryRadiusKm = value;
+      }
+      if (settings.minimumOrderAmount !== undefined) {
+        const value = Number(settings.minimumOrderAmount);
+        if (Number.isFinite(value) && value >= 0) merged.minimumOrderAmount = value;
+      }
+      if (settings.upiId !== undefined) {
+        merged.upiId = String(settings.upiId || "").trim();
+      }
+
+      updates.settings = merged;
+    }
+
+    if (notifications && typeof notifications === "object") {
+      const currentNotifications = ((partner as any).notifications || {}) as Record<string, any>;
+      updates.notifications = {
+        ...currentNotifications,
+        ...(notifications.newOrderAlerts !== undefined && { newOrderAlerts: Boolean(notifications.newOrderAlerts) }),
+        ...(notifications.paymentAlerts !== undefined && { paymentAlerts: Boolean(notifications.paymentAlerts) }),
+        ...(notifications.promotionalNotifications !== undefined && {
+          promotionalNotifications: Boolean(notifications.promotionalNotifications)
+        })
+      };
+    }
+
+    if (language !== undefined) {
+      const allowed = ["en", "hi", "ta", "te", "kn", "ml", "mr"];
+      if (allowed.includes(language)) {
+        updates.language = language;
       }
     }
 

@@ -65,7 +65,6 @@ router.post(
 router.get(
   "/partner/my", 
   authMiddleware, 
-  roleMiddleware([ROLES.PARTNER]), 
   getMyOrders
 );
 
@@ -73,7 +72,6 @@ router.get(
 router.get(
   "/partner/:orderId", 
   authMiddleware, 
-  roleMiddleware([ROLES.PARTNER]), 
   getOrderDetails
 );
 
@@ -81,7 +79,6 @@ router.get(
 router.post(
   "/partner/:orderId/status", 
   authMiddleware, 
-  roleMiddleware([ROLES.PARTNER]), 
   updateOrderStatus
 );
 
@@ -95,7 +92,6 @@ router.post(
 router.get(
   "/delivery/available-jobs", 
   authMiddleware, 
-  roleMiddleware([ROLES.DELIVERY]), 
   getAvailableDeliveryJobs
 );
 
@@ -103,7 +99,6 @@ router.get(
 router.post(
   "/delivery/:orderId/accept", 
   authMiddleware, 
-  roleMiddleware([ROLES.DELIVERY]), 
   acceptDeliveryJob
 );
 
@@ -111,7 +106,6 @@ router.post(
 router.get(
   "/delivery/my", 
   authMiddleware, 
-  roleMiddleware([ROLES.DELIVERY]), 
   getMyOrders
 );
 
@@ -119,7 +113,6 @@ router.get(
 router.get(
   "/delivery/:orderId", 
   authMiddleware, 
-  roleMiddleware([ROLES.DELIVERY]), 
   getOrderDetails
 );
 
@@ -127,7 +120,6 @@ router.get(
 router.post(
   "/delivery/:orderId/status", 
   authMiddleware, 
-  roleMiddleware([ROLES.DELIVERY]), 
   updateDeliveryStatus
 );
 

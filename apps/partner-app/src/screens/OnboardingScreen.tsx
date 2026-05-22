@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, { uploadMultipart } from "../api/client";
 
-const CATEGORIES = ["bakery", "mini-restaurant", "tiffin-center", "fast-food", "sweets", "ice-creams", "juice", "other"];
+const CATEGORIES = ["bakery", "mini-restaurant", "grocery", "tiffin-center", "fast-food", "sweets", "ice-creams", "juice", "other"];
 
 const INDIAN_CITIES = [
   "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata",
@@ -50,7 +50,6 @@ type DocumentState = {
   shopLicenseUrl: string;
   ownerPanUrl: string;
   menuProofUrl: string;
-  operatingHoursNote: string;
 };
 
 interface UploadResponse {
@@ -104,7 +103,8 @@ const optionalDocs: Array<{ key: keyof DocumentState; title: string; subtitle: s
 ];
 
 const getUploadMimeType = (filename: string) => {
-  const extension = filename.split(".").pop()?.toLowerCase();
+  const lastDot = filename.lastIndexOf(".");
+  const extension = lastDot >= 0 ? filename.slice(lastDot + 1).toLowerCase() : "";
   if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
   if (extension === "png") return "image/png";
   if (extension === "webp") return "image/webp";
@@ -112,6 +112,32 @@ const getUploadMimeType = (filename: string) => {
   if (extension === "heif") return "image/heif";
   if (extension === "pdf") return "application/pdf";
   return "image/jpeg";
+};
+
+const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
+  const fromUri = asset.uri.split(/[\\/]/).pop()?.split("?")[0];
+  const rawName = asset.fileName || fromUri || fallbackName;
+  const sanitized = rawName.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+  if (/\.[a-z0-9]+$/i.test(sanitized)) {
+    return sanitized;
+  }
+
+  const mimeExtension = (asset.mimeType || "")
+    .split("/")[1]
+    ?.replace("jpeg", "jpg")
+    .replace("svg+xml", "svg") || "jpg";
+
+  return `${sanitized || "upload"}.${mimeExtension}`;
+};
+
+const loadLocationModule = async () => {
+  try {
+    return await import("expo-location");
+  } catch (error) {
+    console.warn("expo-location is unavailable in this app build:", error);
+    return null;
+  }
 };
 
 export default function OnboardingScreen({ navigation }: any) {
@@ -154,11 +180,12 @@ export default function OnboardingScreen({ navigation }: any) {
     gstUrl: "",
     shopLicenseUrl: "",
     ownerPanUrl: "",
-    menuProofUrl: "",
-    operatingHoursNote: ""
+    menuProofUrl: ""
   });
   const [selectedCategory, setSelectedCategory] = useState("");
   const [autoFilledPhone, setAutoFilledPhone] = useState("");
+  const [shopLocation, setShopLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [capturingLocation, setCapturingLocation] = useState(false);
 
   useEffect(() => {
     const fetchPhone = async () => {
@@ -184,7 +211,7 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const uploadImageToCloudinary = async (asset: PickerAsset): Promise<string> => {
     const formData = new FormData();
-    const filename = asset.fileName || asset.uri.split("/").pop() || "document.jpg";
+    const filename = getUploadFilename(asset, "partner-document.jpg");
     const type = asset.mimeType || getUploadMimeType(filename);
 
     // @ts-ignore React Native FormData file object
@@ -268,6 +295,44 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
+  const captureShopLocation = async () => {
+    try {
+      setCapturingLocation(true);
+      const Location = await loadLocationModule();
+      if (!Location) {
+        Alert.alert(
+          "App update required",
+          "This Partner app build does not include location support yet. Install the latest build, or paste your shop Google Maps link below for now."
+        );
+        return;
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location permission needed",
+          "Open the Vyaha Partner app while standing at your shop and allow location access so we can pin its exact spot."
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+
+      setShopLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      });
+
+      Alert.alert("Shop location captured", "We have pinned your shop. You can re-capture any time from this screen.");
+    } catch (error: any) {
+      Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
+    } finally {
+      setCapturingLocation(false);
+    }
+  };
+
   const validateForm = () => {
     if (!form.ownerName || !form.restaurantName || !form.phone) {
       return "Please fill all basic details";
@@ -278,8 +343,11 @@ export default function OnboardingScreen({ navigation }: any) {
     if (!selectedCategory) {
       return "Please select a business category";
     }
-    if (!address.state || !address.city || !address.pincode || !address.area || !address.colony || !address.roadStreet || !address.googleMapsLink) {
-      return "Please fill all address fields including the shop Google Maps link";
+    if (!address.state || !address.city || !address.pincode || !address.area || !address.colony || !address.roadStreet) {
+      return "Please fill state, city, pincode, area, colony and road / street";
+    }
+    if (!shopLocation && !address.googleMapsLink.trim()) {
+      return "Tap 'Use my shop location' or paste a Google Maps share link so customers can find you";
     }
     if (!/^\d{6}$/.test(address.pincode)) {
       return "Pincode must be exactly 6 digits";
@@ -324,7 +392,7 @@ export default function OnboardingScreen({ navigation }: any) {
       const userStr = await AsyncStorage.getItem("user");
       const fallbackUserId = userStr ? JSON.parse(userStr).id : "";
 
-      const requestData = {
+      const requestData: any = {
         ...form,
         address: {
           state: address.state.trim(),
@@ -351,19 +419,21 @@ export default function OnboardingScreen({ navigation }: any) {
           bankProofUrl: documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl,
           bankAccountHolderName: documents.bankAccountHolderName.trim(),
           bankAccountNumber: documents.bankAccountNumber.trim(),
-          bankIfsc: documents.bankIfsc.trim().toUpperCase(),
-          operatingHoursNote: documents.operatingHoursNote.trim()
+          bankIfsc: documents.bankIfsc.trim().toUpperCase()
         }
       };
+
+      if (shopLocation) {
+        requestData.location = shopLocation;
+      }
 
       await api.post("/partners/onboard", requestData);
       await AsyncStorage.setItem("partnerPhone", form.phone);
 
-      Alert.alert(
-        "Application Submitted",
-        "Your business details and mandatory documents were submitted successfully for admin review.",
-        [{ text: "OK", onPress: () => navigation.replace("PendingApproval") }]
-      );
+      navigation.replace("ApplicationSubmitted", {
+        ownerName: form.ownerName,
+        restaurantName: form.restaurantName
+      });
     } catch (error: any) {
       console.error("Submission error:", error);
       Alert.alert("Error", error.response?.data?.message || error.response?.data?.error || "Submission failed. Please try again.");
@@ -540,16 +610,49 @@ export default function OnboardingScreen({ navigation }: any) {
           <Text style={styles.label}>Nearby places</Text>
           <TextInput placeholder="Metro station, mall, landmark" placeholderTextColor="#98A2B3" value={address.nearbyPlaces} onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })} style={styles.input} />
 
-          <Text style={styles.label}>Shop Google Maps link</Text>
-          <TextInput placeholder="Paste the shop Google Maps share link" placeholderTextColor="#98A2B3" value={address.googleMapsLink} onChangeText={(v) => setAddress({ ...address, googleMapsLink: v })} style={styles.input} />
+          <Text style={styles.label}>Pin your shop</Text>
+          <Text style={styles.helperText}>
+            Stand inside your shop and tap below. Customers within 3 km will see you and delivery partners will navigate here.
+          </Text>
+          <TouchableOpacity
+            style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]}
+            onPress={captureShopLocation}
+            disabled={capturingLocation}
+          >
+            {capturingLocation ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.primaryActionButtonText}>
+                {shopLocation ? "Re-capture shop location" : "Use my shop location"}
+              </Text>
+            )}
+          </TouchableOpacity>
+          {shopLocation ? (
+            <View style={styles.successCard}>
+              <Text style={styles.successCardText}>
+                Pinned: {shopLocation.latitude.toFixed(5)}, {shopLocation.longitude.toFixed(5)}
+              </Text>
+            </View>
+          ) : null}
+
+          <Text style={styles.label}>Google Maps link (optional)</Text>
+          <TextInput
+            placeholder="Optional - paste a Google Maps share link"
+            placeholderTextColor="#98A2B3"
+            value={address.googleMapsLink}
+            onChangeText={(v) => setAddress({ ...address, googleMapsLink: v })}
+            style={styles.input}
+          />
 
           <TouchableOpacity style={styles.utilityButton} onPress={() => Linking.openURL("https://maps.google.com")}>
             <Text style={styles.utilityButtonText}>Open Google Maps</Text>
           </TouchableOpacity>
 
           <View style={styles.tipCard}>
-            <Text style={styles.tipTitle}>How to get the link</Text>
-            <Text style={styles.tipText}>Open Google Maps, find your shop location, tap Share, then copy the shop link.</Text>
+            <Text style={styles.tipTitle}>Why pin your shop?</Text>
+            <Text style={styles.tipText}>
+              The pinned spot is what we use to match nearby customers and route delivery partners. A maps link is only useful as a backup if you can't open the app inside the shop.
+            </Text>
           </View>
 
           <Text style={styles.sectionTitle}>Business category</Text>
@@ -664,15 +767,6 @@ export default function OnboardingScreen({ navigation }: any) {
           </View>
 
           {optionalDocs.map((doc) => renderDocCard(doc.title, doc.subtitle, doc.key))}
-
-          <Text style={styles.label}>Operating hours note</Text>
-          <TextInput
-            placeholder="Example: 8:00 AM to 10:00 PM"
-            placeholderTextColor="#98A2B3"
-            value={documents.operatingHoursNote}
-            onChangeText={(value) => setDocuments((prev) => ({ ...prev, operatingHoursNote: value }))}
-            style={styles.input}
-          />
 
           <TouchableOpacity style={[styles.submitButton, submitting && styles.submitButtonDisabled]} onPress={submit} disabled={submitting || uploadingKey !== null}>
             {submitting ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.submitButtonText}>Submit for Approval</Text>}
@@ -890,6 +984,37 @@ const styles = StyleSheet.create({
     color: "#2F80ED",
     fontWeight: "700",
     fontSize: 13
+  },
+  primaryActionButton: {
+    alignSelf: "stretch",
+    backgroundColor: "#FF6B35",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 6,
+    marginBottom: 10
+  },
+  primaryActionButtonDisabled: {
+    backgroundColor: "#FFB48A"
+  },
+  primaryActionButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  successCard: {
+    backgroundColor: "#ECFDF3",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#A6F4C5"
+  },
+  successCardText: {
+    color: "#166534",
+    fontSize: 13,
+    fontWeight: "700"
   },
   tipCard: {
     backgroundColor: "#F1F7FF",

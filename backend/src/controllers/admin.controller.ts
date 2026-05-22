@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
-import User from "../models/User.model";
 
 // Create a type for authenticated requests
 interface AuthRequest extends Request {
@@ -115,10 +114,6 @@ export const updatePartnerStatus = async (req: AuthRequest, res: Response) => {
       partner.approvedAt = new Date();
       partner.rejectionReason = undefined;
       
-      // Update user role to partner if userId exists
-      if (partner.userId) {
-        await User.findByIdAndUpdate(partner.userId, { role: "partner" });
-      }
     } else if (status === "REJECTED") {
       partner.rejectionReason = rejectionReason || "Application rejected";
       partner.approvedBy = undefined;
@@ -140,6 +135,83 @@ export const updatePartnerStatus = async (req: AuthRequest, res: Response) => {
       success: false,
       message: "Failed to update partner status"
     });
+  }
+};
+
+const VALID_REUPLOAD_KEYS = new Set([
+  "fssaiUrl",
+  "panFrontUrl",
+  "aadhaarFrontUrl",
+  "aadhaarBackUrl",
+  "bankProofUrl",
+  "addressProofUrl",
+  "gstUrl",
+  "shopLicenseUrl",
+  "ownerPanUrl",
+  "menuProofUrl"
+]);
+
+/**
+ * REQUEST DOCUMENT RE-UPLOAD (ADMIN)
+ * Body: { keys: string[], note?: string, clear?: boolean }
+ */
+export const requestPartnerDocumentReupload = async (req: AuthRequest, res: Response) => {
+  if (!isAdmin(req, res)) return;
+
+  try {
+    const { partnerId } = req.params;
+    const { keys, note, clear } = req.body as { keys?: string[]; note?: string; clear?: boolean };
+
+    const partner = await Partner.findById(partnerId);
+    if (!partner) {
+      return res.status(404).json({ success: false, message: "Partner not found" });
+    }
+
+    const documents: any = partner.documents || {};
+    documents.reuploadFlags = documents.reuploadFlags || {};
+
+    const sanitizedKeys = Array.isArray(keys)
+      ? keys.filter((key) => VALID_REUPLOAD_KEYS.has(key))
+      : [];
+
+    if (clear) {
+      const targetKeys = sanitizedKeys.length ? sanitizedKeys : Array.from(VALID_REUPLOAD_KEYS);
+      targetKeys.forEach((key) => {
+        documents.reuploadFlags[key] = false;
+      });
+      if (note !== undefined) {
+        documents.reuploadNotes = String(note || "").trim();
+      } else if (!sanitizedKeys.length) {
+        documents.reuploadNotes = "";
+      }
+    } else {
+      if (!sanitizedKeys.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Provide at least one document key to request re-upload."
+        });
+      }
+      sanitizedKeys.forEach((key) => {
+        documents.reuploadFlags[key] = true;
+      });
+      documents.reuploadNotes = String(note || "").trim();
+    }
+
+    partner.documents = documents;
+    partner.markModified("documents");
+    await partner.save();
+
+    res.json({
+      success: true,
+      data: {
+        reuploadFlags: documents.reuploadFlags,
+        reuploadNotes: documents.reuploadNotes
+      },
+      message: clear ? "Re-upload requirement cleared" : "Re-upload requested"
+    });
+  } catch (error: any) {
+    console.error("Error requesting document re-upload:", error);
+    res.status(500).json({ success: false, message: "Failed to update re-upload request" });
   }
 };
 
@@ -220,7 +292,18 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     const { orderId } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ["PENDING", "CONFIRMED", "PREPARING", "READY", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
+    const validStatuses = [
+      "PENDING",
+      "CONFIRMED",
+      "ACCEPTED",
+      "PREPARING",
+      "READY",
+      "ASSIGNED",
+      "PICKED_UP",
+      "DELIVERED",
+      "CANCELLED",
+      "REJECTED"
+    ];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,

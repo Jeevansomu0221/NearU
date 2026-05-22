@@ -35,7 +35,19 @@
     },
     "plugins": [
       "@react-native-firebase/app",
-      "@react-native-firebase/auth"
+      "@react-native-firebase/auth",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vyaha Partner needs photo access so you can upload restaurant photos, menu images, and business verification documents."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Vyaha Partner uses your location while you're at the shop to pin its exact spot so nearby customers can find you and delivery partners can navigate to you."
+        }
+      ]
     ],
     "extra": {
       "eas": {
