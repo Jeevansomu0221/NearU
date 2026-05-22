@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { roleMiddleware } from "../middlewares/role.middleware";
-import { ROLES } from "../config/roles";
+import { CONSUMER_APP_ROLES, ROLES } from "../config/roles";
 import {
   createOrder,
   updateOrderStatus,
@@ -11,7 +11,6 @@ import {
   getMyOrders,
   getOrderDetails,
   cancelOrder,
-  updateOrderPayment,
   getAvailableDeliveryJobs,
   acceptDeliveryJob
 } from "../controllers/order.controller";
@@ -28,7 +27,7 @@ const router = Router();
 router.post(
   "/", 
   authMiddleware, 
-  roleMiddleware([ROLES.CUSTOMER]), 
+  roleMiddleware([...CONSUMER_APP_ROLES]), 
   createOrder
 );
 
@@ -36,7 +35,7 @@ router.post(
 router.get(
   "/my", 
   authMiddleware, 
-  roleMiddleware([ROLES.CUSTOMER]), 
+  roleMiddleware([...CONSUMER_APP_ROLES]), 
   getMyOrders
 );
 
@@ -44,7 +43,7 @@ router.get(
 router.get(
   "/:orderId", 
   authMiddleware, 
-  roleMiddleware([ROLES.CUSTOMER]), 
+  roleMiddleware([...CONSUMER_APP_ROLES]), 
   getOrderDetails
 );
 
@@ -52,16 +51,8 @@ router.get(
 router.post(
   "/:orderId/cancel", 
   authMiddleware, 
-  roleMiddleware([ROLES.CUSTOMER]), 
+  roleMiddleware([...CONSUMER_APP_ROLES]), 
   cancelOrder
-);
-
-// Update order payment status (customer only)
-router.post(
-  "/:orderId/update-payment", 
-  authMiddleware, 
-  roleMiddleware([ROLES.CUSTOMER]), 
-  updateOrderPayment
 );
 
 /**

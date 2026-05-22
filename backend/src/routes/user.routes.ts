@@ -2,15 +2,26 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { roleMiddleware } from "../middlewares/role.middleware";
-import { ROLES } from "../config/roles";
+import { CONSUMER_APP_ROLES } from "../config/roles";
 import {
   getUserProfile,
   updateUserProfile,
   updateUserAddress,
-  getMyOrders
+  getSavedAddresses,
+  addUserAddress,
+  setDefaultAddress,
+  deleteUserAddress,
+  getMyOrders,
+  deleteMyAccount
 } from "../controllers/user.controller";
 
 const router = Router();
+
+router.delete(
+  "/me",
+  authMiddleware,
+  deleteMyAccount
+);
 
 /**
  * ================================
@@ -22,7 +33,7 @@ const router = Router();
 router.get(
   "/profile",
   authMiddleware,
-  roleMiddleware([ROLES.CUSTOMER]),
+  roleMiddleware([...CONSUMER_APP_ROLES]),
   getUserProfile
 );
 
@@ -30,7 +41,7 @@ router.get(
 router.put(
   "/profile",
   authMiddleware,
-  roleMiddleware([ROLES.CUSTOMER]),
+  roleMiddleware([...CONSUMER_APP_ROLES]),
   updateUserProfile
 );
 
@@ -38,15 +49,43 @@ router.put(
 router.put(
   "/address",
   authMiddleware,
-  roleMiddleware([ROLES.CUSTOMER]),
+  roleMiddleware([...CONSUMER_APP_ROLES]),
   updateUserAddress
+);
+
+router.get(
+  "/addresses",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  getSavedAddresses
+);
+
+router.post(
+  "/addresses",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  addUserAddress
+);
+
+router.put(
+  "/address/:addressId/default",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  setDefaultAddress
+);
+
+router.delete(
+  "/address/:addressId",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  deleteUserAddress
 );
 
 // Get user's orders (customer only)
 router.get(
   "/orders",
   authMiddleware,
-  roleMiddleware([ROLES.CUSTOMER]),
+  roleMiddleware([...CONSUMER_APP_ROLES]),
   getMyOrders
 );
 

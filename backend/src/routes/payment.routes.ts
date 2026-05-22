@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { roleMiddleware } from "../middlewares/role.middleware";
-import { ROLES } from "../config/roles";
+import { CONSUMER_APP_ROLES } from "../config/roles";
 import {
   createPaymentOrder,
   verifyPayment,
@@ -15,14 +15,14 @@ router.post("/webhook", handlePaymentWebhook);
 router.post(
   "/create-order",
   authMiddleware,
-  roleMiddleware([ROLES.CUSTOMER]),
+  roleMiddleware([...CONSUMER_APP_ROLES]),
   createPaymentOrder
 );
 
 router.post(
   "/verify",
   authMiddleware,
-  roleMiddleware([ROLES.CUSTOMER]),
+  roleMiddleware([...CONSUMER_APP_ROLES]),
   verifyPayment
 );
 

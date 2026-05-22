@@ -5,10 +5,13 @@ import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
 import MenuItem from "../models/MenuItem.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
-import { ROLES } from "../config/roles";
+import { CONSUMER_APP_ROLES, ROLES } from "../config/roles";
 import { successResponse, errorResponse } from "../utils/response";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { config } from "../config/env";
+
+const isConsumerAppRole = (role?: string) =>
+  !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
 
 // Define interface for masked customer
 interface MaskedCustomer {
@@ -60,7 +63,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
 
-    if (!user || user.role !== ROLES.CUSTOMER) {
+    if (!user || !isConsumerAppRole(user.role)) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
@@ -204,7 +207,7 @@ export const updateOrderPayment = async (req: AuthRequest, res: Response) => {
       paymentStatus 
     } = req.body;
 
-    if (!user || user.role !== ROLES.CUSTOMER) {
+    if (!user || !isConsumerAppRole(user.role)) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
@@ -462,8 +465,11 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
     }
 
     let filter: any = {};
+    const isCustomerOrdersRoute = req.path === "/my";
 
-    if (user.role === ROLES.CUSTOMER) {
+    if (isCustomerOrdersRoute) {
+      filter.customerId = user.id;
+    } else if (user.role === ROLES.CUSTOMER) {
       filter.customerId = user.id;
     } else if (user.role === ROLES.DELIVERY) {
       filter.deliveryPartnerId = user.id;
@@ -482,7 +488,7 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
 
     let orders;
     
-    if (user.role === ROLES.PARTNER) {
+    if (user.role === ROLES.PARTNER && !isCustomerOrdersRoute) {
       // For partners: don't show customer details, only delivery partner details
       orders = await Order.find(filter)
         .sort({ createdAt: -1 })
@@ -504,7 +510,7 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
         return orderObj;
       });
     } else {
-      // For customers and delivery: show all details
+      // Customer app order list and delivery partner lists
       orders = await Order.find(filter)
         .sort({ createdAt: -1 })
         .populate("customerId", "name phone")
@@ -638,16 +644,21 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
       return errorResponse(res, "Delivery profile not found", 404);
     }
 
-    const riderCoordinates = deliveryPartner.currentLocation?.coordinates;
-    if (
-      deliveryPartner.status !== "ACTIVE" ||
-      !deliveryPartner.isAvailable ||
-      !riderCoordinates ||
-      riderCoordinates.length !== 2 ||
-      (riderCoordinates[0] === 0 && riderCoordinates[1] === 0)
-    ) {
+    // Allow both VERIFIED and ACTIVE delivery partners to see jobs.
+    // Admin moves PENDING -> VERIFIED after document review; ACTIVE is the
+    // "currently working" promotion. We also accept VERIFIED to avoid the
+    // common case where admin only marked the partner as VERIFIED and not yet ACTIVE.
+    const eligibleStatuses = ["ACTIVE", "VERIFIED"];
+    if (!eligibleStatuses.includes(deliveryPartner.status) || !deliveryPartner.isAvailable) {
       return successResponse(res, [], "Delivery partner is not eligible for nearby jobs");
     }
+
+    const riderCoordinates = deliveryPartner.currentLocation?.coordinates;
+    const hasRiderLocation = Boolean(
+      riderCoordinates &&
+      riderCoordinates.length === 2 &&
+      !(riderCoordinates[0] === 0 && riderCoordinates[1] === 0)
+    );
 
     // Find orders that are READY and not assigned to any delivery partner
     const availableJobs = await Order.find({
@@ -664,11 +675,29 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
 
     console.log(`🔍 Found ${availableJobs.length} available delivery jobs for user ${user.id}`);
 
+    // If the rider hasn't shared their location yet, still show every READY
+    // job so they at least know what's pending and can refresh after enabling GPS.
+    if (!hasRiderLocation) {
+      const jobs = availableJobs.map((job: any) => job.toObject());
+      return successResponse(res, jobs, "Available delivery jobs retrieved (rider location pending)");
+    }
+
     const rankedJobs = availableJobs
       .map((job: any) => {
         const partnerCoordinates = job.partnerId?.location?.coordinates;
-        if (!partnerCoordinates || partnerCoordinates.length !== 2) {
-          return null;
+        const partnerHasLocation = Boolean(
+          partnerCoordinates &&
+          partnerCoordinates.length === 2 &&
+          !(partnerCoordinates[0] === 0 && partnerCoordinates[1] === 0)
+        );
+
+        // If the shop never set its location, still surface the job to the
+        // rider but mark distance as unknown rather than dropping it silently.
+        if (!partnerHasLocation) {
+          return {
+            ...job.toObject(),
+            distanceToRestaurant: null
+          };
         }
 
         const distanceToRestaurant = haversineKm(riderCoordinates as [number, number], partnerCoordinates);
@@ -682,7 +711,11 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
         };
       })
       .filter(Boolean)
-      .sort((left: any, right: any) => left.distanceToRestaurant - right.distanceToRestaurant);
+      .sort((left: any, right: any) => {
+        const leftDist = left.distanceToRestaurant ?? Number.POSITIVE_INFINITY;
+        const rightDist = right.distanceToRestaurant ?? Number.POSITIVE_INFINITY;
+        return leftDist - rightDist;
+      });
 
     return successResponse(res, rankedJobs, "Available delivery jobs retrieved");
 
@@ -707,7 +740,8 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
     }
 
     const deliveryPartner = await DeliveryPartner.findOne({ userId: user.id }).select("status isAvailable");
-    if (!deliveryPartner || deliveryPartner.status !== "ACTIVE" || !deliveryPartner.isAvailable) {
+    const acceptStatuses = ["ACTIVE", "VERIFIED"];
+    if (!deliveryPartner || !acceptStatuses.includes(deliveryPartner.status) || !deliveryPartner.isAvailable) {
       return errorResponse(res, "Delivery partner is not eligible to accept jobs", 403);
     }
 
@@ -759,7 +793,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     const user = req.user;
     const { orderId } = req.params;
 
-    if (!user || user.role !== ROLES.CUSTOMER) {
+    if (!user || !isConsumerAppRole(user.role)) {
       return errorResponse(res, "Unauthorized", 401);
     }
 
