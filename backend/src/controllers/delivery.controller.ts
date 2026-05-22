@@ -522,6 +522,17 @@ export const updateDeliveryLocation = async (req: AuthRequest, res: Response) =>
       return errorResponse(res, "latitude and longitude are required", 400);
     }
 
+    const existing = await DeliveryPartner.findOne({ userId: user.id }).select("status");
+
+    if (!existing) {
+      return errorResponse(res, "Delivery profile not found", 404);
+    }
+
+    // Auto-promote VERIFIED riders to ACTIVE the first time they share a
+    // valid location. The admin has already approved their documents, so
+    // sharing GPS == "I am ready to take jobs".
+    const nextStatus = existing.status === "VERIFIED" ? "ACTIVE" : existing.status;
+
     const deliveryPartner = await DeliveryPartner.findOneAndUpdate(
       { userId: user.id },
       {
@@ -529,7 +540,8 @@ export const updateDeliveryLocation = async (req: AuthRequest, res: Response) =>
           type: "Point",
           coordinates: [longitude, latitude]
         },
-        isAvailable: true
+        isAvailable: true,
+        status: nextStatus
       },
       { new: true }
     );
@@ -540,6 +552,7 @@ export const updateDeliveryLocation = async (req: AuthRequest, res: Response) =>
 
     return successResponse(res, {
       currentLocation: deliveryPartner.currentLocation,
+      status: deliveryPartner.status,
       freshnessMinutes: config.deliveryLocationFreshnessMinutes
     }, "Location updated successfully");
   } catch (error) {

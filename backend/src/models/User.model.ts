@@ -1,6 +1,77 @@
 import { Schema, model, Types } from "mongoose";
 import { ROLES } from "../config/roles";
 
+const AddressSchema = new Schema({
+  label: {
+    type: String,
+    default: "Home",
+    trim: true
+  },
+  recipientName: {
+    type: String,
+    default: ""
+  },
+  houseFlatDoorNo: {
+    type: String,
+    default: ""
+  },
+  buildingApartmentName: {
+    type: String,
+    default: ""
+  },
+  streetRoadName: {
+    type: String,
+    default: ""
+  },
+  street: {
+    type: String,
+    default: ""
+  },
+  city: {
+    type: String,
+    default: ""
+  },
+  state: {
+    type: String,
+    default: ""
+  },
+  pincode: {
+    type: String,
+    default: ""
+  },
+  area: {
+    type: String,
+    default: ""
+  },
+  areaLocality: {
+    type: String,
+    default: ""
+  },
+  landmark: {
+    type: String,
+    default: ""
+  },
+  cityTownVillage: {
+    type: String,
+    default: ""
+  },
+  district: {
+    type: String,
+    default: ""
+  },
+  country: {
+    type: String,
+    default: "India"
+  },
+  isDefault: {
+    type: Boolean,
+    default: false
+  }
+}, {
+  _id: true,
+  timestamps: true
+});
+
 const UserSchema = new Schema({
   phone: {
     type: String,
@@ -80,6 +151,10 @@ const UserSchema = new Schema({
       type: String,
       default: "India"
     }
+  },
+  addresses: {
+    type: [AddressSchema],
+    default: []
   },
   fcmToken: {
     type: String

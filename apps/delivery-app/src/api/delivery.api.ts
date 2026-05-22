@@ -58,7 +58,7 @@ export interface DeliveryOrder {
 }
 
 export interface DeliveryJob extends DeliveryOrder {
-  distanceToRestaurant?: number;
+  distanceToRestaurant?: number | null;
   distanceToCustomer?: number;
   totalDistance?: number;
 }
