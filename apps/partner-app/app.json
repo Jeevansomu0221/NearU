@@ -39,7 +39,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Vyaha Partner needs photo access so you can upload restaurant photos, menu images, and business verification documents."
+          "photosPermission": "Vyaha Partner needs photo access so you can upload restaurant photos, menu images, and business verification documents.",
+          "cameraPermission": false
         }
       ],
       [
