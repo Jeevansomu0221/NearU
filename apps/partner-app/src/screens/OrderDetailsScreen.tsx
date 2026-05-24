@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl
+  RefreshControl,
+  Modal
 } from "react-native";
 import api from "../api/client";
 
@@ -29,6 +30,11 @@ interface Order {
     name: string;
     phone: string;
   };
+  deliveryPartnerId?: {
+    name?: string;
+    phone?: string;
+    vehicleType?: string;
+  };
   grandTotal: number;
   itemTotal: number;
   deliveryFee: number;
@@ -48,6 +54,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
 
   const loadOrderDetails = async () => {
     try {
@@ -79,44 +86,26 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   };
 
   const updateOrderStatus = async (status: string) => {
+    setPendingStatus(status);
+  };
+
+  const confirmStatusUpdate = async () => {
+    if (!pendingStatus) return;
+
     try {
       setUpdating(true);
-      
-      const confirmMessage = status === "ACCEPTED" 
-        ? "Accept this order?" 
-        : status === "REJECTED" 
-        ? "Reject this order?" 
-        : `Mark order as ${status}?`;
-      
-      Alert.alert(
-        "Confirm",
-        confirmMessage,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Confirm",
-            onPress: async () => {
-              try {
-                const res = await api.post(`/orders/partner/${orderId}/status`, { status });
-                // Type cast the response
-                const response = res.data as ApiResponse<Order>;
-                
-                if (response.success) {
-                  Alert.alert("Success", `Order ${status.toLowerCase()} successfully`);
-                  loadOrderDetails(); // Refresh order details
-                } else {
-                  Alert.alert("Error", response.message || "Failed to update order");
-                }
-              } catch (error: any) {
-                console.error("Error updating order:", error);
-                Alert.alert("Error", "Failed to update order status");
-              }
-            }
-          }
-        ]
-      );
+      const res = await api.post(`/orders/partner/${orderId}/status`, { status: pendingStatus });
+      const response = res.data as ApiResponse<Order>;
+
+      if (response.success) {
+        setPendingStatus(null);
+        loadOrderDetails();
+      } else {
+        Alert.alert("Error", response.message || "Failed to update order");
+      }
     } catch (error) {
       console.error("Error in updateOrderStatus:", error);
+      Alert.alert("Error", "Failed to update order status");
     } finally {
       setUpdating(false);
     }
@@ -185,6 +174,32 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       case 'REFUNDED': return 'Refunded';
       case 'CANCELLED': return 'Cancelled';
       default: return status;
+    }
+  };
+
+  const getPendingStatusTitle = () => {
+    switch (pendingStatus) {
+      case "ACCEPTED":
+        return "Accept order";
+      case "REJECTED":
+        return "Reject order";
+      case "PREPARING":
+        return "Mark as preparing";
+      case "READY":
+        return "Mark as ready";
+      default:
+        return `Mark as ${pendingStatus?.replace("_", " ").toLowerCase() || "updated"}`;
+    }
+  };
+
+  const getPendingStatusText = () => {
+    switch (pendingStatus) {
+      case "ACCEPTED":
+        return "The customer will see that your restaurant accepted the order.";
+      case "REJECTED":
+        return "The order will be cancelled and the customer will see the refund message if payment was done.";
+      default:
+        return "";
     }
   };
 
@@ -282,31 +297,21 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
         )}
       </View>
 
-      {/* Customer Info */}
+      {/* Parcel Handoff */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Customer Details</Text>
+        <Text style={styles.sectionTitle}>Parcel Handoff</Text>
         <View style={styles.infoCard}>
-          {order.customerId && (
-            <>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Name:</Text>
-                <Text style={styles.infoValue}>{order.customerId.name}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Phone:</Text>
-                <Text style={[styles.infoValue, styles.phoneText]}>
-                  {order.customerId.phone}
-                </Text>
-              </View>
-            </>
-          )}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Delivery Address:</Text>
-            <Text style={styles.infoValue}>{order.deliveryAddress}</Text>
+            <Text style={styles.infoLabel}>Order ID:</Text>
+            <Text style={styles.infoValue}>#{order._id.slice(-6).toUpperCase()}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Delivery Partner:</Text>
+            <Text style={styles.infoValue}>{order.deliveryPartnerId?.name || "Not assigned yet"}</Text>
           </View>
           {order.note && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Special Instructions:</Text>
+              <Text style={styles.infoLabel}>Packing Note:</Text>
               <Text style={styles.infoValue}>{order.note}</Text>
             </View>
           )}
@@ -417,6 +422,28 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
           )}
         </View>
       </View>
+
+      <Modal visible={Boolean(pendingStatus)} transparent animationType="fade" onRequestClose={() => !updating && setPendingStatus(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmEyebrow}>Order #{order._id.slice(-6).toUpperCase()}</Text>
+            <Text style={styles.confirmTitle}>{getPendingStatusTitle()}</Text>
+            {getPendingStatusText() ? <Text style={styles.confirmText}>{getPendingStatusText()}</Text> : null}
+            <View style={styles.confirmActions}>
+              <TouchableOpacity style={styles.confirmSecondary} onPress={() => setPendingStatus(null)} disabled={updating}>
+                <Text style={styles.confirmSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmPrimary, pendingStatus === "REJECTED" && styles.confirmDanger]}
+                onPress={confirmStatusUpdate}
+                disabled={updating}
+              >
+                {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Confirm</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -561,6 +588,70 @@ const styles = StyleSheet.create({
   },
   phoneText: {
     color: '#2196F3',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(20, 16, 12, 0.42)",
+    justifyContent: "center",
+    paddingHorizontal: 22
+  },
+  confirmCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#FFE0CC"
+  },
+  confirmEyebrow: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#C4541C",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  confirmTitle: {
+    marginTop: 8,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#2C2018"
+  },
+  confirmText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#6B5E55"
+  },
+  confirmActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18
+  },
+  confirmSecondary: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: "center",
+    backgroundColor: "#F5EFE7"
+  },
+  confirmSecondaryText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#6B5E55"
+  },
+  confirmPrimary: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: "center",
+    backgroundColor: "#4CAF50"
+  },
+  confirmDanger: {
+    backgroundColor: "#B42318"
+  },
+  confirmPrimaryText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#FFFFFF"
   },
   itemRow: {
     flexDirection: 'row',

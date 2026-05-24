@@ -6,11 +6,13 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  BackHandler,
   TouchableOpacity,
   RefreshControl,
   Linking
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { getOrderDetails } from "../api/order.api";
 import type { Order } from "../api/order.api";
 
@@ -65,6 +67,17 @@ export default function OrderStatusScreen({ route, navigation }: any) {
 
     return () => clearInterval(interval);
   }, [loadOrderDetails]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        navigation.reset({ index: 0, routes: [{ name: "Home" }] });
+        return true;
+      });
+
+      return () => subscription.remove();
+    }, [navigation])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -159,7 +172,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       case "DELIVERED":
         return "Your order was delivered successfully.";
       case "CANCELLED":
-        return "This order has been cancelled.";
+        return order?.customerCancellationMessage || "This order has been cancelled.";
       case "REJECTED":
         return "The restaurant could not accept this order.";
       default:
@@ -315,6 +328,11 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         <View style={[styles.sectionCard, styles.alertCard, { backgroundColor: statusTheme.bg }]}>
           <Text style={[styles.alertTitle, { color: statusTheme.text }]}>{getStatusText(order.status)}</Text>
           <Text style={[styles.alertText, { color: statusTheme.text }]}>{getStatusDescription(order.status)}</Text>
+          {order.cancellationReason ? (
+            <Text style={[styles.alertText, { color: statusTheme.text, marginTop: 8 }]}>
+              Reason: {order.cancellationReason}
+            </Text>
+          ) : null}
         </View>
       )}
 

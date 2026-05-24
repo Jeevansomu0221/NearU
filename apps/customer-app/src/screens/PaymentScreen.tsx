@@ -88,7 +88,20 @@ export default function PaymentScreen({ route, navigation }: any) {
     return parts.join(", ");
   };
 
-  const createOrderForGroup = async (group: CheckoutGroup, selectedMethod: string) => {
+  const getDeliveryPin = async () => {
+    return orderSummary?.deliveryLocation;
+  };
+
+  const createOrderForGroup = async (group: CheckoutGroup, selectedMethod: string, orderDeliveryLocation?: { latitude: number; longitude: number }) => {
+    if (
+      !orderDeliveryLocation ||
+      !Number.isFinite(orderDeliveryLocation.latitude) ||
+      !Number.isFinite(orderDeliveryLocation.longitude) ||
+      (orderDeliveryLocation.latitude === 0 && orderDeliveryLocation.longitude === 0)
+    ) {
+      throw new Error("Exact delivery GPS pin is required. Please allow location permission before placing the order.");
+    }
+
     const orderItems = group.items.map((item: any) => ({
       name: item.name,
       quantity: item.quantity,
@@ -101,7 +114,8 @@ export default function PaymentScreen({ route, navigation }: any) {
       orderSummary.address,
       orderItems,
       orderSummary.note || "",
-      selectedMethod
+      selectedMethod,
+      orderDeliveryLocation
     );
 
     if (!response.success || !response.data) {
@@ -113,9 +127,10 @@ export default function PaymentScreen({ route, navigation }: any) {
 
   const placeOrders = async (selectedMethod: string) => {
     const createdOrders = [];
+    const orderDeliveryLocation = await getDeliveryPin();
 
     for (const group of groupedShops) {
-      createdOrders.push(await createOrderForGroup(group, selectedMethod));
+      createdOrders.push(await createOrderForGroup(group, selectedMethod, orderDeliveryLocation));
     }
 
     return createdOrders;
@@ -123,9 +138,10 @@ export default function PaymentScreen({ route, navigation }: any) {
 
   const placeOnlineOrders = async () => {
     const paidOrders = [];
+    const orderDeliveryLocation = await getDeliveryPin();
 
     for (const group of groupedShops) {
-      const createdOrder = await createOrderForGroup(group, "RAZORPAY");
+      const createdOrder = await createOrderForGroup(group, "RAZORPAY", orderDeliveryLocation);
       const paymentOrderResponse = await createRazorpayOrder({ orderId: createdOrder._id });
 
       if (!paymentOrderResponse.success || !paymentOrderResponse.data) {

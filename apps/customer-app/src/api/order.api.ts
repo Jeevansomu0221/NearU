@@ -11,6 +11,10 @@ interface OrderItem {
 interface CreateOrderRequest {
   partnerId: string;
   deliveryAddress: string;
+  deliveryLocation: {
+    latitude: number;
+    longitude: number;
+  };
   items: OrderItem[];
   note?: string;
   paymentMethod?: string;
@@ -26,6 +30,9 @@ export interface Order {
   customerId?: any;
   deliveryPartnerId?: any;
   deliveryAddress?: string;
+  deliveryLocation?: {
+    coordinates: [number, number];
+  };
   note?: string;
   items: OrderItem[];
   itemTotal?: number;
@@ -35,6 +42,9 @@ export interface Order {
   paymentId?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
+  cancellationReason?: string;
+  customerCancellationMessage?: string;
+  autoCancelledAt?: string;
 }
 
 /**
@@ -44,12 +54,14 @@ export const createShopOrder = (
   partnerId: string,
   deliveryAddress: string,
   items: OrderItem[],
-  note?: string,
-  paymentMethod?: string
+  note: string | undefined,
+  paymentMethod: string | undefined,
+  deliveryLocation: { latitude: number; longitude: number }
 ): Promise<ApiResponse<Order>> => {
   const requestData: CreateOrderRequest = {
     partnerId,
     deliveryAddress,
+    deliveryLocation,
     items,
     note: note || ""
   };

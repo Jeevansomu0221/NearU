@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { formatAddress, type AddressLike } from "../utils/address";
 
 type Job = {
   _id: string;
@@ -24,7 +25,7 @@ type Job = {
   partnerId?: {
     restaurantName?: string;
     shopName?: string;
-    address?: string;
+    address?: AddressLike;
   };
   customerId?: {
     name?: string;
@@ -38,13 +39,6 @@ type Props = {
   onAccept: () => void;
   onDismiss: () => void;
   autoHideMs?: number;
-};
-
-const shortAddress = (value?: string) => {
-  if (!value || typeof value !== "string") return "Address not available";
-  const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
-  if (parts.length <= 2) return parts.join(", ") || value;
-  return parts.slice(0, 2).join(", ");
 };
 
 export default function NewJobBanner({
@@ -143,7 +137,7 @@ export default function NewJobBanner({
           <View style={styles.routeText}>
             <Text style={styles.routeLabel}>Pickup</Text>
             <Text style={styles.routeValue} numberOfLines={2}>
-              {restaurantName} - {shortAddress(job.partnerId?.address)}
+              {restaurantName} - {formatAddress(job.partnerId?.address, { short: true })}
             </Text>
           </View>
         </View>
@@ -152,7 +146,7 @@ export default function NewJobBanner({
           <View style={styles.routeText}>
             <Text style={styles.routeLabel}>Drop</Text>
             <Text style={styles.routeValue} numberOfLines={2}>
-              {job.customerId?.name || "Customer"} - {shortAddress(job.deliveryAddress)}
+              {job.customerId?.name || "Customer"} - {formatAddress(job.deliveryAddress, { short: true })}
             </Text>
           </View>
         </View>

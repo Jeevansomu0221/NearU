@@ -63,6 +63,12 @@ const AddressSchema = new Schema({
     type: String,
     default: "India"
   },
+  latitude: {
+    type: Number
+  },
+  longitude: {
+    type: Number
+  },
   isDefault: {
     type: Boolean,
     default: false
@@ -150,6 +156,12 @@ const UserSchema = new Schema({
     country: {
       type: String,
       default: "India"
+    },
+    latitude: {
+      type: Number
+    },
+    longitude: {
+      type: Number
     }
   },
   addresses: {

@@ -12,7 +12,8 @@ import {
   getOrderDetails,
   cancelOrder,
   getAvailableDeliveryJobs,
-  acceptDeliveryJob
+  acceptDeliveryJob,
+  rejectDeliveryJob
 } from "../controllers/order.controller";
 
 const router = Router();
@@ -100,6 +101,12 @@ router.post(
   "/delivery/:orderId/accept", 
   authMiddleware, 
   acceptDeliveryJob
+);
+
+router.post(
+  "/delivery/:orderId/reject",
+  authMiddleware,
+  rejectDeliveryJob
 );
 
 // Delivery gets assigned orders

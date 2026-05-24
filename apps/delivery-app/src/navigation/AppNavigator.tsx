@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Import screens
 import LoginScreen from "../screens/LoginScreen";
@@ -22,6 +23,8 @@ const Tab = createBottomTabNavigator();
 
 // Tab Navigator (Main screen)
 function MainTabs() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -30,6 +33,9 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: "#fff",
           borderTopColor: "#eee",
+          height: 62 + Math.max(insets.bottom, 8),
+          paddingBottom: Math.max(insets.bottom, 8),
+          paddingTop: 8,
         },
         headerShown: false,
       }}

@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPatch, ApiResponse } from "./client";
+import type { AddressLike } from "../utils/address";
 
 // Interfaces
 export interface OrderItem {
@@ -19,7 +20,7 @@ export interface PartnerInfo {
   restaurantName: string;
   shopName: string;
   phone: string;
-  address: string;  // This will now be a string
+  address: AddressLike;
   googleMapsLink?: string;  // ADD THIS
   location?: {
     coordinates: [number, number];

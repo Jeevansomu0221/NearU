@@ -6,15 +6,19 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert
+  Alert,
+  RefreshControl
 } from "react-native";
 import { getDeliveryStats, getTodaysEarnings } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function EarningsScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<any>(null);
   const [todayEarnings, setTodayEarnings] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
 
   useEffect(() => {
@@ -35,13 +39,20 @@ export default function EarningsScreen({ navigation }: any) {
       const statsResponse = await getDeliveryStats();
       if (statsResponse.success && statsResponse.data) {
         setStats(statsResponse.data);
+        setTodayEarnings(statsResponse.data.todaysEarnings ?? todayEarnings);
       }
     } catch (error: any) {
       console.error("Error loading earnings:", error);
       Alert.alert("Error", "Failed to load earnings data");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadEarningsData();
   };
 
   const formatCurrency = (amount: number) => {
@@ -49,10 +60,7 @@ export default function EarningsScreen({ navigation }: any) {
   };
 
   const earningsHistory = [
-    { id: '1', date: 'Today', amount: todayEarnings, deliveries: 3 },
-    { id: '2', date: 'Yesterday', amount: 450, deliveries: 2 },
-    { id: '3', date: '2 days ago', amount: 600, deliveries: 3 },
-    { id: '4', date: '3 days ago', amount: 350, deliveries: 1 },
+    { id: '1', date: 'Today', amount: todayEarnings, deliveries: stats?.todaysDeliveries || 0 },
   ];
 
   if (loading) {
@@ -65,7 +73,11 @@ export default function EarningsScreen({ navigation }: any) {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 34 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#4CAF50"]} tintColor="#4CAF50" />}
+    >
       {/* Today's Earnings Card */}
       <View style={styles.todayCard}>
         <Text style={styles.todayLabel}>TODAY'S EARNINGS</Text>
@@ -172,7 +184,7 @@ export default function EarningsScreen({ navigation }: any) {
           </View>
           <View style={styles.breakdownTextContainer}>
             <Text style={styles.breakdownText}>Tips Received</Text>
-            <Text style={styles.breakdownAmount}>₹120</Text>
+            <Text style={styles.breakdownAmount}>₹0</Text>
           </View>
         </View>
         
@@ -182,7 +194,7 @@ export default function EarningsScreen({ navigation }: any) {
           </View>
           <View style={styles.breakdownTextContainer}>
             <Text style={styles.breakdownText}>Bonus Earnings</Text>
-            <Text style={styles.breakdownAmount}>₹80</Text>
+            <Text style={styles.breakdownAmount}>₹0</Text>
           </View>
         </View>
         
@@ -191,7 +203,7 @@ export default function EarningsScreen({ navigation }: any) {
         <View style={styles.totalEarningsItem}>
           <Text style={styles.totalEarningsLabel}>Total Earnings</Text>
           <Text style={styles.totalEarningsAmount}>
-            {formatCurrency(todayEarnings + 120 + 80)}
+            {formatCurrency(todayEarnings)}
           </Text>
         </View>
       </View>
@@ -222,7 +234,7 @@ export default function EarningsScreen({ navigation }: any) {
           <Ionicons name="wallet" size={24} color="#4CAF50" />
           <Text style={styles.withdrawalTitle}>Available Balance</Text>
         </View>
-        <Text style={styles.withdrawalAmount}>{formatCurrency(todayEarnings + 1250)}</Text>
+        <Text style={styles.withdrawalAmount}>{formatCurrency(stats?.totalEarnings || 0)}</Text>
         <Text style={styles.withdrawalNote}>
           You can withdraw your earnings every Monday
         </Text>

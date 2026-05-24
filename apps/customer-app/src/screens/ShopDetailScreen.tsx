@@ -131,14 +131,18 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (!selectedCategory && groupedMenu.length > 0) {
-      setSelectedCategory(groupedMenu[0][0]);
+      setSelectedCategory("All");
     }
   }, [groupedMenu, selectedCategory]);
 
   const selectedItems = useMemo(() => {
+    if (selectedCategory === "All") {
+      return menu;
+    }
+
     const activeSection = groupedMenu.find(([title]) => title === selectedCategory);
     return activeSection?.[1] || groupedMenu[0]?.[1] || [];
-  }, [groupedMenu, selectedCategory]);
+  }, [groupedMenu, menu, selectedCategory]);
 
   const getShopName = () => shop?.restaurantName || shop?.shopName || "Restaurant";
 
@@ -305,7 +309,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoryTabs}
             >
-              {groupedMenu.map(([section]) => {
+              {["All", ...groupedMenu.map(([section]) => section)].map((section) => {
                 const active = selectedCategory === section;
 
                 return (
@@ -315,7 +319,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                     onPress={() => setSelectedCategory(section)}
                   >
                     <MaterialCommunityIcons
-                      name={active ? "silverware-fork-knife" : "food-outline"}
+                      name={section === "All" ? "view-grid-outline" : active ? "silverware-fork-knife" : "food-outline"}
                       size={14}
                       color={active ? "#FFFFFF" : "#6B6058"}
                       style={styles.categoryTabIcon}

@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Text, TouchableOpacity } from 'react-native';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
@@ -37,6 +38,8 @@ export interface Address {
   country?: string;
   nearbyPlaces?: string[];
   googleMapsLink?: string;
+  latitude?: number;
+  longitude?: number;
   isDefault?: boolean;
 }
 
@@ -71,6 +74,10 @@ export interface OrderSummary {
   deliveryFee: number;
   total: number;
   address: string;
+  deliveryLocation?: {
+    latitude: number;
+    longitude: number;
+  };
   note?: string;
   groupedShops?: Array<{
     shopId: string;
@@ -115,6 +122,13 @@ const isGeneratedCustomerName = (value?: string) => {
   );
 };
 
+const hasExactAddressPin = (address?: Address) =>
+  typeof address?.latitude === "number" &&
+  typeof address?.longitude === "number" &&
+  Number.isFinite(address.latitude) &&
+  Number.isFinite(address.longitude) &&
+  !(address.latitude === 0 && address.longitude === 0);
+
 const isCustomerProfileComplete = (profile: {
   name?: string;
   address?: Address;
@@ -132,7 +146,8 @@ const isCustomerProfileComplete = (profile: {
     !!(address?.cityTownVillage || address?.city) &&
     !!address?.state &&
     !!address?.pincode &&
-    !!(address?.areaLocality || address?.area);
+    !!(address?.areaLocality || address?.area) &&
+    hasExactAddressPin(address);
 
   return Boolean(hasRealName && hasAddress);
 };
@@ -250,7 +265,17 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="OrderStatus" 
         component={OrderStatusScreen}
-        options={{ title: 'Order Status' }}
+        options={({ navigation }) => ({
+          title: 'Order Status',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
+              style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "700" }}>Home</Text>
+            </TouchableOpacity>
+          )
+        })}
       />
       <Stack.Screen 
         name="Orders" 

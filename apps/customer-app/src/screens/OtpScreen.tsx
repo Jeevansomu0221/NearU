@@ -59,7 +59,19 @@ export default function OtpScreen({ navigation, route }: Props) {
       state?: string;
       pincode?: string;
       area?: string;
+      latitude?: number;
+      longitude?: number;
     };
+    addresses?: Array<{
+      street?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+      area?: string;
+      latitude?: number;
+      longitude?: number;
+      isDefault?: boolean;
+    }>;
   }) => {
     const normalizedName = (profile.name || '').trim().toLowerCase();
     const isGeneratedName =
@@ -73,14 +85,22 @@ export default function OtpScreen({ navigation, route }: Props) {
       !isGeneratedName &&
       profile.name.trim().length >= 3;
 
-    const address = profile.address;
+    const address = profile.address || profile.addresses?.find((entry) => entry.isDefault) || profile.addresses?.[0];
+    const hasExactPin =
+      typeof address?.latitude === "number" &&
+      typeof address?.longitude === "number" &&
+      Number.isFinite(address.latitude) &&
+      Number.isFinite(address.longitude) &&
+      !(address.latitude === 0 && address.longitude === 0);
+
     return Boolean(
       hasRealName &&
         address?.street &&
         address?.city &&
         address?.state &&
         address?.pincode &&
-        address?.area
+        address?.area &&
+        hasExactPin
     );
   };
 

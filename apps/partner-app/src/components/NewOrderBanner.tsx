@@ -18,6 +18,8 @@ type Props = {
   itemCount: number;
   grandTotal: number;
   onOpen: () => void;
+  onAccept?: () => void;
+  onReject?: () => void;
   onDismiss: () => void;
   autoHideMs?: number;
 };
@@ -28,8 +30,10 @@ export default function NewOrderBanner({
   itemCount,
   grandTotal,
   onOpen,
+  onAccept,
+  onReject,
   onDismiss,
-  autoHideMs = 10000
+  autoHideMs = 20000
 }: Props) {
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(-220)).current;
@@ -99,12 +103,17 @@ export default function NewOrderBanner({
             #{orderId.slice(-6).toUpperCase()} - Rs {grandTotal}
           </Text>
           <Text style={styles.subtitle}>
-            {itemCount} item{itemCount === 1 ? "" : "s"} waiting for your acceptance
+            {itemCount} item{itemCount === 1 ? "" : "s"} waiting for accept / reject
           </Text>
         </View>
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.openButton} onPress={onOpen} activeOpacity={0.85}>
-            <Text style={styles.openButtonText}>Open</Text>
+          {onReject ? (
+            <TouchableOpacity style={styles.rejectButton} onPress={onReject} activeOpacity={0.85}>
+              <Text style={styles.rejectButtonText}>Reject</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={styles.openButton} onPress={onAccept || onOpen} activeOpacity={0.85}>
+            <Text style={styles.openButtonText}>{onAccept ? "Accept" : "Open"}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.dismissButton} onPress={onDismiss} activeOpacity={0.85}>
             <Ionicons name="close" size={20} color="#7B6D63" />
@@ -177,6 +186,23 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   actions: {
+    alignItems: "flex-end",
+    gap: 6
+  },
+  rejectButton: {
+    backgroundColor: "#FFF1F1",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FFD1D1"
+  },
+  rejectButtonText: {
+    color: "#B42318",
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  actionButtonsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6

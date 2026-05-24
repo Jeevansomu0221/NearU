@@ -32,6 +32,18 @@ const OrderSchema = new Schema({
     required: true
   },
 
+  deliveryLocation: {
+    type: {
+      type: String,
+      enum: ["Point"],
+      default: "Point"
+    },
+    coordinates: {
+      type: [Number],
+      default: undefined
+    }
+  },
+
   note: {
     type: String,
     default: ""
@@ -131,6 +143,20 @@ const OrderSchema = new Schema({
       "REJECTED"        // Partner rejected order
     ],
     default: "PENDING"
+  },
+
+  cancellationReason: {
+    type: String,
+    default: ""
+  },
+
+  customerCancellationMessage: {
+    type: String,
+    default: ""
+  },
+
+  autoCancelledAt: {
+    type: Date
   }
 }, { 
   timestamps: true 
@@ -143,5 +169,6 @@ OrderSchema.index({ deliveryPartnerId: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
 OrderSchema.index({ razorpayOrderId: 1 });
+OrderSchema.index({ deliveryLocation: "2dsphere" });
 
 export default model("Order", OrderSchema);

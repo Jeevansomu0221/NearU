@@ -92,6 +92,49 @@ const clearSessionAndNotify = async () => {
   DeviceEventEmitter.emit("auth:expired");
 };
 
+let inFlightRefresh: Promise<string | null> | null = null;
+
+const refreshAccessToken = async () => {
+  if (inFlightRefresh) {
+    return inFlightRefresh;
+  }
+
+  inFlightRefresh = (async () => {
+    try {
+      const refreshToken = await AsyncStorage.getItem("refreshToken");
+      if (!refreshToken) return null;
+
+      const response = await axios.post(
+        "/auth/refresh",
+        { refreshToken },
+        {
+          baseURL: api.defaults.baseURL || API_BASE_URL,
+          timeout: 15000,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+
+      const refreshData = response.data as any;
+      const token = refreshData?.data?.token;
+      const nextRefreshToken = refreshData?.data?.refreshToken;
+      if (!token) return null;
+
+      await AsyncStorage.multiSet([
+        ["token", token],
+        ["refreshToken", nextRefreshToken || refreshToken]
+      ]);
+
+      return token;
+    } catch {
+      return null;
+    } finally {
+      inFlightRefresh = null;
+    }
+  })();
+
+  return inFlightRefresh;
+};
+
 api.interceptors.request.use(
   async (config: any) => {
     if (isFormDataPayload(config.data) && config.headers) {
@@ -119,7 +162,7 @@ api.interceptors.response.use(
     logDebug(`API Response: ${response.status} ${response.config.url}`);
     return response;
   },
-  (error: any) => {
+  async (error: any) => {
     const requestConfig = error.config;
     const currentRetryIndex = requestConfig?._baseUrlRetryIndex || 0;
     const nextBaseUrl = API_BASE_URLS[currentRetryIndex + 1];
@@ -133,16 +176,30 @@ api.interceptors.response.use(
       return api.request(requestConfig);
     }
 
+    if (
+      error.response?.status === 401 &&
+      requestConfig &&
+      !requestConfig._tokenRefreshRetry &&
+      !requestConfig.url?.includes("/auth/refresh")
+    ) {
+      const refreshedToken = await refreshAccessToken();
+
+      if (refreshedToken) {
+        requestConfig._tokenRefreshRetry = true;
+        requestConfig.headers = requestConfig.headers || {};
+        requestConfig.headers.Authorization = `Bearer ${refreshedToken}`;
+        return api.request(requestConfig);
+      }
+
+      await clearSessionAndNotify();
+    }
+
     logDebug("API Error:", {
       message: error.message,
       status: error.response?.status,
       url: error.config?.url,
       data: error.response?.data
     });
-
-    if (error.response?.status === 401) {
-      clearSessionAndNotify().catch(() => {});
-    }
 
     if (error.message === "Network Error") {
       return Promise.reject(new Error("Cannot connect to server. Please check your connection."));

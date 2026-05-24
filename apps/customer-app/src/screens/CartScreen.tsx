@@ -9,9 +9,10 @@ import {
   ActivityIndicator,
   TextInput
 } from "react-native";
+import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
-import { getUserProfile, type UserProfile } from "../api/user.api";
+import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 
 interface CartItem {
   _id?: string;
@@ -101,33 +102,114 @@ export default function CartScreen({ route, navigation }: any) {
       .join(", ");
   };
 
-  const proceedToPayment = async () => {
-    if (items.length === 0) {
-      Alert.alert("Cart Empty", "Please add items to cart first");
-      return;
+  const getDeliveryLocation = () => {
+    const address = userProfile?.address;
+    if (!address || typeof address === "string") return undefined;
+
+    if (
+      typeof address.latitude === "number" &&
+      typeof address.longitude === "number" &&
+      Number.isFinite(address.latitude) &&
+      Number.isFinite(address.longitude) &&
+      !(address.latitude === 0 && address.longitude === 0)
+    ) {
+      return {
+        latitude: address.latitude,
+        longitude: address.longitude
+      };
     }
 
-    if (!userProfile?.address) {
-      Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Add Address", onPress: () => navigation.navigate("Profile") }
-      ]);
-      return;
-    }
-
-    navigation.navigate("Payment", {
-      userProfile,
-      orderSummary: {
-        items,
-        subtotal,
-        deliveryFee,
-        total,
-        address: formatAddress(),
-        note,
-        groupedShops: groupedItems
-      }
-    });
+    return undefined;
   };
+
+  const captureAndSaveDeliveryLocation = async () => {
+    const address = userProfile?.address;
+    if (!address || typeof address === "string") {
+      Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.");
+      return undefined;
+    }
+
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status !== "granted") {
+      Alert.alert(
+        "Location Permission Needed",
+        "Please allow location access so we can save your exact GPS pin. Orders cannot be placed with only pincode or text address."
+      );
+      return undefined;
+    }
+
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High
+    });
+
+    const deliveryLocation = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude
+    };
+
+    const payload: SavedAddress = {
+      ...address,
+      addressId: address._id,
+      latitude: deliveryLocation.latitude,
+      longitude: deliveryLocation.longitude,
+      isDefault: address.isDefault ?? true
+    } as SavedAddress & { addressId?: string };
+
+    const response = await updateUserAddress(payload);
+    if (!response.success || !response.data) {
+      Alert.alert("Location Save Failed", response.message || "Could not save your exact delivery pin.");
+      return undefined;
+    }
+
+    setUserProfile(response.data);
+    return deliveryLocation;
+  };
+
+  const proceedToPayment = async () => {
+    try {
+      setLoading(true);
+
+      if (items.length === 0) {
+        Alert.alert("Cart Empty", "Please add items to cart first");
+        return;
+      }
+
+      if (!userProfile?.address) {
+        Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Add Address", onPress: () => navigation.navigate("Profile") }
+        ]);
+        return;
+      }
+
+      const deliveryLocation = getDeliveryLocation() || await captureAndSaveDeliveryLocation();
+      if (!deliveryLocation) {
+        return;
+      }
+
+      navigation.navigate("Payment", {
+        userProfile,
+        orderSummary: {
+          items,
+          subtotal,
+          deliveryFee,
+          total,
+          address: formatAddress(),
+          deliveryLocation,
+          note,
+          groupedShops: groupedItems
+        }
+      });
+    } catch (error: any) {
+      Alert.alert("Location Error", error.message || "Could not capture your exact delivery location.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const hasAddressPin = Boolean(getDeliveryLocation());
+  const canCheckout =
+    Boolean(userProfile?.address) && !loading && items.length > 0;
 
   const handleRemoveItem = (item: CartItem) => {
       Alert.alert("Remove Item", "Remove this item from cart?", [
@@ -233,6 +315,13 @@ export default function CartScreen({ route, navigation }: any) {
               <Text style={styles.addressName}>{userProfile?.name || "Customer"}</Text>
               <Text style={styles.addressPhone}>{userProfile?.phone}</Text>
               <Text style={styles.addressText}>{formatAddress()}</Text>
+
+              {userProfile?.address && hasAddressPin ? (
+                <View style={styles.pinSavedRow}>
+                  <Text style={styles.pinSavedDot}>●</Text>
+                  <Text style={styles.pinSavedText}>Location access is set for accurate delivery.</Text>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.sectionCard}>
@@ -271,9 +360,9 @@ export default function CartScreen({ route, navigation }: any) {
               <Text style={styles.footerTotal}>Rs {total}</Text>
             </View>
             <TouchableOpacity
-              style={[styles.checkoutButton, (!userProfile?.address || loading) && styles.checkoutButtonDisabled]}
+              style={[styles.checkoutButton, !canCheckout && styles.checkoutButtonDisabled]}
               onPress={proceedToPayment}
-              disabled={loading || !userProfile?.address}
+              disabled={!canCheckout}
             >
               <Text style={styles.checkoutButtonText}>Continue to Payment</Text>
             </TouchableOpacity>
@@ -580,5 +669,25 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800"
+  },
+  pinSavedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F4EAE0"
+  },
+  pinSavedDot: {
+    color: "#2B9C4A",
+    fontSize: 14,
+    marginRight: 6
+  },
+  pinSavedText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#216E39",
+    fontWeight: "600"
   }
 });

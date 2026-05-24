@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -16,9 +17,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, updateLocation } from "../api/delivery.api";
-import { getDeliveryProfile } from "../api/profile.api";
+import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, rejectJob, updateLocation } from "../api/delivery.api";
+import { getDeliveryProfile, updateDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
+import { formatAddress } from "../utils/address";
 import NewJobBanner from "../components/NewJobBanner";
 
 interface CalculatedJob extends DeliveryJob {
@@ -38,6 +40,7 @@ export default function JobsScreen({ navigation }: any) {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isAvailable, setIsAvailable] = useState(true);
   const [newJobAlert, setNewJobAlert] = useState<CalculatedJob | null>(null);
+  const [selectedJobAction, setSelectedJobAction] = useState<{ job: CalculatedJob; action: "accept" | "reject" } | null>(null);
   const [emptyMessage, setEmptyMessage] = useState("When restaurants mark orders as READY, they will appear here for delivery.");
   const knownJobIds = useRef<Set<string>>(new Set());
   const firstLoadDone = useRef(false);
@@ -185,6 +188,7 @@ export default function JobsScreen({ navigation }: any) {
     setIsAvailable(value);
     try {
       await AsyncStorage.setItem("driverAvailability", value.toString());
+      await updateDeliveryProfile({ isAvailable: value });
     } catch (error) {
       console.error("Failed to save availability preference", error);
     }
@@ -212,39 +216,36 @@ export default function JobsScreen({ navigation }: any) {
     await loadAvailableJobs();
   };
 
-  const handleAcceptJob = async (orderId: string, job: CalculatedJob) => {
-    setAcceptingJobId(orderId);
+  const handleAcceptJob = (job: CalculatedJob) => {
+    setSelectedJobAction({ job, action: "accept" });
+  };
 
-    const distanceLabel = typeof job.distance === "number" ? `${job.distance} km` : "Distance pending";
-    const timeLabel = typeof job.travelTime === "number" ? `${job.travelTime} min` : "Time pending";
+  const handleRejectJob = (job: CalculatedJob) => {
+    setSelectedJobAction({ job, action: "reject" });
+  };
 
-    Alert.alert(
-      "Accept Delivery Job",
-      `Distance: ${distanceLabel}\nEstimated time: ${timeLabel}\nEstimated earnings: Rs ${
-        job.estimatedEarnings || job.deliveryFee || 49
-      }`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-          onPress: () => setAcceptingJobId(null)
-        },
-        {
-          text: "Accept",
-          onPress: async () => {
-            const response = await acceptJob(orderId);
-            setAcceptingJobId(null);
+  const confirmSelectedJobAction = async () => {
+    if (!selectedJobAction) return;
 
-            if (response.success) {
-              navigation.getParent()?.navigate("JobDetails", { orderId, job });
-              loadAvailableJobs();
-            } else {
-              Alert.alert("Could not accept job", response.message || "Please try again.");
-            }
-          }
+    const { job, action } = selectedJobAction;
+    setAcceptingJobId(job._id);
+
+    try {
+      const response = action === "accept" ? await acceptJob(job._id) : await rejectJob(job._id);
+      if (response.success) {
+        setSelectedJobAction(null);
+        setNewJobAlert(null);
+        setJobs((current) => current.filter((entry) => entry._id !== job._id));
+        if (action === "accept") {
+          navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job: response.data || job });
         }
-      ]
-    );
+        loadAvailableJobs();
+      } else {
+        Alert.alert(action === "accept" ? "Could not accept job" : "Could not reject job", response.message || "Please try again.");
+      }
+    } finally {
+      setAcceptingJobId(null);
+    }
   };
 
   const handleBannerAccept = async () => {
@@ -255,7 +256,7 @@ export default function JobsScreen({ navigation }: any) {
     const response = await acceptJob(job._id);
     setAcceptingJobId(null);
     if (response.success) {
-      navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job });
+      navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job: response.data || job });
       loadAvailableJobs();
     } else {
       Alert.alert("Could not accept job", response.message || "Please try again.");
@@ -275,11 +276,6 @@ export default function JobsScreen({ navigation }: any) {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  const formatAddress = (address: any) => {
-    if (!address || typeof address !== "string") return "Address not available";
-    return address.split(",")[0]?.trim() || address;
-  };
-
   const getItemsSummary = (items: any[]) => {
     if (!Array.isArray(items) || items.length === 0) return "No items";
     const totalItems = items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
@@ -291,10 +287,7 @@ export default function JobsScreen({ navigation }: any) {
       <View style={styles.headerTop}>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, width < 380 && styles.titleCompact]} numberOfLines={2}>
-            Available Delivery Jobs
-          </Text>
-          <Text style={styles.locationText}>
-            {locationError || (userLocation ? "Showing jobs near your location" : "Checking your location")}
+            Available Jobs
           </Text>
         </View>
         <TouchableOpacity onPress={onRefresh} style={styles.refreshButton} accessibilityLabel="Refresh jobs">
@@ -303,8 +296,8 @@ export default function JobsScreen({ navigation }: any) {
       </View>
       <View style={styles.availabilityRow}>
         <View style={styles.availabilityText}>
-          <Text style={styles.availabilityLabel}>Available for deliveries</Text>
-          <Text style={styles.availabilitySubLabel}>{isAvailable ? "You will receive job notifications" : "You won't receive job notifications"}</Text>
+          <Text style={styles.availabilityLabel}>{isAvailable ? "Available to deliver now" : "Not available for delivery"}</Text>
+          {locationError ? <Text style={styles.availabilitySubLabel}>{locationError}</Text> : null}
         </View>
         <Switch
           value={isAvailable}
@@ -338,7 +331,7 @@ export default function JobsScreen({ navigation }: any) {
           <Ionicons name="storefront-outline" size={18} color="#2E7D32" />
           <View style={styles.routeTextBlock}>
             <Text style={styles.restaurantName}>{item.partnerId?.restaurantName || item.partnerId?.shopName || "Restaurant"}</Text>
-            <Text style={styles.routeSubText}>{formatAddress(item.partnerId?.address)}</Text>
+            <Text style={styles.routeSubText}>{formatAddress(item.partnerId?.address, { short: true })}</Text>
           </View>
         </View>
         <View style={styles.routeDivider} />
@@ -346,7 +339,7 @@ export default function JobsScreen({ navigation }: any) {
           <Ionicons name="home-outline" size={18} color="#1565C0" />
           <View style={styles.routeTextBlock}>
             <Text style={styles.customerName}>{item.customerId?.name || "Customer"}</Text>
-            <Text style={styles.routeSubText}>{formatAddress(item.deliveryAddress)}</Text>
+            <Text style={styles.routeSubText}>{formatAddress(item.deliveryAddress, { short: true })}</Text>
           </View>
         </View>
       </View>
@@ -370,7 +363,7 @@ export default function JobsScreen({ navigation }: any) {
         </View>
         <TouchableOpacity
           style={[styles.acceptButton, acceptingJobId === item._id && styles.acceptButtonDisabled]}
-          onPress={() => handleAcceptJob(item._id, item)}
+          onPress={() => handleAcceptJob(item)}
           disabled={acceptingJobId === item._id}
         >
           {acceptingJobId === item._id ? (
@@ -378,6 +371,13 @@ export default function JobsScreen({ navigation }: any) {
           ) : (
             <Text style={styles.acceptButtonText}>Accept</Text>
           )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.rejectButton}
+          onPress={() => handleRejectJob(item)}
+          disabled={acceptingJobId === item._id}
+        >
+          <Text style={styles.rejectButtonText}>Reject</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -418,8 +418,54 @@ export default function JobsScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
         }
-        contentContainerStyle={jobs.length === 0 ? styles.emptyListContent : styles.listContent}
+        contentContainerStyle={[
+          jobs.length === 0 ? styles.emptyListContent : styles.listContent,
+          { paddingBottom: insets.bottom + 24 }
+        ]}
       />
+      <Modal
+        visible={Boolean(selectedJobAction)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !acceptingJobId && setSelectedJobAction(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmEyebrow}>Delivery job</Text>
+            <Text style={styles.confirmTitle}>
+              {selectedJobAction?.action === "accept" ? "Accept this delivery?" : "Reject this delivery?"}
+            </Text>
+            <Text style={styles.confirmText}>
+              {selectedJobAction?.action === "accept"
+                ? "You will go directly to the job details for pickup and delivery."
+                : "This job will be removed from your available list and remain open for other delivery partners."}
+            </Text>
+            {selectedJobAction?.job ? (
+              <View style={styles.confirmMetaCard}>
+                <Text style={styles.confirmMetaTitle}>Order #{selectedJobAction.job._id.slice(-6).toUpperCase()}</Text>
+                <Text style={styles.confirmMetaText}>
+                  {selectedJobAction.job.partnerId?.restaurantName || selectedJobAction.job.partnerId?.shopName || "Restaurant"}
+                </Text>
+                <Text style={styles.confirmMetaText}>
+                  Earnings Rs {selectedJobAction.job.estimatedEarnings || selectedJobAction.job.deliveryFee || 49}
+                </Text>
+              </View>
+            ) : null}
+            <View style={styles.confirmActions}>
+              <TouchableOpacity style={styles.confirmSecondary} onPress={() => setSelectedJobAction(null)} disabled={Boolean(acceptingJobId)}>
+                <Text style={styles.confirmSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmPrimary, selectedJobAction?.action === "reject" && styles.confirmDanger]}
+                onPress={confirmSelectedJobAction}
+                disabled={Boolean(acceptingJobId)}
+              >
+                {acceptingJobId ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Confirm</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -656,6 +702,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800"
   },
+  rejectButton: {
+    minWidth: 88,
+    backgroundColor: "#FFF1F1",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FFD1D1"
+  },
+  rejectButtonText: {
+    color: "#B42318",
+    fontSize: 14,
+    fontWeight: "800"
+  },
   emptyListContent: {
     flexGrow: 1
   },
@@ -696,5 +757,85 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 24
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+    justifyContent: "center",
+    paddingHorizontal: 22
+  },
+  confirmCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#DFF3E3"
+  },
+  confirmEyebrow: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#2E7D32",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  confirmTitle: {
+    marginTop: 8,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#1F2937"
+  },
+  confirmText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#667085"
+  },
+  confirmMetaCard: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "#F8FAFC"
+  },
+  confirmMetaTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#1F2937"
+  },
+  confirmMetaText: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#667085"
+  },
+  confirmActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18
+  },
+  confirmSecondary: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: "center",
+    backgroundColor: "#F3F4F6"
+  },
+  confirmSecondaryText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#475467"
+  },
+  confirmPrimary: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: "center",
+    backgroundColor: "#4CAF50"
+  },
+  confirmDanger: {
+    backgroundColor: "#B42318"
+  },
+  confirmPrimaryText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#FFFFFF"
   }
 });

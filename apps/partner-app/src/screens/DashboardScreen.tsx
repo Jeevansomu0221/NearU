@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -13,12 +13,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 import NotificationButton from "../components/NotificationButton";
+import NewOrderBanner from "../components/NewOrderBanner";
+
+const isAwaitingPartnerAction = (status: string) =>
+  status === "CONFIRMED";
 
 export default function DashboardScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [shopOpen, setShopOpen] = useState(true);
   const [partner, setPartner] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [newOrderAlert, setNewOrderAlert] = useState<any>(null);
+  const knownOrderIds = useRef<Set<string>>(new Set());
   const [stats, setStats] = useState({
     todayOrders: 0,
     totalOrders: 0,
@@ -29,7 +35,48 @@ export default function DashboardScreen({ navigation }: any) {
 
   useEffect(() => {
     loadDashboardData();
+    loadPendingOrders();
+    const interval = setInterval(loadPendingOrders, 10000);
+    return () => clearInterval(interval);
   }, []);
+
+  const loadPendingOrders = async () => {
+    try {
+      const res = await api.get("/orders/partner/my");
+      const response = res.data as { success: boolean; data?: any[] };
+      if (!response.success || !Array.isArray(response.data)) return;
+
+      const actionable = response.data.filter((order) => isAwaitingPartnerAction(order.status));
+      const newlyActionable = actionable.filter((order) => !knownOrderIds.current.has(order._id));
+      knownOrderIds.current = new Set(response.data.map((order) => order._id));
+      setStats((current) => ({ ...current, pendingOrders: actionable.length }));
+
+      if (newlyActionable.length > 0) {
+        setNewOrderAlert(newlyActionable[0]);
+      }
+    } catch (error) {
+      console.log("Failed to poll partner orders", error);
+    }
+  };
+
+  const updateOrderStatus = async (orderId: string, status: "ACCEPTED" | "REJECTED") => {
+    try {
+      const res = await api.post(`/orders/partner/${orderId}/status`, { status });
+      const response = res.data as { success: boolean; message?: string };
+      if (!response.success) {
+        Alert.alert("Order update failed", response.message || "Please try again.");
+        return;
+      }
+
+      setNewOrderAlert(null);
+      await loadPendingOrders();
+      if (status === "ACCEPTED") {
+        navigation.navigate("OrderDetails", { orderId });
+      }
+    } catch (error: any) {
+      Alert.alert("Order update failed", error.response?.data?.message || "Please try again.");
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -104,11 +151,22 @@ export default function DashboardScreen({ navigation }: any) {
   ];
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.container}>
+      <NewOrderBanner
+        visible={Boolean(newOrderAlert)}
+        orderId={newOrderAlert?._id || ""}
+        itemCount={newOrderAlert?.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0}
+        grandTotal={newOrderAlert?.grandTotal || 0}
+        onOpen={() => newOrderAlert && navigation.navigate("OrderDetails", { orderId: newOrderAlert._id })}
+        onAccept={() => newOrderAlert && updateOrderStatus(newOrderAlert._id, "ACCEPTED")}
+        onReject={() => newOrderAlert && updateOrderStatus(newOrderAlert._id, "REJECTED")}
+        onDismiss={() => setNewOrderAlert(null)}
+      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.topBar}>
         <View>
           <Text style={styles.screenTitle}>Dashboard</Text>
@@ -181,7 +239,8 @@ export default function DashboardScreen({ navigation }: any) {
           </View>
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 

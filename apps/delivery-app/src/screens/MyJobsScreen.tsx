@@ -12,9 +12,11 @@ import {
 import { getMyDeliveryOrders, DeliveryOrder } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { formatAddress } from "../utils/address";
 
-export default function MyJobsScreen({ navigation }: any) {
+export default function MyJobsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
+  const highlightOrderId = route?.params?.highlightOrderId;
   const [jobs, setJobs] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -72,14 +74,6 @@ export default function MyJobsScreen({ navigation }: any) {
     });
   };
 
-  const formatAddress = (address: string) => {
-    if (!address || typeof address !== 'string') {
-      return "Address not available";
-    }
-    const parts = address.split(',');
-    return parts.length > 0 ? parts[0] : address;
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case "ASSIGNED": return "#2196F3"; // Blue
@@ -107,7 +101,7 @@ export default function MyJobsScreen({ navigation }: any) {
 
   const renderJobItem = ({ item }: { item: DeliveryOrder }) => (
     <TouchableOpacity
-      style={styles.jobCard}
+      style={[styles.jobCard, highlightOrderId === item._id && styles.jobCardHighlighted]}
       onPress={() => handleJobPress(item)}
       activeOpacity={0.9}
     >
@@ -127,7 +121,7 @@ export default function MyJobsScreen({ navigation }: any) {
           🏪 {item.partnerId?.restaurantName || item.partnerId?.shopName || "Restaurant"}
         </Text>
         <Text style={styles.restaurantAddress}>
-          📍 {formatAddress(item.partnerId?.address || "")}
+          📍 {formatAddress(item.partnerId?.address, { short: true })}
         </Text>
       </View>
 
@@ -137,7 +131,7 @@ export default function MyJobsScreen({ navigation }: any) {
           👤 {item.customerId?.name || "Customer"}
         </Text>
         <Text style={styles.deliveryAddress}>
-          🏠 {formatAddress(item.deliveryAddress)}
+          🏠 {formatAddress(item.deliveryAddress, { short: true })}
         </Text>
       </View>
 
@@ -252,6 +246,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+  },
+  jobCardHighlighted: {
+    borderWidth: 2,
+    borderColor: "#4CAF50",
+    backgroundColor: "#F6FFF8"
   },
   jobHeader: {
     flexDirection: 'row',

@@ -5,6 +5,7 @@ import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
 import MenuItem from "../models/MenuItem.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
+import User from "../models/User.model";
 import { CONSUMER_APP_ROLES, ROLES } from "../config/roles";
 import { successResponse, errorResponse } from "../utils/response";
 import { AuthRequest } from "../middlewares/auth.middleware";
@@ -12,6 +13,11 @@ import { config } from "../config/env";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
+
+const RESTAURANT_ACCEPT_TIMEOUT_MS = 10 * 60 * 1000;
+const DELIVERY_ACCEPT_TIMEOUT_MS = 15 * 60 * 1000;
+const AUTO_CANCEL_MESSAGE =
+  "Sorry for the problem. We could not place this order. If payment was done, the amount will be returned within 24 hours.";
 
 const resolvePartnerForUser = async (user?: AuthRequest["user"]) => {
   if (!user) return null;
@@ -57,6 +63,84 @@ const formatPartnerForDelivery = (partnerDoc: any) => {
   };
 };
 
+type GeoPoint = { type: "Point"; coordinates: [number, number] };
+
+const buildGeoPoint = (latitudeInput: any, longitudeInput: any): GeoPoint | undefined => {
+  const latitude = Number(latitudeInput);
+  const longitude = Number(longitudeInput);
+
+  if (
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180 &&
+    !(latitude === 0 && longitude === 0)
+  ) {
+    return {
+      type: "Point",
+      coordinates: [longitude, latitude]
+    };
+  }
+
+  return undefined;
+};
+
+const normalizeLocationPayload = (value: any): GeoPoint | undefined => {
+  const coordinateArray = Array.isArray(value?.coordinates) ? value.coordinates : undefined;
+
+  return buildGeoPoint(
+    value?.latitude ?? value?.lat ?? value?.coordinates?.latitude ?? coordinateArray?.[1],
+    value?.longitude ?? value?.lng ?? value?.lon ?? value?.coordinates?.longitude ?? coordinateArray?.[0]
+  );
+};
+
+const resolveCustomerSavedLocation = async (customerId: any): Promise<GeoPoint | undefined> => {
+  const resolvedCustomerId = customerId?._id || customerId;
+  if (!resolvedCustomerId) return undefined;
+
+  const customer = await User.findById(resolvedCustomerId).select("address addresses").lean();
+  if (!customer) return undefined;
+
+  const addresses = Array.isArray((customer as any).addresses) ? (customer as any).addresses : [];
+  const candidates = [
+    addresses.find((entry: any) => entry?.isDefault),
+    (customer as any).address,
+    ...addresses
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const location = normalizeLocationPayload(candidate);
+    if (location) return location;
+  }
+
+  return undefined;
+};
+
+const ensureDeliveryLocationForResponse = async (orderObj: any): Promise<any> => {
+  if (!orderObj) return orderObj;
+
+  const existingLocation = normalizeLocationPayload(orderObj.deliveryLocation);
+  if (existingLocation) {
+    orderObj.deliveryLocation = existingLocation;
+    return orderObj;
+  }
+
+  const fallbackLocation = await resolveCustomerSavedLocation(orderObj.customerId);
+  if (!fallbackLocation) return orderObj;
+
+  orderObj.deliveryLocation = fallbackLocation;
+
+  if (orderObj._id) {
+    await Order.findByIdAndUpdate(orderObj._id, { deliveryLocation: fallbackLocation }).catch((error) => {
+      console.error("Failed to persist fallback delivery location:", error);
+    });
+  }
+
+  return orderObj;
+};
+
 const haversineKm = (from: [number, number], to: [number, number]) => {
   const [fromLng, fromLat] = from;
   const [toLng, toLat] = to;
@@ -74,6 +158,47 @@ const haversineKm = (from: [number, number], to: [number, number]) => {
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+const markAutoCancelled = (order: any, reason: string) => {
+  order.status = "CANCELLED";
+  order.cancellationReason = reason;
+  order.customerCancellationMessage = AUTO_CANCEL_MESSAGE;
+  order.autoCancelledAt = new Date();
+
+  if (order.paymentStatus === "PAID") {
+    order.paymentStatus = "REFUNDED";
+  } else if (order.paymentStatus === "PENDING") {
+    order.paymentStatus = "CANCELLED";
+  }
+};
+
+const cancelStaleUnacceptedOrders = async () => {
+  const now = new Date();
+  const restaurantDeadline = new Date(now.getTime() - RESTAURANT_ACCEPT_TIMEOUT_MS);
+  const deliveryDeadline = new Date(now.getTime() - DELIVERY_ACCEPT_TIMEOUT_MS);
+
+  const restaurantTimedOut = await Order.find({
+    status: "CONFIRMED",
+    createdAt: { $lte: restaurantDeadline }
+  });
+
+  const deliveryTimedOut = await Order.find({
+    status: "READY",
+    updatedAt: { $lte: deliveryDeadline },
+    $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+  });
+
+  await Promise.all([
+    ...restaurantTimedOut.map((order: any) => {
+      markAutoCancelled(order, "Restaurant did not accept the order in time");
+      return order.save();
+    }),
+    ...deliveryTimedOut.map((order: any) => {
+      markAutoCancelled(order, "No delivery partner accepted the order in time");
+      return order.save();
+    })
+  ]);
+};
+
 /**
  * ================================
  * CREATE SHOP ORDER (UPDATED WITH PAYMENT)
@@ -87,7 +212,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const { partnerId, deliveryAddress, items, note, paymentMethod = "RAZORPAY" } = req.body;
+    const { partnerId, deliveryAddress, deliveryLocation, items, note, paymentMethod = "RAZORPAY" } = req.body;
 
     // Validate required fields
     if (!partnerId || !deliveryAddress) {
@@ -102,6 +227,11 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     const validPaymentMethods = ["RAZORPAY", "CASH_ON_DELIVERY", "CARD", "UPI", "WALLET"];
     if (!validPaymentMethods.includes(paymentMethod)) {
       return errorResponse(res, `Invalid payment method. Valid methods: ${validPaymentMethods.join(", ")}`, 400);
+    }
+
+    const normalizedDeliveryLocation = normalizeLocationPayload(deliveryLocation) || await resolveCustomerSavedLocation(user.id);
+    if (!normalizedDeliveryLocation) {
+      return errorResponse(res, "Exact delivery map pin is required. Please save your address GPS location.", 400);
     }
 
     // Validate partner exists and is open
@@ -170,6 +300,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       customerId: user.id,
       partnerId,
       deliveryAddress,
+      deliveryLocation: normalizedDeliveryLocation,
       note: note || "",
       items: validatedItems,
       itemTotal,
@@ -260,6 +391,9 @@ export const updateOrderPayment = async (req: AuthRequest, res: Response) => {
     // If payment is successful and order was PENDING, update to CONFIRMED
     if (paymentStatus === "PAID" && order.status === "PENDING") {
       order.status = "CONFIRMED";
+      order.cancellationReason = "";
+      order.customerCancellationMessage = "";
+      order.autoCancelledAt = undefined;
     }
 
     await order.save();
@@ -304,6 +438,10 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Order not found", 404);
     }
 
+    if (["CANCELLED", "REJECTED", "DELIVERED"].includes(order.status)) {
+      return errorResponse(res, `Order cannot be updated because it is ${order.status}`, 400);
+    }
+
     // Check payment status before allowing partner to accept
     if (status === "ACCEPTED") {
       // For COD orders, allow if payment status is PAYMENT_PENDING_DELIVERY
@@ -330,6 +468,9 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 
     // Update order status
     order.status = status;
+    if (status === "REJECTED") {
+      markAutoCancelled(order, "Restaurant rejected the order");
+    }
     await order.save();
 
     return successResponse(res, order, `Order status updated to ${status}`);
@@ -460,6 +601,18 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
     await order.save();
 
+    if (status === "DELIVERED") {
+      await DeliveryPartner.findOneAndUpdate(
+        { userId: user.id },
+        {
+          $inc: {
+            totalDeliveries: 1,
+            totalEarnings: order.deliveryFee || 49
+          }
+        }
+      );
+    }
+
     const responseOrder = order.toObject() as any;
     if (status === "DELIVERED") {
       responseOrder.deliveryEarnings = order.deliveryFee || 49;
@@ -480,6 +633,8 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
  */
 export const getMyOrders = async (req: AuthRequest, res: Response) => {
   try {
+    await cancelStaleUnacceptedOrders();
+
     const user = req.user;
 
     if (!user) {
@@ -537,8 +692,19 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
       orders = await Order.find(filter)
         .sort({ createdAt: -1 })
         .populate("customerId", "name phone")
-        .populate("partnerId", "restaurantName shopName phone")
+        .populate({
+          path: "partnerId",
+          select: "restaurantName shopName phone address category location",
+          transform: formatPartnerForDelivery
+        })
         .populate("deliveryPartnerId", "name phone");
+    }
+
+    if (isDeliveryOrdersRoute) {
+      const deliveryOrders = await Promise.all(
+        orders.map((order: any) => ensureDeliveryLocationForResponse(order.toObject ? order.toObject() : order))
+      );
+      return successResponse(res, deliveryOrders);
     }
 
     return successResponse(res, orders);
@@ -555,6 +721,8 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
  */
 export const getOrderDetails = async (req: AuthRequest, res: Response) => {
   try {
+    await cancelStaleUnacceptedOrders();
+
     const user = req.user;
     const { orderId } = req.params;
 
@@ -564,7 +732,11 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
 
     const order = await Order.findById(orderId)
       .populate("customerId", "name phone")
-      .populate("partnerId", "restaurantName shopName phone address")
+      .populate({
+        path: "partnerId",
+        select: "restaurantName shopName phone address category location",
+        transform: formatPartnerForDelivery
+      })
       .populate("deliveryPartnerId", "name phone");
 
     if (!order) {
@@ -629,11 +801,13 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
           orderObj.deliveryAddress = `${addressParts[addressParts.length - 2]}, ${addressParts[addressParts.length - 1]}`;
         }
       }
+      orderObj.deliveryLocation = undefined;
       
       return successResponse(res, orderObj, "Order details retrieved");
     }
 
-    return successResponse(res, order, "Order details retrieved");
+    const responseOrder = await ensureDeliveryLocationForResponse(orderObj);
+    return successResponse(res, responseOrder, "Order details retrieved");
   } catch (err: any) {
     console.error("getOrderDetails error:", err);
     return errorResponse(res, "Failed to get order details");
@@ -647,6 +821,8 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
  */
 export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) => {
   try {
+    await cancelStaleUnacceptedOrders();
+
     const user = req.user;
 
     if (!user) {
@@ -702,14 +878,17 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
 
     console.log(`🔍 Found ${availableJobs.length} available delivery jobs for user ${user.id}`);
 
+    const availableJobObjects = await Promise.all(
+      availableJobs.map((job: any) => ensureDeliveryLocationForResponse(job.toObject()))
+    );
+
     // If the rider hasn't shared their location yet, still show every READY
     // job so they at least know what's pending and can refresh after enabling GPS.
     if (!hasRiderLocation) {
-      const jobs = availableJobs.map((job: any) => job.toObject());
-      return successResponse(res, jobs, "Available delivery jobs retrieved (rider location pending)");
+      return successResponse(res, availableJobObjects, "Available delivery jobs retrieved (rider location pending)");
     }
 
-    const rankedJobs = availableJobs
+    const rankedJobs = availableJobObjects
       .map((job: any) => {
         const partnerCoordinates = job.partnerId?.location?.coordinates;
         const partnerHasLocation = Boolean(
@@ -722,7 +901,7 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
         // rider but mark distance as unknown rather than dropping it silently.
         if (!partnerHasLocation) {
           return {
-            ...job.toObject(),
+            ...job,
             distanceToRestaurant: null
           };
         }
@@ -733,7 +912,7 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
         }
 
         return {
-          ...job.toObject(),
+          ...job,
           distanceToRestaurant: Number(distanceToRestaurant.toFixed(2))
         };
       })
@@ -805,17 +984,46 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       .populate("customerId", "name phone")
       .populate({
         path: "partnerId",
-        select: "restaurantName shopName phone address category",
+        select: "restaurantName shopName phone address category location",
         transform: formatPartnerForDelivery
       })
       .populate("deliveryPartnerId", "name phone");
 
     console.log(`🚚 Delivery partner ${user.id} accepted job for order ${orderId}`);
 
-    return successResponse(res, populatedOrder, "Delivery job accepted successfully");
+    const responseOrder = populatedOrder
+      ? await ensureDeliveryLocationForResponse(populatedOrder.toObject())
+      : populatedOrder;
+
+    return successResponse(res, responseOrder, "Delivery job accepted successfully");
   } catch (err: any) {
     console.error("acceptDeliveryJob error:", err);
     return errorResponse(res, "Failed to accept delivery job");
+  }
+};
+
+export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { orderId } = req.params;
+
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const order = await Order.findById(orderId).select("_id status deliveryPartnerId");
+    if (!order) {
+      return errorResponse(res, "Order not found", 404);
+    }
+
+    if (order.status !== "READY" || order.deliveryPartnerId) {
+      return errorResponse(res, "Job is no longer available", 409);
+    }
+
+    return successResponse(res, { orderId }, "Delivery job rejected");
+  } catch (err: any) {
+    console.error("rejectDeliveryJob error:", err);
+    return errorResponse(res, "Failed to reject delivery job");
   }
 };
 

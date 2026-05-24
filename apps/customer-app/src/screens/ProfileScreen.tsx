@@ -14,6 +14,7 @@ import {
   Linking
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Location from "expo-location";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   getUserProfile,
@@ -173,6 +174,9 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [landmark, setLandmark] = useState("");
   const [district, setDistrict] = useState("");
   const [country, setCountry] = useState("India");
+  const [addressLatitude, setAddressLatitude] = useState<number | undefined>(undefined);
+  const [addressLongitude, setAddressLongitude] = useState<number | undefined>(undefined);
+  const [capturingAddressPin, setCapturingAddressPin] = useState(false);
 
   const hydrateAddressForm = (address?: SavedAddress | null, fallbackName = "") => {
     setAddressLabel(address?.label || "Home");
@@ -188,6 +192,8 @@ export default function ProfileScreen({ navigation, route }: any) {
     setLandmark(address?.landmark || "");
     setDistrict(address?.district || "");
     setCountry(address?.country || "India");
+    setAddressLatitude(address?.latitude);
+    setAddressLongitude(address?.longitude);
     setEditingAddressId(address?._id);
   };
 
@@ -198,6 +204,13 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
     return userData.address ? [{ ...userData.address, label: "Home", isDefault: true }] : [];
   };
+
+  const hasValidAddressPin = (latitude?: number, longitude?: number) =>
+    typeof latitude === "number" &&
+    typeof longitude === "number" &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    !(latitude === 0 && longitude === 0);
 
   const hydrateForm = (userData: UserProfile) => {
     const cleanName = isGeneratedCustomerName(userData.name) ? "" : userData.name || "";
@@ -335,9 +348,50 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
+      let nextAddressLatitude = addressLatitude;
+      let nextAddressLongitude = addressLongitude;
+
+      if (!hasValidAddressPin(nextAddressLatitude, nextAddressLongitude)) {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== "granted") {
+          Alert.alert(
+            "Location Permission Needed",
+            "Please allow location access so we can save your exact delivery GPS pin. We cannot use only pincode or text address for delivery directions."
+          );
+          return;
+        }
+
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High
+        });
+        nextAddressLatitude = location.coords.latitude;
+        nextAddressLongitude = location.coords.longitude;
+        setAddressLatitude(nextAddressLatitude);
+        setAddressLongitude(nextAddressLongitude);
+      }
+
       const legacyStreet = [houseFlatDoorNo.trim(), buildingApartmentName.trim(), streetRoadName.trim()]
         .filter(Boolean)
         .join(", ");
+      const addressPayload = {
+        label: addressLabel.trim() || "Home",
+        recipientName: recipientName.trim(),
+        houseFlatDoorNo: houseFlatDoorNo.trim(),
+        buildingApartmentName: buildingApartmentName.trim() || undefined,
+        streetRoadName: streetRoadName.trim(),
+        areaLocality: area.trim(),
+        street: legacyStreet || street.trim(),
+        city: city.trim(),
+        cityTownVillage: city.trim(),
+        state: state.trim(),
+        pincode: pincode.trim(),
+        area: area.trim(),
+        landmark: landmark.trim() || undefined,
+        district: district.trim() || undefined,
+        country: country.trim(),
+        latitude: nextAddressLatitude,
+        longitude: nextAddressLongitude
+      };
 
       const [profileResult, addressResult] = await Promise.all([
         updateUserProfile({
@@ -346,40 +400,12 @@ export default function ProfileScreen({ navigation, route }: any) {
         }),
         addressFormMode === "add"
           ? addAddress({
-          label: addressLabel.trim() || "Home",
-          recipientName: recipientName.trim(),
-          houseFlatDoorNo: houseFlatDoorNo.trim(),
-          buildingApartmentName: buildingApartmentName.trim() || undefined,
-          streetRoadName: streetRoadName.trim(),
-          areaLocality: area.trim(),
-          street: legacyStreet || street.trim(),
-          city: city.trim(),
-          cityTownVillage: city.trim(),
-          state: state.trim(),
-          pincode: pincode.trim(),
-          area: area.trim(),
-          landmark: landmark.trim() || undefined,
-          district: district.trim() || undefined,
-          country: country.trim(),
+          ...addressPayload,
           isDefault: getSavedAddressesFromProfile(profile).length === 0
         })
           : updateUserAddress({
+          ...addressPayload,
           addressId: editingAddressId,
-          label: addressLabel.trim() || "Home",
-          recipientName: recipientName.trim(),
-          houseFlatDoorNo: houseFlatDoorNo.trim(),
-          buildingApartmentName: buildingApartmentName.trim() || undefined,
-          streetRoadName: streetRoadName.trim(),
-          areaLocality: area.trim(),
-          street: legacyStreet || street.trim(),
-          city: city.trim(),
-          cityTownVillage: city.trim(),
-          state: state.trim(),
-          pincode: pincode.trim(),
-          area: area.trim(),
-          landmark: landmark.trim() || undefined,
-          district: district.trim() || undefined,
-          country: country.trim(),
           isDefault: getSavedAddressesFromProfile(profile).length === 0 ||
             getSavedAddressesFromProfile(profile).some((entry) => entry._id === editingAddressId && entry.isDefault)
         })
@@ -402,6 +428,29 @@ export default function ProfileScreen({ navigation, route }: any) {
       Alert.alert("Error", error.message || "Failed to update profile");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCaptureAddressPin = async () => {
+    try {
+      setCapturingAddressPin(true);
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        Alert.alert("Location Permission", "Please allow location access while you are at this delivery address.");
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+
+      setAddressLatitude(location.coords.latitude);
+      setAddressLongitude(location.coords.longitude);
+      Alert.alert("Location Pin Saved", "This saved address now has an exact GPS pin for delivery directions.");
+    } catch (error: any) {
+      Alert.alert("Location Error", error.message || "Could not capture your current location.");
+    } finally {
+      setCapturingAddressPin(false);
     }
   };
 
@@ -719,7 +768,9 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
-            <Text style={styles.sectionHint}>This address will be used for your orders.</Text>
+            <Text style={styles.sectionHint}>
+              This address needs an exact GPS pin. We will ask location permission when you complete registration.
+            </Text>
 
             <TextInput
               style={[styles.input, focusedField === "addressLabel" && styles.inputFocused]}
@@ -1118,6 +1169,24 @@ export default function ProfileScreen({ navigation, route }: any) {
                 />
               </View>
 
+              <View style={styles.pinCard}>
+                <View style={styles.pinCopy}>
+                  <Text style={styles.pinTitle}>Exact delivery pin</Text>
+                  <Text style={styles.pinText}>
+                    {hasValidAddressPin(addressLatitude, addressLongitude)
+                      ? `Saved: ${Number(addressLatitude).toFixed(5)}, ${Number(addressLongitude).toFixed(5)}`
+                      : "Stand at this address and save the GPS pin so delivery can use exact Google Maps directions."}
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.pinButton} onPress={handleCaptureAddressPin} disabled={capturingAddressPin}>
+                  {capturingAddressPin ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.pinButtonText}>Use Current Location</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
               {!forceComplete && (
                 <TouchableOpacity style={styles.fullSaveButton} onPress={handleSaveProfile} disabled={saving}>
                   {saving ? (
@@ -1144,6 +1213,9 @@ export default function ProfileScreen({ navigation, route }: any) {
                       {line}
                     </Text>
                   ))}
+                  <Text style={[styles.addressLine, styles.addressPinLine]}>
+                    {hasValidAddressPin(savedAddress.latitude, savedAddress.longitude) ? "Exact map pin saved" : "Exact map pin not saved"}
+                  </Text>
                   <View style={styles.addressActions}>
                     {!savedAddress.isDefault && savedAddress._id ? (
                       <TouchableOpacity onPress={() => handleSetDefaultAddress(savedAddress)} disabled={saving}>
@@ -1656,6 +1728,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#344054",
     marginBottom: 5
+  },
+  addressPinLine: {
+    marginTop: 4,
+    fontWeight: "800",
+    color: "#2B9C4A"
+  },
+  pinCard: {
+    backgroundColor: "#F0FFF4",
+    borderWidth: 1,
+    borderColor: "#BFE9CA",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12
+  },
+  pinCopy: {
+    marginBottom: 10
+  },
+  pinTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#216E39",
+    marginBottom: 4
+  },
+  pinText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#3F6B4A"
+  },
+  pinButton: {
+    backgroundColor: "#2B9C4A",
+    borderRadius: 12,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12
+  },
+  pinButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900"
   },
   addressActions: {
     flexDirection: "row",

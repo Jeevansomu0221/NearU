@@ -414,8 +414,11 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
     return successResponse(
       res,
       {
-        totalDeliveries: deliveryPartner.totalDeliveries,
-        totalEarnings: deliveryPartner.totalEarnings,
+        totalDeliveries: deliveredOrders.length,
+        totalEarnings: deliveredOrders.reduce(
+          (sum, order) => sum + (typeof order.deliveryFee === "number" ? order.deliveryFee : 0),
+          0
+        ),
         todaysDeliveries: todaysOrders.length,
         todaysEarnings: todaysOrders.reduce(
           (sum, order) => sum + (typeof order.deliveryFee === "number" ? order.deliveryFee : 0),

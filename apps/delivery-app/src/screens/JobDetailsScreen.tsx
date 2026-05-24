@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   Platform
 } from "react-native";
 import { 
@@ -18,11 +19,46 @@ import {
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from 'expo-location';
+import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
 
 interface Props {
   route: any;
   navigation: any;
 }
+
+type CoordinateValue = number | string | null | undefined;
+
+type MapLocation = {
+  coordinates?:
+    | [CoordinateValue, CoordinateValue]
+    | {
+        latitude?: CoordinateValue;
+        longitude?: CoordinateValue;
+        lat?: CoordinateValue;
+        lng?: CoordinateValue;
+        lon?: CoordinateValue;
+      };
+  latitude?: CoordinateValue;
+  longitude?: CoordinateValue;
+  lat?: CoordinateValue;
+  lng?: CoordinateValue;
+  lon?: CoordinateValue;
+};
+
+type MapTarget = {
+  address?: AddressLike;
+  googleMapsLink?: string;
+  location?: MapLocation;
+  requireCoordinates?: boolean;
+  destinationLabel?: string;
+  contactPhone?: string;
+};
+
+type NoLocationModalState = {
+  address?: AddressLike;
+  contactPhone?: string;
+  destinationLabel?: string;
+};
 
 export default function JobDetailsScreen({ route, navigation }: Props) {
   const { orderId, job: initialJob } = route.params;
@@ -30,12 +66,17 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(!initialJob);
   const [updating, setUpdating] = useState(false);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
+  const [cashConfirmVisible, setCashConfirmVisible] = useState(false);
+  const [statusModal, setStatusModal] = useState<{
+    title: string;
+    message: string;
+    actionLabel: string;
+    onAction: () => void;
+  } | null>(null);
+  const [noLocationModal, setNoLocationModal] = useState<NoLocationModalState | null>(null);
 
   useEffect(() => {
-    if (!initialJob) {
-      loadJobDetails();
-    }
-
+    loadJobDetails();
     getCurrentLocation().then(setUserLocation).catch(() => {});
   }, []);
 
@@ -71,18 +112,147 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
-  const handleOpenMaps = (address: string, googleMapsLink?: string) => {
-    // Prefer Google Maps link if available
-    if (googleMapsLink) {
-      Linking.openURL(googleMapsLink);
-    } else {
-      const url = Platform.select({
-        ios: `maps:0,0?q=${encodeURIComponent(address)}`,
-        android: `geo:0,0?q=${encodeURIComponent(address)}`,
-      });
-      if (url) {
-        Linking.openURL(url);
+  const toCoordinateNumber = (value: CoordinateValue) => {
+    if (value === null || value === undefined || value === "") return null;
+
+    const parsed = typeof value === "string" ? Number(value.trim()) : Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const getLatLngFromPoint = (location?: MapLocation) => {
+    if (!location) return null;
+
+    const coordinateArray = Array.isArray(location.coordinates) ? location.coordinates : null;
+    const coordinateObject = !Array.isArray(location.coordinates) ? location.coordinates : null;
+    const latitude = toCoordinateNumber(
+      location.latitude ?? location.lat ?? coordinateObject?.latitude ?? coordinateObject?.lat ?? coordinateArray?.[1]
+    );
+    const longitude = toCoordinateNumber(
+      location.longitude ?? location.lng ?? location.lon ?? coordinateObject?.longitude ?? coordinateObject?.lng ?? coordinateObject?.lon ?? coordinateArray?.[0]
+    );
+
+    if (
+      typeof latitude !== "number" ||
+      typeof longitude !== "number" ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      (latitude === 0 && longitude === 0)
+    ) {
+      return null;
+    }
+
+    return { latitude, longitude };
+  };
+
+  const openCoordinateDirections = async (
+    latitude: number,
+    longitude: number,
+    label?: string
+  ) => {
+    const coordinateText = `${latitude},${longitude}`;
+    const trimmedLabel = label?.trim();
+    // Sanitize the label so it never breaks the URL. Google Maps shows it on
+    // the pin so the rider knows whose drop this is.
+    const safeLabel = trimmedLabel ? trimmedLabel.replace(/[()]/g, "") : undefined;
+    const encodedLabel = safeLabel ? encodeURIComponent(safeLabel) : undefined;
+    const nativeUrl = Platform.select({
+      // google.navigation gives instant turn-by-turn directions on Android.
+      android: `google.navigation:q=${coordinateText}&mode=d`,
+      ios: `comgooglemaps://?daddr=${coordinateText}&directionsmode=driving`
+    });
+    // For the universal web link we attach the label as a "place name" so the
+    // rider sees "Customer Name" on the destination marker.
+    const webUrl = encodedLabel
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinateText)}&destination_place_id=&travelmode=driving&query=${encodedLabel}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinateText)}&travelmode=driving`;
+
+    if (nativeUrl) {
+      try {
+        const canOpenNative = await Linking.canOpenURL(nativeUrl);
+        if (canOpenNative) {
+          await Linking.openURL(nativeUrl);
+          return;
+        }
+      } catch {
+        // Fall back to the universal Maps URL below.
       }
+    }
+
+    await Linking.openURL(webUrl);
+  };
+
+  const handleOpenMaps = async ({
+    address,
+    googleMapsLink,
+    location,
+    requireCoordinates,
+    destinationLabel,
+    contactPhone
+  }: MapTarget) => {
+    const coordinates = getLatLngFromPoint(location);
+
+    if (coordinates) {
+      await openCoordinateDirections(coordinates.latitude, coordinates.longitude, destinationLabel);
+      return;
+    }
+
+    if (requireCoordinates) {
+      try {
+        const latestResponse = await getJobDetails(orderId);
+        const latestJob = latestResponse.success ? latestResponse.data : null;
+        const latestCoordinates = getLatLngFromPoint(latestJob?.deliveryLocation);
+
+        if (latestJob) {
+          setJob(latestJob);
+        }
+
+        if (latestCoordinates) {
+          await openCoordinateDirections(
+            latestCoordinates.latitude,
+            latestCoordinates.longitude,
+            latestJob?.customerId?.name || destinationLabel
+          );
+          return;
+        }
+      } catch {
+        // Continue to the fallback modal below.
+      }
+
+      // Pincode-only / text-only links from Google Maps drop the rider far
+      // from the real door. Open a helpful chooser instead of a dead alert.
+      setNoLocationModal({ address, contactPhone, destinationLabel });
+      return;
+    }
+
+    const savedMapsLink = googleMapsLink || getAddressGoogleMapsLink(address);
+    if (savedMapsLink) {
+      await Linking.openURL(savedMapsLink);
+      return;
+    }
+
+    const destination = formatAddress(address);
+    if (destination !== "Address not available") {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+      await Linking.openURL(url);
+      return;
+    }
+
+    Alert.alert("Location unavailable", "No map location is available for this stop.");
+  };
+
+  const openMapsSearchFallback = async (address?: AddressLike) => {
+    const searchUrl = buildMapsSearchUrl(address);
+    if (!searchUrl) {
+      Alert.alert(
+        "Search not possible",
+        "We do not have enough address text to search Google Maps. Please call the customer for directions."
+      );
+      return;
+    }
+    try {
+      await Linking.openURL(searchUrl);
+    } catch {
+      Alert.alert("Could not open Google Maps", "Please try again or call the customer.");
     }
   };
 
@@ -107,19 +277,15 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       );
 
       if (response.success) {
-        Alert.alert(
-          "Success!",
-          "Order marked as picked up.\n\nPlease deliver to the customer now.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setJob(response.data || null);
-                navigation.navigate("MyJobs");
-              }
-            }
-          ]
-        );
+        setJob((current) => current ? { ...current, status: "PICKED_UP" } : response.data || null);
+        setStatusModal({
+          title: "Order picked up",
+          message: "Nice work. Stay on this screen and complete delivery after handoff.",
+          actionLabel: "Continue Delivery",
+          onAction: () => {
+            setStatusModal(null);
+          }
+        });
       } else {
         Alert.alert("Error", response.message || "Failed to update status");
       }
@@ -133,17 +299,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const handleDeliver = async () => {
     if (job?.paymentMethod === "CASH_ON_DELIVERY") {
-      Alert.alert(
-        "Collect Cash",
-        `Collect Rs ${job.grandTotal} from the customer before completing this delivery.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: `Collected Rs ${job.grandTotal}`,
-            onPress: () => confirmDelivery(job.grandTotal)
-          }
-        ]
-      );
+      setCashConfirmVisible(true);
     } else {
       // For pre-paid orders, just confirm delivery
       await confirmDelivery();
@@ -174,24 +330,21 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       if (response.success) {
         const earnedAmount = response.data?.deliveryEarnings || response.data?.deliveryFee || job?.deliveryFee || 49;
         const collectedText = collectedAmount
-          ? `\nCash collected: Rs ${collectedAmount}`
+          ? ` Cash collected: Rs ${collectedAmount}.`
           : "";
 
-        Alert.alert(
-          "Delivery Complete!",
-          `Successfully completed 1 delivery.${collectedText}\nAmount added to earnings: Rs ${earnedAmount}`,
-          [
-            {
-              text: "Go Home",
-              onPress: () => {
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: "Main", params: { screen: "Jobs" } }],
-                });
-              }
-            }
-          ]
-        );
+        setStatusModal({
+          title: "Delivery complete",
+          message: `Successfully completed 1 delivery.${collectedText} Amount added to earnings: Rs ${earnedAmount}.`,
+          actionLabel: "Back to Jobs",
+          onAction: () => {
+            setStatusModal(null);
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Main", params: { screen: "Jobs" } }],
+            });
+          }
+        });
       } else {
         Alert.alert("Error", response.message || "Failed to complete delivery");
       }
@@ -267,7 +420,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             {job.partnerId?.restaurantName || job.partnerId?.shopName || "Restaurant"}
           </Text>
           <Text style={styles.addressText}>
-            📍 {job.partnerId?.address || "Address not available"}
+            📍 {formatAddress(job.partnerId?.address)}
           </Text>
           {job.partnerId?.phone && (
             <TouchableOpacity
@@ -282,13 +435,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           )}
           <TouchableOpacity
             style={styles.mapButton}
-            onPress={() => handleOpenMaps(
-              job.partnerId?.address || "", 
-              job.partnerId?.googleMapsLink
-            )}
+            onPress={() =>
+              handleOpenMaps({
+                address: job.partnerId?.address,
+                googleMapsLink: job.partnerId?.googleMapsLink || getAddressGoogleMapsLink(job.partnerId?.address),
+                location: job.partnerId?.location,
+                destinationLabel: job.partnerId?.restaurantName || job.partnerId?.shopName,
+                contactPhone: job.partnerId?.phone
+              })
+            }
           >
             <Ionicons name="navigate" size={16} color="#1976D2" />
-            <Text style={styles.mapButtonText}>Open in Maps</Text>
+            <Text style={styles.mapButtonText}>Directions in Google Maps</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -319,10 +477,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           )}
           <TouchableOpacity
             style={styles.mapButton}
-            onPress={() => handleOpenMaps(job.deliveryAddress)}
+            onPress={() =>
+              handleOpenMaps({
+                address: job.deliveryAddress,
+                location: job.deliveryLocation,
+                requireCoordinates: true,
+                destinationLabel: job.customerId?.name || "Customer",
+                contactPhone: job.customerId?.phone
+              })
+            }
           >
             <Ionicons name="navigate" size={16} color="#1976D2" />
-            <Text style={styles.mapButtonText}>Open in Maps</Text>
+            <Text style={styles.mapButtonText}>Directions in Google Maps</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -464,6 +630,112 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       )}
 
       <View style={styles.spacer} />
+
+      <Modal visible={cashConfirmVisible} transparent animationType="fade" onRequestClose={() => setCashConfirmVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIcon}>
+              <Ionicons name="cash-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.confirmTitle}>Collect cash first</Text>
+            <Text style={styles.confirmText}>Collect Rs {job.grandTotal} from the customer before completing this delivery.</Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity style={styles.confirmSecondary} onPress={() => setCashConfirmVisible(false)} disabled={updating}>
+                <Text style={styles.confirmSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmPrimary}
+                onPress={() => {
+                  setCashConfirmVisible(false);
+                  confirmDelivery(job.grandTotal);
+                }}
+                disabled={updating}
+              >
+                {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Collected</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(statusModal)} transparent animationType="fade" onRequestClose={() => setStatusModal(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIcon}>
+              <Ionicons name="checkmark-done-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.confirmTitle}>{statusModal?.title}</Text>
+            <Text style={styles.confirmText}>{statusModal?.message}</Text>
+            <TouchableOpacity style={[styles.confirmPrimary, styles.confirmSingleAction]} onPress={statusModal?.onAction}>
+              <Text style={styles.confirmPrimaryText}>{statusModal?.actionLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(noLocationModal)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNoLocationModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={[styles.confirmIcon, styles.confirmIconWarn]}>
+              <Ionicons name="navigate-circle-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.confirmTitle}>Location pin unavailable</Text>
+            <Text style={styles.confirmText}>
+              We could not load an exact GPS pin for this order. A text or pincode-only Google Maps link can land you in
+              the wrong area, so use one of these options instead.
+            </Text>
+
+            <View style={styles.noLocationAddressCard}>
+              <Text style={styles.noLocationAddressLabel}>Saved address</Text>
+              <Text style={styles.noLocationAddressText}>{formatAddress(noLocationModal?.address)}</Text>
+            </View>
+
+            <View style={styles.noLocationActions}>
+              {noLocationModal?.contactPhone ? (
+                <TouchableOpacity
+                  style={[styles.confirmPrimary, styles.noLocationActionButton]}
+                  onPress={() => {
+                    const phone = noLocationModal?.contactPhone;
+                    setNoLocationModal(null);
+                    if (phone) handleCall(phone);
+                  }}
+                >
+                  <Ionicons name="call" size={16} color="#FFFFFF" />
+                  <Text style={[styles.confirmPrimaryText, styles.noLocationActionText]}>
+                    Call for directions
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.confirmSecondary, styles.noLocationActionButton]}
+                onPress={() => {
+                  const address = noLocationModal?.address;
+                  setNoLocationModal(null);
+                  openMapsSearchFallback(address);
+                }}
+              >
+                <Ionicons name="search" size={16} color="#475467" />
+                <Text style={[styles.confirmSecondaryText, styles.noLocationActionText]}>
+                  Search address in Google Maps
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.noLocationDismiss}
+                onPress={() => setNoLocationModal(null)}
+              >
+                <Text style={styles.noLocationDismissText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -769,4 +1041,123 @@ const styles = StyleSheet.create({
   spacer: {
     height: 40,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+    justifyContent: "center",
+    paddingHorizontal: 22
+  },
+  confirmCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 22,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DFF3E3"
+  },
+  confirmIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#4CAF50",
+    marginBottom: 14
+  },
+  confirmTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1F2937",
+    textAlign: "center"
+  },
+  confirmText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#667085",
+    textAlign: "center"
+  },
+  confirmActions: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 20
+  },
+  confirmSecondary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    backgroundColor: "#F3F4F6"
+  },
+  confirmSecondaryText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#475467"
+  },
+  confirmPrimary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    backgroundColor: "#4CAF50"
+  },
+  confirmSingleAction: {
+    width: "100%",
+    marginTop: 20,
+    flex: 0
+  },
+  confirmPrimaryText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#FFFFFF"
+  },
+  confirmIconWarn: {
+    backgroundColor: "#F4A100"
+  },
+  noLocationAddressCard: {
+    width: "100%",
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0"
+  },
+  noLocationAddressLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#475467",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 4
+  },
+  noLocationAddressText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#1F2937"
+  },
+  noLocationActions: {
+    width: "100%",
+    marginTop: 18,
+    gap: 10
+  },
+  noLocationActionButton: {
+    flex: 0,
+    width: "100%",
+    flexDirection: "row",
+    gap: 8
+  },
+  noLocationActionText: {
+    marginLeft: 4
+  },
+  noLocationDismiss: {
+    paddingVertical: 8,
+    alignItems: "center"
+  },
+  noLocationDismissText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#667085"
+  }
 });

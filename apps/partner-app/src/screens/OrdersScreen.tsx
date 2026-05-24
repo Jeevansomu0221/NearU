@@ -28,11 +28,15 @@ interface Order {
     name: string;
     phone: string;
   };
+  deliveryPartnerId?: {
+    name?: string;
+    phone?: string;
+  };
   grandTotal?: number;
 }
 
 const isAwaitingPartnerAction = (status: string) =>
-  status === "CONFIRMED" || status === "PENDING";
+  status === "CONFIRMED";
 
 interface OrdersResponse {
   success: boolean;
@@ -47,7 +51,6 @@ export default function OrdersScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
   const knownOrderIds = useRef<Set<string>>(new Set());
-  const firstLoadDone = useRef(false);
 
   const loadOrders = async () => {
     try {
@@ -61,11 +64,10 @@ export default function OrdersScreen({ navigation }: any) {
         );
         knownOrderIds.current = new Set(incomingOrders.map((order) => order._id));
 
-        if (firstLoadDone.current && newActionable.length > 0) {
+        if (newActionable.length > 0) {
           setNewOrderAlert(newActionable[0]);
         }
 
-        firstLoadDone.current = true;
         setOrders(response.data);
       } else {
         Alert.alert("Error", response.message || "Failed to load orders");
@@ -93,6 +95,25 @@ export default function OrdersScreen({ navigation }: any) {
   const openNewOrder = (orderId: string) => {
     setNewOrderAlert(null);
     navigation.navigate("OrderDetails", { orderId });
+  };
+
+  const updateOrderStatus = async (orderId: string, status: "ACCEPTED" | "REJECTED") => {
+    try {
+      const res = await api.post(`/orders/partner/${orderId}/status`, { status });
+      const response = res.data as { success: boolean; message?: string };
+      if (!response.success) {
+        Alert.alert("Order update failed", response.message || "Please try again.");
+        return;
+      }
+
+      setNewOrderAlert(null);
+      await loadOrders();
+      if (status === "ACCEPTED") {
+        navigation.navigate("OrderDetails", { orderId });
+      }
+    } catch (error: any) {
+      Alert.alert("Order update failed", error.response?.data?.message || "Please try again.");
+    }
   };
 
   const getStatusTheme = (status: string) => {
@@ -166,12 +187,13 @@ export default function OrdersScreen({ navigation }: any) {
           </View>
         </View>
 
-        {item.customerId ? (
-          <View style={styles.customerCard}>
-            <Text style={styles.customerName}>{item.customerId.name || "Customer"}</Text>
-            <Text style={styles.customerPhone}>{item.customerId.phone || ""}</Text>
-          </View>
-        ) : null}
+        <View style={styles.handoffCard}>
+          <Text style={styles.handoffLabel}>Parcel handoff</Text>
+          <Text style={styles.handoffText}>Order ID #{item._id.slice(-6).toUpperCase()}</Text>
+          <Text style={styles.handoffSubtext}>
+            {item.deliveryPartnerId?.name ? `Delivery partner: ${item.deliveryPartnerId.name}` : "Delivery partner will appear after assignment"}
+          </Text>
+        </View>
 
         {item.items?.slice(0, 2).map((orderItem, idx) => (
           <View key={`${item._id}-${idx}`} style={styles.itemRow}>
@@ -210,6 +232,8 @@ export default function OrdersScreen({ navigation }: any) {
         itemCount={bannerItemCount}
         grandTotal={newOrderAlert?.grandTotal || 0}
         onOpen={() => newOrderAlert && openNewOrder(newOrderAlert._id)}
+        onAccept={() => newOrderAlert && updateOrderStatus(newOrderAlert._id, "ACCEPTED")}
+        onReject={() => newOrderAlert && updateOrderStatus(newOrderAlert._id, "REJECTED")}
         onDismiss={() => setNewOrderAlert(null)}
       />
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -345,18 +369,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800"
   },
-  customerCard: {
+  handoffCard: {
     backgroundColor: "#FFF8F1",
     borderRadius: 16,
     padding: 12,
     marginBottom: 12
   },
-  customerName: {
+  handoffLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#C4541C",
+    textTransform: "uppercase",
+    letterSpacing: 0.7
+  },
+  handoffText: {
+    marginTop: 5,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#2C2018"
   },
-  customerPhone: {
+  handoffSubtext: {
     marginTop: 3,
     fontSize: 12,
     color: "#7B6D63"

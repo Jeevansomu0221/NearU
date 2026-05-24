@@ -38,6 +38,8 @@ const normalizeAddressPayload = (body: any) => {
     landmark,
     district,
     country,
+    latitude,
+    longitude,
     isDefault
   } = body;
 
@@ -48,6 +50,16 @@ const normalizeAddressPayload = (body: any) => {
       .join(", ");
   const normalizedArea = area || areaLocality || "";
   const normalizedCity = city || cityTownVillage || "";
+  const normalizedLatitude = Number(latitude);
+  const normalizedLongitude = Number(longitude);
+  const hasValidCoordinates =
+    Number.isFinite(normalizedLatitude) &&
+    Number.isFinite(normalizedLongitude) &&
+    normalizedLatitude >= -90 &&
+    normalizedLatitude <= 90 &&
+    normalizedLongitude >= -180 &&
+    normalizedLongitude <= 180 &&
+    !(normalizedLatitude === 0 && normalizedLongitude === 0);
 
   return {
     label: (label || "Home").trim(),
@@ -65,6 +77,8 @@ const normalizeAddressPayload = (body: any) => {
     landmark: landmark || "",
     district: district || "",
     country: country || "India",
+    latitude: hasValidCoordinates ? normalizedLatitude : undefined,
+    longitude: hasValidCoordinates ? normalizedLongitude : undefined,
     isDefault: Boolean(isDefault)
   };
 };
@@ -83,7 +97,9 @@ const legacyAddressFromSaved = (address: any) => ({
   areaLocality: address?.areaLocality || address?.area || "",
   landmark: address?.landmark || "",
   district: address?.district || "",
-  country: address?.country || "India"
+  country: address?.country || "India",
+  latitude: address?.latitude,
+  longitude: address?.longitude
 });
 
 /**

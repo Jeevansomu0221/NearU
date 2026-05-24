@@ -116,13 +116,6 @@ api.interceptors.response.use(
       String(error.message || "").toLowerCase().includes("timeout");
     const isNetworkError = error.message === "Network Error" || isTimeoutError || (error.request && !error.response);
 
-    console.error("API Error:", {
-      message: error.message,
-      status: error.response?.status,
-      url: error.config?.url,
-      data: error.response?.data
-    });
-
     if (isNetworkError && requestConfig && nextBaseUrl) {
       logDebug(`Trying fallback API base URL: ${nextBaseUrl}`);
       requestConfig._baseUrlRetryIndex = currentRetryIndex + 1;
@@ -140,7 +133,10 @@ api.interceptors.response.use(
       requestConfig &&
       !requestConfig._retryAuth &&
       requestConfig.url !== "/auth/refresh" &&
-      String(serverMessage).toLowerCase().includes("token expired")
+      (
+        String(serverMessage).toLowerCase().includes("token expired") ||
+        String(serverMessage).toLowerCase().includes("session expired")
+      )
     ) {
       try {
         const refreshToken = await AsyncStorage.getItem("refreshToken");
@@ -181,6 +177,13 @@ api.interceptors.response.use(
         return Promise.reject(new Error("Your session expired. Please log in again."));
       }
     }
+
+    console.error("API Error:", {
+      message: error.message,
+      status: error.response?.status,
+      url: error.config?.url,
+      data: error.response?.data
+    });
 
     return Promise.reject(error.response?.data || error);
   }

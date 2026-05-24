@@ -18,6 +18,8 @@ export interface SavedAddress {
   landmark?: string;
   district?: string;
   country?: string;
+  latitude?: number;
+  longitude?: number;
   isDefault?: boolean;
 }
 
@@ -69,6 +71,8 @@ export const updateUserAddress = (addressData: {
   landmark?: string;
   district?: string;
   country?: string;
+  latitude?: number;
+  longitude?: number;
   isDefault?: boolean;
 }): Promise<ApiResponse<UserProfile>> => {
   return apiPut<UserProfile>("/users/address", addressData);
