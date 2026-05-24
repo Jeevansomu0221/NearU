@@ -18,7 +18,7 @@ import { errorMiddleware } from "./middlewares/error.middleware";
 
 const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
-const allowConfiguredWildcardOrigin = !config.isProduction && config.corsOrigins.includes("*");
+const allowConfiguredWildcardOrigin = config.corsOrigins.includes("*");
 
 const isLocalDevelopmentOrigin = (origin: string) => {
   try {

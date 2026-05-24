@@ -74,10 +74,6 @@ export const validateEnv = (): void => {
       missing.push("CORS_ORIGINS");
     }
 
-    if (config.corsOrigins.includes("*")) {
-      missing.push("CORS_ORIGINS must not contain * in production");
-    }
-
     if (!config.adminPanelPhone || !config.adminPanelPassword) {
       missing.push("ADMIN_PANEL_PHONE/ADMIN_PANEL_PASSWORD");
     }
