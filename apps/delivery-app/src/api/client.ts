@@ -43,6 +43,8 @@ const resolveApiBaseUrls = () => {
   }
 
   const urls: string[] = [];
+  addUnique(urls, PRODUCTION_API_URL);
+
   const scriptURL = NativeModules.SourceCode?.scriptURL;
   if (scriptURL) {
     try {
