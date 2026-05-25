@@ -9,7 +9,6 @@ import User from "../models/User.model";
 import { CONSUMER_APP_ROLES, ROLES } from "../config/roles";
 import { successResponse, errorResponse } from "../utils/response";
 import { AuthRequest } from "../middlewares/auth.middleware";
-import { config } from "../config/env";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
@@ -39,6 +38,19 @@ const resolvePartnerForUser = async (user?: AuthRequest["user"]) => {
   }
 
   return partner;
+};
+
+const resolveDeliveryPartnerForUser = async (user?: AuthRequest["user"], select = "") => {
+  if (!user) return null;
+
+  const byUserId = mongoose.Types.ObjectId.isValid(user.id)
+    ? await DeliveryPartner.findOne({ userId: user.id }).select(select)
+    : null;
+  if (byUserId) return byUserId;
+
+  return user.phone
+    ? DeliveryPartner.findOne({ phone: user.phone }).select(select)
+    : null;
 };
 
 const idString = (value: any) => {
@@ -854,7 +866,8 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const deliveryPartner = await DeliveryPartner.findOne({ userId: user.id }).lean();
+    const deliveryPartnerDoc = await resolveDeliveryPartnerForUser(user);
+    const deliveryPartner = deliveryPartnerDoc?.toObject ? deliveryPartnerDoc.toObject() : deliveryPartnerDoc;
     if (!deliveryPartner) {
       return errorResponse(res, "Delivery profile not found", 404);
     }
@@ -877,7 +890,7 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
     // "currently working" promotion. We also accept VERIFIED to avoid the
     // common case where admin only marked the partner as VERIFIED and not yet ACTIVE.
     const eligibleStatuses = ["ACTIVE", "VERIFIED"];
-    if (!eligibleStatuses.includes(deliveryPartner.status) || !deliveryPartner.isAvailable) {
+    if (!eligibleStatuses.includes(deliveryPartner.status)) {
       return successResponse(res, [], "Delivery partner is not eligible for nearby jobs");
     }
 
@@ -932,10 +945,6 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
         }
 
         const distanceToRestaurant = haversineKm(riderCoordinates as [number, number], partnerCoordinates);
-        if (distanceToRestaurant > config.deliveryRadiusKm) {
-          return null;
-        }
-
         return {
           ...job,
           distanceToRestaurant: Number(distanceToRestaurant.toFixed(2))
@@ -970,9 +979,9 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const deliveryPartner = await DeliveryPartner.findOne({ userId: user.id }).select("status isAvailable");
+    const deliveryPartner = await resolveDeliveryPartnerForUser(user, "status isAvailable");
     const acceptStatuses = ["ACTIVE", "VERIFIED"];
-    if (!deliveryPartner || !acceptStatuses.includes(deliveryPartner.status) || !deliveryPartner.isAvailable) {
+    if (!deliveryPartner || !acceptStatuses.includes(deliveryPartner.status)) {
       return errorResponse(res, "Delivery partner is not eligible to accept jobs", 403);
     }
 

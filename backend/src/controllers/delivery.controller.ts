@@ -36,6 +36,28 @@ const firstString = (...values: any[]) =>
 
 const safeTrimmedString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
+const findDeliveryPartnerForUser = (user: NonNullable<AuthRequest["user"]>) => {
+  const filters = [];
+  if (mongoose.Types.ObjectId.isValid(user.id)) {
+    filters.push({ userId: user.id });
+  }
+  if (user.phone) {
+    filters.push({ phone: user.phone });
+  }
+  return filters.length > 0 ? DeliveryPartner.findOne({ $or: filters }) : null;
+};
+
+const updateDeliveryPartnerForUser = (user: NonNullable<AuthRequest["user"]>, update: Record<string, unknown>, options = {}) => {
+  const filters = [];
+  if (mongoose.Types.ObjectId.isValid(user.id)) {
+    filters.push({ userId: user.id });
+  }
+  if (user.phone) {
+    filters.push({ phone: user.phone });
+  }
+  return filters.length > 0 ? DeliveryPartner.findOneAndUpdate({ $or: filters }, update, options) : null;
+};
+
 const isDeliveryProfileComplete = (profile: {
   name?: string;
   address?: string;
@@ -105,7 +127,7 @@ export const getDeliveryProfile = async (req: AuthRequest, res: Response) => {
 
     const [userDoc, deliveryPartner] = await Promise.all([
       User.findById(user.id).select("name phone email"),
-      DeliveryPartner.findOne({ userId: user.id }).lean()
+      findDeliveryPartnerForUser(user)?.lean()
     ]);
 
     if (!userDoc || !deliveryPartner) {
@@ -224,7 +246,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
     }
 
     if (documents !== undefined) {
-      const currentPartner = await DeliveryPartner.findOne({ userId: user.id }).lean();
+      const currentPartner = await findDeliveryPartnerForUser(user)?.lean();
       if (!currentPartner) {
         return errorResponse(res, "Delivery profile not found", 404);
       }
@@ -320,7 +342,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         new: true,
         runValidators: true
       }).select("name phone email"),
-      DeliveryPartner.findOneAndUpdate({ userId: user.id }, updateDelivery, {
+      updateDeliveryPartnerForUser(user, updateDelivery, {
         new: true,
         runValidators: true
       })
@@ -378,7 +400,7 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
     const user = ensureDeliveryUser(req, res);
     if (!user) return;
 
-    const deliveryPartner = await DeliveryPartner.findOne({ userId: user.id }).lean();
+    const deliveryPartner = await findDeliveryPartnerForUser(user)?.lean();
     if (!deliveryPartner) {
       return errorResponse(res, "Delivery profile not found", 404);
     }
@@ -439,7 +461,7 @@ export const getTodaysEarnings = async (req: AuthRequest, res: Response) => {
     const user = ensureDeliveryUser(req, res);
     if (!user) return;
 
-    const deliveryPartner = await DeliveryPartner.findOne({ userId: user.id }).lean();
+    const deliveryPartner = await findDeliveryPartnerForUser(user)?.lean();
     if (!deliveryPartner) {
       return errorResponse(res, "Delivery profile not found", 404);
     }
@@ -525,7 +547,7 @@ export const updateDeliveryLocation = async (req: AuthRequest, res: Response) =>
       return errorResponse(res, "latitude and longitude are required", 400);
     }
 
-    const existing = await DeliveryPartner.findOne({ userId: user.id }).select("status");
+    const existing = await findDeliveryPartnerForUser(user)?.select("status");
 
     if (!existing) {
       return errorResponse(res, "Delivery profile not found", 404);
@@ -536,8 +558,8 @@ export const updateDeliveryLocation = async (req: AuthRequest, res: Response) =>
     // sharing GPS == "I am ready to take jobs".
     const nextStatus = existing.status === "VERIFIED" ? "ACTIVE" : existing.status;
 
-    const deliveryPartner = await DeliveryPartner.findOneAndUpdate(
-      { userId: user.id },
+    const deliveryPartner = await updateDeliveryPartnerForUser(
+      user,
       {
         currentLocation: {
           type: "Point",
