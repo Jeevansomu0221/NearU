@@ -144,6 +144,44 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     return { latitude, longitude };
   };
 
+  const getLatLngFromMapsLink = (mapsLink?: string) => {
+    if (!mapsLink) return null;
+
+    let decodedLink = mapsLink;
+    try {
+      decodedLink = decodeURIComponent(mapsLink);
+    } catch {
+      decodedLink = mapsLink;
+    }
+    const coordinatePatterns = [
+      /(?:destination|query|q)=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i,
+      /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
+      /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i
+    ];
+
+    for (const pattern of coordinatePatterns) {
+      const match = decodedLink.match(pattern);
+      const latitude = toCoordinateNumber(match?.[1]);
+      const longitude = toCoordinateNumber(match?.[2]);
+
+      if (
+        typeof latitude === "number" &&
+        typeof longitude === "number" &&
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude) &&
+        latitude >= -90 &&
+        latitude <= 90 &&
+        longitude >= -180 &&
+        longitude <= 180 &&
+        !(latitude === 0 && longitude === 0)
+      ) {
+        return { latitude, longitude };
+      }
+    }
+
+    return null;
+  };
+
   const openCoordinateDirections = async (
     latitude: number,
     longitude: number,
@@ -160,11 +198,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       android: `google.navigation:q=${coordinateText}&mode=d`,
       ios: `comgooglemaps://?daddr=${coordinateText}&directionsmode=driving`
     });
-    // For the universal web link we attach the label as a "place name" so the
-    // rider sees "Customer Name" on the destination marker.
-    const webUrl = encodedLabel
-      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinateText)}&destination_place_id=&travelmode=driving&query=${encodedLabel}`
-      : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinateText)}&travelmode=driving`;
+    const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinateText)}&travelmode=driving${encodedLabel ? `&query=${encodedLabel}` : ""}`;
 
     if (nativeUrl) {
       try {
@@ -196,11 +230,19 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       return;
     }
 
+    const linkCoordinates = getLatLngFromMapsLink(googleMapsLink);
+    if (linkCoordinates) {
+      await openCoordinateDirections(linkCoordinates.latitude, linkCoordinates.longitude, destinationLabel);
+      return;
+    }
+
     if (requireCoordinates) {
       try {
         const latestResponse = await getJobDetails(orderId);
         const latestJob = latestResponse.success ? latestResponse.data : null;
-        const latestCoordinates = getLatLngFromPoint(latestJob?.deliveryLocation);
+        const latestCoordinates =
+          getLatLngFromPoint(latestJob?.deliveryLocation) ||
+          getLatLngFromMapsLink(latestJob?.deliveryGoogleMapsLink);
 
         if (latestJob) {
           setJob(latestJob);
@@ -480,6 +522,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             onPress={() =>
               handleOpenMaps({
                 address: job.deliveryAddress,
+                googleMapsLink: job.deliveryGoogleMapsLink,
                 location: job.deliveryLocation,
                 requireCoordinates: true,
                 destinationLabel: job.customerId?.name || "Customer",

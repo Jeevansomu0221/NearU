@@ -138,6 +138,20 @@ const buildGeoPoint = (latitudeInput: any, longitudeInput: any): GeoPoint | unde
   return undefined;
 };
 
+const buildGoogleMapsDirectionsLink = (location?: GeoPoint) => {
+  const [longitude, latitude] = location?.coordinates || [];
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    (latitude === 0 && longitude === 0)
+  ) {
+    return undefined;
+  }
+
+  const destination = `${latitude},${longitude}`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+};
+
 const normalizeLocationPayload = (value: any): GeoPoint | undefined => {
   const coordinateArray = Array.isArray(value?.coordinates) ? value.coordinates : undefined;
 
@@ -175,6 +189,7 @@ const ensureDeliveryLocationForResponse = async (orderObj: any): Promise<any> =>
   const existingLocation = normalizeLocationPayload(orderObj.deliveryLocation);
   if (existingLocation) {
     orderObj.deliveryLocation = existingLocation;
+    orderObj.deliveryGoogleMapsLink = buildGoogleMapsDirectionsLink(existingLocation);
     return orderObj;
   }
 
@@ -182,6 +197,7 @@ const ensureDeliveryLocationForResponse = async (orderObj: any): Promise<any> =>
   if (!fallbackLocation) return orderObj;
 
   orderObj.deliveryLocation = fallbackLocation;
+  orderObj.deliveryGoogleMapsLink = buildGoogleMapsDirectionsLink(fallbackLocation);
 
   if (orderObj._id) {
     await Order.findByIdAndUpdate(orderObj._id, { deliveryLocation: fallbackLocation }).catch((error) => {
@@ -835,8 +851,10 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized to view this order", 401);
     }
 
-    // For partners: mask customer details
-    if (isPartner) {
+    // Only partner-only viewers should see masked customer details. A delivery
+    // rider can also match a partner profile by phone/user linkage, but they
+    // still need the real drop address and GPS pin to complete delivery.
+    if (isPartner && !isCustomer && !isDelivery && !isAdmin) {
       orderObj.customerId = maskedCustomerFrom(orderObj.customerId);
       
       // Also mask detailed delivery address for partners
@@ -979,10 +997,19 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
     const activeOrder = await Order.findOne({
       deliveryPartnerId: user.id,
       status: { $in: ["ASSIGNED", "PICKED_UP"] }
-    }).select("_id").lean();
+    }).select("_id status").lean();
 
     if (activeOrder) {
-      return errorResponse(res, "Complete your current delivery before accepting another job", 409);
+      return errorResponse(
+        res,
+        "Complete your current delivery before accepting another job",
+        409,
+        {
+          code: "ACTIVE_DELIVERY_EXISTS",
+          activeOrderId: idString(activeOrder._id),
+          activeOrderStatus: activeOrder.status
+        }
+      );
     }
 
     const order = await Order.findOneAndUpdate(

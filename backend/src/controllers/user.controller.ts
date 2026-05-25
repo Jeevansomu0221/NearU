@@ -211,6 +211,7 @@ export const updateUserAddress = async (req: AuthRequest, res: Response) => {
     const existingIndex = addressId
       ? addresses.findIndex((entry: any) => entry._id?.toString() === addressId)
       : addresses.findIndex((entry: any) => entry.isDefault);
+    let savedAddressId: string | undefined;
 
     if (existingIndex >= 0) {
       const existing = addresses[existingIndex];
@@ -220,15 +221,17 @@ export const updateUserAddress = async (req: AuthRequest, res: Response) => {
         _id: existing._id,
         isDefault: requestedDefault || existing.isDefault
       };
+      savedAddressId = existing._id?.toString();
     } else {
       addresses.push({
         ...address,
         isDefault: requestedDefault
       });
+      savedAddressId = addresses[addresses.length - 1]?._id?.toString();
     }
 
     if (requestedDefault || !addresses.some((entry: any) => entry.isDefault)) {
-      const defaultId = addressId || addresses[addresses.length - 1]?._id?.toString();
+      const defaultId = addressId || savedAddressId;
       addresses.forEach((entry: any) => {
         entry.isDefault = defaultId ? entry._id?.toString() === defaultId : entry === addresses[addresses.length - 1];
       });

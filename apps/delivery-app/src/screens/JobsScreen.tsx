@@ -17,7 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, rejectJob, updateLocation } from "../api/delivery.api";
+import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, getMyDeliveryOrders, rejectJob, updateLocation } from "../api/delivery.api";
 import { getDeliveryProfile, updateDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { formatAddress } from "../utils/address";
@@ -224,6 +224,41 @@ export default function JobsScreen({ navigation }: any) {
     setSelectedJobAction({ job, action: "reject" });
   };
 
+  const isActiveDeliveryBlock = (response: any) => {
+    const message = String(response?.message || "").toLowerCase();
+    return response?.errors?.code === "ACTIVE_DELIVERY_EXISTS" || message.includes("current delivery");
+  };
+
+  const promptToContinueActiveDelivery = async (response: any) => {
+    const activeOrderId = response?.errors?.activeOrderId;
+    const myOrdersResponse = await getMyDeliveryOrders();
+    const activeOrder = myOrdersResponse.success
+      ? myOrdersResponse.data?.find((order) => order._id === activeOrderId) ||
+        myOrdersResponse.data?.find((order) => ["ASSIGNED", "PICKED_UP"].includes(order.status))
+      : null;
+
+    const orderLabel = activeOrder?._id ? ` #${activeOrder._id.slice(-6).toUpperCase()}` : "";
+
+    Alert.alert(
+      "Finish current delivery",
+      `You already have an active delivery${orderLabel}. Complete it before accepting another job.`,
+      [
+        { text: "Not now", style: "cancel" },
+        {
+          text: activeOrder ? "Continue Delivery" : "Open My Jobs",
+          onPress: () => {
+            if (activeOrder) {
+              navigation.getParent()?.navigate("JobDetails", { orderId: activeOrder._id, job: activeOrder });
+              return;
+            }
+
+            navigation.navigate("MyJobs", activeOrderId ? { highlightOrderId: activeOrderId } : undefined);
+          }
+        }
+      ]
+    );
+  };
+
   const confirmSelectedJobAction = async () => {
     if (!selectedJobAction) return;
 
@@ -241,6 +276,12 @@ export default function JobsScreen({ navigation }: any) {
         }
         loadAvailableJobs();
       } else {
+        if (action === "accept" && isActiveDeliveryBlock(response)) {
+          setSelectedJobAction(null);
+          await promptToContinueActiveDelivery(response);
+          return;
+        }
+
         Alert.alert(action === "accept" ? "Could not accept job" : "Could not reject job", response.message || "Please try again.");
       }
     } finally {
@@ -259,6 +300,11 @@ export default function JobsScreen({ navigation }: any) {
       navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job: response.data || job });
       loadAvailableJobs();
     } else {
+      if (isActiveDeliveryBlock(response)) {
+        await promptToContinueActiveDelivery(response);
+        return;
+      }
+
       Alert.alert("Could not accept job", response.message || "Please try again.");
     }
   };

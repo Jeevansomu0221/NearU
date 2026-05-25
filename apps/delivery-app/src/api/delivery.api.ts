@@ -44,6 +44,7 @@ export interface DeliveryOrder {
   deliveryLocation?: {
     coordinates: [number, number];
   };
+  deliveryGoogleMapsLink?: string;
   note: string;
   items: OrderItem[];
   customerId: CustomerInfo;

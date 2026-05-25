@@ -78,16 +78,22 @@ export default function CartScreen({ route, navigation }: any) {
   const subtotal = items.reduce((sum: number, item: CartItem) => sum + item.price * item.quantity, 0);
   const total = subtotal + deliveryFee;
 
+  const getSelectedAddress = (): SavedAddress | string | undefined => {
+    const defaultSavedAddress = userProfile?.addresses?.find((address) => address.isDefault);
+    return (defaultSavedAddress || userProfile?.address) as SavedAddress | string | undefined;
+  };
+
   const formatAddress = () => {
-    if (!userProfile?.address) {
+    const selectedAddress = getSelectedAddress();
+    if (!selectedAddress) {
       return "No address saved. Please add delivery address in Profile.";
     }
 
-    if (typeof userProfile.address === "string") {
-      return userProfile.address;
+    if (typeof selectedAddress === "string") {
+      return selectedAddress;
     }
 
-    const addr = userProfile.address;
+    const addr = selectedAddress;
     return [
       addr.recipientName,
       [addr.houseFlatDoorNo, addr.buildingApartmentName].filter(Boolean).join(", ") || addr.street,
@@ -103,7 +109,7 @@ export default function CartScreen({ route, navigation }: any) {
   };
 
   const getDeliveryLocation = () => {
-    const address = userProfile?.address;
+    const address = getSelectedAddress();
     if (!address || typeof address === "string") return undefined;
 
     if (
@@ -123,7 +129,7 @@ export default function CartScreen({ route, navigation }: any) {
   };
 
   const captureAndSaveDeliveryLocation = async () => {
-    const address = userProfile?.address;
+    const address = getSelectedAddress();
     if (!address || typeof address === "string") {
       Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.");
       return undefined;
@@ -174,7 +180,7 @@ export default function CartScreen({ route, navigation }: any) {
         return;
       }
 
-      if (!userProfile?.address) {
+      if (!getSelectedAddress()) {
         Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.", [
           { text: "Cancel", style: "cancel" },
           { text: "Add Address", onPress: () => navigation.navigate("Profile") }
@@ -209,7 +215,7 @@ export default function CartScreen({ route, navigation }: any) {
 
   const hasAddressPin = Boolean(getDeliveryLocation());
   const canCheckout =
-    Boolean(userProfile?.address) && !loading && items.length > 0;
+    Boolean(getSelectedAddress()) && !loading && items.length > 0;
 
   const handleRemoveItem = (item: CartItem) => {
       Alert.alert("Remove Item", "Remove this item from cart?", [
@@ -309,14 +315,14 @@ export default function CartScreen({ route, navigation }: any) {
               <View style={styles.deliveryHeader}>
                 <Text style={styles.sectionTitle}>Delivery Address</Text>
                 <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
-                  <Text style={styles.linkText}>{userProfile?.address ? "Change" : "Add Address"}</Text>
+                  <Text style={styles.linkText}>{getSelectedAddress() ? "Change" : "Add Address"}</Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.addressName}>{userProfile?.name || "Customer"}</Text>
               <Text style={styles.addressPhone}>{userProfile?.phone}</Text>
               <Text style={styles.addressText}>{formatAddress()}</Text>
 
-              {userProfile?.address && hasAddressPin ? (
+              {getSelectedAddress() && hasAddressPin ? (
                 <View style={styles.pinSavedRow}>
                   <Text style={styles.pinSavedDot}>●</Text>
                   <Text style={styles.pinSavedText}>Location access is set for accurate delivery.</Text>
