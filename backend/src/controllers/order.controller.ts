@@ -22,21 +22,60 @@ const AUTO_CANCEL_MESSAGE =
 const resolvePartnerForUser = async (user?: AuthRequest["user"]) => {
   if (!user) return null;
 
-  if (user.partnerId) {
+  if (user.partnerId && mongoose.Types.ObjectId.isValid(user.partnerId)) {
     const partnerByToken = await Partner.findById(user.partnerId);
     if (partnerByToken) return partnerByToken;
   }
 
-  let partner = await Partner.findOne({ userId: user.id });
+  let partner = mongoose.Types.ObjectId.isValid(user.id)
+    ? await Partner.findOne({ userId: user.id })
+    : null;
   if (!partner && user.phone) {
     partner = await Partner.findOne({ phone: user.phone });
-    if (partner && !partner.userId) {
+    if (partner && !partner.userId && mongoose.Types.ObjectId.isValid(user.id)) {
       partner.userId = new mongoose.Types.ObjectId(user.id);
       await partner.save();
     }
   }
 
   return partner;
+};
+
+const idString = (value: any) => {
+  const rawId = value?._id || value;
+  if (!rawId) return "";
+  return typeof rawId.toString === "function" ? rawId.toString() : String(rawId);
+};
+
+const idsMatch = (left: any, right: any) => {
+  const leftId = idString(left);
+  const rightId = idString(right);
+  return Boolean(leftId && rightId && leftId === rightId);
+};
+
+const maskedCustomerFrom = (customer: any): MaskedCustomer => {
+  const phone = typeof customer?.phone === "string" ? customer.phone : "";
+  const maskedCustomer: MaskedCustomer = {
+    _id: idString(customer) || "masked",
+    name: "Customer"
+  };
+
+  if (phone.length > 3) {
+    maskedCustomer.phone = `XXXXXX${phone.slice(-3)}`;
+  }
+
+  return maskedCustomer;
+};
+
+const maskDeliveryAddressForPartner = (value: unknown) => {
+  if (typeof value !== "string") return value;
+
+  const addressParts = value.split(",").map((part) => part.trim()).filter(Boolean);
+  if (addressParts.length > 2) {
+    return `${addressParts[addressParts.length - 2]}, ${addressParts[addressParts.length - 1]}`;
+  }
+
+  return value;
 };
 
 // Define interface for masked customer
@@ -172,31 +211,53 @@ const markAutoCancelled = (order: any, reason: string) => {
 };
 
 const cancelStaleUnacceptedOrders = async () => {
-  const now = new Date();
-  const restaurantDeadline = new Date(now.getTime() - RESTAURANT_ACCEPT_TIMEOUT_MS);
-  const deliveryDeadline = new Date(now.getTime() - DELIVERY_ACCEPT_TIMEOUT_MS);
+  try {
+    const now = new Date();
+    const restaurantDeadline = new Date(now.getTime() - RESTAURANT_ACCEPT_TIMEOUT_MS);
+    const deliveryDeadline = new Date(now.getTime() - DELIVERY_ACCEPT_TIMEOUT_MS);
 
-  const restaurantTimedOut = await Order.find({
-    status: "CONFIRMED",
-    createdAt: { $lte: restaurantDeadline }
-  });
+    const restaurantTimedOutFilter = {
+      status: "CONFIRMED",
+      createdAt: { $lte: restaurantDeadline }
+    };
 
-  const deliveryTimedOut = await Order.find({
-    status: "READY",
-    updatedAt: { $lte: deliveryDeadline },
-    $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
-  });
+    const deliveryTimedOutFilter = {
+      status: "READY",
+      updatedAt: { $lte: deliveryDeadline },
+      $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+    };
 
-  await Promise.all([
-    ...restaurantTimedOut.map((order: any) => {
-      markAutoCancelled(order, "Restaurant did not accept the order in time");
-      return order.save();
-    }),
-    ...deliveryTimedOut.map((order: any) => {
-      markAutoCancelled(order, "No delivery partner accepted the order in time");
-      return order.save();
-    })
-  ]);
+    const autoCancelByPaymentStatus = async (baseFilter: any, reason: string) => {
+      const baseSet = {
+        status: "CANCELLED",
+        cancellationReason: reason,
+        customerCancellationMessage: AUTO_CANCEL_MESSAGE,
+        autoCancelledAt: now
+      };
+
+      await Promise.all([
+        Order.updateMany(
+          { ...baseFilter, paymentStatus: "PAID" },
+          { $set: { ...baseSet, paymentStatus: "REFUNDED" } }
+        ),
+        Order.updateMany(
+          { ...baseFilter, paymentStatus: "PENDING" },
+          { $set: { ...baseSet, paymentStatus: "CANCELLED" } }
+        ),
+        Order.updateMany(
+          { ...baseFilter, paymentStatus: { $nin: ["PAID", "PENDING"] } },
+          { $set: baseSet }
+        )
+      ]);
+    };
+
+    await Promise.all([
+      autoCancelByPaymentStatus(restaurantTimedOutFilter, "Restaurant did not accept the order in time"),
+      autoCancelByPaymentStatus(deliveryTimedOutFilter, "No delivery partner accepted the order in time")
+    ]);
+  } catch (error) {
+    console.error("cancelStaleUnacceptedOrders error:", error);
+  }
 };
 
 /**
@@ -676,15 +737,7 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
       // Mask customer information for partners
       orders = orders.map(order => {
         const orderObj = order.toObject() as any;
-        
-        // Create a masked customer object
-        const maskedCustomer: MaskedCustomer = {
-          _id: orderObj.customerId ? orderObj.customerId._id || "masked" : "masked",
-          name: "Customer"
-        };
-        
-        // Replace customerId with masked version
-        orderObj.customerId = maskedCustomer;
+        orderObj.customerId = maskedCustomerFrom(orderObj.customerId);
         return orderObj;
       });
     } else {
@@ -744,26 +797,20 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
     }
 
     // Check if user has permission to view this order
-    const userId = new mongoose.Types.ObjectId(user.id);
     const orderObj = order.toObject() as any;
     
     // Check if user is the customer
-    const isCustomer = orderObj.customerId && orderObj.customerId._id 
-      ? new mongoose.Types.ObjectId(orderObj.customerId._id.toString()).equals(userId)
-      : false;
+    const isCustomer = idsMatch(orderObj.customerId, user.id);
     
     // Check if user is the delivery partner
-    const isDelivery = orderObj.deliveryPartnerId && orderObj.deliveryPartnerId._id
-      ? new mongoose.Types.ObjectId(orderObj.deliveryPartnerId._id.toString()).equals(userId)
-      : false;
+    const isDelivery = idsMatch(orderObj.deliveryPartnerId, user.id);
     
     // Check if the account owns the partner profile, regardless of its primary role.
     const partner = await resolvePartnerForUser(user);
     const isPartner = Boolean(
       partner &&
         orderObj.partnerId &&
-        orderObj.partnerId._id &&
-        new mongoose.Types.ObjectId(orderObj.partnerId._id.toString()).equals(partner._id)
+        idsMatch(orderObj.partnerId, partner._id)
     );
 
     const isAdmin = user.role === ROLES.ADMIN;
@@ -774,33 +821,11 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
 
     // For partners: mask customer details
     if (isPartner) {
-      // Create a masked customer object
-      const maskedCustomer: MaskedCustomer = {
-        _id: orderObj.customerId ? orderObj.customerId._id || "masked" : "masked",
-        name: "Customer"
-      };
-      
-      // Mask phone number if it exists in the populated customer object
-      if (orderObj.customerId && (orderObj.customerId as any).phone) {
-        const phoneStr = (orderObj.customerId as any).phone.toString();
-        // Mask all but last 3 digits
-        if (phoneStr.length > 3) {
-          maskedCustomer.phone = "XXXXXX" + phoneStr.slice(-3);
-        }
-      }
-      
-      // Replace customerId with masked version
-      orderObj.customerId = maskedCustomer;
+      orderObj.customerId = maskedCustomerFrom(orderObj.customerId);
       
       // Also mask detailed delivery address for partners
       // Show only area/city, not full address
-      if (orderObj.deliveryAddress) {
-        const addressParts = orderObj.deliveryAddress.split(',');
-        if (addressParts.length > 2) {
-          // Show only last 2 parts (city, state - pincode)
-          orderObj.deliveryAddress = `${addressParts[addressParts.length - 2]}, ${addressParts[addressParts.length - 1]}`;
-        }
-      }
+      orderObj.deliveryAddress = maskDeliveryAddressForPartner(orderObj.deliveryAddress);
       orderObj.deliveryLocation = undefined;
       
       return successResponse(res, orderObj, "Order details retrieved");
@@ -1102,7 +1127,7 @@ export const getPartnerOrderDetails = async (req: AuthRequest, res: Response) =>
 
     // Check if user is the partner for this order
     const partner = await resolvePartnerForUser(user);
-    const isPartner = Boolean(partner && order.partnerId.equals(partner._id));
+    const isPartner = Boolean(partner && idsMatch((order as any).partnerId, partner._id));
 
     if (!isPartner) {
       return errorResponse(res, "Unauthorized to view this order", 401);
@@ -1111,21 +1136,10 @@ export const getPartnerOrderDetails = async (req: AuthRequest, res: Response) =>
     const orderObj = order.toObject() as any;
     
     // Completely mask customer information for partners
-    const maskedCustomer: MaskedCustomer = {
-      _id: new mongoose.Types.ObjectId(), // Create a new ObjectId
-      name: "Customer"
-    };
-    
-    orderObj.customerId = maskedCustomer;
+    orderObj.customerId = maskedCustomerFrom(orderObj.customerId);
     
     // Mask delivery address (only show general area)
-    if (orderObj.deliveryAddress) {
-      const addressParts = orderObj.deliveryAddress.split(',');
-      if (addressParts.length > 2) {
-        // Show only city and pincode
-        orderObj.deliveryAddress = `${addressParts[addressParts.length - 2]}, ${addressParts[addressParts.length - 1]}`;
-      }
-    }
+    orderObj.deliveryAddress = maskDeliveryAddressForPartner(orderObj.deliveryAddress);
 
     return successResponse(res, orderObj, "Order details retrieved for partner");
   } catch (err: any) {
