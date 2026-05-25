@@ -223,6 +223,10 @@ const markAutoCancelled = (order: any, reason: string) => {
 };
 
 const cancelStaleUnacceptedOrders = async () => {
+  if (process.env.ENABLE_ORDER_AUTO_CANCEL !== "true") {
+    return;
+  }
+
   try {
     const now = new Date();
     const restaurantDeadline = new Date(now.getTime() - RESTAURANT_ACCEPT_TIMEOUT_MS);
@@ -870,19 +874,6 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
     const deliveryPartner = deliveryPartnerDoc?.toObject ? deliveryPartnerDoc.toObject() : deliveryPartnerDoc;
     if (!deliveryPartner) {
       return errorResponse(res, "Delivery profile not found", 404);
-    }
-
-    const activeOrder = await Order.findOne({
-      deliveryPartnerId: user.id,
-      status: { $in: ["ASSIGNED", "PICKED_UP"] }
-    }).select("_id status").lean();
-
-    if (activeOrder) {
-      return successResponse(
-        res,
-        [],
-        "Complete your current delivery before accepting another job"
-      );
     }
 
     // Allow both VERIFIED and ACTIVE delivery partners to see jobs.
