@@ -66,6 +66,7 @@ const filterOptions = [
 ];
 
 const NEARBY_RADIUS_KM = 3;
+const SHOW_APPROVED_FALLBACK_IN_DEV = typeof __DEV__ !== "undefined" && __DEV__;
 
 const shopPlaceholders: Record<string, string> = {
   bakery:
@@ -116,12 +117,29 @@ export default function HomeScreen({ navigation }: Props) {
         radiusKm: NEARBY_RADIUS_KM
       });
 
-      if (response?.success && Array.isArray(response.data)) {
-        setShops(response.data);
+      const nearbyShops = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray((response as any)?.data)
+          ? (response as any).data
+          : null;
+
+      if (nearbyShops && nearbyShops.length > 0) {
+        setShops(nearbyShops);
         setLocationMessage(`Showing shops within ${NEARBY_RADIUS_KM} km of your current location`);
-      } else if (Array.isArray((response as any)?.data)) {
-        setShops((response as any).data);
-        setLocationMessage(`Showing shops within ${NEARBY_RADIUS_KM} km of your current location`);
+      } else if (nearbyShops && SHOW_APPROVED_FALLBACK_IN_DEV) {
+        const fallbackResponse = await getPartners();
+        const approvedShops = Array.isArray(fallbackResponse?.data)
+          ? fallbackResponse.data
+          : Array.isArray((fallbackResponse as any)?.data)
+            ? (fallbackResponse as any).data
+            : [];
+
+        setShops(approvedShops);
+        setLocationMessage(
+          approvedShops.length > 0
+            ? `No shops found within ${NEARBY_RADIUS_KM} km. Showing approved shops for development testing while shop GPS pins are updated.`
+            : `No approved shops found. Check partner approval and setup status.`
+        );
       } else {
         setShops([]);
       }

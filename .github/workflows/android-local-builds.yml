@@ -24,9 +24,10 @@ on:
       artifact:
         description: Artifact type
         required: true
-        default: aab
+        default: all
         type: choice
         options:
+          - all
           - both
           - development-apk
           - aab
@@ -80,7 +81,7 @@ jobs:
         run: npm ci
 
       - name: Build production AAB
-        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab')) }}
+        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab')) }}
         working-directory: ${{ matrix.app_dir }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -89,7 +90,7 @@ jobs:
         run: npx eas-cli build -p android --profile production --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-production.aab
 
       - name: Build development APK
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && github.event.inputs.artifact == 'development-apk' }}
+        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'development-apk')) }}
         working-directory: ${{ matrix.app_dir }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -98,11 +99,11 @@ jobs:
         run: npx eas-cli build -p android --profile development --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-development.apk
 
       - name: Print development APK signing certificate
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && github.event.inputs.artifact == 'development-apk' }}
+        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'development-apk')) }}
         run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify --print-certs ${{ matrix.artifact_prefix }}-development.apk
 
       - name: Build preview APK
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'apk') }}
+        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'apk')) }}
         working-directory: ${{ matrix.app_dir }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -111,7 +112,7 @@ jobs:
         run: npx eas-cli build -p android --profile preview --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-preview.apk
 
       - name: Upload AAB
-        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab')) }}
+        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab')) }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_prefix }}-production-aab
@@ -119,7 +120,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload development APK
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && github.event.inputs.artifact == 'development-apk' }}
+        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'development-apk')) }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_prefix }}-development-apk
@@ -127,7 +128,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload APK
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'apk') }}
+        if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'apk')) }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_prefix }}-preview-apk

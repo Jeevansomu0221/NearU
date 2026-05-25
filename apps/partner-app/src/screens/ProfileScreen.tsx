@@ -172,6 +172,15 @@ const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
   return `${baseName}.${mimeExtension}`;
 };
 
+const loadLocationModule = async () => {
+  try {
+    return await import("expo-location");
+  } catch (error) {
+    console.warn("expo-location is unavailable in this app build:", error);
+    return null;
+  }
+};
+
 const formatAddress = (address?: PartnerProfile["address"]) => {
   if (!address) return "";
   return [address.roadStreet, address.colony, address.area, address.city, address.state, address.pincode]
@@ -224,6 +233,8 @@ export default function ProfileScreen({ navigation }: any) {
     googleMapsLink: "",
     landmark: ""
   });
+  const [capturedLocation, setCapturedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [capturingLocation, setCapturingLocation] = useState(false);
 
   const [images, setImages] = useState({
     shopImageUrl: "",
@@ -262,6 +273,7 @@ export default function ProfileScreen({ navigation }: any) {
       googleMapsLink: data.address?.googleMapsLink || "",
       landmark: data.address?.nearbyPlaces?.join(", ") || ""
     });
+    setCapturedLocation(null);
     setImages({
       shopImageUrl: data.shopImageUrl || "",
       bannerImageUrl: data.bannerImageUrl || "",
@@ -369,6 +381,43 @@ export default function ProfileScreen({ navigation }: any) {
       "Basic shop details updated"
     );
 
+  const captureShopLocation = async () => {
+    try {
+      setCapturingLocation(true);
+      const Location = await loadLocationModule();
+      if (!Location) {
+        Alert.alert(
+          "App update required",
+          "This Partner app build does not include location support yet. Install the latest build, or paste a Google Maps link with coordinates."
+        );
+        return;
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location permission needed",
+          "Stand at your shop and allow location access so customers can find the correct nearby listing."
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+
+      setCapturedLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      });
+      Alert.alert("Shop location captured", "Tap Save address to apply this GPS pin.");
+    } catch (error: any) {
+      Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
+    } finally {
+      setCapturingLocation(false);
+    }
+  };
+
   const handleSaveAddress = async () => {
     if (!address.roadStreet || !address.colony || !address.area || !address.city || !address.state) {
       Alert.alert("Missing details", "Fill all address fields before saving.");
@@ -378,8 +427,13 @@ export default function ProfileScreen({ navigation }: any) {
       Alert.alert("Pincode", "Pincode must be exactly 6 digits.");
       return;
     }
-    if (!address.googleMapsLink.trim()) {
-      Alert.alert("Maps link", "Add a Google Maps link so customers can locate you.");
+    const [storedLng, storedLat] = profile?.location?.coordinates || [];
+    const hasStoredLocation =
+      typeof storedLat === "number" &&
+      typeof storedLng === "number" &&
+      !(storedLat === 0 && storedLng === 0);
+    if (!capturedLocation && !hasStoredLocation && !address.googleMapsLink.trim()) {
+      Alert.alert("Shop location", "Capture your shop GPS pin or add a Google Maps link so customers can locate you.");
       return;
     }
 
@@ -388,22 +442,26 @@ export default function ProfileScreen({ navigation }: any) {
       .map((item) => item.trim())
       .filter(Boolean);
 
-    await saveUpdate(
-      {
-        address: {
-          ...profile?.address,
-          roadStreet: address.roadStreet.trim(),
-          colony: address.colony.trim(),
-          area: address.area.trim(),
-          city: address.city.trim(),
-          state: address.state.trim(),
-          pincode: address.pincode.trim(),
-          nearbyPlaces: landmarks,
-          googleMapsLink: address.googleMapsLink.trim()
-        }
-      },
-      "Address & location updated"
-    );
+    const payload: Record<string, any> = {
+      address: {
+        ...profile?.address,
+        roadStreet: address.roadStreet.trim(),
+        colony: address.colony.trim(),
+        area: address.area.trim(),
+        city: address.city.trim(),
+        state: address.state.trim(),
+        pincode: address.pincode.trim(),
+        nearbyPlaces: landmarks,
+        googleMapsLink: address.googleMapsLink.trim()
+      }
+    };
+
+    if (capturedLocation) {
+      payload.location = capturedLocation;
+    }
+
+    await saveUpdate(payload, "Address & location updated");
+    setCapturedLocation(null);
   };
 
   const handleSaveHours = () => {
@@ -468,12 +526,16 @@ export default function ProfileScreen({ navigation }: any) {
     }));
 
   const coordinateText = useMemo(() => {
+    if (capturedLocation) {
+      return `${capturedLocation.latitude.toFixed(6)}, ${capturedLocation.longitude.toFixed(6)} (new pin, save to apply)`;
+    }
+
     const [lng, lat] = profile?.location?.coordinates || [];
     if (typeof lat !== "number" || typeof lng !== "number" || (lat === 0 && lng === 0)) {
-      return "Auto-generated from Google Maps link";
+      return "No valid GPS pin saved yet";
     }
     return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-  }, [profile?.location?.coordinates]);
+  }, [capturedLocation, profile?.location?.coordinates]);
 
   if (loading && !profile) {
     return (
@@ -898,6 +960,16 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.detailLabel}>Latitude / longitude</Text>
           <Text style={styles.detailValue}>{coordinateText}</Text>
         </View>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={captureShopLocation} disabled={saving || capturingLocation}>
+          {capturingLocation ? (
+            <ActivityIndicator color="#2F80ED" />
+          ) : (
+            <Text style={styles.secondaryButtonText}>
+              {capturedLocation ? "Re-capture shop GPS pin" : "Use current shop GPS pin"}
+            </Text>
+          )}
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.primaryButton} onPress={handleSaveAddress} disabled={saving}>
           {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save address</Text>}

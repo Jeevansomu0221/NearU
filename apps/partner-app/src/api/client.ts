@@ -64,11 +64,13 @@ const resolveApiBaseUrls = () => {
     }
   }
 
-  addUnique(urls, `http://${DEV_LAN_HOST}:5000/api`);
-
   if (Platform.OS === "android") {
     addUnique(urls, `http://${ANDROID_EMULATOR_HOST}:5000/api`);
   }
+
+  addUnique(urls, `http://${DEV_LAN_HOST}:5000/api`);
+  addUnique(urls, "http://127.0.0.1:5000/api");
+  addUnique(urls, PRODUCTION_API_URL);
 
   return urls;
 };
