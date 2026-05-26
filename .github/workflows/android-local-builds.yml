@@ -1,5 +1,7 @@
 name: Android Local Builds
 
+# Retrigger partner APK builds when we need a fresh run after runner/setup issues.
+
 on:
   push:
     branches:
