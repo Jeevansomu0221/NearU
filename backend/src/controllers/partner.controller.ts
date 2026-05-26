@@ -177,6 +177,14 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       operatingHoursNote: firstString(documents?.operatingHoursNote)
     };
 
+    const hasAnyBankInput = Boolean(
+      normalizedDocs.bankAccountHolderName ||
+      normalizedDocs.bankAccountNumber ||
+      normalizedDocs.bankIfsc ||
+      normalizedDocs.bankDocumentType ||
+      normalizedDocs.bankProofUrl
+    );
+
     if (!fssaiRegex.test(normalizedDocs.fssaiNumber)) {
       return res.status(400).json({ success: false, message: "FSSAI number must be 14 digits" });
     }
@@ -186,11 +194,20 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     if (!aadhaarRegex.test(normalizedDocs.aadhaarNumber)) {
       return res.status(400).json({ success: false, message: "Aadhaar number must be 12 digits" });
     }
-    if (!/^[0-9]+$/.test(normalizedDocs.bankAccountNumber)) {
-      return res.status(400).json({ success: false, message: "Bank account number must be numeric" });
-    }
-    if (!ifscRegex.test(normalizedDocs.bankIfsc)) {
-      return res.status(400).json({ success: false, message: "IFSC code format is invalid" });
+
+    if (hasAnyBankInput) {
+      if (!normalizedDocs.bankAccountHolderName) {
+        return res.status(400).json({ success: false, message: "Bank account holder name is required when bank details are added" });
+      }
+      if (!/^[0-9]+$/.test(normalizedDocs.bankAccountNumber)) {
+        return res.status(400).json({ success: false, message: "Bank account number must be numeric" });
+      }
+      if (!ifscRegex.test(normalizedDocs.bankIfsc)) {
+        return res.status(400).json({ success: false, message: "IFSC code format is invalid" });
+      }
+      if (!normalizedDocs.bankDocumentType || !normalizedDocs.bankProofUrl) {
+        return res.status(400).json({ success: false, message: "Add one bank proof if you enter bank details" });
+      }
     }
 
     const hasMandatoryDocuments = Boolean(
@@ -198,20 +215,21 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       normalizedDocs.panFrontUrl &&
       normalizedDocs.aadhaarFrontUrl &&
       normalizedDocs.aadhaarBackUrl &&
-      normalizedDocs.bankAccountHolderName &&
-      normalizedDocs.bankAccountNumber &&
-      normalizedDocs.bankIfsc &&
-      normalizedDocs.bankDocumentType &&
-      normalizedDocs.bankProofUrl &&
       normalizedDocs.addressProofUrl
     );
 
     if (!hasMandatoryDocuments) {
       return res.status(400).json({
         success: false,
-        message: "FSSAI, PAN front, Aadhaar front/back, bank details with one proof, and restaurant address proof are mandatory"
+        message: "FSSAI, PAN front, Aadhaar front/back, and restaurant address proof are mandatory"
       });
     }
+
+    const normalizedBankProofUrl = hasAnyBankInput ? normalizedDocs.bankProofUrl : "";
+    const normalizedBankDocumentType = hasAnyBankInput ? normalizedDocs.bankDocumentType : "";
+    const normalizedBankAccountHolderName = hasAnyBankInput ? normalizedDocs.bankAccountHolderName : "";
+    const normalizedBankAccountNumber = hasAnyBankInput ? normalizedDocs.bankAccountNumber : "";
+    const normalizedBankIfsc = hasAnyBankInput ? normalizedDocs.bankIfsc : "";
 
     let partner = await Partner.findOne({ phone });
 
@@ -248,11 +266,11 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         shopLicenseUrl: documents?.shopLicenseUrl || "",
         ownerIdProofUrl: normalizedDocs.aadhaarFrontUrl,
         ownerPanUrl: normalizedDocs.panFrontUrl,
-        bankProofUrl: normalizedDocs.bankProofUrl,
-        bankDocumentType: normalizedDocs.bankDocumentType,
-        bankAccountHolderName: normalizedDocs.bankAccountHolderName,
-        bankAccountNumber: normalizedDocs.bankAccountNumber,
-        bankIfsc: normalizedDocs.bankIfsc,
+        bankProofUrl: normalizedBankProofUrl,
+        bankDocumentType: normalizedBankDocumentType,
+        bankAccountHolderName: normalizedBankAccountHolderName,
+        bankAccountNumber: normalizedBankAccountNumber,
+        bankIfsc: normalizedBankIfsc,
         addressProofUrl: normalizedDocs.addressProofUrl,
         menuProofUrl: normalizedDocs.menuProofUrl,
         restaurantPhotosUrls: Array.isArray(documents?.restaurantPhotosUrls) ? documents.restaurantPhotosUrls : [],
