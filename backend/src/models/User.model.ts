@@ -171,6 +171,10 @@ const UserSchema = new Schema({
   fcmToken: {
     type: String
   },
+  partnerOnboardingDraft: {
+    type: Schema.Types.Mixed,
+    default: null
+  },
   isActive: {
     type: Boolean,
     default: true

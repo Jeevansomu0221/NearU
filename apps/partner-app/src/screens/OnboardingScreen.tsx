@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,6 @@ import {
   Image,
   Modal
 } from "react-native";
-import * as DocumentPicker from "expo-document-picker";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, { uploadMultipart } from "../api/client";
@@ -101,6 +100,28 @@ type PendingDocument = {
   title: string;
 };
 
+type OnboardingDraft = {
+  activeStep: number;
+  form: {
+    ownerName: string;
+    restaurantName: string;
+    phone: string;
+  };
+  address: {
+    state: string;
+    city: string;
+    pincode: string;
+    area: string;
+    colony: string;
+    roadStreet: string;
+    nearbyPlaces: string;
+    googleMapsLink: string;
+  };
+  documents: DocumentState;
+  selectedCategory: string;
+  shopLocation: { latitude: number; longitude: number } | null;
+};
+
 const mandatoryDocs: Array<{ key: keyof DocumentState; title: string; subtitle: string }> = [
   { key: "fssaiUrl", title: "FSSAI License", subtitle: "Single PDF/image document" },
   { key: "panFrontUrl", title: "PAN Card - Front", subtitle: "Owner PAN proof" },
@@ -124,6 +145,8 @@ const STEPS = [
   { key: "bank", title: "Bank details", subtitle: "Optional for now. You can add later in Profile." },
   { key: "optional", title: "If applicable", subtitle: "Optional proofs and extra documents." }
 ] as const;
+
+const DRAFT_STORAGE_KEY = "partnerOnboardingDraft";
 
 const getUploadMimeType = (filename: string) => {
   const lastDot = filename.lastIndexOf(".");
@@ -163,6 +186,63 @@ const loadLocationModule = async () => {
     console.warn("expo-location is unavailable in this app build:", error);
     return null;
   }
+};
+
+const normalizeDraft = (draft: any): OnboardingDraft | null => {
+  if (!draft || typeof draft !== "object") return null;
+
+  const safeForm = typeof draft.form === "object" && draft.form ? draft.form : {};
+  const safeAddress = typeof draft.address === "object" && draft.address ? draft.address : {};
+  const safeDocuments = typeof draft.documents === "object" && draft.documents ? draft.documents : {};
+  const safeLocation = typeof draft.shopLocation === "object" && draft.shopLocation ? draft.shopLocation : null;
+
+  return {
+    activeStep: Number.isFinite(Number(draft.activeStep)) ? Math.max(0, Math.min(5, Number(draft.activeStep))) : 0,
+    form: {
+      ownerName: String(safeForm.ownerName || ""),
+      restaurantName: String(safeForm.restaurantName || ""),
+      phone: String(safeForm.phone || "")
+    },
+    address: {
+      state: String(safeAddress.state || ""),
+      city: String(safeAddress.city || ""),
+      pincode: String(safeAddress.pincode || ""),
+      area: String(safeAddress.area || ""),
+      colony: String(safeAddress.colony || ""),
+      roadStreet: String(safeAddress.roadStreet || ""),
+      nearbyPlaces: String(safeAddress.nearbyPlaces || ""),
+      googleMapsLink: String(safeAddress.googleMapsLink || "")
+    },
+    documents: {
+      fssaiNumber: String(safeDocuments.fssaiNumber || ""),
+      fssaiUrl: String(safeDocuments.fssaiUrl || ""),
+      panNumber: String(safeDocuments.panNumber || ""),
+      panFrontUrl: String(safeDocuments.panFrontUrl || ""),
+      aadhaarNumber: String(safeDocuments.aadhaarNumber || ""),
+      aadhaarFrontUrl: String(safeDocuments.aadhaarFrontUrl || ""),
+      aadhaarBackUrl: String(safeDocuments.aadhaarBackUrl || ""),
+      bankDocumentType: String(safeDocuments.bankDocumentType || "") as DocumentState["bankDocumentType"],
+      bankAccountHolderName: String(safeDocuments.bankAccountHolderName || ""),
+      cancelledChequeUrl: String(safeDocuments.cancelledChequeUrl || ""),
+      bankPassbookUrl: String(safeDocuments.bankPassbookUrl || ""),
+      bankStatementUrl: String(safeDocuments.bankStatementUrl || ""),
+      bankAccountNumber: String(safeDocuments.bankAccountNumber || ""),
+      bankIfsc: String(safeDocuments.bankIfsc || ""),
+      addressProofUrl: String(safeDocuments.addressProofUrl || ""),
+      gstUrl: String(safeDocuments.gstUrl || ""),
+      shopLicenseUrl: String(safeDocuments.shopLicenseUrl || ""),
+      ownerPanUrl: String(safeDocuments.ownerPanUrl || ""),
+      menuProofUrl: String(safeDocuments.menuProofUrl || "")
+    },
+    selectedCategory: String(draft.selectedCategory || ""),
+    shopLocation:
+      safeLocation && Number.isFinite(Number(safeLocation.latitude)) && Number.isFinite(Number(safeLocation.longitude))
+        ? {
+            latitude: Number(safeLocation.latitude),
+            longitude: Number(safeLocation.longitude)
+          }
+        : null
+  };
 };
 
 export default function OnboardingScreen({ navigation }: any) {
@@ -212,6 +292,9 @@ export default function OnboardingScreen({ navigation }: any) {
   const [autoFilledPhone, setAutoFilledPhone] = useState("");
   const [shopLocation, setShopLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [capturingLocation, setCapturingLocation] = useState(false);
+  const [hydratingDraft, setHydratingDraft] = useState(true);
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftReadyRef = useRef(false);
 
   useEffect(() => {
     const fetchPhone = async () => {
@@ -228,6 +311,88 @@ export default function OnboardingScreen({ navigation }: any) {
 
     fetchPhone();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreDraft = async () => {
+      try {
+        const localDraftRaw = await AsyncStorage.getItem(DRAFT_STORAGE_KEY);
+        let remoteDraft: OnboardingDraft | null = null;
+
+        try {
+          const response = await api.get<any>("/partners/onboarding-draft");
+          remoteDraft = normalizeDraft(response.data?.data);
+        } catch (error: any) {
+          console.log("Could not load remote onboarding draft:", error?.message || error);
+        }
+
+        const draft = remoteDraft || normalizeDraft(localDraftRaw ? JSON.parse(localDraftRaw) : null);
+        if (cancelled || !draft) {
+          return;
+        }
+
+        setActiveStep(draft.activeStep);
+        setForm((prev) => ({ ...prev, ...draft.form }));
+        setAddress((prev) => ({ ...prev, ...draft.address }));
+        setDocuments(draft.documents);
+        setSelectedCategory(draft.selectedCategory);
+        setShopLocation(draft.shopLocation);
+        if (draft.form.phone) {
+          setAutoFilledPhone(draft.form.phone);
+        }
+      } catch (error) {
+        console.log("Error restoring onboarding draft:", error);
+      } finally {
+        if (!cancelled) {
+          draftReadyRef.current = true;
+          setHydratingDraft(false);
+        }
+      }
+    };
+
+    restoreDraft();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!draftReadyRef.current || hydratingDraft) return;
+
+    const draft: OnboardingDraft = {
+      activeStep,
+      form,
+      address,
+      documents,
+      selectedCategory,
+      shopLocation
+    };
+
+    if (draftSaveTimerRef.current) {
+      clearTimeout(draftSaveTimerRef.current);
+    }
+
+    draftSaveTimerRef.current = setTimeout(() => {
+      const persistDraft = async () => {
+        try {
+          await AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+          await api.put("/partners/onboarding-draft", { draft });
+        } catch (error: any) {
+          console.log("Draft autosave skipped:", error?.message || error);
+        }
+      };
+
+      persistDraft();
+    }, 700);
+
+    return () => {
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current);
+      }
+    };
+  }, [activeStep, form, address, documents, selectedCategory, shopLocation, hydratingDraft]);
 
   const filteredCities = useMemo(() => {
     if (!address.city || address.city.length < 2) return [];
@@ -251,7 +416,19 @@ export default function OnboardingScreen({ navigation }: any) {
   };
 
   const pickAsset = async (): Promise<PickerAsset | null> => {
-    const result = await DocumentPicker.getDocumentAsync({
+    let DocumentPickerModule: typeof import("expo-document-picker");
+    try {
+      DocumentPickerModule = await import("expo-document-picker");
+    } catch (error: any) {
+      console.error("Document picker module unavailable:", error);
+      Alert.alert(
+        "Update required",
+        "This partner app build does not include the PDF picker yet. Please install the latest partner app build to upload PDF documents."
+      );
+      return null;
+    }
+
+    const result = await DocumentPickerModule.getDocumentAsync({
       type: ["image/*", "application/pdf"],
       copyToCacheDirectory: true,
       multiple: false
@@ -462,6 +639,7 @@ export default function OnboardingScreen({ navigation }: any) {
       }
 
       await api.post("/partners/onboard", requestData);
+      await AsyncStorage.removeItem(DRAFT_STORAGE_KEY);
       await AsyncStorage.setItem("partnerPhone", form.phone);
 
       navigation.replace("ApplicationSubmitted", {
@@ -742,6 +920,18 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
+  if (hydratingDraft) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={partnerTheme.colors.primary} />
+          <Text style={styles.loadingTitle}>Restoring your draft</Text>
+          <Text style={styles.loadingSubtitle}>We are bringing back your saved onboarding progress.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
     <KeyboardAvoidingView
@@ -834,9 +1024,15 @@ export default function OnboardingScreen({ navigation }: any) {
               const active = index === activeStep;
               const done = index < activeStep;
               return (
-                <View key={step.key} style={[styles.stepPill, active && styles.stepPillActive, done && styles.stepPillDone]}>
+                <TouchableOpacity
+                  key={step.key}
+                  style={[styles.stepPill, active && styles.stepPillActive, done && styles.stepPillDone]}
+                  onPress={() => setActiveStep(index)}
+                  activeOpacity={0.85}
+                  disabled={submitting || uploadingKey !== null}
+                >
                   <Text style={[styles.stepPillText, active && styles.stepPillTextActive, done && styles.stepPillTextDone]}>{index + 1}</Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -875,6 +1071,27 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: partnerTheme.colors.background
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: partnerTheme.colors.background
+  },
+  loadingTitle: {
+    marginTop: 16,
+    fontSize: 20,
+    fontWeight: "800",
+    color: partnerTheme.colors.text,
+    textAlign: "center"
+  },
+  loadingSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: partnerTheme.colors.muted,
+    textAlign: "center"
   },
   keyboard: {
     flex: 1,

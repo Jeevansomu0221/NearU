@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 import Partner from "../models/Partner.model";
+import User from "../models/User.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
 
 // Define AuthRequest interface
@@ -59,6 +60,145 @@ const resolvePartnerForAuth = async (authReq: AuthRequest) => {
   }
 
   return partner;
+};
+
+const sanitizeOnboardingDraft = (draft: any) => {
+  if (!draft || typeof draft !== "object") return null;
+
+  const safeForm = typeof draft.form === "object" && draft.form ? draft.form : {};
+  const safeAddress = typeof draft.address === "object" && draft.address ? draft.address : {};
+  const safeDocuments = typeof draft.documents === "object" && draft.documents ? draft.documents : {};
+  const safeLocation = typeof draft.shopLocation === "object" && draft.shopLocation ? draft.shopLocation : null;
+
+  return {
+    activeStep: Number.isFinite(Number(draft.activeStep)) ? Math.max(0, Math.min(5, Number(draft.activeStep))) : 0,
+    form: {
+      ownerName: String(safeForm.ownerName || ""),
+      restaurantName: String(safeForm.restaurantName || ""),
+      phone: String(safeForm.phone || "")
+    },
+    address: {
+      state: String(safeAddress.state || ""),
+      city: String(safeAddress.city || ""),
+      pincode: String(safeAddress.pincode || ""),
+      area: String(safeAddress.area || ""),
+      colony: String(safeAddress.colony || ""),
+      roadStreet: String(safeAddress.roadStreet || ""),
+      nearbyPlaces: String(safeAddress.nearbyPlaces || ""),
+      googleMapsLink: String(safeAddress.googleMapsLink || "")
+    },
+    documents: {
+      fssaiNumber: String(safeDocuments.fssaiNumber || ""),
+      fssaiUrl: String(safeDocuments.fssaiUrl || ""),
+      panNumber: String(safeDocuments.panNumber || ""),
+      panFrontUrl: String(safeDocuments.panFrontUrl || ""),
+      aadhaarNumber: String(safeDocuments.aadhaarNumber || ""),
+      aadhaarFrontUrl: String(safeDocuments.aadhaarFrontUrl || ""),
+      aadhaarBackUrl: String(safeDocuments.aadhaarBackUrl || ""),
+      bankDocumentType: String(safeDocuments.bankDocumentType || ""),
+      bankAccountHolderName: String(safeDocuments.bankAccountHolderName || ""),
+      cancelledChequeUrl: String(safeDocuments.cancelledChequeUrl || ""),
+      bankPassbookUrl: String(safeDocuments.bankPassbookUrl || ""),
+      bankStatementUrl: String(safeDocuments.bankStatementUrl || ""),
+      bankAccountNumber: String(safeDocuments.bankAccountNumber || ""),
+      bankIfsc: String(safeDocuments.bankIfsc || ""),
+      addressProofUrl: String(safeDocuments.addressProofUrl || ""),
+      gstUrl: String(safeDocuments.gstUrl || ""),
+      shopLicenseUrl: String(safeDocuments.shopLicenseUrl || ""),
+      ownerPanUrl: String(safeDocuments.ownerPanUrl || ""),
+      menuProofUrl: String(safeDocuments.menuProofUrl || "")
+    },
+    selectedCategory: String(draft.selectedCategory || ""),
+    shopLocation: safeLocation && Number.isFinite(Number(safeLocation.latitude)) && Number.isFinite(Number(safeLocation.longitude))
+      ? {
+          latitude: Number(safeLocation.latitude),
+          longitude: Number(safeLocation.longitude)
+        }
+      : null,
+    updatedAt: new Date().toISOString()
+  };
+};
+
+export const getPartnerOnboardingDraft = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthRequest;
+    const userId = toObjectId(authReq.user?.id);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const user = await User.findById(userId).select("partnerOnboardingDraft").lean();
+    return res.json({
+      success: true,
+      data: sanitizeOnboardingDraft(user?.partnerOnboardingDraft)
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load onboarding draft",
+      error: error.message
+    });
+  }
+};
+
+export const savePartnerOnboardingDraft = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthRequest;
+    const userId = toObjectId(authReq.user?.id);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const draft = sanitizeOnboardingDraft(req.body?.draft ?? req.body);
+    if (!draft) {
+      return res.status(400).json({ success: false, message: "Invalid draft payload" });
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        partnerOnboardingDraft: draft
+      }
+    });
+
+    return res.json({
+      success: true,
+      data: draft,
+      message: "Draft saved"
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to save onboarding draft",
+      error: error.message
+    });
+  }
+};
+
+export const clearPartnerOnboardingDraft = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthRequest;
+    const userId = toObjectId(authReq.user?.id);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        partnerOnboardingDraft: null
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: "Draft cleared"
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to clear onboarding draft",
+      error: error.message
+    });
+  }
 };
 
 /**
@@ -316,6 +456,14 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     } else {
       Object.assign(partner, partnerData);
       await partner.save();
+    }
+
+    if (objectId) {
+      await User.findByIdAndUpdate(objectId, {
+        $set: {
+          partnerOnboardingDraft: null
+        }
+      });
     }
 
     return res.json({

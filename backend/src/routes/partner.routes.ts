@@ -10,7 +10,10 @@ import {
   getMyStatus,
   completeSetup,
   getPartnerProfile,
-  updatePartnerProfile
+  updatePartnerProfile,
+  getPartnerOnboardingDraft,
+  savePartnerOnboardingDraft,
+  clearPartnerOnboardingDraft
 } from "../controllers/partner.controller";
 
 import { getShopsWithImages } from "../controllers/shop.controller";
@@ -32,6 +35,9 @@ router.get("/status/:phone", getPartnerStatus);
 ====================================================== */
 router.get("/my-status", authMiddleware, getMyStatus);
 router.post("/complete-setup", authMiddleware, completeSetup);
+router.get("/onboarding-draft", authMiddleware, getPartnerOnboardingDraft);
+router.put("/onboarding-draft", authMiddleware, savePartnerOnboardingDraft);
+router.delete("/onboarding-draft", authMiddleware, clearPartnerOnboardingDraft);
 
 /* ======================================================
    PARTNER-ONLY ROUTES (approved partners)
