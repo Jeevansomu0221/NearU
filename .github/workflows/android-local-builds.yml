@@ -66,10 +66,11 @@ jobs:
 
       - name: Set up Java
         if: ${{ github.event_name == 'push' || github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+          java -version
 
       - name: Set up Android SDK
         if: ${{ github.event_name == 'push' || github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name }}
