@@ -104,12 +104,14 @@ const PartnerSchema = new Schema(
       }
     },
     
-    // UPDATE: Add sweets and ice creams to categories
+    // Supported onboarding categories (keep legacy value for backward compatibility)
     category: {
       type: String,
       required: true,
       enum: [
         "bakery", 
+        "restaurant",
+        "cloud-kitchen",
         "mini-restaurant", 
         "grocery",
         "tiffin-center", 
