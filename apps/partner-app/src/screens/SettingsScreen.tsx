@@ -18,23 +18,36 @@ const PRIVACY_URL = "https://vyaha-app-backend.onrender.com/legal/privacy";
 const TERMS_URL = "https://vyaha-app-backend.onrender.com/legal/terms";
 const DELETE_URL = "https://vyaha-app-backend.onrender.com/legal/delete-account";
 
-const LANGUAGES: Array<{ code: string; label: string }> = [
-  { code: "en", label: "English" },
-  { code: "hi", label: "Hindi" },
-  { code: "ta", label: "Tamil" },
-  { code: "te", label: "Telugu" },
-  { code: "kn", label: "Kannada" },
-  { code: "ml", label: "Malayalam" },
-  { code: "mr", label: "Marathi" }
-];
+type SelfDeliveryPartner = {
+  deliveryPartnerId?: string;
+  userId?: string;
+  phone: string;
+  name?: string;
+  isActive?: boolean;
+};
+
+type SettingsState = {
+  autoAcceptOrders: boolean;
+  estimatedPrepTime: string;
+  deliveryMode: "platform" | "self";
+  selfDeliveryPartners: SelfDeliveryPartner[];
+  deliveryRadiusKm: string;
+  minimumOrderAmount: string;
+  upiId: string;
+  newOrderAlerts: boolean;
+  paymentAlerts: boolean;
+  promotionalNotifications: boolean;
+  language: string;
+};
 
 export default function SettingsScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<SettingsState>({
     autoAcceptOrders: false,
     estimatedPrepTime: "20",
     deliveryMode: "platform" as "platform" | "self",
+    selfDeliveryPartners: [],
     deliveryRadiusKm: "3",
     minimumOrderAmount: "0",
     upiId: "",
@@ -58,10 +71,20 @@ export default function SettingsScreen({ navigation }: any) {
       }
 
       const data = payload.data;
+      const selfDeliveryPartners = Array.isArray(data.settings?.selfDeliveryPartners)
+        ? data.settings.selfDeliveryPartners.slice(0, 5).map((partner: any) => ({
+            deliveryPartnerId: partner.deliveryPartnerId,
+            userId: partner.userId,
+            phone: String(partner.phone || ""),
+            name: partner.name || "",
+            isActive: partner.isActive !== false
+          }))
+        : [];
       setSettings({
         autoAcceptOrders: Boolean(data.settings?.autoAcceptOrders),
         estimatedPrepTime: String(data.settings?.estimatedPrepTime ?? 20),
         deliveryMode: data.settings?.deliveryMode === "self" ? "self" : "platform",
+        selfDeliveryPartners,
         deliveryRadiusKm: String(data.settings?.deliveryRadiusKm ?? 3),
         minimumOrderAmount: String(data.settings?.minimumOrderAmount ?? 0),
         upiId: data.settings?.upiId || "",
@@ -77,10 +100,46 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
+  const updateSelfDeliveryPartnerPhone = (index: number, value: string) => {
+    const phone = value.replace(/[^\d+]/g, "").slice(0, 16);
+    setSettings((prev) => ({
+      ...prev,
+      selfDeliveryPartners: prev.selfDeliveryPartners.map((partner, partnerIndex) =>
+        partnerIndex === index ? { ...partner, phone } : partner
+      )
+    }));
+  };
+
+  const addSelfDeliveryPartner = () => {
+    setSettings((prev) => {
+      if (prev.selfDeliveryPartners.length >= 5) {
+        Alert.alert("Limit reached", "You can add maximum 5 self delivery partners for this shop.");
+        return prev;
+      }
+
+      return {
+        ...prev,
+        selfDeliveryPartners: [...prev.selfDeliveryPartners, { phone: "" }]
+      };
+    });
+  };
+
+  const removeSelfDeliveryPartner = (index: number) => {
+    setSettings((prev) => ({
+      ...prev,
+      selfDeliveryPartners: prev.selfDeliveryPartners.filter((_, partnerIndex) => partnerIndex !== index)
+    }));
+  };
+
   const saveAllSettings = async () => {
     const prepTime = Number(settings.estimatedPrepTime);
     const radius = Number(settings.deliveryRadiusKm);
     const minOrder = Number(settings.minimumOrderAmount);
+    const selfDeliveryPartners = settings.selfDeliveryPartners
+      .map((partner) => ({ ...partner, phone: partner.phone.trim() }))
+      .filter((partner) => partner.phone.length > 0)
+      .slice(0, 5);
+
     if (!Number.isFinite(prepTime) || prepTime <= 0) {
       Alert.alert("Prep time", "Enter valid estimated prep time in minutes.");
       return;
@@ -93,6 +152,10 @@ export default function SettingsScreen({ navigation }: any) {
       Alert.alert("Minimum order", "Enter valid minimum order amount.");
       return;
     }
+    if (settings.deliveryMode === "self" && selfDeliveryPartners.length === 0) {
+      Alert.alert("Self delivery", "Add at least one delivery-app rider phone number before enabling self delivery.");
+      return;
+    }
 
     try {
       setSaving(true);
@@ -101,6 +164,7 @@ export default function SettingsScreen({ navigation }: any) {
           autoAcceptOrders: settings.autoAcceptOrders,
           estimatedPrepTime: Math.round(prepTime),
           deliveryMode: settings.deliveryMode,
+          selfDeliveryPartners,
           deliveryRadiusKm: radius,
           minimumOrderAmount: minOrder,
           upiId: settings.upiId.trim()
@@ -158,8 +222,6 @@ export default function SettingsScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <Text style={styles.title}>Settings</Text>
-
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Order</Text>
         <View style={styles.switchRow}>
@@ -197,6 +259,45 @@ export default function SettingsScreen({ navigation }: any) {
             );
           })}
         </View>
+
+        {settings.deliveryMode === "self" && (
+          <View style={styles.selfDeliveryBox}>
+            <Text style={styles.selfDeliveryTitle}>Self delivery riders</Text>
+            <Text style={styles.helperText}>
+              Add delivery-app phone numbers for this shop. These riders get 5 minutes to accept each READY order before it opens to platform delivery.
+            </Text>
+            {settings.selfDeliveryPartners.map((partner, index) => (
+              <View key={`${partner.userId || partner.deliveryPartnerId || "new"}-${index}`} style={styles.riderRow}>
+                <View style={styles.riderInputWrap}>
+                  <TextInput
+                    style={styles.riderInput}
+                    value={partner.phone}
+                    onChangeText={(value) => updateSelfDeliveryPartnerPhone(index, value)}
+                    keyboardType="phone-pad"
+                    placeholder="Delivery rider phone"
+                    placeholderTextColor="#98A2B3"
+                  />
+                  {partner.name ? <Text style={styles.riderName}>{partner.name}</Text> : null}
+                </View>
+                <TouchableOpacity style={styles.removeRiderButton} onPress={() => removeSelfDeliveryPartner(index)}>
+                  <Text style={styles.removeRiderText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={[
+                styles.addRiderButton,
+                settings.selfDeliveryPartners.length >= 5 && styles.addRiderButtonDisabled
+              ]}
+              onPress={addSelfDeliveryPartner}
+              disabled={settings.selfDeliveryPartners.length >= 5}
+            >
+              <Text style={styles.addRiderText}>
+                {settings.selfDeliveryPartners.length >= 5 ? "Maximum 5 riders added" : "Add delivery rider"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <Text style={styles.label}>Delivery radius (km)</Text>
         <TextInput
@@ -249,24 +350,6 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Language</Text>
-        <View style={styles.choiceRow}>
-          {LANGUAGES.map((item) => {
-            const selected = settings.language === item.code;
-            return (
-              <TouchableOpacity
-                key={item.code}
-                style={[styles.choicePill, selected && styles.choicePillSelected]}
-                onPress={() => setSettings((prev) => ({ ...prev, language: item.code }))}
-              >
-                <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{item.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
       <TouchableOpacity style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={saveAllSettings} disabled={saving}>
         {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.saveButtonText}>Save Settings</Text>}
       </TouchableOpacity>
@@ -316,6 +399,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 15, fontWeight: "800", color: "#143A66", marginBottom: 10 },
   label: { fontSize: 13, color: "#355877", fontWeight: "700" },
+  helperText: { fontSize: 12, color: "#5E7897", lineHeight: 17, marginBottom: 10 },
   input: {
     borderWidth: 1,
     borderColor: "#CFE0F5",
@@ -346,6 +430,51 @@ const styles = StyleSheet.create({
   choicePillSelected: { backgroundColor: "#2F80ED" },
   choiceText: { fontSize: 12, color: "#355877", fontWeight: "700" },
   choiceTextSelected: { color: "#FFFFFF" },
+  selfDeliveryBox: {
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    borderRadius: 14,
+    backgroundColor: "#F9FCFF",
+    padding: 12,
+    marginBottom: 12
+  },
+  selfDeliveryTitle: { fontSize: 13, color: "#143A66", fontWeight: "800", marginBottom: 4 },
+  riderRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
+  riderInputWrap: { flex: 1 },
+  riderInput: {
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#123456",
+    backgroundColor: "#FFFFFF"
+  },
+  riderName: { marginTop: 4, fontSize: 12, color: "#5E7897", fontWeight: "700" },
+  removeRiderButton: {
+    marginLeft: 8,
+    borderRadius: 12,
+    backgroundColor: "#FFF1F1",
+    borderWidth: 1,
+    borderColor: "#FFD1D1",
+    paddingHorizontal: 10,
+    paddingVertical: 11
+  },
+  removeRiderText: { color: "#B42318", fontSize: 12, fontWeight: "800" },
+  addRiderButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2F80ED",
+    backgroundColor: "#EAF3FF",
+    alignItems: "center",
+    paddingVertical: 11
+  },
+  addRiderButtonDisabled: {
+    borderColor: "#CFE0F5",
+    backgroundColor: "#F2F6FB"
+  },
+  addRiderText: { color: "#2F80ED", fontSize: 13, fontWeight: "800" },
   saveButton: {
     backgroundColor: "#2F80ED",
     borderRadius: 16,

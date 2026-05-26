@@ -27,6 +27,30 @@ const OrderSchema = new Schema({
     ref: "User"
   },
 
+  selfDelivery: {
+    mode: {
+      type: String,
+      enum: ["self", "platform"],
+      default: "platform"
+    },
+    reservedFor: {
+      type: [Types.ObjectId],
+      ref: "User",
+      default: []
+    },
+    rejectedBy: {
+      type: [Types.ObjectId],
+      ref: "User",
+      default: []
+    },
+    expiresAt: {
+      type: Date
+    },
+    fallbackReleasedAt: {
+      type: Date
+    }
+  },
+
   deliveryAddress: {
     type: String,
     required: true
@@ -155,6 +179,10 @@ const OrderSchema = new Schema({
     default: ""
   },
 
+  deliveryReadyAt: {
+    type: Date
+  },
+
   autoCancelledAt: {
     type: Date
   }
@@ -169,6 +197,9 @@ OrderSchema.index({ deliveryPartnerId: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
 OrderSchema.index({ razorpayOrderId: 1 });
+OrderSchema.index({ status: 1, deliveryReadyAt: 1 });
 OrderSchema.index({ deliveryLocation: "2dsphere" });
+OrderSchema.index({ "selfDelivery.expiresAt": 1 });
+OrderSchema.index({ "selfDelivery.reservedFor": 1, status: 1 });
 
 export default model("Order", OrderSchema);

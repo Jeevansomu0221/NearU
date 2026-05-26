@@ -220,6 +220,25 @@ const PartnerSchema = new Schema(
       autoAcceptOrders: { type: Boolean, default: false },
       estimatedPrepTime: { type: Number, default: 20, min: 1 },
       deliveryMode: { type: String, enum: ["self", "platform"], default: "platform" },
+      selfDeliveryPartners: {
+        type: [
+          {
+            deliveryPartnerId: { type: Schema.Types.ObjectId, ref: "DeliveryPartner", required: true },
+            userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+            phone: { type: String, required: true, trim: true },
+            name: { type: String, default: "" },
+            addedAt: { type: Date, default: Date.now },
+            isActive: { type: Boolean, default: true }
+          }
+        ],
+        default: [],
+        validate: {
+          validator: function(value: unknown[]) {
+            return !Array.isArray(value) || value.length <= 5;
+          },
+          message: "A shop can have maximum 5 self delivery partners"
+        }
+      },
       deliveryRadiusKm: { type: Number, default: 3, min: 0.5 },
       minimumOrderAmount: { type: Number, default: 0, min: 0 },
       upiId: { type: String, default: "" }
@@ -256,5 +275,6 @@ PartnerSchema.index({ 'address.pincode': 1 });
 PartnerSchema.index({ 'address.area': 1 });
 PartnerSchema.index({ 'address.city': 1 });  // ADDED index for city
 PartnerSchema.index({ 'address.state': 1 });
+PartnerSchema.index({ "settings.selfDeliveryPartners.userId": 1 });
 
 export default model("Partner", PartnerSchema);

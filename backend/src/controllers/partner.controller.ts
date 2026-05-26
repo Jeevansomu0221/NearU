@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 import Partner from "../models/Partner.model";
 import User from "../models/User.model";
+import DeliveryPartner from "../models/DeliveryPartner.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
 
 // Define AuthRequest interface
@@ -45,6 +46,89 @@ const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+
+const selfDeliveryEligibleStatuses = ["VERIFIED", "ACTIVE"];
+
+const validationError = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
+
+const phoneLookupCandidates = (value: unknown) => {
+  const raw = String(value || "").trim();
+  const compact = raw.replace(/[\s().-]/g, "");
+  const digits = compact.replace(/\D/g, "");
+  const candidates = new Set<string>();
+
+  [raw, compact, digits].filter(Boolean).forEach((candidate) => candidates.add(candidate));
+  if (digits.length === 10) {
+    candidates.add(`+91${digits}`);
+    candidates.add(`91${digits}`);
+  }
+  if (digits.length === 12 && digits.startsWith("91")) {
+    candidates.add(digits.slice(2));
+    candidates.add(`+${digits}`);
+  }
+
+  return Array.from(candidates);
+};
+
+const normalizeSelfDeliveryPartners = async (value: unknown) => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw validationError("Self delivery partners must be a list of phone numbers");
+  }
+  if (value.length > 5) {
+    throw validationError("A shop can add maximum 5 self delivery partners");
+  }
+
+  const normalized: any[] = [];
+  const seenUserIds = new Set<string>();
+  const seenPhones = new Set<string>();
+
+  for (const entry of value) {
+    const phoneInput = typeof entry === "string" ? entry : entry?.phone;
+    const phone = String(phoneInput || "").trim();
+    if (!phone) {
+      throw validationError("Each self delivery partner must have a phone number");
+    }
+
+    const lookupCandidates = phoneLookupCandidates(phone);
+    const lookupKey = lookupCandidates[0];
+    if (lookupKey && seenPhones.has(lookupKey)) {
+      continue;
+    }
+    if (lookupKey) seenPhones.add(lookupKey);
+
+    const deliveryPartner = await DeliveryPartner.findOne({
+      phone: { $in: lookupCandidates }
+    })
+      .select("_id userId phone name status")
+      .lean();
+
+    if (!deliveryPartner) {
+      throw validationError(`No delivery-app rider found for ${phone}. Ask this rider to sign in to the delivery app first.`);
+    }
+
+    if (!selfDeliveryEligibleStatuses.includes(deliveryPartner.status)) {
+      throw validationError(`Delivery rider ${deliveryPartner.phone} is not verified yet`);
+    }
+
+    const userId = String(deliveryPartner.userId);
+    if (seenUserIds.has(userId)) {
+      continue;
+    }
+    seenUserIds.add(userId);
+
+    normalized.push({
+      deliveryPartnerId: deliveryPartner._id,
+      userId: deliveryPartner.userId,
+      phone: deliveryPartner.phone,
+      name: deliveryPartner.name || "",
+      addedAt: new Date(),
+      isActive: true
+    });
+  }
+
+  return normalized;
+};
 
 const resolvePartnerForAuth = async (authReq: AuthRequest) => {
   const objectId = toObjectId(authReq.user?.id);
@@ -696,12 +780,12 @@ export const getMyStatus = async (req: Request, res: Response) => {
     const objectId = toObjectId(userId);
     if (objectId) {
       partner = await Partner.findOne({ userId: objectId })
-        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason userId");
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason userId category createdAt documents.submittedAt");
     }
     
     if (!partner && userPhone) {
       partner = await Partner.findOne({ phone: userPhone })
-        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason userId");
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason userId category createdAt documents.submittedAt");
     }
     
     if (!partner) {
@@ -1106,6 +1190,9 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
       if (settings.deliveryMode !== undefined && ["self", "platform"].includes(settings.deliveryMode)) {
         merged.deliveryMode = settings.deliveryMode;
       }
+      if (settings.selfDeliveryPartners !== undefined) {
+        merged.selfDeliveryPartners = await normalizeSelfDeliveryPartners(settings.selfDeliveryPartners);
+      }
       if (settings.deliveryRadiusKm !== undefined) {
         const value = Number(settings.deliveryRadiusKm);
         if (Number.isFinite(value) && value > 0) merged.deliveryRadiusKm = value;
@@ -1116,6 +1203,18 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
       }
       if (settings.upiId !== undefined) {
         merged.upiId = String(settings.upiId || "").trim();
+      }
+
+      if (merged.deliveryMode === "self") {
+        const activeSelfDeliveryPartners = Array.isArray(merged.selfDeliveryPartners)
+          ? merged.selfDeliveryPartners.filter((entry: any) => entry?.isActive !== false)
+          : [];
+        if (activeSelfDeliveryPartners.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Add at least one verified delivery-app rider before enabling self delivery"
+          });
+        }
       }
 
       updates.settings = merged;
@@ -1155,6 +1254,13 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("❌ Error updating partner profile:", error);
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Failed to update profile",

@@ -14,9 +14,10 @@ const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
 
 const RESTAURANT_ACCEPT_TIMEOUT_MS = 10 * 60 * 1000;
-const DELIVERY_ACCEPT_TIMEOUT_MS = 15 * 60 * 1000;
+const DELIVERY_ACCEPT_TIMEOUT_MS = 30 * 60 * 1000;
+const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const AUTO_CANCEL_MESSAGE =
-  "Sorry for the problem. We could not place this order. If payment was done, the amount will be returned within 24 hours.";
+  "Sorry for the problem. We could not place this order. If online payment was done, the refund will be completed within today.";
 
 const resolvePartnerForUser = async (user?: AuthRequest["user"]) => {
   if (!user) return null;
@@ -63,6 +64,108 @@ const idsMatch = (left: any, right: any) => {
   const leftId = idString(left);
   const rightId = idString(right);
   return Boolean(leftId && rightId && leftId === rightId);
+};
+
+const idStrings = (values: any[] = []) => values.map((value) => idString(value)).filter(Boolean);
+
+const getActiveSelfDeliveryUserIds = (partner: any): string[] => {
+  const settings = partner?.settings || {};
+  if (settings.deliveryMode !== "self") return [];
+
+  return (Array.isArray(settings.selfDeliveryPartners) ? settings.selfDeliveryPartners : [])
+    .filter((entry: any) => entry?.isActive !== false && entry?.userId)
+    .map((entry: any) => idString(entry.userId))
+    .filter(Boolean)
+    .slice(0, 5);
+};
+
+const getSelfDeliveryState = (order: any, now = new Date()) => {
+  const selfDelivery = order?.selfDelivery || {};
+  const reservedFor = idStrings(selfDelivery.reservedFor);
+  const rejectedBy = new Set(idStrings(selfDelivery.rejectedBy));
+  const expiresAt = selfDelivery.expiresAt ? new Date(selfDelivery.expiresAt) : null;
+  const isSelfMode = selfDelivery.mode === "self" && reservedFor.length > 0;
+  const isExpired = !expiresAt || expiresAt.getTime() <= now.getTime();
+  const allReservedRidersRejected = reservedFor.length > 0 && reservedFor.every((id) => rejectedBy.has(id));
+  const fallbackReleased = Boolean(selfDelivery.fallbackReleasedAt) || isExpired || allReservedRidersRejected;
+
+  return {
+    reservedFor,
+    rejectedBy,
+    expiresAt,
+    isSelfMode,
+    fallbackReleased
+  };
+};
+
+const isDeliveryJobVisibleToUser = (order: any, userId: string, now = new Date()) => {
+  const selfDelivery = getSelfDeliveryState(order, now);
+  if (!selfDelivery.isSelfMode || selfDelivery.fallbackReleased) return true;
+
+  return selfDelivery.reservedFor.includes(userId) && !selfDelivery.rejectedBy.has(userId);
+};
+
+const buildUnassignedDeliveryFilter = () => ({
+  $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+});
+
+const buildStaleDeliveryReadyFilter = (deadline: Date) => ({
+  $or: [
+    { deliveryReadyAt: { $lte: deadline } },
+    { deliveryReadyAt: { $exists: false }, updatedAt: { $lte: deadline } },
+    { deliveryReadyAt: null, updatedAt: { $lte: deadline } }
+  ]
+});
+
+const buildFreshDeliveryReadyFilter = (deadline: Date) => ({
+  $or: [
+    { deliveryReadyAt: { $gt: deadline } },
+    { deliveryReadyAt: { $exists: false }, updatedAt: { $gt: deadline } },
+    { deliveryReadyAt: null, updatedAt: { $gt: deadline } }
+  ]
+});
+
+const buildDeliveryAcceptVisibilityFilter = (userId: string, now = new Date()) => {
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+
+  return {
+    $or: [
+      { "selfDelivery.mode": { $ne: "self" } },
+      { "selfDelivery.reservedFor": { $size: 0 } },
+      { "selfDelivery.expiresAt": { $lte: now } },
+      { "selfDelivery.fallbackReleasedAt": { $type: "date", $lte: now } },
+      {
+        $and: [
+          { "selfDelivery.reservedFor": userObjectId },
+          { "selfDelivery.rejectedBy": { $ne: userObjectId } },
+          { "selfDelivery.expiresAt": { $gt: now } }
+        ]
+      }
+    ]
+  };
+};
+
+const configureSelfDeliveryForReadyOrder = (order: any, partner: any) => {
+  const selfDeliveryUserIds = getActiveSelfDeliveryUserIds(partner);
+
+  if (selfDeliveryUserIds.length === 0) {
+    order.selfDelivery = {
+      mode: "platform",
+      reservedFor: [],
+      rejectedBy: [],
+      expiresAt: undefined,
+      fallbackReleasedAt: undefined
+    };
+    return;
+  }
+
+  order.selfDelivery = {
+    mode: "self",
+    reservedFor: selfDeliveryUserIds.map((id) => new mongoose.Types.ObjectId(id)),
+    rejectedBy: [],
+    expiresAt: new Date(Date.now() + SELF_DELIVERY_ACCEPT_TIMEOUT_MS),
+    fallbackReleasedAt: undefined
+  };
 };
 
 const maskedCustomerFrom = (customer: any): MaskedCustomer => {
@@ -233,16 +336,12 @@ const markAutoCancelled = (order: any, reason: string) => {
 
   if (order.paymentStatus === "PAID") {
     order.paymentStatus = "REFUNDED";
-  } else if (order.paymentStatus === "PENDING") {
+  } else if (["PENDING", "PAYMENT_PENDING_DELIVERY"].includes(order.paymentStatus)) {
     order.paymentStatus = "CANCELLED";
   }
 };
 
-const cancelStaleUnacceptedOrders = async () => {
-  if (process.env.ENABLE_ORDER_AUTO_CANCEL !== "true") {
-    return;
-  }
-
+export const cancelStaleUnacceptedOrders = async () => {
   try {
     const now = new Date();
     const restaurantDeadline = new Date(now.getTime() - RESTAURANT_ACCEPT_TIMEOUT_MS);
@@ -254,9 +353,11 @@ const cancelStaleUnacceptedOrders = async () => {
     };
 
     const deliveryTimedOutFilter = {
-      status: "READY",
-      updatedAt: { $lte: deliveryDeadline },
-      $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+      $and: [
+        { status: "READY" },
+        buildUnassignedDeliveryFilter(),
+        buildStaleDeliveryReadyFilter(deliveryDeadline)
+      ]
     };
 
     const autoCancelByPaymentStatus = async (baseFilter: any, reason: string) => {
@@ -273,20 +374,27 @@ const cancelStaleUnacceptedOrders = async () => {
           { $set: { ...baseSet, paymentStatus: "REFUNDED" } }
         ),
         Order.updateMany(
-          { ...baseFilter, paymentStatus: "PENDING" },
+          { ...baseFilter, paymentStatus: { $in: ["PENDING", "PAYMENT_PENDING_DELIVERY"] } },
           { $set: { ...baseSet, paymentStatus: "CANCELLED" } }
         ),
         Order.updateMany(
-          { ...baseFilter, paymentStatus: { $nin: ["PAID", "PENDING"] } },
+          { ...baseFilter, paymentStatus: { $nin: ["PAID", "PENDING", "PAYMENT_PENDING_DELIVERY"] } },
           { $set: baseSet }
         )
       ]);
     };
 
-    await Promise.all([
-      autoCancelByPaymentStatus(restaurantTimedOutFilter, "Restaurant did not accept the order in time"),
+    const autoCancelJobs = [
       autoCancelByPaymentStatus(deliveryTimedOutFilter, "No delivery partner accepted the order in time")
-    ]);
+    ];
+
+    if (process.env.ENABLE_ORDER_AUTO_CANCEL === "true") {
+      autoCancelJobs.push(
+        autoCancelByPaymentStatus(restaurantTimedOutFilter, "Restaurant did not accept the order in time")
+      );
+    }
+
+    await Promise.all(autoCancelJobs);
   } catch (error) {
     console.error("cancelStaleUnacceptedOrders error:", error);
   }
@@ -531,6 +639,10 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Order not found", 404);
     }
 
+    if (status === "REJECTED" && order.status === "CANCELLED" && order.cancellationReason === "Restaurant rejected the order") {
+      return successResponse(res, order, "Order cancelled. Refund will be completed within today if online payment was done.");
+    }
+
     if (["CANCELLED", "REJECTED", "DELIVERED"].includes(order.status)) {
       return errorResponse(res, `Order cannot be updated because it is ${order.status}`, 400);
     }
@@ -559,14 +671,25 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized to update this order", 401);
     }
 
-    // Update order status
+    const previousStatus = order.status;
     order.status = status;
+    if (status === "READY" && previousStatus !== "READY") {
+      const orderPartner = partner || await Partner.findById(order.partnerId);
+      order.deliveryReadyAt = new Date();
+      configureSelfDeliveryForReadyOrder(order, orderPartner);
+    }
     if (status === "REJECTED") {
       markAutoCancelled(order, "Restaurant rejected the order");
     }
     await order.save();
 
-    return successResponse(res, order, `Order status updated to ${status}`);
+    return successResponse(
+      res,
+      order,
+      status === "REJECTED"
+        ? "Order cancelled. Refund will be completed within today if online payment was done."
+        : `Order status updated to ${order.status}`
+    );
   } catch (err: any) {
     console.error("updateOrderStatus error:", err);
     return errorResponse(res, "Failed to update order status");
@@ -745,7 +868,8 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
     } else if (isAdminOrdersRoute) {
       filter = {};
     } else if (isDeliveryOrdersRoute) {
-      filter.deliveryPartnerId = user.id;
+      const deliveryPartner = await resolveDeliveryPartnerForUser(user, "userId");
+      filter.deliveryPartnerId = deliveryPartner?.userId || user.id;
     } else if (isPartnerOrdersRoute) {
       const partner = await resolvePartnerForUser(user);
       if (partner) {
@@ -902,6 +1026,11 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
     if (!eligibleStatuses.includes(deliveryPartner.status)) {
       return successResponse(res, [], "Delivery partner is not eligible for nearby jobs");
     }
+    if (deliveryPartner.isAvailable === false) {
+      return successResponse(res, [], "You are currently marked unavailable for delivery jobs");
+    }
+
+    const deliveryUserId = idString(deliveryPartner.userId) || user.id;
 
     const riderCoordinates = deliveryPartner.currentLocation?.coordinates;
     const hasRiderLocation = Boolean(
@@ -910,10 +1039,15 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
       !(riderCoordinates[0] === 0 && riderCoordinates[1] === 0)
     );
 
-    // Find orders that are READY and not assigned to any delivery partner
+    const deliveryDeadline = new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS);
+
+    // Find non-expired READY orders that are not assigned to any delivery partner.
     const availableJobs = await Order.find({
-      status: "READY",
-      $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+      $and: [
+        { status: "READY" },
+        buildUnassignedDeliveryFilter(),
+        buildFreshDeliveryReadyFilter(deliveryDeadline)
+      ]
     })
     .populate("customerId", "name phone")
     .populate({
@@ -925,9 +1059,9 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
 
     console.log(`🔍 Found ${availableJobs.length} available delivery jobs for user ${user.id}`);
 
-    const availableJobObjects = await Promise.all(
+    const availableJobObjects = (await Promise.all(
       availableJobs.map((job: any) => ensureDeliveryLocationForResponse(job.toObject()))
-    );
+    )).filter((job: any) => isDeliveryJobVisibleToUser(job, deliveryUserId));
 
     // If the rider hasn't shared their location yet, still show every READY
     // job so they at least know what's pending and can refresh after enabling GPS.
@@ -981,6 +1115,8 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
  */
 export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
   try {
+    await cancelStaleUnacceptedOrders();
+
     const user = req.user;
     const { orderId } = req.params;
 
@@ -988,14 +1124,19 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const deliveryPartner = await resolveDeliveryPartnerForUser(user, "status isAvailable");
+    const deliveryPartner = await resolveDeliveryPartnerForUser(user, "userId status isAvailable");
     const acceptStatuses = ["ACTIVE", "VERIFIED"];
     if (!deliveryPartner || !acceptStatuses.includes(deliveryPartner.status)) {
       return errorResponse(res, "Delivery partner is not eligible to accept jobs", 403);
     }
+    if (deliveryPartner.isAvailable === false) {
+      return errorResponse(res, "You are currently marked unavailable for delivery jobs", 403);
+    }
+
+    const deliveryUserId = idString(deliveryPartner.userId) || user.id;
 
     const activeOrder = await Order.findOne({
-      deliveryPartnerId: user.id,
+      deliveryPartnerId: deliveryUserId,
       status: { $in: ["ASSIGNED", "PICKED_UP"] }
     }).select("_id status").lean();
 
@@ -1012,15 +1153,20 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       );
     }
 
+    const acceptFilter: any = {
+      $and: [
+        { _id: orderId, status: "READY" },
+        buildUnassignedDeliveryFilter(),
+        buildFreshDeliveryReadyFilter(new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS)),
+        buildDeliveryAcceptVisibilityFilter(deliveryUserId)
+      ]
+    };
+
     const order = await Order.findOneAndUpdate(
-      {
-        _id: orderId,
-        status: "READY",
-        $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
-      },
+      acceptFilter,
       {
         $set: {
-          deliveryPartnerId: new mongoose.Types.ObjectId(user.id),
+          deliveryPartnerId: new mongoose.Types.ObjectId(deliveryUserId),
           status: "ASSIGNED"
         }
       },
@@ -1056,6 +1202,8 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
 
 export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
   try {
+    await cancelStaleUnacceptedOrders();
+
     const user = req.user;
     const { orderId } = req.params;
 
@@ -1063,13 +1211,56 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const order = await Order.findById(orderId).select("_id status deliveryPartnerId");
+    const deliveryPartner = await resolveDeliveryPartnerForUser(user, "userId status");
+    if (!deliveryPartner) {
+      return errorResponse(res, "Delivery profile not found", 404);
+    }
+
+    const deliveryUserId = idString(deliveryPartner.userId) || user.id;
+    const order = await Order.findById(orderId).select("_id status deliveryPartnerId selfDelivery deliveryReadyAt updatedAt");
     if (!order) {
       return errorResponse(res, "Order not found", 404);
     }
 
     if (order.status !== "READY" || order.deliveryPartnerId) {
       return errorResponse(res, "Job is no longer available", 409);
+    }
+
+    const deliveryDeadline = new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS);
+    const readyAt = order.deliveryReadyAt || order.updatedAt;
+    if (readyAt && readyAt.getTime() <= deliveryDeadline.getTime()) {
+      return errorResponse(res, "Job is no longer available", 409);
+    }
+
+    const selfDelivery = getSelfDeliveryState(order);
+    if (
+      selfDelivery.isSelfMode &&
+      !selfDelivery.fallbackReleased &&
+      selfDelivery.reservedFor.includes(deliveryUserId)
+    ) {
+      const nextRejectedBy = new Set(selfDelivery.rejectedBy);
+      nextRejectedBy.add(deliveryUserId);
+      const allSelfRidersRejected = selfDelivery.reservedFor.every((id) => nextRejectedBy.has(id));
+      const now = new Date();
+
+      await Order.updateOne(
+        {
+          _id: orderId,
+          status: "READY",
+          $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+        },
+        {
+          $addToSet: { "selfDelivery.rejectedBy": new mongoose.Types.ObjectId(deliveryUserId) },
+          ...(allSelfRidersRejected
+            ? {
+                $set: {
+                  "selfDelivery.fallbackReleasedAt": now,
+                  "selfDelivery.expiresAt": now
+                }
+              }
+            : {})
+        }
+      );
     }
 
     return successResponse(res, { orderId }, "Delivery job rejected");

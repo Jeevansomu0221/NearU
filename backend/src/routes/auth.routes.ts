@@ -1,12 +1,54 @@
 import { Router } from "express";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { adminPasswordLogin, logout, refreshToken, sendOTP, verifyOTP } from "../controllers/auth.controller";
 
 const router = Router();
 
-router.post("/send-otp", sendOTP);
-router.post("/verify-otp", verifyOTP);
-router.post("/admin-password-login", adminPasswordLogin);
+const authRateLimitKey = (req: any) => {
+  const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+  const role = typeof req.body?.role === "string" ? req.body.role.trim() : "";
+  return `${ipKeyGenerator(req.ip || "")}:${phone}:${role}`;
+};
+
+const sendOtpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  keyGenerator: authRateLimitKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many OTP requests. Please wait a few minutes and try again."
+  }
+});
+
+const verifyOtpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 60,
+  keyGenerator: authRateLimitKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many OTP verification attempts. Please wait a few minutes and try again."
+  }
+});
+
+const adminLoginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many admin login attempts. Please try again later."
+  }
+});
+
+router.post("/send-otp", sendOtpLimiter, sendOTP);
+router.post("/verify-otp", verifyOtpLimiter, verifyOTP);
+router.post("/admin-password-login", adminLoginLimiter, adminPasswordLogin);
 router.post("/refresh", refreshToken);
 router.post("/logout", authMiddleware, logout);
 

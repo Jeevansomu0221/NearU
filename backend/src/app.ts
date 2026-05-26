@@ -20,6 +20,8 @@ const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
 const allowConfiguredWildcardOrigin = config.corsOrigins.includes("*");
 
+app.set("trust proxy", 1);
+
 const isLocalDevelopmentOrigin = (origin: string) => {
   try {
     const { hostname } = new URL(origin);
@@ -58,13 +60,6 @@ app.use(helmet({
   crossOriginResourcePolicy: false
 }));
 
-app.use(rateLimit({
-  windowMs: config.rateLimitWindowMs,
-  max: config.rateLimitMax,
-  standardHeaders: true,
-  legacyHeaders: false
-}));
-
 app.use((req, res, next) => {
   if (req.path === "/api/payment/webhook") {
     return express.raw({ type: "application/json", limit: config.requestBodyLimit })(req, res, next);
@@ -72,6 +67,14 @@ app.use((req, res, next) => {
 
   return express.json({ limit: config.requestBodyLimit })(req, res, next);
 });
+
+app.use(rateLimit({
+  windowMs: config.rateLimitWindowMs,
+  max: config.rateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path.startsWith("/api/auth")
+}));
 
 app.use("/api/menu", menuRoutes);
 app.use("/api/auth", authRoutes);
