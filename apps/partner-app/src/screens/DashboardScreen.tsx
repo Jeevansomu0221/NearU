@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 import NotificationButton from "../components/NotificationButton";
-import NewOrderBanner from "../components/NewOrderBanner";
+import { Ionicons } from "@expo/vector-icons";
+
 
 const isAwaitingPartnerAction = (status: string) =>
   status === "CONFIRMED";
@@ -23,8 +24,6 @@ export default function DashboardScreen({ navigation }: any) {
   const [shopOpen, setShopOpen] = useState(true);
   const [partner, setPartner] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [newOrderAlert, setNewOrderAlert] = useState<any>(null);
-  const knownOrderIds = useRef<Set<string>>(new Set());
   const [stats, setStats] = useState({
     todayOrders: 0,
     totalOrders: 0,
@@ -47,34 +46,9 @@ export default function DashboardScreen({ navigation }: any) {
       if (!response.success || !Array.isArray(response.data)) return;
 
       const actionable = response.data.filter((order) => isAwaitingPartnerAction(order.status));
-      const newlyActionable = actionable.filter((order) => !knownOrderIds.current.has(order._id));
-      knownOrderIds.current = new Set(response.data.map((order) => order._id));
       setStats((current) => ({ ...current, pendingOrders: actionable.length }));
-
-      if (newlyActionable.length > 0) {
-        setNewOrderAlert(newlyActionable[0]);
-      }
     } catch (error) {
       console.log("Failed to poll partner orders", error);
-    }
-  };
-
-  const updateOrderStatus = async (orderId: string, status: "ACCEPTED" | "REJECTED") => {
-    try {
-      const res = await api.post(`/orders/partner/${orderId}/status`, { status });
-      const response = res.data as { success: boolean; message?: string };
-      if (!response.success) {
-        Alert.alert("Order update failed", response.message || "Please try again.");
-        return;
-      }
-
-      setNewOrderAlert(null);
-      await loadPendingOrders();
-      if (status === "ACCEPTED") {
-        navigation.navigate("OrderDetails", { orderId });
-      }
-    } catch (error: any) {
-      Alert.alert("Order update failed", error.response?.data?.message || "Please try again.");
     }
   };
 
@@ -136,112 +110,153 @@ export default function DashboardScreen({ navigation }: any) {
     );
   }
 
-  const quickStats = [
-    { label: "Today's Orders", value: stats.todayOrders },
-    { label: "Today's Earnings", value: `Rs ${stats.todayEarnings}` },
-    { label: "Pending Orders", value: stats.pendingOrders },
-    { label: "Menu Items", value: partner.menuItemsCount || 0 }
-  ];
-
-  const quickActions = [
-    { title: "Menu", target: "Menu" },
-    { title: "Orders", target: "Orders" },
-    { title: "Profile", target: "Profile" },
-    { title: "Settings", target: "Settings" }
-  ];
-
   return (
     <View style={styles.container}>
-      <NewOrderBanner
-        visible={Boolean(newOrderAlert)}
-        orderId={newOrderAlert?._id || ""}
-        itemCount={newOrderAlert?.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0}
-        grandTotal={newOrderAlert?.grandTotal || 0}
-        onOpen={() => newOrderAlert && navigation.navigate("OrderDetails", { orderId: newOrderAlert._id })}
-        onAccept={() => newOrderAlert && updateOrderStatus(newOrderAlert._id, "ACCEPTED")}
-        onReject={() => newOrderAlert && updateOrderStatus(newOrderAlert._id, "REJECTED")}
-        onDismiss={() => setNewOrderAlert(null)}
-      />
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={{ paddingTop: insets.top + 6, paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
-      <View style={styles.topBar}>
-        <View>
-          <Text style={styles.screenTitle}>Dashboard</Text>
-          <Text style={styles.screenSubtitle}>Today at a glance</Text>
+        <View style={styles.headerContainer}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.welcomeText}>Welcome back,</Text>
+            <Text style={styles.shopNameText} numberOfLines={1}>
+              {partner.restaurantName || partner.shopName || "Your Shop"}
+            </Text>
+          </View>
+          <NotificationButton count={stats.pendingOrders} onPress={() => navigation.navigate("Orders")} />
         </View>
-        <NotificationButton count={stats.pendingOrders} onPress={() => navigation.navigate("Orders")} />
-      </View>
 
-      <View style={styles.hero}>
-        <Text style={styles.heroEyebrow}>Partner dashboard</Text>
-        <Text style={styles.heroTitle}>{partner.restaurantName || partner.shopName || "Your Shop"}</Text>
-
-        <View style={styles.statusCard}>
-          <View style={styles.statusCopy}>
-            <Text style={styles.statusLabel}>Store visibility</Text>
-            <Text style={styles.statusValue}>{shopOpen ? "Open for orders" : "Temporarily closed"}</Text>
+        <View style={[styles.statusBanner, shopOpen ? styles.statusBannerOpen : styles.statusBannerClosed]}>
+          <View style={styles.statusIndicatorCircle}>
+            <View style={[styles.pulseDot, shopOpen ? styles.pulseDotOpen : styles.pulseDotClosed]} />
+          </View>
+          <View style={styles.statusTextContainer}>
+            <Text style={[styles.statusHeading, shopOpen ? styles.statusHeadingOpen : styles.statusHeadingClosed]}>
+              {shopOpen ? "Store is Open" : "Store is Offline"}
+            </Text>
+            <Text style={[styles.statusSubheading, shopOpen ? styles.statusSubheadingOpen : styles.statusSubheadingClosed]}>
+              {shopOpen ? "Accepting customer orders" : "Tap switch to go online"}
+            </Text>
           </View>
           <Switch
             value={shopOpen}
             onValueChange={toggleShopStatus}
-            trackColor={{ false: "#D3E3F7", true: "#9FC5F8" }}
-            thumbColor={shopOpen ? "#2F80ED" : "#9AB3CC"}
+            trackColor={{ false: "#FDA4AF", true: "#A7F3D0" }}
+            thumbColor={shopOpen ? "#10B981" : "#F43F5E"}
           />
         </View>
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Today's overview</Text>
-        <View style={styles.statsGrid}>
-          {quickStats.map((stat) => (
-            <View key={stat.label} style={styles.statCard}>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+        <View style={styles.metricsCard}>
+          <View style={styles.metricsHeader}>
+            <View>
+              <Text style={styles.metricsLabel}>Today's Earnings</Text>
+              <Text style={styles.metricsValue}>Rs {stats.todayEarnings}</Text>
             </View>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick actions</Text>
-        {quickActions.map((action) => (
-          <TouchableOpacity key={action.title} style={styles.actionCard} onPress={() => navigation.navigate(action.target)}>
-            <View style={styles.actionCopy}>
-              <Text style={styles.actionTitle}>{action.title}</Text>
+            <View style={styles.earningsIconContainer}>
+              <Ionicons name="wallet-outline" size={24} color="#2F80ED" />
             </View>
-            <Text style={styles.actionArrow}>Open</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+          </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Business snapshot</Text>
-          <TouchableOpacity onPress={loadDashboardData}>
-            <Text style={styles.linkText}>Refresh</Text>
-          </TouchableOpacity>
+          <View style={styles.divider} />
+
+          <View style={styles.metricsSubGrid}>
+            <View style={styles.subStatItem}>
+              <Text style={styles.subStatLabel}>Pending</Text>
+              <Text style={[styles.subStatValue, stats.pendingOrders > 0 ? styles.subStatPendingHighlight : null]}>
+                {stats.pendingOrders}
+              </Text>
+            </View>
+            <View style={styles.verticalDivider} />
+            <View style={styles.subStatItem}>
+              <Text style={styles.subStatLabel}>Orders Today</Text>
+              <Text style={styles.subStatValue}>{stats.todayOrders}</Text>
+            </View>
+            <View style={styles.verticalDivider} />
+            <View style={styles.subStatItem}>
+              <Text style={styles.subStatLabel}>Active Menu</Text>
+              <Text style={styles.subStatValue}>{partner.menuItemsCount || 0}</Text>
+            </View>
+          </View>
         </View>
-        <View style={styles.snapshotCard}>
-          <View style={styles.snapshotRow}>
-            <Text style={styles.snapshotLabel}>Total orders</Text>
-            <Text style={styles.snapshotValue}>{stats.totalOrders}</Text>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick actions</Text>
+          <View style={styles.gridContainer}>
+            <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Orders")} activeOpacity={0.7}>
+              <View style={[styles.gridIconCircle, { backgroundColor: "#EBF3FE" }]}>
+                <Ionicons name="cart" size={22} color="#2F80ED" />
+              </View>
+              <Text style={styles.gridCardTitle}>Orders</Text>
+              <Text style={styles.gridCardDesc}>Live & past orders</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Menu")} activeOpacity={0.7}>
+              <View style={[styles.gridIconCircle, { backgroundColor: "#FFF6ED" }]}>
+                <Ionicons name="restaurant" size={20} color="#EA580C" />
+              </View>
+              <Text style={styles.gridCardTitle}>Menu</Text>
+              <Text style={styles.gridCardDesc}>Items & pricing</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.snapshotRow}>
-            <Text style={styles.snapshotLabel}>Total earnings</Text>
-            <Text style={styles.snapshotValue}>Rs {stats.totalEarnings}</Text>
-          </View>
-          <View style={styles.snapshotRow}>
-            <Text style={styles.snapshotLabel}>Approval status</Text>
-            <Text style={styles.snapshotValue}>{partner.status || "Approved"}</Text>
+
+          <View style={[styles.gridContainer, { marginTop: 10 }]}>
+            <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Profile")} activeOpacity={0.7}>
+              <View style={[styles.gridIconCircle, { backgroundColor: "#ECFDF5" }]}>
+                <Ionicons name="storefront" size={20} color="#10B981" />
+              </View>
+              <Text style={styles.gridCardTitle}>Profile</Text>
+              <Text style={styles.gridCardDesc}>Business & details</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Settings")} activeOpacity={0.7}>
+              <View style={[styles.gridIconCircle, { backgroundColor: "#F1F5F9" }]}>
+                <Ionicons name="settings-sharp" size={20} color="#475569" />
+              </View>
+              <Text style={styles.gridCardTitle}>Settings</Text>
+              <Text style={styles.gridCardDesc}>System & alerts</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Business snapshot</Text>
+            <TouchableOpacity onPress={loadDashboardData}>
+              <Text style={styles.linkText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.snapshotCard}>
+            <View style={styles.snapshotRow}>
+              <View style={styles.snapshotRowLeft}>
+                <Ionicons name="analytics-outline" size={18} color="#5E7897" style={styles.rowIcon} />
+                <Text style={styles.snapshotLabel}>Total orders</Text>
+              </View>
+              <Text style={styles.snapshotValue}>{stats.totalOrders}</Text>
+            </View>
+
+            <View style={styles.snapshotRow}>
+              <View style={styles.snapshotRowLeft}>
+                <Ionicons name="cash-outline" size={18} color="#5E7897" style={styles.rowIcon} />
+                <Text style={styles.snapshotLabel}>Total earnings</Text>
+              </View>
+              <Text style={styles.snapshotValue}>Rs {stats.totalEarnings}</Text>
+            </View>
+
+            <View style={[styles.snapshotRow, { borderBottomWidth: 0 }]}>
+              <View style={styles.snapshotRowLeft}>
+                <Ionicons name="checkbox-outline" size={18} color="#5E7897" style={styles.rowIcon} />
+                <Text style={styles.snapshotLabel}>Approval status</Text>
+              </View>
+              <Text style={[styles.snapshotValue, styles.statusBadgeText]}>{partner.status || "APPROVED"}</Text>
+            </View>
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
+
 }
 
 const styles = StyleSheet.create({
@@ -260,79 +275,188 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#6B5E55"
   },
-  hero: {
+  headerContainer: {
     marginHorizontal: 16,
-    marginBottom: 14,
-    backgroundColor: "#2F80ED",
-    borderRadius: 30,
-    padding: 16
-  },
-  topBar: {
-    marginHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
   },
-  screenTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#143A66"
+  headerLeft: {
+    flex: 1,
+    marginRight: 12
   },
-  screenSubtitle: {
-    marginTop: 2,
-    fontSize: 12,
-    color: "#5E7897"
+  welcomeText: {
+    fontSize: 13,
+    color: "#5E7897",
+    fontWeight: "600"
   },
-  heroEyebrow: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    color: "#FFE4D7",
-    marginBottom: 10
-  },
-  heroTitle: {
+  shopNameText: {
     fontSize: 22,
-    lineHeight: 28,
-    fontWeight: "800",
-    color: "#FFFFFF"
+    fontWeight: "900",
+    color: "#143A66",
+    marginTop: 2
   },
-  statusCard: {
-    marginTop: 12,
-    backgroundColor: "#FFF6F1",
-    borderRadius: 18,
-    padding: 12,
+  statusBanner: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#143A66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1
+  },
+  statusBannerOpen: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#A7F3D0"
+  },
+  statusBannerClosed: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECDD3"
+  },
+  statusIndicatorCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1
+  },
+  pulseDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5
+  },
+  pulseDotOpen: {
+    backgroundColor: "#10B981"
+  },
+  pulseDotClosed: {
+    backgroundColor: "#EF4444"
+  },
+  statusTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 10
+  },
+  statusHeading: {
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  statusHeadingOpen: {
+    color: "#065F46"
+  },
+  statusHeadingClosed: {
+    color: "#991B1B"
+  },
+  statusSubheading: {
+    fontSize: 12,
+    marginTop: 1,
+    fontWeight: "500"
+  },
+  statusSubheadingOpen: {
+    color: "#047857"
+  },
+  statusSubheadingClosed: {
+    color: "#B91C1C"
+  },
+  metricsCard: {
+    marginHorizontal: 16,
+    marginBottom: 18,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    padding: 18,
+    shadowColor: "#143A66",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 2
+  },
+  metricsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  metricsLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#5E7897",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  metricsValue: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#143A66",
+    marginTop: 4
+  },
+  earningsIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#F0F6FE",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E1EEFE"
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#E6EEF9",
+    marginVertical: 16
+  },
+  metricsSubGrid: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  subStatItem: {
+    flex: 1,
     alignItems: "center"
   },
-  statusCopy: {
-    flex: 1,
-    marginRight: 14
+  verticalDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#E6EEF9"
   },
-  statusLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#8B6A54",
+  subStatLabel: {
+    fontSize: 11,
+    color: "#5E7897",
+    fontWeight: "600",
     marginBottom: 4
   },
-  statusValue: {
-    fontSize: 16,
+  subStatValue: {
+    fontSize: 17,
     fontWeight: "800",
     color: "#143A66"
+  },
+  subStatPendingHighlight: {
+    color: "#EA580C"
   },
   section: {
     marginHorizontal: 16,
-    marginBottom: 14
+    marginBottom: 18
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12
+    marginBottom: 10
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: "#143A66",
     marginBottom: 10
@@ -342,78 +466,81 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#2F80ED"
   },
-  statsGrid: {
+  gridContainer: {
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "space-between"
   },
-  statCard: {
-    width: "48%",
+  gridCard: {
+    width: "48.5%",
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "#D9E6F7",
-    padding: 10,
-    marginBottom: 8
+    padding: 16,
+    shadowColor: "#143A66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1
   },
-  statValue: {
-    fontSize: 18,
+  gridIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12
+  },
+  gridCardTitle: {
+    fontSize: 15,
     fontWeight: "800",
-    color: "#2F80ED",
-    marginBottom: 4
+    color: "#143A66"
   },
-  statLabel: {
-    fontSize: 10,
-    lineHeight: 16,
-    color: "#5E7897"
-  },
-  actionCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#D9E6F7",
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center"
-  },
-  actionCopy: {
-    flex: 1,
-    marginRight: 12
-  },
-  actionTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#143A66",
-    marginBottom: 0
-  },
-  actionArrow: {
+  gridCardDesc: {
     fontSize: 11,
-    fontWeight: "800",
-    color: "#2F80ED"
+    color: "#5E7897",
+    marginTop: 2,
+    fontWeight: "500"
   },
   snapshotCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: "#D9E6F7",
-    padding: 13
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    shadowColor: "#143A66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1
   },
   snapshotRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 9,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#F2E9E0"
+    borderBottomColor: "#E6EEF9"
+  },
+  snapshotRowLeft: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  rowIcon: {
+    marginRight: 10
   },
   snapshotLabel: {
-    fontSize: 12,
-    color: "#5E7897"
+    fontSize: 13,
+    color: "#5E7897",
+    fontWeight: "600"
   },
   snapshotValue: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "800",
     color: "#143A66"
+  },
+  statusBadgeText: {
+    color: "#10B981"
   }
 });

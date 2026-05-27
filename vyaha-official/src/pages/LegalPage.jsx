@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import './LegalPage.css';
 
-const effectiveDate = 'May 5, 2026';
+const effectiveDate = 'May 27, 2026';
+const businessName = 'Vyaha';
+const serviceStage = 'development and pilot stage';
 const supportEmail = 'support@vyaha.com';
 const privacyEmail = 'privacy@vyaha.com';
 const securityEmail = 'security@vyaha.com';
@@ -20,6 +22,22 @@ function PolicyNote({ children }) {
   return <p className="policy-note">{children}</p>;
 }
 
+function ContactBlock() {
+  return (
+    <div className="policy-note">
+      <strong>Business contact:</strong> {businessName} is currently in a {serviceStage}. For platform, privacy, security, or fraud concerns, use the contacts below.
+      <br />
+      <strong>Support:</strong> <MailLink email={supportEmail} />
+      <br />
+      <strong>Privacy:</strong> <MailLink email={privacyEmail} />
+      <br />
+      <strong>Security:</strong> <MailLink email={securityEmail} />
+      <br />
+      <strong>Fraud reports:</strong> <MailLink email={reportEmail} />
+    </div>
+  );
+}
+
 const pageData = {
   policies: {
     title: 'Guidelines and Policies',
@@ -29,8 +47,9 @@ const pageData = {
           Vyaha is a local commerce and delivery platform for customers, restaurants, delivery partners, and internal operations teams. These policies explain how our platform should be used, how we protect information, and what standards we expect from everyone in the Vyaha ecosystem.
         </PolicyIntro>
         <PolicyNote>
-          These pages are written for Vyaha's current customer app, restaurant partner app, delivery partner app, admin panel, website, APIs, and related services. They should be reviewed by a qualified legal advisor before launch.
+          These pages are written for Vyaha's current customer app, restaurant partner app, delivery partner app, admin panel, website, APIs, and related services. They should be reviewed by a qualified legal advisor before launch and updated when product features change.
         </PolicyNote>
+        <ContactBlock />
         <h3>Policy Hub</h3>
         <ul className="policy-link-list">
           <li><Link to="/privacy">Privacy Policy</Link></li>
@@ -159,6 +178,7 @@ const pageData = {
       <>
         <p><strong>Effective Date:</strong> {effectiveDate}</p>
         <PolicyIntro>Vyaha respects your privacy. This policy explains what information we collect, how we use it, when we share it, and the choices available to users of our website, customer app, restaurant partner app, delivery partner app, admin panel, APIs, and related services.</PolicyIntro>
+        <ContactBlock />
         <h3>1. Information We Collect</h3>
         <p><strong>Account information:</strong> name, phone number, email address, role, login status, OTP verification details, and account preferences.</p>
         <p><strong>Customer information:</strong> delivery address, saved profile details, cart items, order history, delivery notes, payment method, support messages, and refund requests.</p>
@@ -205,6 +225,7 @@ const pageData = {
       <>
         <p><strong>Effective Date:</strong> {effectiveDate}</p>
         <PolicyIntro>Vyaha works to keep customer accounts, restaurant operations, delivery activity, payments, documents, and admin tools secure.</PolicyIntro>
+        <ContactBlock />
         <h3>1. Account Protection</h3>
         <ul>
           <li>We use OTP-based authentication and token-based sessions for platform access.</li>
@@ -230,6 +251,7 @@ const pageData = {
       <>
         <p><strong>Effective Date:</strong> {effectiveDate}</p>
         <PolicyIntro>These Terms govern your use of Vyaha's website, customer app, restaurant partner app, delivery partner app, admin panel, APIs, and related services. By using Vyaha, you agree to these Terms.</PolicyIntro>
+        <ContactBlock />
         <h3>1. Eligibility</h3>
         <p>You must be legally capable of entering into a binding agreement or use Vyaha under appropriate parental or guardian supervision. Restaurant and delivery partners must provide truthful registration, verification, tax, payout, and operational details.</p>
         <h3>2. Platform Role</h3>
@@ -267,6 +289,7 @@ const pageData = {
       <>
         <p><strong>Effective Date:</strong> {effectiveDate}</p>
         <PolicyIntro>This policy explains how Vyaha reviews cancellations, refunds, payment failures, missing items, delays, and delivery disputes.</PolicyIntro>
+        <ContactBlock />
         <h3>1. Customer Cancellations</h3>
         <p>You may request cancellation before the restaurant accepts or begins preparing the order. Once preparation, packing, or delivery assignment has started, cancellation may be declined or charges may apply.</p>
         <h3>2. Restaurant or Platform Cancellations</h3>
@@ -371,6 +394,7 @@ const pageData = {
       <>
         <p><strong>Effective Date:</strong> {effectiveDate}</p>
         <PolicyIntro>Vyaha's website and web tools may use cookies, local storage, pixels, SDKs, and similar technologies to run the service, remember preferences, improve performance, and understand usage.</PolicyIntro>
+        <ContactBlock />
         <h3>Types We May Use</h3>
         <ul>
           <li><strong>Essential:</strong> login sessions, security, routing, fraud prevention, and service availability.</li>
@@ -444,7 +468,7 @@ const pageData = {
           <li>Admin support for onboarding, verification, and issue handling.</li>
           <li>Business insights, promotions, and payout support as features become available.</li>
         </ul>
-        <button className="cta-button">Register Your Restaurant</button>
+        <Link className="cta-button" to="/partner">Register Your Restaurant</Link>
       </>
     )
   },
@@ -455,13 +479,13 @@ const pageData = {
         <PolicyIntro>Vyaha includes separate experiences for customers, restaurants, delivery partners, and administrators.</PolicyIntro>
         <h3>Customer App</h3>
         <p>Order from nearby restaurants, manage profile and address details, track orders, choose COD or supported online payments, and contact support.</p>
-        <button className="cta-button">Download Customer App</button>
+        <Link className="cta-button" to="/apps">View Customer App Access</Link>
         <h3>Restaurant Partner App</h3>
         <p>Manage onboarding, documents, menu items, order status, customer orders, and restaurant operations.</p>
-        <button className="cta-button">Download Partner App</button>
+        <Link className="cta-button" to="/restaurants">View Partner App Access</Link>
         <h3>Delivery Partner App</h3>
         <p>Complete verification, go available, view jobs, accept deliveries, update status, manage profile, and track earnings.</p>
-        <button className="cta-button">Download Delivery App</button>
+        <Link className="cta-button" to="/delivery">View Delivery App Access</Link>
       </>
     )
   },
@@ -478,7 +502,7 @@ const pageData = {
           <li>Order workflow and staff process recommendations.</li>
           <li>Local promotion and customer retention ideas.</li>
         </ul>
-        <button className="cta-button">Book a Consultation</button>
+        <Link className="cta-button" to="/support">Book a Consultation</Link>
       </>
     )
   },
@@ -502,7 +526,7 @@ const pageData = {
           <li>Bank account details for payouts.</li>
           <li>Agreement to Vyaha's delivery partner policies and safety standards.</li>
         </ul>
-        <button className="cta-button">Become a Delivery Partner</button>
+        <Link className="cta-button" to="/delivery-policy">Become a Delivery Partner</Link>
       </>
     )
   }

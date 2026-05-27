@@ -86,18 +86,18 @@ function Footer() {
               ))}
             </div>
             <div className="footer-app-links" style={{ marginTop: '20px' }}>
-              <a href="#" className="store-badge-small" style={{ display: 'block', marginBottom: '10px' }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" style={{ width: '120px' }} />
-              </a>
-              <a href="#" className="store-badge-small" style={{ display: 'block' }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Play Store" style={{ width: '120px' }} />
-              </a>
+              <Link to="/apps" className="store-badge-small" style={{ display: 'block', marginBottom: '10px' }}>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App access page" style={{ width: '120px' }} />
+              </Link>
+              <Link to="/apps" className="store-badge-small" style={{ display: 'block' }}>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="App access page" style={{ width: '120px' }} />
+              </Link>
             </div>
           </div>
         </div>
 
         <div className="footer-bottom">
-          <p>By continuing past this page, you agree to our Terms of Service, Cookie Policy, Privacy Policy, and Content Policies. All trademarks are properties of their respective owners. 2026 (c) Vyaha Ltd. All rights reserved.</p>
+          <p>By continuing past this page, you agree to our Terms of Service, Cookie Policy, Privacy Policy, and Content Policies. All trademarks are properties of their respective owners. © 2026 Vyaha. All rights reserved.</p>
         </div>
       </div>
     </footer>

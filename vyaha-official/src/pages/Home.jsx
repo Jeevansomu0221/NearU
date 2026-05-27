@@ -10,14 +10,14 @@ function Home() {
           <h1 className="hero-title">Your Hyperlocal Food Delivery App</h1>
           <p className="hero-subtitle">Enjoy your favorite local dishes at genuine menu prices<br />with the Vyaha app</p>
           <div className="hero-download-buttons">
-            <a href="#" className="store-badge">
+            <Link to="/apps" className="store-badge">
               <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" />
-            </a>
-            <a href="#" className="store-badge">
+            </Link>
+            <Link to="/apps" className="store-badge">
               <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="Download on the App Store" />
-            </a>
+            </Link>
           </div>
-          <a href="#email-link" className="hero-email-link">support@vyaha.com &rarr;</a>
+          <a href="mailto:support@vyaha.com" className="hero-email-link">support@vyaha.com &rarr;</a>
         </div>
       </section>
 
@@ -119,12 +119,12 @@ function Home() {
               <h2>Download the app now</h2>
               <p>Scan the QR code or use the store links to get started with Vyaha.</p>
               <div className="hero-download-buttons">
-                <a href="#" className="store-badge">
+                <Link to="/apps" className="store-badge">
                   <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" />
-                </a>
-                <a href="#" className="store-badge">
+                </Link>
+                <Link to="/apps" className="store-badge">
                   <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="Download on the App Store" />
-                </a>
+                </Link>
               </div>
             </div>
             <div className="qr-container">

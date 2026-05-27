@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -144,6 +144,8 @@ const isGeneratedCustomerName = (value?: string) => {
 export default function ProfileScreen({ navigation, route }: any) {
   const forceComplete = Boolean(route?.params?.forceComplete);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [addressesY, setAddressesY] = useState(0);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(forceComplete);
@@ -897,6 +899,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
     >
       <ScrollView
+        ref={scrollViewRef}
         style={styles.container}
         contentContainerStyle={[styles.content, forceComplete && styles.contentWithFooter]}
         showsVerticalScrollIndicator={false}
@@ -912,14 +915,14 @@ export default function ProfileScreen({ navigation, route }: any) {
               <Text style={styles.heroName}>{isGeneratedCustomerName(profile?.name) ? "Your Profile" : profile?.name || "Your Profile"}</Text>
               <Text style={styles.heroSubtext}>{profile?.phone}</Text>
               <Text style={styles.heroSubtext}>{profile?.email || "Add your email for invoices and offers"}</Text>
+              <View style={styles.memberSinceContainer}>
+                <MaterialCommunityIcons name="calendar-check-outline" size={14} color="#7A6F65" />
+                <Text style={styles.memberSinceText}>Member since {memberSince}</Text>
+              </View>
             </View>
           </View>
 
-          <View style={styles.heroInfoRow}>
-            <View style={styles.heroPill}>
-              <MaterialCommunityIcons name="calendar-check-outline" size={16} color="#7A4B21" />
-              <Text style={styles.heroPillText}>Member since {memberSince}</Text>
-            </View>
+          <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 10 }}>
             <TouchableOpacity
               style={styles.photoButton}
               onPress={() =>
@@ -959,7 +962,9 @@ export default function ProfileScreen({ navigation, route }: any) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.shortcutCard}
-            onPress={() => setEditing(true)}
+            onPress={() => {
+              scrollViewRef.current?.scrollTo({ y: addressesY, animated: true });
+            }}
           >
             <View style={styles.shortcutIconWrap}>
               <MaterialCommunityIcons name="map-marker-radius-outline" size={20} color="#2B9C4A" />
@@ -1042,7 +1047,13 @@ export default function ProfileScreen({ navigation, route }: any) {
           </View>
         </View>
 
-        <View style={styles.section}>
+        <View
+          style={styles.section}
+          onLayout={(event) => {
+            const { y } = event.nativeEvent.layout;
+            setAddressesY(y);
+          }}
+        >
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Saved Addresses</Text>
             {!editing ? (
@@ -2235,5 +2246,16 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "800"
+  },
+  memberSinceContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6
+  },
+  memberSinceText: {
+    fontSize: 12,
+    color: "#7A6F65",
+    marginLeft: 4,
+    fontWeight: "600"
   }
 });

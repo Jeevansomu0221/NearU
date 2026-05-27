@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../api/client";
+import { partnerTheme } from "../theme";
 
 export default function RejectedScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -29,7 +30,7 @@ export default function RejectedScreen({ navigation }: any) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}
+      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.hero}>
@@ -41,10 +42,13 @@ export default function RejectedScreen({ navigation }: any) {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Admin note</Text>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>Admin note</Text>
+        </View>
+
         {loading ? (
           <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color="#FF6B35" />
+            <ActivityIndicator size="small" color={partnerTheme.colors.primary} />
             <Text style={styles.loadingText}>Loading review note...</Text>
           </View>
         ) : (
@@ -64,12 +68,12 @@ export default function RejectedScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F3EE"
+    backgroundColor: partnerTheme.colors.background
   },
   hero: {
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: "#B42318",
+    backgroundColor: partnerTheme.colors.primary,
     borderRadius: 28,
     padding: 22
   },
@@ -78,39 +82,47 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.8,
     textTransform: "uppercase",
-    color: "#F8D5D2",
+    color: "#DDEBFF",
     marginBottom: 10
   },
   heroTitle: {
     fontSize: 27,
     lineHeight: 33,
     fontWeight: "800",
-    color: "#FFFFFF"
+    color: partnerTheme.colors.card
   },
   heroSubtitle: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 21,
-    color: "#FDECEC"
+    color: "#EAF3FF"
   },
   card: {
     marginHorizontal: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: partnerTheme.colors.card,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: partnerTheme.colors.border,
     padding: 18
   },
-  cardTitle: {
-    fontSize: 18,
+  badge: {
+    alignSelf: "flex-start",
+    backgroundColor: partnerTheme.colors.dangerSoft,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 10
+  },
+  badgeText: {
+    fontSize: 11,
     fontWeight: "800",
-    color: "#2C2018",
-    marginBottom: 8
+    color: partnerTheme.colors.danger,
+    textTransform: "uppercase"
   },
   cardText: {
     fontSize: 14,
     lineHeight: 20,
-    color: "#6B5E55",
+    color: partnerTheme.colors.muted,
     marginBottom: 18
   },
   loadingRow: {
@@ -121,16 +133,16 @@ const styles = StyleSheet.create({
   loadingText: {
     marginLeft: 10,
     fontSize: 13,
-    color: "#6B5E55"
+    color: partnerTheme.colors.muted
   },
   primaryButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: partnerTheme.colors.primary,
     borderRadius: 18,
     alignItems: "center",
     paddingVertical: 15
   },
   primaryButtonText: {
-    color: "#FFFFFF",
+    color: partnerTheme.colors.card,
     fontSize: 14,
     fontWeight: "800"
   }

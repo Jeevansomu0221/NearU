@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Image,
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 import { confirmFirebaseOtp, sendFirebaseOtp } from "../services/firebasePhoneAuth";
+import { partnerTheme } from "../theme";
 
 const TEST_LOGIN_PHONE = "1010101010";
 const TEST_LOGIN_OTP = "000000";
@@ -195,16 +197,16 @@ export default function LoginScreen({ navigation }: any) {
     >
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <Text style={styles.brand}>Vyaha Partner</Text>
-          <Text style={styles.title}>No extra commission. Genuine pricing for your customers.</Text>
-          <Text style={styles.subtitle}>
-            Register now, upload documents once, and start receiving trusted local orders after approval.
-          </Text>
+        <View style={styles.headerContainer}>
+          <Image
+            source={require("../../assets/vyaha-partner-text-logo.png")}
+            style={styles.brandImage}
+            resizeMode="contain"
+          />
         </View>
 
         <View style={styles.card}>
@@ -284,7 +286,7 @@ export default function LoginScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F4F8FF"
+    backgroundColor: partnerTheme.colors.background
   },
   scroll: {
     flex: 1
@@ -294,71 +296,56 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "center"
   },
-  hero: {
-    marginBottom: 42,
-    backgroundColor: "#2F80ED",
-    borderRadius: 28,
-    padding: 22
-  },
-  brand: {
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    color: "#DDEBFF",
-    marginBottom: 12
-  },
-  title: {
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: "800",
-    color: "#FFFFFF"
-  },
-  subtitle: {
+  headerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#EAF3FF"
+    marginBottom: 20
+  },
+  brandImage: {
+    width: 240,
+    height: 120
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: partnerTheme.colors.card,
     borderRadius: 26,
     padding: 20,
     borderWidth: 1,
-    borderColor: "#D9E6F7",
-    shadowColor: "#143A66",
+    borderColor: partnerTheme.colors.border,
+    shadowColor: partnerTheme.colors.primaryDark,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
     shadowRadius: 18,
-    elevation: 3
+    elevation: 3,
+    marginTop: -6
   },
   cardTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#143A66",
+    color: partnerTheme.colors.primaryDark,
     marginBottom: 6
   },
   cardHint: {
     fontSize: 14,
     lineHeight: 20,
-    color: "#5E7897",
+    color: partnerTheme.colors.muted,
     marginBottom: 18
   },
   label: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#486887",
+    color: partnerTheme.colors.mutedDark,
     marginBottom: 8
   },
   input: {
     borderWidth: 1,
-    borderColor: "#CFE0F5",
+    borderColor: partnerTheme.colors.border,
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#123456",
-    backgroundColor: "#F9FCFF",
+    color: partnerTheme.colors.text,
+    backgroundColor: partnerTheme.colors.surface,
     marginBottom: 16
   },
   feedbackCard: {
@@ -368,12 +355,12 @@ const styles = StyleSheet.create({
     marginBottom: 14
   },
   feedbackSuccess: {
-    backgroundColor: "#E8F5E9",
+    backgroundColor: partnerTheme.colors.successSoft,
     borderWidth: 1,
     borderColor: "#CDE8D4"
   },
   feedbackError: {
-    backgroundColor: "#FDECEC",
+    backgroundColor: partnerTheme.colors.dangerSoft,
     borderWidth: 1,
     borderColor: "#F4C7C3"
   },
@@ -386,10 +373,10 @@ const styles = StyleSheet.create({
     color: "#216E39"
   },
   feedbackErrorText: {
-    color: "#B42318"
+    color: partnerTheme.colors.danger
   },
   primaryButton: {
-    backgroundColor: "#2F80ED",
+    backgroundColor: partnerTheme.colors.primary,
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: "center"
@@ -404,7 +391,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14
   },
   secondaryButtonText: {
-    color: "#2F80ED",
+    color: partnerTheme.colors.primary,
     fontSize: 14,
     fontWeight: "700"
   }

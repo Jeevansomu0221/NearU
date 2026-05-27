@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../api/client";
 import NotificationButton from "../components/NotificationButton";
-import NewOrderBanner from "../components/NewOrderBanner";
+import { partnerTheme } from "../theme";
 
 interface Order {
   _id: string;
@@ -35,8 +35,7 @@ interface Order {
   grandTotal?: number;
 }
 
-const isAwaitingPartnerAction = (status: string) =>
-  status === "CONFIRMED";
+const isAwaitingPartnerAction = (status: string) => status === "CONFIRMED";
 
 interface OrdersResponse {
   success: boolean;
@@ -49,8 +48,6 @@ export default function OrdersScreen({ navigation }: any) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
-  const knownOrderIds = useRef<Set<string>>(new Set());
 
   const loadOrders = async () => {
     try {
@@ -58,16 +55,6 @@ export default function OrdersScreen({ navigation }: any) {
       const response = res.data as OrdersResponse;
 
       if (response.success) {
-        const incomingOrders = response.data || [];
-        const newActionable = incomingOrders.filter(
-          (order) => !knownOrderIds.current.has(order._id) && isAwaitingPartnerAction(order.status)
-        );
-        knownOrderIds.current = new Set(incomingOrders.map((order) => order._id));
-
-        if (newActionable.length > 0) {
-          setNewOrderAlert(newActionable[0]);
-        }
-
         setOrders(response.data);
       } else {
         Alert.alert("Error", response.message || "Failed to load orders");
@@ -83,7 +70,6 @@ export default function OrdersScreen({ navigation }: any) {
 
   useEffect(() => {
     loadOrders();
-    // Faster polling so new orders pop within ~10s instead of 30s.
     const interval = setInterval(() => {
       if (!loading) {
         loadOrders();
@@ -91,30 +77,6 @@ export default function OrdersScreen({ navigation }: any) {
     }, 10000);
     return () => clearInterval(interval);
   }, []);
-
-  const openNewOrder = (orderId: string) => {
-    setNewOrderAlert(null);
-    navigation.navigate("OrderDetails", { orderId });
-  };
-
-  const updateOrderStatus = async (orderId: string, status: "ACCEPTED" | "REJECTED") => {
-    try {
-      const res = await api.post(`/orders/partner/${orderId}/status`, { status });
-      const response = res.data as { success: boolean; message?: string };
-      if (!response.success) {
-        Alert.alert("Order update failed", response.message || "Please try again.");
-        return;
-      }
-
-      setNewOrderAlert(null);
-      await loadOrders();
-      if (status === "ACCEPTED") {
-        navigation.navigate("OrderDetails", { orderId });
-      }
-    } catch (error: any) {
-      Alert.alert("Order update failed", error.response?.data?.message || "Please try again.");
-    }
-  };
 
   const getStatusTheme = (status: string) => {
     switch (status) {
@@ -191,13 +153,17 @@ export default function OrdersScreen({ navigation }: any) {
           <Text style={styles.handoffLabel}>Parcel handoff</Text>
           <Text style={styles.handoffText}>Order ID #{item._id.slice(-6).toUpperCase()}</Text>
           <Text style={styles.handoffSubtext}>
-            {item.deliveryPartnerId?.name ? `Delivery partner: ${item.deliveryPartnerId.name}` : "Delivery partner will appear after assignment"}
+            {item.deliveryPartnerId?.name
+              ? `Delivery partner: ${item.deliveryPartnerId.name}`
+              : "Delivery partner will appear after assignment"}
           </Text>
         </View>
 
         {item.items?.slice(0, 2).map((orderItem, idx) => (
           <View key={`${item._id}-${idx}`} style={styles.itemRow}>
-            <Text style={styles.itemText}>{orderItem.quantity} x {orderItem.name}</Text>
+            <Text style={styles.itemText}>
+              {orderItem.quantity} x {orderItem.name}
+            </Text>
             <Text style={styles.itemPrice}>Rs {orderItem.quantity * orderItem.price}</Text>
           </View>
         ))}
@@ -215,30 +181,19 @@ export default function OrdersScreen({ navigation }: any) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
+        <ActivityIndicator size="large" color={partnerTheme.colors.primary} />
         <Text style={styles.loadingText}>Loading orders...</Text>
       </View>
     );
   }
 
   const pendingCount = orders.filter((order) => isAwaitingPartnerAction(order.status)).length;
-  const bannerItemCount = newOrderAlert?.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
 
   return (
     <View style={styles.container}>
-      <NewOrderBanner
-        visible={Boolean(newOrderAlert)}
-        orderId={newOrderAlert?._id || ""}
-        itemCount={bannerItemCount}
-        grandTotal={newOrderAlert?.grandTotal || 0}
-        onOpen={() => newOrderAlert && openNewOrder(newOrderAlert._id)}
-        onAccept={() => newOrderAlert && updateOrderStatus(newOrderAlert._id, "ACCEPTED")}
-        onReject={() => newOrderAlert && updateOrderStatus(newOrderAlert._id, "REJECTED")}
-        onDismiss={() => setNewOrderAlert(null)}
-      />
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#143A66" />
+          <Ionicons name="arrow-back" size={24} color={partnerTheme.colors.primaryDark} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Orders</Text>
@@ -246,7 +201,7 @@ export default function OrdersScreen({ navigation }: any) {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.refreshButton} onPress={loadOrders}>
-            <Ionicons name="refresh" size={21} color="#C4541C" />
+            <Ionicons name="refresh" size={21} color={partnerTheme.colors.primary} />
           </TouchableOpacity>
           <NotificationButton count={pendingCount} onPress={loadOrders} />
         </View>
@@ -256,7 +211,9 @@ export default function OrdersScreen({ navigation }: any) {
         data={orders}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadOrders} colors={["#FF6B35"]} tintColor="#FF6B35" />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={loadOrders} colors={[partnerTheme.colors.primary]} tintColor={partnerTheme.colors.primary} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No orders yet</Text>
@@ -276,18 +233,18 @@ export default function OrdersScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F3EE"
+    backgroundColor: partnerTheme.colors.background
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F7F3EE"
+    backgroundColor: partnerTheme.colors.background
   },
   loadingText: {
     marginTop: 12,
     fontSize: 15,
-    color: "#6B5E55"
+    color: partnerTheme.colors.muted
   },
   header: {
     paddingHorizontal: 16,
@@ -302,9 +259,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: partnerTheme.colors.card,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: partnerTheme.colors.border,
     marginRight: 10
   },
   headerCopy: {
@@ -314,12 +271,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#2C2018"
+    color: partnerTheme.colors.primaryDark
   },
   subtitle: {
     marginTop: 2,
     fontSize: 12,
-    color: "#7B6D63"
+    color: partnerTheme.colors.muted
   },
   headerActions: {
     flexDirection: "row",
@@ -332,15 +289,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: partnerTheme.colors.card,
     borderWidth: 1,
-    borderColor: "#EFE5DA"
+    borderColor: partnerTheme.colors.border
   },
   orderCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: partnerTheme.colors.card,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: partnerTheme.colors.border,
     padding: 16,
     marginBottom: 12
   },
@@ -353,11 +310,11 @@ const styles = StyleSheet.create({
   orderId: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#2C2018"
+    color: partnerTheme.colors.primaryDark
   },
   timeText: {
     fontSize: 12,
-    color: "#7B6D63",
+    color: partnerTheme.colors.muted,
     marginTop: 4
   },
   statusBadge: {
@@ -370,7 +327,7 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   handoffCard: {
-    backgroundColor: "#FFF8F1",
+    backgroundColor: partnerTheme.colors.neutralSoft,
     borderRadius: 16,
     padding: 12,
     marginBottom: 12
@@ -378,7 +335,7 @@ const styles = StyleSheet.create({
   handoffLabel: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#C4541C",
+    color: partnerTheme.colors.primary,
     textTransform: "uppercase",
     letterSpacing: 0.7
   },
@@ -386,12 +343,12 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 14,
     fontWeight: "800",
-    color: "#2C2018"
+    color: partnerTheme.colors.primaryDark
   },
   handoffSubtext: {
     marginTop: 3,
     fontSize: 12,
-    color: "#7B6D63"
+    color: partnerTheme.colors.muted
   },
   itemRow: {
     flexDirection: "row",
@@ -402,36 +359,36 @@ const styles = StyleSheet.create({
   itemText: {
     flex: 1,
     fontSize: 13,
-    color: "#5E5148",
+    color: partnerTheme.colors.mutedDark,
     marginRight: 12
   },
   itemPrice: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#2C2018"
+    color: partnerTheme.colors.primaryDark
   },
   moreItems: {
     marginTop: 4,
     fontSize: 12,
-    color: "#8B6A54"
+    color: partnerTheme.colors.muted
   },
   orderFooter: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "#F2E9E0",
+    borderTopColor: partnerTheme.colors.borderSoft,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center"
   },
   totalLabel: {
     fontSize: 13,
-    color: "#7B6D63"
+    color: partnerTheme.colors.muted
   },
   totalAmount: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: partnerTheme.colors.primary
   },
   emptyList: {
     flexGrow: 1,
@@ -439,9 +396,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24
   },
   emptyContainer: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: partnerTheme.colors.card,
     borderWidth: 1,
-    borderColor: "#EFE5DA",
+    borderColor: partnerTheme.colors.border,
     borderRadius: 24,
     padding: 24,
     alignItems: "center"
@@ -449,24 +406,24 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#2C2018",
+    color: partnerTheme.colors.primaryDark,
     marginBottom: 8
   },
   emptySubText: {
     fontSize: 14,
     lineHeight: 20,
-    color: "#7B6D63",
+    color: partnerTheme.colors.muted,
     textAlign: "center",
     marginBottom: 18
   },
   emptyButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: partnerTheme.colors.primary,
     borderRadius: 16,
     paddingHorizontal: 18,
     paddingVertical: 12
   },
   emptyButtonText: {
-    color: "#FFFFFF",
+    color: partnerTheme.colors.card,
     fontSize: 14,
     fontWeight: "800"
   }

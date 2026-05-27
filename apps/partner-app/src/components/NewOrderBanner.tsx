@@ -16,6 +16,10 @@ type Props = {
   visible: boolean;
   orderId: string;
   itemCount: number;
+  items?: Array<{
+    name: string;
+    quantity: number;
+  }>;
   grandTotal: number;
   onOpen: () => void;
   onAccept?: () => void;
@@ -28,6 +32,7 @@ export default function NewOrderBanner({
   visible,
   orderId,
   itemCount,
+  items = [],
   grandTotal,
   onOpen,
   onAccept,
@@ -94,29 +99,42 @@ export default function NewOrderBanner({
       ]}
     >
       <View style={styles.card}>
-        <Animated.View style={[styles.iconBubble, { transform: [{ scale }] }]}>
-          <Ionicons name="notifications" size={26} color="#FFFFFF" />
-        </Animated.View>
-        <View style={styles.body}>
-          <Text style={styles.eyebrow}>New order received</Text>
-          <Text style={styles.title} numberOfLines={1}>
-            #{orderId.slice(-6).toUpperCase()} - Rs {grandTotal}
-          </Text>
+        <View style={styles.topRow}>
+          <Animated.View style={[styles.iconBubble, { transform: [{ scale }] }]}>
+            <Ionicons name="notifications" size={26} color="#FFFFFF" />
+          </Animated.View>
+          <View style={styles.body}>
+            <Text style={styles.eyebrow}>New order received</Text>
+            <Text style={styles.title} numberOfLines={1}>
+              #{orderId.slice(-6).toUpperCase()} - Rs {grandTotal}
+            </Text>
           <Text style={styles.subtitle}>
             {itemCount} item{itemCount === 1 ? "" : "s"} waiting for accept / reject
           </Text>
+          {items.length > 0 ? (
+            <View style={styles.itemsWrap}>
+              {items.map((item) => (
+                <View key={`${orderId}-${item.name}`} style={styles.itemChip}>
+                  <Text style={styles.itemChipText} numberOfLines={1}>
+                    {item.quantity} x {item.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
-        <View style={styles.actions}>
+          <TouchableOpacity style={styles.dismissButton} onPress={onDismiss} activeOpacity={0.85}>
+            <Ionicons name="close" size={20} color="#7B6D63" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.actionButtonsRow}>
           {onReject ? (
-            <TouchableOpacity style={styles.rejectButton} onPress={onReject} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={onReject} activeOpacity={0.85}>
               <Text style={styles.rejectButtonText}>Reject</Text>
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={styles.openButton} onPress={onAccept || onOpen} activeOpacity={0.85}>
+          <TouchableOpacity style={[styles.actionButton, styles.openButton]} onPress={onAccept || onOpen} activeOpacity={0.85}>
             <Text style={styles.openButtonText}>{onAccept ? "Accept" : "Open"}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.dismissButton} onPress={onDismiss} activeOpacity={0.85}>
-            <Ionicons name="close" size={20} color="#7B6D63" />
           </TouchableOpacity>
         </View>
       </View>
@@ -135,8 +153,6 @@ const styles = StyleSheet.create({
     elevation: 12
   },
   card: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 22,
     paddingVertical: 12,
@@ -152,6 +168,10 @@ const styles = StyleSheet.create({
         shadowRadius: 12
       }
     })
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center"
   },
   iconBubble: {
     width: 48,
@@ -185,9 +205,35 @@ const styles = StyleSheet.create({
     color: "#7B6D63",
     marginTop: 2
   },
-  actions: {
-    alignItems: "flex-end",
-    gap: 6
+  itemsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 10
+  },
+  itemChip: {
+    backgroundColor: "#F4F8FF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  itemChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#143A66"
+  },
+  actionButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 12
+  },
+  actionButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center"
   },
   rejectButton: {
     backgroundColor: "#FFF1F1",
@@ -201,11 +247,6 @@ const styles = StyleSheet.create({
     color: "#B42318",
     fontSize: 12,
     fontWeight: "900"
-  },
-  actionButtonsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6
   },
   openButton: {
     backgroundColor: "#143A66",

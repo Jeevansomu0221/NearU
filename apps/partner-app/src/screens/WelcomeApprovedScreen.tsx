@@ -8,7 +8,7 @@ export default function WelcomeApprovedScreen({ navigation }: any) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}
+      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.hero}>

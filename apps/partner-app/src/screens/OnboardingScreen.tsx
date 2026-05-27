@@ -415,35 +415,47 @@ export default function OnboardingScreen({ navigation }: any) {
     return uploadData.data.url;
   };
 
+  const resolveDocumentPicker = async () => {
+    const module: any = await import("expo-document-picker");
+    const getDocumentAsync =
+      module.getDocumentAsync ||
+      module.default?.getDocumentAsync ||
+      module.default?.default?.getDocumentAsync;
+
+    if (typeof getDocumentAsync !== "function") {
+      throw new Error("Document picker is unavailable in this app build.");
+    }
+
+    return getDocumentAsync;
+  };
+
   const pickAsset = async (): Promise<PickerAsset | null> => {
-    let DocumentPickerModule: typeof import("expo-document-picker");
     try {
-      DocumentPickerModule = await import("expo-document-picker");
+      const getDocumentAsync = await resolveDocumentPicker();
+      const result = await getDocumentAsync({
+        type: ["image/*", "application/pdf"],
+        copyToCacheDirectory: true,
+        multiple: false
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return null;
+      }
+
+      const asset = result.assets[0];
+      return {
+        uri: asset.uri,
+        fileName: asset.name,
+        mimeType: asset.mimeType
+      };
     } catch (error: any) {
       console.error("Document picker module unavailable:", error);
       Alert.alert(
-        "Update required",
-        "This partner app build does not include the PDF picker yet. Please install the latest partner app build to upload PDF documents."
+        "Picker Failed",
+        error?.message || "Could not open the document picker."
       );
       return null;
     }
-
-    const result = await DocumentPickerModule.getDocumentAsync({
-      type: ["image/*", "application/pdf"],
-      copyToCacheDirectory: true,
-      multiple: false
-    });
-
-    if (result.canceled || !result.assets?.[0]) {
-      return null;
-    }
-
-    const asset = result.assets[0];
-    return {
-      uri: asset.uri,
-      fileName: asset.name,
-      mimeType: asset.mimeType
-    };
   };
 
   const getDocumentTitle = (docKey: Exclude<UploadingKey, null>) => {
@@ -941,7 +953,7 @@ export default function OnboardingScreen({ navigation }: any) {
     >
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ paddingTop: insets.top + 14, paddingBottom: insets.bottom + 180, flexGrow: 1 }}
+        contentContainerStyle={{ paddingTop: 10, paddingBottom: insets.bottom + 180, flexGrow: 1 }}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}

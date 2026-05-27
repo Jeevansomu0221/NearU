@@ -42,10 +42,42 @@ const TEST_RES1_ITEMS: MenuSeed[] = [
   { name: "Blueberry Cheesecake Jar", description: "Creamy cheesecake in a jar", price: 129, category: "Desserts", isVegetarian: true, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1533134242443-d4fd215305ad" }
 ];
 
-const upsertMenuForPartner = async (phone: string, restaurantName: string, items: MenuSeed[]) => {
-  const partner = await Partner.findOne({ phone });
+const RAJA_CLOUD_KITCHEN_ITEMS: MenuSeed[] = [
+  { name: "Plain Dosa", description: "Crispy dosa with chutney and sambar", price: 79, category: "Breakfast", isVegetarian: true, preparationTime: 10, imageUrl: "https://images.unsplash.com/photo-1630383249896-424e482df921" },
+  { name: "Masala Dosa", description: "Dosa stuffed with spiced potato masala", price: 99, category: "Breakfast", isVegetarian: true, preparationTime: 12, imageUrl: "https://images.unsplash.com/photo-1626500155537-93690a4f4937" },
+  { name: "Idly (2 pcs)", description: "Soft steamed idly served hot", price: 59, category: "Breakfast", isVegetarian: true, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1589302168068-964664d93dc0" },
+  { name: "Ghee Podi Idly", description: "Mini idly tossed with ghee and podi", price: 89, category: "Breakfast", isVegetarian: true, preparationTime: 9, imageUrl: "https://images.unsplash.com/photo-1601050690597-df0568f70950" },
+  { name: "Bread Omelette", description: "Street-style bread omelette with masala", price: 69, category: "Egg Specials", isVegetarian: false, preparationTime: 9, imageUrl: "https://images.unsplash.com/photo-1482049016688-2d3e1b311543" },
+  { name: "Egg Fry (2 Eggs)", description: "Pan-fried eggs with onion and chili", price: 79, category: "Egg Specials", isVegetarian: false, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1498654896293-37aacf113fd9" },
+  { name: "Veg Fried Rice", description: "Classic Indo-Chinese veg fried rice", price: 119, category: "Rice", isVegetarian: true, preparationTime: 12, imageUrl: "https://images.unsplash.com/photo-1512058564366-18510be2db19" },
+  { name: "Egg Fried Rice", description: "Fried rice with eggs and spring onion", price: 129, category: "Rice", isVegetarian: false, preparationTime: 13, imageUrl: "https://images.unsplash.com/photo-1603133872878-684f208fb84b" },
+  { name: "Chicken Fried Rice", description: "Smoky fried rice with juicy chicken", price: 159, category: "Rice", isVegetarian: false, preparationTime: 14, imageUrl: "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f" },
+  { name: "Veg Biryani", description: "Aromatic dum biryani with mixed vegetables", price: 149, category: "Biryani", isVegetarian: true, preparationTime: 18, imageUrl: "https://images.unsplash.com/photo-1563379091339-03246963d51a" },
+  { name: "Chicken Dum Biryani", description: "Spicy chicken dum biryani", price: 199, category: "Biryani", isVegetarian: false, preparationTime: 20, imageUrl: "https://images.unsplash.com/photo-1599043513900-ed6fe01d3833" },
+  { name: "Jeera Rice", description: "Steamed jeera rice with ghee aroma", price: 99, category: "Rice", isVegetarian: true, preparationTime: 10, imageUrl: "https://images.unsplash.com/photo-1512058564366-18510be2db19" },
+  { name: "Maggie Masala", description: "Classic masala maggie with veggies", price: 69, category: "Snacks", isVegetarian: true, preparationTime: 7, imageUrl: "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841" },
+  { name: "Paneer Butter Masala", description: "Creamy paneer curry with rich gravy", price: 179, category: "Curries", isVegetarian: true, preparationTime: 16, imageUrl: "https://images.unsplash.com/photo-1604908176997-4317c7eaeb9b" },
+  { name: "Chicken Curry", description: "Homestyle spicy chicken curry", price: 189, category: "Curries", isVegetarian: false, preparationTime: 17, imageUrl: "https://images.unsplash.com/photo-1601050690117-8b3b8f567f1f" },
+  { name: "Curd Rice", description: "Cooling curd rice tempered with mustard", price: 89, category: "Rice", isVegetarian: true, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1596797038530-2c107aa1e2fd" }
+];
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const upsertMenuForPartner = async (
+  phone: string | null,
+  restaurantName: string,
+  items: MenuSeed[]
+) => {
+  let partner = phone ? await Partner.findOne({ phone }) : null;
+
   if (!partner) {
-    console.log(`⚠️ Partner not found for ${restaurantName} (${phone})`);
+    partner = await Partner.findOne({
+      restaurantName: { $regex: new RegExp(`^${escapeRegex(restaurantName)}$`, "i") }
+    });
+  }
+
+  if (!partner) {
+    console.log(`Partner not found for ${restaurantName} (${phone || "no-phone"})`);
     return;
   }
 
@@ -68,7 +100,7 @@ const upsertMenuForPartner = async (phone: string, restaurantName: string, items
   partner.hasCompletedSetup = true;
   await partner.save();
 
-  console.log(`✅ Seeded ${items.length} menu items for ${restaurantName} (${phone})`);
+  console.log(`Seeded ${items.length} menu items for ${restaurantName}`);
 };
 
 const run = async () => {
@@ -79,15 +111,16 @@ const run = async () => {
     }
 
     await mongoose.connect(mongoURI);
-    console.log("✅ Connected to MongoDB");
+    console.log("Connected to MongoDB");
 
     await upsertMenuForPartner("9999900000", "Fastfood test", FASTFOOD_TEST_ITEMS);
     await upsertMenuForPartner("1010101010", "Test res1", TEST_RES1_ITEMS);
+    await upsertMenuForPartner(process.env.RAJA_CLOUD_PHONE || null, "Raja cloud", RAJA_CLOUD_KITCHEN_ITEMS);
 
-    console.log("🎉 Mock partner menu seeding complete");
+    console.log("Mock partner menu seeding complete");
     process.exit(0);
   } catch (error) {
-    console.error("❌ Failed to seed mock partner menus:", error);
+    console.error("Failed to seed mock partner menus:", error);
     process.exit(1);
   }
 };

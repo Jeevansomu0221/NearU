@@ -14,6 +14,7 @@ import RazorpayCheckout from "react-native-razorpay";
 import { useCart } from "../context/CartContext";
 import { createShopOrder } from "../api/order.api";
 import { createRazorpayOrder, verifyPayment } from "../api/payment.api";
+import SuccessCelebration from "../components/SuccessCelebration";
 
 interface CheckoutGroup {
   shopId: string;
@@ -381,9 +382,7 @@ export default function PaymentScreen({ route, navigation }: any) {
       <Modal visible={Boolean(successOrders)} transparent animationType="fade">
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
-            <View style={styles.successPulse}>
-              <Text style={styles.successCheck}>✓</Text>
-            </View>
+            <SuccessCelebration />
             <Text style={styles.successTitle}>Order placed successfully</Text>
             <Text style={styles.successText}>
               {successOrders?.length === 1

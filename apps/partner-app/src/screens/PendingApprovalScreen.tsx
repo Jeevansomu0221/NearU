@@ -13,7 +13,10 @@ interface PartnerData {
   status: string;
   hasCompletedSetup?: boolean;
   menuItemsCount?: number;
-  createdAt: string;
+  createdAt?: string;
+  documents?: {
+    submittedAt?: string;
+  };
 }
 
 export default function PendingApprovalScreen({ navigation }: any) {
@@ -21,6 +24,26 @@ export default function PendingApprovalScreen({ navigation }: any) {
   const [partnerData, setPartnerData] = useState<PartnerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const formatCategory = (category?: string) => {
+    if (!category) return "Not available";
+    return category
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  };
+
+  const formatSubmittedDate = (data?: PartnerData | null) => {
+    const rawDate = data?.documents?.submittedAt || data?.createdAt;
+    if (!rawDate) return "Not available";
+    const parsed = new Date(rawDate);
+    if (Number.isNaN(parsed.getTime())) return "Not available";
+    return parsed.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    });
+  };
 
   const checkStatus = async (isManual = false) => {
     try {
@@ -78,7 +101,7 @@ export default function PendingApprovalScreen({ navigation }: any) {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 6, paddingBottom: insets.bottom + 16 }]}>
       <View style={styles.mainCard}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>Pending Review</Text>
@@ -99,17 +122,11 @@ export default function PendingApprovalScreen({ navigation }: any) {
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Category</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>{partnerData.category}</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>{formatCategory(partnerData.category)}</Text>
             </View>
             <View style={[styles.infoRow, styles.infoRowLast]}>
               <Text style={styles.infoLabel}>Submitted</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>
-                {new Date(partnerData.createdAt).toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric"
-                })}
-              </Text>
+              <Text style={styles.infoValue} numberOfLines={1}>{formatSubmittedDate(partnerData)}</Text>
             </View>
           </View>
         ) : null}

@@ -116,6 +116,8 @@ type PickerAsset = {
 
 const CATEGORY_LABELS: Record<string, string> = {
   bakery: "Bakery",
+  restaurant: "Restaurant",
+  "cloud-kitchen": "Cloud Kitchen",
   "mini-restaurant": "Restaurant",
   grocery: "Grocery",
   "tiffin-center": "Tiffin center",

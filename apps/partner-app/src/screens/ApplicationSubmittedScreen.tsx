@@ -8,7 +8,7 @@ export default function ApplicationSubmittedScreen({ navigation, route }: any) {
   const restaurantName = route?.params?.restaurantName || "your shop";
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 18 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 18 }]}>
       <View style={styles.card}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>Submitted</Text>

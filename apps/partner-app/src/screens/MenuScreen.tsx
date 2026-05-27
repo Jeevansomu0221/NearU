@@ -56,6 +56,8 @@ const withCommonCategories = (categories: string[]) => [...categories, "Hots", "
 
 const CATEGORY_BY_SHOP_TYPE: Record<string, string[]> = {
   bakery: withCommonCategories(["Breads", "Cakes", "Pastries", "Cookies", "Puffs", "Buns"]),
+  restaurant: withCommonCategories(["Veg Meals", "Non Veg Meals", "Biryani", "Curries", "Rice", "Combos"]),
+  "cloud-kitchen": withCommonCategories(["Veg Meals", "Non Veg Meals", "Biryani", "Curries", "Rice", "Combos"]),
   "mini-restaurant": withCommonCategories(["Veg Meals", "Non Veg Meals", "Biryani", "Curries", "Rice", "Combos"]),
   grocery: withCommonCategories(["Staples", "Snacks", "Dairy", "Beverages", "Personal Care", "Household"]),
   "tiffin-center": withCommonCategories(["Idli", "Dosa", "Poori", "Uttapam", "Meals", "Snacks"]),
@@ -540,6 +542,14 @@ export default function MenuScreen({ navigation }: any) {
           </ScrollView>
         </View>
       </Modal>
+
+      <TouchableOpacity
+        style={[styles.fabButton, { bottom: 18 + insets.bottom }]}
+        onPress={() => openEditor()}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -933,5 +943,20 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800"
+  },
+  fabButton: {
+    position: "absolute",
+    right: 18,
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: "#2F80ED",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#143A66",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 5
   }
 });

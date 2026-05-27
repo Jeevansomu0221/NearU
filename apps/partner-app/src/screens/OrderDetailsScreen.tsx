@@ -1,17 +1,19 @@
-// apps/partner-app/src/screens/OrderDetailsScreen.tsx
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
+  Animated,
   ActivityIndicator,
   Alert,
+  Modal,
+  PanResponder,
   RefreshControl,
-  Modal
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import api from "../api/client";
+import { partnerTheme } from "../theme";
 
 interface OrderItem {
   name: string;
@@ -48,6 +50,116 @@ interface ApiResponse<T = any> {
   data?: T;
 }
 
+type SwipeActionProps = {
+  title: string;
+  subtitle: string;
+  actionLabel: string;
+  accentColor: string;
+  onConfirm: () => Promise<void>;
+  disabled?: boolean;
+};
+
+function SwipeAction({ title, subtitle, actionLabel, accentColor, onConfirm, disabled }: SwipeActionProps) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const thumbSize = 56;
+  const [fillWidth, setFillWidth] = useState(thumbSize + 16);
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  const maxTranslate = Math.max(0, trackWidth - thumbSize - 16);
+
+  const resetThumb = () => {
+    setFillWidth(thumbSize + 16);
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 0
+    }).start();
+  };
+
+  const confirmSwipe = async () => {
+    if (disabled || !maxTranslate) return;
+
+    setFillWidth(maxTranslate + thumbSize + 16);
+    Animated.timing(translateX, {
+      toValue: maxTranslate,
+      duration: 160,
+      useNativeDriver: true
+    }).start(async () => {
+      try {
+        await onConfirm();
+      } finally {
+        resetThumb();
+      }
+    });
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabled && maxTranslate > 0,
+        onMoveShouldSetPanResponder: (_, gesture) => !disabled && maxTranslate > 0 && Math.abs(gesture.dx) > 6,
+        onPanResponderMove: (_, gesture) => {
+          if (disabled || !maxTranslate) return;
+          const nextX = Math.max(0, Math.min(gesture.dx, maxTranslate));
+          translateX.setValue(nextX);
+          setFillWidth(nextX + thumbSize + 16);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (disabled || !maxTranslate) return;
+          const shouldConfirm = gesture.dx > maxTranslate * 0.7;
+          if (shouldConfirm) {
+            void confirmSwipe();
+          } else {
+            resetThumb();
+          }
+        },
+        onPanResponderTerminate: () => {
+          resetThumb();
+        }
+      }),
+    [disabled, maxTranslate, onConfirm]
+  );
+
+  return (
+    <View style={styles.swipeActionCard}>
+      <Text style={styles.swipeTitle}>{title}</Text>
+      <Text style={styles.swipeSubtitle}>{subtitle}</Text>
+
+      <View style={styles.swipeTrackWrap} onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}>
+        <View
+          pointerEvents="none"
+          style={[
+            styles.swipeFill,
+            {
+              backgroundColor: accentColor,
+              width: fillWidth
+            }
+          ]}
+        />
+        <View style={styles.swipeTrack}>
+          <Text style={styles.swipeTrackHint}>{actionLabel}</Text>
+        </View>
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            styles.swipeThumb,
+            {
+              width: thumbSize,
+              height: thumbSize,
+              borderColor: accentColor,
+              backgroundColor: accentColor,
+              transform: [{ translateX }]
+            }
+          ]}
+        >
+          <Text style={styles.swipeThumbText}>›</Text>
+        </Animated.View>
+      </View>
+      <Text style={[styles.swipeFooter, { color: accentColor }]}>Swipe all the way right to confirm</Text>
+    </View>
+  );
+}
+
 export default function OrderDetailsScreen({ route, navigation }: any) {
   const { orderId } = route.params;
   const [order, setOrder] = useState<Order | null>(null);
@@ -59,9 +171,8 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const loadOrderDetails = async () => {
     try {
       const res = await api.get(`/orders/partner/${orderId}`);
-      // Type cast the response
       const response = res.data as ApiResponse<Order>;
-      
+
       if (response.success && response.data) {
         setOrder(response.data);
       } else {
@@ -85,95 +196,140 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
     loadOrderDetails();
   };
 
-  const updateOrderStatus = async (status: string) => {
-    setPendingStatus(status);
-  };
-
-  const confirmStatusUpdate = async () => {
-    if (!pendingStatus) return;
-
+  const performStatusUpdate = async (status: string) => {
     try {
       setUpdating(true);
-      const res = await api.post(`/orders/partner/${orderId}/status`, { status: pendingStatus });
+      const res = await api.post(`/orders/partner/${orderId}/status`, { status });
       const response = res.data as ApiResponse<Order>;
 
       if (response.success) {
         setPendingStatus(null);
-        loadOrderDetails();
+        await loadOrderDetails();
       } else {
         Alert.alert("Error", response.message || "Failed to update order");
       }
-    } catch (error) {
-      console.error("Error in updateOrderStatus:", error);
-      Alert.alert("Error", "Failed to update order status");
+    } catch (error: any) {
+      const message = error.response?.data?.message || "Failed to update order status";
+      if (status === "REJECTED" && String(message).includes("CANCELLED")) {
+        setPendingStatus(null);
+        await loadOrderDetails();
+        Alert.alert(
+          "Order cancelled",
+          "This order is already cancelled. If online payment was done, the refund will be completed within today."
+        );
+        return;
+      }
+
+      console.error("Error updating order status:", error);
+      Alert.alert("Error", message);
     } finally {
       setUpdating(false);
     }
   };
 
+  const confirmStatusUpdate = async () => {
+    if (!pendingStatus) return;
+    await performStatusUpdate(pendingStatus);
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
     });
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'PENDING': return '#FF9800';
-      case 'CONFIRMED': return '#2196F3';
-      case 'ACCEPTED': return '#00BCD4';
-      case 'PREPARING': return '#FF5722';
-      case 'READY': return '#9C27B0';
-      case 'ASSIGNED': return '#FF9800';
-      case 'PICKED_UP': return '#673AB7';
-      case 'DELIVERED': return '#4CAF50';
-      case 'CANCELLED': return '#F44336';
-      case 'REJECTED': return '#795548';
-      default: return '#666';
+      case "PENDING":
+        return "#FF9800";
+      case "CONFIRMED":
+        return "#2196F3";
+      case "ACCEPTED":
+        return "#00BCD4";
+      case "PREPARING":
+        return "#FF5722";
+      case "READY":
+        return "#9C27B0";
+      case "ASSIGNED":
+        return "#FF9800";
+      case "PICKED_UP":
+        return "#673AB7";
+      case "DELIVERED":
+        return "#4CAF50";
+      case "CANCELLED":
+        return "#F44336";
+      case "REJECTED":
+        return "#795548";
+      default:
+        return partnerTheme.colors.muted;
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'Payment Pending';
-      case 'CONFIRMED': return 'Order Placed';
-      case 'ACCEPTED': return 'Accepted';
-      case 'PREPARING': return 'Preparing Food';
-      case 'READY': return 'Ready for Pickup';
-      case 'ASSIGNED': return 'Delivery Assigned';
-      case 'PICKED_UP': return 'Picked Up';
-      case 'DELIVERED': return 'Delivered';
-      case 'CANCELLED': return 'Cancelled';
-      case 'REJECTED': return 'Rejected';
-      default: return status;
+      case "PENDING":
+        return "Payment Pending";
+      case "CONFIRMED":
+        return "Order Placed";
+      case "ACCEPTED":
+        return "Accepted";
+      case "PREPARING":
+        return "Preparing Food";
+      case "READY":
+        return "Ready for Pickup";
+      case "ASSIGNED":
+        return "Delivery Assigned";
+      case "PICKED_UP":
+        return "Picked Up";
+      case "DELIVERED":
+        return "Delivered";
+      case "CANCELLED":
+        return "Cancelled";
+      case "REJECTED":
+        return "Rejected";
+      default:
+        return status;
     }
   };
 
   const getPaymentMethodText = (method: string) => {
     switch (method) {
-      case 'CASH_ON_DELIVERY': return 'Pay on Delivery';
-      case 'UPI': return 'UPI Payment';
-      case 'RAZORPAY': return 'Online Payment';
-      case 'CARD': return 'Card Payment';
-      case 'WALLET': return 'Wallet Payment';
-      default: return method;
+      case "CASH_ON_DELIVERY":
+        return "Pay on Delivery";
+      case "UPI":
+        return "UPI Payment";
+      case "RAZORPAY":
+        return "Online Payment";
+      case "CARD":
+        return "Card Payment";
+      case "WALLET":
+        return "Wallet Payment";
+      default:
+        return method;
     }
   };
 
   const getPaymentStatusText = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'Pending';
-      case 'PAYMENT_PENDING_DELIVERY': return 'Collect on Delivery';
-      case 'PAID': return 'Paid';
-      case 'FAILED': return 'Failed';
-      case 'REFUNDED': return 'Refunded';
-      case 'CANCELLED': return 'Cancelled';
-      default: return status;
+      case "PENDING":
+        return "Pending";
+      case "PAYMENT_PENDING_DELIVERY":
+        return "Collect on Delivery";
+      case "PAID":
+        return "Paid";
+      case "FAILED":
+        return "Failed";
+      case "REFUNDED":
+        return "Refunded";
+      case "CANCELLED":
+        return "Cancelled";
+      default:
+        return status;
     }
   };
 
@@ -183,12 +339,8 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
         return "Accept order";
       case "REJECTED":
         return "Reject order";
-      case "PREPARING":
-        return "Mark as preparing";
-      case "READY":
-        return "Mark as ready";
       default:
-        return `Mark as ${pendingStatus?.replace("_", " ").toLowerCase() || "updated"}`;
+        return `Mark as ${pendingStatus?.replaceAll("_", " ").toLowerCase() || "updated"}`;
     }
   };
 
@@ -197,7 +349,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       case "ACCEPTED":
         return "The customer will see that your restaurant accepted the order.";
       case "REJECTED":
-        return "The order will be cancelled and the customer will see the refund message if payment was done.";
+        return "The order will be marked as cancelled. The customer will see that any online payment refund will be completed within today.";
       default:
         return "";
     }
@@ -206,7 +358,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
+        <ActivityIndicator size="large" color={partnerTheme.colors.primary} />
         <Text style={styles.loadingText}>Loading order details...</Text>
       </View>
     );
@@ -216,34 +368,26 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Order not found</Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // Determine which actions are available based on current status
   const showAcceptButton = order.status === "CONFIRMED";
   const showRejectButton = order.status === "CONFIRMED";
-  const showPreparingButton = order.status === "ACCEPTED";
-  const showReadyButton = order.status === "PREPARING";
+  const showPreparingSwipe = order.status === "ACCEPTED";
+  const showReadySwipe = order.status === "PREPARING";
+  const isCancelledOrder = order.status === "CANCELLED" || order.status === "REJECTED";
 
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={["#FF6B35"]}
-        />
-      }
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[partnerTheme.colors.primary]} tintColor={partnerTheme.colors.primary} />}
+      contentContainerStyle={{ paddingBottom: 24 }}
+      showsVerticalScrollIndicator={false}
     >
-      {/* Order Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.orderId}>Order #{order._id.slice(-6)}</Text>
@@ -254,50 +398,54 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
         </View>
       </View>
 
-      {/* Order Actions */}
       <View style={styles.actionsContainer}>
-        {showAcceptButton && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.acceptButton]}
-            onPress={() => updateOrderStatus("ACCEPTED")}
-            disabled={updating}
-          >
-            <Text style={styles.actionButtonText}>✓ Accept Order</Text>
-          </TouchableOpacity>
-        )}
-
-        {showPreparingButton && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.preparingButton]}
-            onPress={() => updateOrderStatus("PREPARING")}
-            disabled={updating}
-          >
-            <Text style={styles.actionButtonText}>👨‍🍳 Start Preparing</Text>
-          </TouchableOpacity>
-        )}
-
-        {showReadyButton && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.readyButton]}
-            onPress={() => updateOrderStatus("READY")}
-            disabled={updating}
-          >
-            <Text style={styles.actionButtonText}>✅ Mark as Ready</Text>
-          </TouchableOpacity>
-        )}
-
         {showRejectButton && (
           <TouchableOpacity
             style={[styles.actionButton, styles.rejectButton]}
-            onPress={() => updateOrderStatus("REJECTED")}
+            onPress={() => setPendingStatus("REJECTED")}
             disabled={updating}
           >
-            <Text style={styles.actionButtonText}>✗ Reject Order</Text>
+            <Text style={styles.actionButtonText}>Reject Order</Text>
+          </TouchableOpacity>
+        )}
+
+        {showAcceptButton && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.acceptButton]}
+            onPress={() => setPendingStatus("ACCEPTED")}
+            disabled={updating}
+          >
+            <Text style={styles.actionButtonText}>Accept Order</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Parcel Handoff */}
+      {showPreparingSwipe ? (
+        <View style={styles.section}>
+          <SwipeAction
+            title="Start preparation"
+            subtitle="Swipe the handle to move this order into the kitchen queue."
+            actionLabel="Swipe to start preparing"
+            accentColor={partnerTheme.colors.warning}
+            onConfirm={() => performStatusUpdate("PREPARING")}
+            disabled={updating}
+          />
+        </View>
+      ) : null}
+
+      {showReadySwipe ? (
+        <View style={styles.section}>
+          <SwipeAction
+            title="Mark ready"
+            subtitle="Swipe once the order is packed and ready for handoff."
+            actionLabel="Swipe to mark ready"
+            accentColor={partnerTheme.colors.success}
+            onConfirm={() => performStatusUpdate("READY")}
+            disabled={updating}
+          />
+        </View>
+      ) : null}
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Parcel Handoff</Text>
         <View style={styles.infoCard}>
@@ -309,32 +457,32 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
             <Text style={styles.infoLabel}>Delivery Partner:</Text>
             <Text style={styles.infoValue}>{order.deliveryPartnerId?.name || "Not assigned yet"}</Text>
           </View>
-          {order.note && (
+          {order.note ? (
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Packing Note:</Text>
               <Text style={styles.infoValue}>{order.note}</Text>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
 
-      {/* Order Items */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Order Items</Text>
         <View style={styles.infoCard}>
-          {order.items && order.items.map((item, index) => (
+          {order.items?.map((item, index) => (
             <View key={index} style={styles.itemRow}>
               <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{item.quantity} × {item.name}</Text>
-                <Text style={styles.itemPrice}>₹{item.price} each</Text>
+                <Text style={styles.itemName}>
+                  {item.quantity} x {item.name}
+                </Text>
+                <Text style={styles.itemPrice}>Rs {item.price} each</Text>
               </View>
-              <Text style={styles.itemTotal}>₹{item.price * item.quantity}</Text>
+              <Text style={styles.itemTotal}>Rs {item.price * item.quantity}</Text>
             </View>
           ))}
         </View>
       </View>
 
-      {/* Payment Details */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Payment Details</Text>
         <View style={styles.infoCard}>
@@ -344,42 +492,43 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Payment Status:</Text>
-            <View style={[
-              styles.paymentStatusBadge,
-              { 
-                backgroundColor: order.paymentStatus === "PAID" ? "#4CAF50" :
-                                order.paymentStatus === "PAYMENT_PENDING_DELIVERY" ? "#FF9800" :
-                                order.paymentStatus === "PENDING" ? "#FF9800" : "#F44336"
-              }
-            ]}>
-              <Text style={styles.paymentStatusText}>
-                {getPaymentStatusText(order.paymentStatus)}
-              </Text>
+            <View
+              style={[
+                styles.paymentStatusBadge,
+                {
+                  backgroundColor:
+                    order.paymentStatus === "PAID"
+                      ? "#4CAF50"
+                      : order.paymentStatus === "PAYMENT_PENDING_DELIVERY" || order.paymentStatus === "PENDING"
+                        ? "#FF9800"
+                        : "#F44336"
+                }
+              ]}
+            >
+              <Text style={styles.paymentStatusText}>{getPaymentStatusText(order.paymentStatus)}</Text>
             </View>
           </View>
         </View>
       </View>
 
-      {/* Order Summary */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Order Summary</Text>
         <View style={styles.infoCard}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Item Total</Text>
-            <Text style={styles.summaryValue}>₹{order.itemTotal}</Text>
+            <Text style={styles.summaryValue}>Rs {order.itemTotal}</Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Delivery Fee</Text>
-            <Text style={styles.summaryValue}>₹{order.deliveryFee || 49}</Text>
+            <Text style={styles.summaryValue}>Rs {order.deliveryFee || 49}</Text>
           </View>
           <View style={styles.grandTotalRow}>
             <Text style={styles.grandTotalLabel}>Total Amount</Text>
-            <Text style={styles.grandTotalValue}>₹{order.grandTotal}</Text>
+            <Text style={styles.grandTotalValue}>Rs {order.grandTotal}</Text>
           </View>
         </View>
       </View>
 
-      {/* Order Timeline */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Order Timeline</Text>
         <View style={styles.timeline}>
@@ -391,12 +540,22 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
             </View>
           </View>
 
-          {order.status !== "CONFIRMED" && (
+          {!isCancelledOrder && order.status !== "CONFIRMED" && (
             <View style={styles.timelineItem}>
               <View style={[styles.timelineDot, { backgroundColor: getStatusColor("ACCEPTED") }]} />
               <View style={styles.timelineContent}>
                 <Text style={styles.timelineTitle}>Order Accepted</Text>
-                <Text style={styles.timelineTime}>—</Text>
+                <Text style={styles.timelineTime}>-</Text>
+              </View>
+            </View>
+          )}
+
+          {isCancelledOrder && (
+            <View style={styles.timelineItem}>
+              <View style={[styles.timelineDot, { backgroundColor: getStatusColor("CANCELLED") }]} />
+              <View style={styles.timelineContent}>
+                <Text style={styles.timelineTitle}>Order Cancelled</Text>
+                <Text style={styles.timelineTime}>Refund will be completed within today if online payment was done.</Text>
               </View>
             </View>
           )}
@@ -406,7 +565,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
               <View style={[styles.timelineDot, { backgroundColor: getStatusColor("PREPARING") }]} />
               <View style={styles.timelineContent}>
                 <Text style={styles.timelineTitle}>Food Preparation</Text>
-                <Text style={styles.timelineTime}>—</Text>
+                <Text style={styles.timelineTime}>-</Text>
               </View>
             </View>
           )}
@@ -416,7 +575,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
               <View style={[styles.timelineDot, { backgroundColor: getStatusColor("READY") }]} />
               <View style={styles.timelineContent}>
                 <Text style={styles.timelineTitle}>Ready for Pickup</Text>
-                <Text style={styles.timelineTime}>—</Text>
+                <Text style={styles.timelineTime}>-</Text>
               </View>
             </View>
           )}
@@ -451,143 +610,133 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: partnerTheme.colors.background
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: partnerTheme.colors.background
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: partnerTheme.colors.muted
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
+    backgroundColor: partnerTheme.colors.background
   },
   errorText: {
     fontSize: 18,
-    color: '#F44336',
-    marginBottom: 20,
+    color: partnerTheme.colors.danger,
+    marginBottom: 20
   },
   backButton: {
-    backgroundColor: '#FF6B35',
+    backgroundColor: partnerTheme.colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 8
   },
   backButtonText: {
-    color: 'white',
+    color: partnerTheme.colors.card,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600"
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: partnerTheme.colors.card,
     padding: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: partnerTheme.colors.border
   },
   orderId: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: "700",
+    color: partnerTheme.colors.primaryDark
   },
   orderDate: {
     fontSize: 14,
-    color: '#888',
-    marginTop: 4,
+    color: partnerTheme.colors.muted,
+    marginTop: 4
   },
   statusBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 999
   },
   statusText: {
-    color: 'white',
+    color: partnerTheme.colors.card,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600"
   },
   actionsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: partnerTheme.colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    gap: 8,
+    borderBottomColor: partnerTheme.colors.borderSoft,
+    gap: 8
   },
   actionButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    minWidth: 120,
+    borderRadius: 14,
+    alignItems: "center",
+    minWidth: 0
   },
   acceptButton: {
-    backgroundColor: '#4CAF50',
-  },
-  preparingButton: {
-    backgroundColor: '#FF9800',
-  },
-  readyButton: {
-    backgroundColor: '#9C27B0',
+    backgroundColor: partnerTheme.colors.success
   },
   rejectButton: {
-    backgroundColor: '#F44336',
+    backgroundColor: partnerTheme.colors.danger
   },
   actionButtonText: {
-    color: 'white',
+    color: partnerTheme.colors.card,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "700"
   },
   section: {
-    backgroundColor: '#fff',
+    backgroundColor: partnerTheme.colors.background,
     padding: 16,
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    marginTop: 8
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    fontWeight: "700",
+    color: partnerTheme.colors.primaryDark,
+    marginBottom: 12
   },
   infoCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: partnerTheme.colors.card,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border
   },
   infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 12,
-    alignItems: 'flex-start',
+    alignItems: "flex-start"
   },
   infoLabel: {
     fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-    flex: 1,
+    color: partnerTheme.colors.muted,
+    fontWeight: "500",
+    flex: 1
   },
   infoValue: {
     fontSize: 14,
-    color: '#333',
+    color: partnerTheme.colors.primaryDark,
     flex: 2,
-    textAlign: 'right',
-    lineHeight: 20,
-  },
-  phoneText: {
-    color: '#2196F3',
+    textAlign: "right",
+    lineHeight: 20
   },
   modalOverlay: {
     flex: 1,
@@ -596,16 +745,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22
   },
   confirmCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: partnerTheme.colors.card,
     borderRadius: 22,
     padding: 20,
     borderWidth: 1,
-    borderColor: "#FFE0CC"
+    borderColor: partnerTheme.colors.border
   },
   confirmEyebrow: {
     fontSize: 12,
     fontWeight: "900",
-    color: "#C4541C",
+    color: partnerTheme.colors.primary,
     letterSpacing: 0.8,
     textTransform: "uppercase"
   },
@@ -613,13 +762,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 22,
     fontWeight: "900",
-    color: "#2C2018"
+    color: partnerTheme.colors.primaryDark
   },
   confirmText: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
-    color: "#6B5E55"
+    color: partnerTheme.colors.muted
   },
   confirmActions: {
     flexDirection: "row",
@@ -631,121 +780,192 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     borderRadius: 14,
     alignItems: "center",
-    backgroundColor: "#F5EFE7"
+    backgroundColor: partnerTheme.colors.neutralSoft
   },
   confirmSecondaryText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#6B5E55"
+    color: partnerTheme.colors.muted
   },
   confirmPrimary: {
     flex: 1,
     paddingVertical: 13,
     borderRadius: 14,
     alignItems: "center",
-    backgroundColor: "#4CAF50"
+    backgroundColor: partnerTheme.colors.success
   },
   confirmDanger: {
-    backgroundColor: "#B42318"
+    backgroundColor: partnerTheme.colors.danger
   },
   confirmPrimaryText: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#FFFFFF"
+    color: partnerTheme.colors.card
   },
   itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: partnerTheme.colors.borderSoft
   },
   itemInfo: {
-    flex: 1,
+    flex: 1
   },
   itemName: {
     fontSize: 14,
-    color: '#333',
-    marginBottom: 4,
+    color: partnerTheme.colors.primaryDark,
+    marginBottom: 4
   },
   itemPrice: {
     fontSize: 13,
-    color: '#666',
+    color: partnerTheme.colors.muted
   },
   itemTotal: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: partnerTheme.colors.primaryDark
   },
   paymentStatusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 6
   },
   paymentStatusText: {
-    color: 'white',
+    color: partnerTheme.colors.card,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600"
   },
   summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8
   },
   summaryLabel: {
     fontSize: 14,
-    color: '#666',
+    color: partnerTheme.colors.muted
   },
   summaryValue: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: "500",
+    color: partnerTheme.colors.primaryDark
   },
   grandTotalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: partnerTheme.colors.borderSoft
   },
   grandTotalLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: partnerTheme.colors.primaryDark
   },
   grandTotalValue: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#FF6B35',
+    fontWeight: "700",
+    color: partnerTheme.colors.primary
   },
   timeline: {
-    marginTop: 8,
+    marginTop: 8
   },
   timelineItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 20,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 20
   },
   timelineDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
     marginTop: 6,
-    marginRight: 12,
+    marginRight: 12
   },
   timelineContent: {
-    flex: 1,
+    flex: 1
   },
   timelineTitle: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
+    fontWeight: "500",
+    color: partnerTheme.colors.primaryDark,
+    marginBottom: 4
   },
   timelineTime: {
     fontSize: 12,
-    color: '#666',
+    color: partnerTheme.colors.muted
   },
+  swipeActionCard: {
+    backgroundColor: partnerTheme.colors.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    padding: 14
+  },
+  swipeTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: partnerTheme.colors.primaryDark
+  },
+  swipeSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 19,
+    color: partnerTheme.colors.muted,
+    marginBottom: 12
+  },
+  swipeTrackWrap: {
+    height: 72,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: partnerTheme.colors.surface,
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    justifyContent: "center"
+  },
+  swipeFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 20
+  },
+  swipeTrack: {
+    flex: 1,
+    justifyContent: "center",
+    paddingLeft: 70,
+    paddingRight: 16
+  },
+  swipeTrackHint: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: partnerTheme.colors.primaryDark
+  },
+  swipeThumb: {
+    position: "absolute",
+    left: 8,
+    top: 8,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: partnerTheme.colors.primaryDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1
+  },
+  swipeThumbText: {
+    color: partnerTheme.colors.card,
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: "300"
+  },
+  swipeFooter: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: "700"
+  }
 });

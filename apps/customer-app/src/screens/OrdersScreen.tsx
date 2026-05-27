@@ -139,7 +139,6 @@ export default function OrdersScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>My Orders</Text>
       
       {orders.length === 0 ? (
         <View style={styles.emptyContainer}>

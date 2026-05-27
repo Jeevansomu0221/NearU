@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -8,7 +8,8 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  Animated
 } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -76,6 +77,145 @@ const categoryLabelMap: Record<string, string> = {
   other: "Food"
 };
 
+interface MenuCardItemProps {
+  item: MenuItem;
+  index: number;
+  quantity: number;
+  selectedCategory: string;
+  getMenuImage: (item: MenuItem, index: number) => string;
+  handleIncrement: (item: MenuItem) => void;
+  handleDecrement: (item: MenuItem) => void;
+  setPreviewImage: (uri: string | null) => void;
+}
+
+function MenuCardItem({
+  item,
+  index,
+  quantity,
+  selectedCategory,
+  getMenuImage,
+  handleIncrement,
+  handleDecrement,
+  setPreviewImage
+}: MenuCardItemProps) {
+  const [floaters, setFloaters] = useState<Array<{ id: number; animY: Animated.Value; animOpacity: Animated.Value }>>([]);
+  const floaterIdRef = useRef(0);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    handleIncrement(item);
+
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.96, duration: 80, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true })
+    ]).start();
+
+    const id = floaterIdRef.current++;
+    const animY = new Animated.Value(0);
+    const animOpacity = new Animated.Value(1);
+
+    setFloaters((prev) => [...prev, { id, animY, animOpacity }]);
+
+    Animated.parallel([
+      Animated.timing(animY, {
+        toValue: -55,
+        duration: 750,
+        useNativeDriver: true
+      }),
+      Animated.timing(animOpacity, {
+        toValue: 0,
+        duration: 750,
+        useNativeDriver: true
+      })
+    ]).start(() => {
+      setFloaters((prev) => prev.filter((f) => f.id !== id));
+    });
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handlePress}
+        style={styles.menuCard}
+      >
+        {index === 0 ? (
+          <View style={styles.bestSellerChip}>
+            <Feather name="star" size={11} color="#F59E0B" />
+            <Text style={styles.bestSellerText}>Best Seller</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.menuCardRow}>
+          <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImage(getMenuImage(item, index))}>
+            <Image source={{ uri: getMenuImage(item, index) }} style={styles.menuImage} resizeMode="cover" />
+          </TouchableOpacity>
+
+          <View style={styles.menuInfo}>
+            <View style={styles.menuInfoTop}>
+              <View style={styles.menuTitleBlock}>
+                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
+              </View>
+              <View style={styles.priceActionBlock}>
+                <Text style={styles.itemPrice}>Rs {item.price}</Text>
+                <View style={styles.stepper}>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleDecrement(item);
+                    }}
+                    disabled={quantity === 0}
+                  >
+                    <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.stepperValue}>{quantity}</Text>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handlePress();
+                    }}
+                  >
+                    <Text style={styles.stepperButtonText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.itemDescription} numberOfLines={3}>
+              {item.description || "Freshly prepared in-store with quality ingredients."}
+            </Text>
+
+            <View style={styles.menuInfoBottom}>
+              <View style={styles.readyRow}>
+                <Feather name="clock" size={12} color="#7C7168" />
+                <Text style={styles.readyText}>Ready in a few minutes</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {floaters.map((f) => (
+          <Animated.View
+            key={f.id}
+            style={[
+              styles.floaterBubble,
+              {
+                transform: [{ translateY: f.animY }],
+                opacity: f.animOpacity
+              }
+            ]}
+          >
+            <Text style={styles.floaterText}>+1 Added</Text>
+          </Animated.View>
+        ))}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 export default function ShopDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { shopId, shop: passedShop } = route.params;
@@ -85,6 +225,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const { items, addItem, updateQuantity, getItemCount, getCartTotal } = useCart();
+  const cartScaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const loadData = async () => {
@@ -227,6 +368,15 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const totalAmount = getCartTotal();
   const bannerImage = shop.shopImageUrl || shopPlaceholders[getShopCategoryKey()] || shopPlaceholders["mini-restaurant"];
 
+  useEffect(() => {
+    if (itemCount > 0) {
+      Animated.sequence([
+        Animated.timing(cartScaleAnim, { toValue: 1.25, duration: 100, useNativeDriver: true }),
+        Animated.spring(cartScaleAnim, { toValue: 1, friction: 3, tension: 40, useNativeDriver: true })
+      ]).start();
+    }
+  }, [itemCount]);
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 118 + Math.max(insets.bottom, 12) }]}>
@@ -335,57 +485,17 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                 const quantity = getCartQuantity(item);
 
                 return (
-                  <View key={item._id} style={styles.menuCard}>
-                    {index === 0 ? (
-                      <View style={styles.bestSellerChip}>
-                        <Feather name="star" size={11} color="#F59E0B" />
-                        <Text style={styles.bestSellerText}>Best Seller</Text>
-                      </View>
-                    ) : null}
-
-                    <View style={styles.menuCardRow}>
-                      <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImage(getMenuImage(item, index))}>
-                        <Image source={{ uri: getMenuImage(item, index) }} style={styles.menuImage} resizeMode="cover" />
-                      </TouchableOpacity>
-
-                      <View style={styles.menuInfo}>
-                        <View style={styles.menuInfoTop}>
-                          <View style={styles.menuTitleBlock}>
-                            <Text style={styles.itemName}>{item.name}</Text>
-                            <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
-                          </View>
-                          <View style={styles.priceActionBlock}>
-                            <Text style={styles.itemPrice}>Rs {item.price}</Text>
-                            <View style={styles.stepper}>
-                              <TouchableOpacity
-                                style={styles.stepperButton}
-                                onPress={() => handleDecrement(item)}
-                                disabled={quantity === 0}
-                              >
-                                <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
-                              </TouchableOpacity>
-                              <Text style={styles.stepperValue}>{quantity}</Text>
-                              <TouchableOpacity style={styles.stepperButton} onPress={() => handleIncrement(item)}>
-                                <Text style={styles.stepperButtonText}>+</Text>
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        </View>
-
-                        <Text style={styles.itemDescription} numberOfLines={3}>
-                          {item.description || "Freshly prepared in-store with quality ingredients."}
-                        </Text>
-
-                        <View style={styles.menuInfoBottom}>
-                          <View style={styles.readyRow}>
-                            <Feather name="clock" size={12} color="#7C7168" />
-                            <Text style={styles.readyText}>Ready in a few minutes</Text>
-                          </View>
-
-                        </View>
-                      </View>
-                    </View>
-                  </View>
+                  <MenuCardItem
+                    key={item._id}
+                    item={item}
+                    index={index}
+                    quantity={quantity}
+                    selectedCategory={selectedCategory}
+                    getMenuImage={getMenuImage}
+                    handleIncrement={handleIncrement}
+                    handleDecrement={handleDecrement}
+                    setPreviewImage={setPreviewImage}
+                  />
                 );
               })}
             </View>
@@ -395,14 +505,14 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.footerLeft}>
-          <View style={styles.footerCartIcon}>
+          <Animated.View style={[styles.footerCartIcon, { transform: [{ scale: cartScaleAnim }] }]}>
             <Feather name="shopping-cart" size={16} color="#FF6B35" />
             {itemCount > 0 ? (
               <View style={styles.footerBadge}>
                 <Text style={styles.footerBadgeText}>{itemCount}</Text>
               </View>
             ) : null}
-          </View>
+          </Animated.View>
           <View>
             <Text style={styles.footerLabel}>Cart</Text>
             <Text style={styles.footerItems}>{itemCount} item{itemCount === 1 ? "" : "s"}</Text>
@@ -950,5 +1060,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.18)"
+  },
+  floaterBubble: {
+    position: "absolute",
+    right: 20,
+    top: 10,
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    zIndex: 99,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3
+  },
+  floaterText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900"
   }
 });
