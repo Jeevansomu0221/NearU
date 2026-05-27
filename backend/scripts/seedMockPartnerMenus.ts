@@ -568,14 +568,21 @@ const DEFAULT_CLUSTER_CENTER = {
 const MOCK_CUSTOMER_PHONE = "9000000001";
 const MOCK_ORDER_NOTE = "mock-partner-dashboard-seed";
 const MOCK_ORDER_PLANS: MockOrderPlan[] = [
-  { status: "CONFIRMED", daysAgo: 0, itemOffset: 0, quantities: [1, 2], paymentMethod: "CASH_ON_DELIVERY" },
-  { status: "CONFIRMED", daysAgo: 0, itemOffset: 2, quantities: [2], paymentMethod: "UPI" },
-  { status: "ACCEPTED", daysAgo: 0, itemOffset: 4, quantities: [1, 1], paymentMethod: "RAZORPAY" },
-  { status: "PREPARING", daysAgo: 0, itemOffset: 6, quantities: [3], paymentMethod: "CASH_ON_DELIVERY" },
-  { status: "DELIVERED", daysAgo: 0, itemOffset: 8, quantities: [1, 1], paymentMethod: "UPI" },
-  { status: "DELIVERED", daysAgo: 1, itemOffset: 10, quantities: [2], paymentMethod: "RAZORPAY" },
-  { status: "DELIVERED", daysAgo: 3, itemOffset: 12, quantities: [1, 2], paymentMethod: "CASH_ON_DELIVERY" },
-  { status: "CANCELLED", daysAgo: 5, itemOffset: 1, quantities: [1], paymentMethod: "CASH_ON_DELIVERY" }
+  { status: "CONFIRMED", daysAgo: 0, itemOffset: 0, quantities: [2, 2], paymentMethod: "CASH_ON_DELIVERY" },
+  { status: "CONFIRMED", daysAgo: 0, itemOffset: 2, quantities: [3], paymentMethod: "UPI" },
+  { status: "CONFIRMED", daysAgo: 0, itemOffset: 4, quantities: [2, 1], paymentMethod: "RAZORPAY" },
+  { status: "CONFIRMED", daysAgo: 1, itemOffset: 6, quantities: [2], paymentMethod: "CASH_ON_DELIVERY" },
+  { status: "ACCEPTED", daysAgo: 0, itemOffset: 8, quantities: [2, 2], paymentMethod: "RAZORPAY" },
+  { status: "PREPARING", daysAgo: 0, itemOffset: 10, quantities: [3], paymentMethod: "CASH_ON_DELIVERY" },
+  { status: "DELIVERED", daysAgo: 0, itemOffset: 12, quantities: [3, 2], paymentMethod: "UPI" },
+  { status: "DELIVERED", daysAgo: 0, itemOffset: 1, quantities: [4], paymentMethod: "RAZORPAY" },
+  { status: "DELIVERED", daysAgo: 1, itemOffset: 3, quantities: [2, 2, 1], paymentMethod: "CASH_ON_DELIVERY" },
+  { status: "DELIVERED", daysAgo: 2, itemOffset: 5, quantities: [3, 3], paymentMethod: "UPI" },
+  { status: "DELIVERED", daysAgo: 3, itemOffset: 7, quantities: [5], paymentMethod: "RAZORPAY" },
+  { status: "DELIVERED", daysAgo: 4, itemOffset: 9, quantities: [2, 3], paymentMethod: "CASH_ON_DELIVERY" },
+  { status: "DELIVERED", daysAgo: 5, itemOffset: 11, quantities: [4, 2], paymentMethod: "UPI" },
+  { status: "DELIVERED", daysAgo: 7, itemOffset: 13, quantities: [3, 2, 2], paymentMethod: "RAZORPAY" },
+  { status: "CANCELLED", daysAgo: 6, itemOffset: 1, quantities: [1], paymentMethod: "CASH_ON_DELIVERY" }
 ];
 
 const findMockPartner = async (phone: string | null, restaurantName: string) => {
