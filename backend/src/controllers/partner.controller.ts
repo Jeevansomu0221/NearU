@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import Partner from "../models/Partner.model";
 import User from "../models/User.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
+import Order from "../models/Order.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
 
 // Define AuthRequest interface
@@ -46,6 +47,22 @@ const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+
+const hasCompleteProfileDocuments = (documents: Record<string, any>) =>
+  Boolean(
+    firstString(documents?.fssaiNumber) &&
+      firstString(documents?.fssaiUrl) &&
+      firstString(documents?.panNumber) &&
+      firstString(documents?.panFrontUrl, documents?.ownerPanUrl) &&
+      firstString(documents?.aadhaarNumber) &&
+      firstString(documents?.aadhaarFrontUrl, documents?.ownerIdProofUrl) &&
+      firstString(documents?.aadhaarBackUrl) &&
+      firstString(documents?.addressProofUrl) &&
+      firstString(documents?.bankAccountHolderName) &&
+      firstString(documents?.bankAccountNumber) &&
+      firstString(documents?.bankIfsc) &&
+      firstString(documents?.bankProofUrl, documents?.cancelledChequeUrl, documents?.bankPassbookUrl, documents?.bankStatementUrl)
+  );
 
 const selfDeliveryEligibleStatuses = ["VERIFIED", "ACTIVE"];
 
@@ -454,6 +471,15 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     const normalizedBankAccountHolderName = hasAnyBankInput ? normalizedDocs.bankAccountHolderName : "";
     const normalizedBankAccountNumber = hasAnyBankInput ? normalizedDocs.bankAccountNumber : "";
     const normalizedBankIfsc = hasAnyBankInput ? normalizedDocs.bankIfsc : "";
+    const documentsForCompletion = {
+      ...normalizedDocs,
+      bankProofUrl: normalizedBankProofUrl,
+      bankAccountHolderName: normalizedBankAccountHolderName,
+      bankAccountNumber: normalizedBankAccountNumber,
+      bankIfsc: normalizedBankIfsc,
+      panFrontUrl: normalizedDocs.panFrontUrl,
+      aadhaarFrontUrl: normalizedDocs.aadhaarFrontUrl
+    };
 
     let partner = await Partner.findOne({ phone });
 
@@ -500,7 +526,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         restaurantPhotosUrls: Array.isArray(documents?.restaurantPhotosUrls) ? documents.restaurantPhotosUrls : [],
         operatingHoursNote: normalizedDocs.operatingHoursNote,
         submittedAt: hasMandatoryDocuments ? new Date() : null,
-        isComplete: hasMandatoryDocuments
+        isComplete: hasCompleteProfileDocuments(documentsForCompletion)
       },
       status: "PENDING",
       isOpen: true,
@@ -931,12 +957,45 @@ export const getPartnerStats = async (req: Request, res: Response) => {
       });
     }
 
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+    const partnerOrderFilter = { partnerId: partner._id };
+    const deliveredOrderFilter = { ...partnerOrderFilter, status: "DELIVERED" };
+    const [todayOrders, totalOrders, pendingOrders, totalEarningsResult, todayEarningsResult] =
+      await Promise.all([
+        Order.countDocuments({
+          ...partnerOrderFilter,
+          createdAt: { $gte: todayStart, $lt: tomorrowStart }
+        }),
+        Order.countDocuments(partnerOrderFilter),
+        Order.countDocuments({
+          ...partnerOrderFilter,
+          status: "CONFIRMED"
+        }),
+        Order.aggregate([
+          { $match: deliveredOrderFilter },
+          { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+        ]),
+        Order.aggregate([
+          {
+            $match: {
+              ...deliveredOrderFilter,
+              createdAt: { $gte: todayStart, $lt: tomorrowStart }
+            }
+          },
+          { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+        ])
+      ]);
+
     const stats = {
-      todayOrders: 0,
-      totalOrders: 0,
-      pendingOrders: 0,
-      todayEarnings: 0,
-      totalEarnings: 0,
+      todayOrders,
+      totalOrders,
+      pendingOrders,
+      todayEarnings: todayEarningsResult[0]?.total || 0,
+      totalEarnings: totalEarningsResult[0]?.total || 0,
       menuItemsCount: partner.menuItemsCount || 0,
       shopStatus: partner.isOpen ? "OPEN" : "CLOSED",
       rating: partner.rating || 4.0,
@@ -1173,6 +1232,7 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
         mergedDocs.reuploadFlags = reuploadFlags;
       }
 
+      mergedDocs.isComplete = hasCompleteProfileDocuments(mergedDocs);
       updates.documents = mergedDocs;
     }
 

@@ -348,9 +348,19 @@ export default function HomeScreen({ navigation }: Props) {
               {address}
             </Text>
           </View>
-          {typeof item.distanceKm === "number" ? (
-            <Text style={styles.distanceText}>{item.distanceKm.toFixed(1)} km away</Text>
-          ) : null}
+
+          <View style={styles.shopInfoRow}>
+            {typeof item.distanceKm === "number" ? (
+              <Text style={styles.distanceText}>{item.distanceKm.toFixed(1)} km away</Text>
+            ) : (
+              <View />
+            )}
+            <View style={[styles.statusPill, !item.isOpen && styles.statusPillClosed]}>
+              <Text style={[styles.statusText, !item.isOpen && styles.statusTextClosed]}>
+                {item.isOpen ? "Open" : "Closed"}
+              </Text>
+            </View>
+          </View>
 
           <View style={styles.shopBottom}>
             <View style={styles.ratingRow}>
@@ -358,16 +368,9 @@ export default function HomeScreen({ navigation }: Props) {
               <Text style={styles.ratingText}>{item.rating?.toFixed(1) || "4.0"}</Text>
             </View>
 
-            <View style={styles.shopMetaRight}>
-              <View style={[styles.statusPill, !item.isOpen && styles.statusPillClosed]}>
-                <Text style={[styles.statusText, !item.isOpen && styles.statusTextClosed]}>
-                  {item.isOpen ? "Open" : "Closed"}
-                </Text>
-              </View>
-              <Text style={styles.timeText}>
-                {item.openingTime && item.closingTime ? `${item.openingTime} - ${item.closingTime}` : "08:00 - 22:00"}
-              </Text>
-            </View>
+            <Text style={styles.timeText}>
+              {item.openingTime && item.closingTime ? `${item.openingTime} - ${item.closingTime}` : "08:00 - 22:00"}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -710,12 +713,12 @@ const styles = StyleSheet.create({
   },
   shopCard: {
     marginHorizontal: 14,
-    marginTop: 8,
+    marginTop: 7,
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "#EEE8E0",
-    padding: 10,
+    padding: 9,
     flexDirection: "row",
     shadowColor: "#E9DED2",
     shadowOffset: { width: 0, height: 4 },
@@ -724,8 +727,8 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   shopImage: {
-    width: 74,
-    height: 74,
+    width: 72,
+    height: 72,
     borderRadius: 14,
     backgroundColor: "#F3E7DA"
   },
@@ -767,25 +770,34 @@ const styles = StyleSheet.create({
   addressRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 5
+    marginTop: 4
   },
   shopAddress: {
     flex: 1,
     marginLeft: 4,
     fontSize: 10,
+    lineHeight: 13,
     color: "#7A7168"
   },
+  shopInfoRow: {
+    marginTop: 3,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8
+  },
   distanceText: {
-    marginTop: 4,
     fontSize: 10,
+    lineHeight: 13,
     fontWeight: "800",
     color: "#2B9C4A"
   },
   shopBottom: {
-    marginTop: 7,
+    marginTop: 4,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end"
+    alignItems: "center",
+    gap: 8
   },
   ratingRow: {
     flexDirection: "row",
@@ -797,12 +809,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#D18E18"
   },
-  shopMetaRight: {
-    alignItems: "flex-end"
-  },
   statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
     borderRadius: 999,
     backgroundColor: "#ECF8EC"
   },
@@ -818,8 +827,8 @@ const styles = StyleSheet.create({
     color: "#C7362E"
   },
   timeText: {
-    marginTop: 4,
     fontSize: 9,
+    lineHeight: 12,
     color: "#7A7168"
   },
   emptyState: {
