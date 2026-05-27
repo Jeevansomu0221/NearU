@@ -66,6 +66,44 @@ const idsMatch = (left: any, right: any) => {
   return Boolean(leftId && rightId && leftId === rightId);
 };
 
+const enrichDeliveryPartnerProfiles = async <T extends Record<string, any>>(orders: T[]): Promise<T[]> => {
+  const deliveryUserIds = Array.from(
+    new Set(orders.map((order) => idString(order.deliveryPartnerId)).filter(Boolean))
+  );
+
+  if (deliveryUserIds.length === 0) {
+    return orders;
+  }
+
+  const deliveryProfiles = await DeliveryPartner.find({
+    userId: { $in: deliveryUserIds.map((id) => new mongoose.Types.ObjectId(id)) }
+  })
+    .select("userId name phone vehicleType")
+    .lean();
+
+  const profilesByUserId = new Map(deliveryProfiles.map((profile: any) => [idString(profile.userId), profile]));
+
+  return orders.map((order) => {
+    const deliveryUserId = idString(order.deliveryPartnerId);
+    const profile = profilesByUserId.get(deliveryUserId);
+    if (!deliveryUserId || !profile) return order;
+
+    const existing = order.deliveryPartnerId && typeof order.deliveryPartnerId === "object"
+      ? order.deliveryPartnerId
+      : { _id: deliveryUserId };
+
+    return {
+      ...order,
+      deliveryPartnerId: {
+        ...existing,
+        name: profile.name || existing.name || "",
+        phone: profile.phone || existing.phone || "",
+        vehicleType: profile.vehicleType || existing.vehicleType || ""
+      }
+    };
+  });
+};
+
 const idStrings = (values: any[] = []) => values.map((value) => idString(value)).filter(Boolean);
 
 const getActiveSelfDeliveryUserIds = (partner: any): string[] => {
@@ -99,6 +137,9 @@ const getSelfDeliveryState = (order: any, now = new Date()) => {
 };
 
 const isDeliveryJobVisibleToUser = (order: any, userId: string, now = new Date()) => {
+  const deliveryRejectedBy = new Set(idStrings(order?.deliveryRejectedBy));
+  if (deliveryRejectedBy.has(userId)) return false;
+
   const selfDelivery = getSelfDeliveryState(order, now);
   if (!selfDelivery.isSelfMode || selfDelivery.fallbackReleased) return true;
 
@@ -896,6 +937,7 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
         orderObj.customerId = maskedCustomerFrom(orderObj.customerId);
         return orderObj;
       });
+      orders = await enrichDeliveryPartnerProfiles(orders);
     } else {
       // Customer app order list and delivery partner lists
       orders = await Order.find(filter)
@@ -985,8 +1027,9 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
       // Show only area/city, not full address
       orderObj.deliveryAddress = maskDeliveryAddressForPartner(orderObj.deliveryAddress);
       orderObj.deliveryLocation = undefined;
-      
-      return successResponse(res, orderObj, "Order details retrieved");
+
+      const [partnerOrder] = await enrichDeliveryPartnerProfiles([orderObj]);
+      return successResponse(res, partnerOrder, "Order details retrieved");
     }
 
     const responseOrder = await ensureDeliveryLocationForResponse(orderObj);
@@ -1031,6 +1074,7 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
     }
 
     const deliveryUserId = idString(deliveryPartner.userId) || user.id;
+    const deliveryUserObjectId = new mongoose.Types.ObjectId(deliveryUserId);
 
     const riderCoordinates = deliveryPartner.currentLocation?.coordinates;
     const hasRiderLocation = Boolean(
@@ -1046,6 +1090,7 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
       $and: [
         { status: "READY" },
         buildUnassignedDeliveryFilter(),
+        { deliveryRejectedBy: { $ne: deliveryUserObjectId } },
         buildFreshDeliveryReadyFilter(deliveryDeadline)
       ]
     })
@@ -1157,6 +1202,7 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       $and: [
         { _id: orderId, status: "READY" },
         buildUnassignedDeliveryFilter(),
+        { deliveryRejectedBy: { $ne: new mongoose.Types.ObjectId(deliveryUserId) } },
         buildFreshDeliveryReadyFilter(new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS)),
         buildDeliveryAcceptVisibilityFilter(deliveryUserId)
       ]
@@ -1217,6 +1263,7 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
     }
 
     const deliveryUserId = idString(deliveryPartner.userId) || user.id;
+    const deliveryUserObjectId = new mongoose.Types.ObjectId(deliveryUserId);
     const order = await Order.findById(orderId).select("_id status deliveryPartnerId selfDelivery deliveryReadyAt updatedAt");
     if (!order) {
       return errorResponse(res, "Order not found", 404);
@@ -1233,6 +1280,10 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
     }
 
     const selfDelivery = getSelfDeliveryState(order);
+    const rejectionUpdate: any = {
+      $addToSet: { deliveryRejectedBy: deliveryUserObjectId }
+    };
+
     if (
       selfDelivery.isSelfMode &&
       !selfDelivery.fallbackReleased &&
@@ -1243,25 +1294,23 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
       const allSelfRidersRejected = selfDelivery.reservedFor.every((id) => nextRejectedBy.has(id));
       const now = new Date();
 
-      await Order.updateOne(
-        {
-          _id: orderId,
-          status: "READY",
-          $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
-        },
-        {
-          $addToSet: { "selfDelivery.rejectedBy": new mongoose.Types.ObjectId(deliveryUserId) },
-          ...(allSelfRidersRejected
-            ? {
-                $set: {
-                  "selfDelivery.fallbackReleasedAt": now,
-                  "selfDelivery.expiresAt": now
-                }
-              }
-            : {})
-        }
-      );
+      rejectionUpdate.$addToSet["selfDelivery.rejectedBy"] = deliveryUserObjectId;
+      if (allSelfRidersRejected) {
+        rejectionUpdate.$set = {
+          "selfDelivery.fallbackReleasedAt": now,
+          "selfDelivery.expiresAt": now
+        };
+      }
     }
+
+    await Order.updateOne(
+      {
+        _id: orderId,
+        status: "READY",
+        $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+      },
+      rejectionUpdate
+    );
 
     return successResponse(res, { orderId }, "Delivery job rejected");
   } catch (err: any) {
@@ -1359,7 +1408,8 @@ export const getPartnerOrderDetails = async (req: AuthRequest, res: Response) =>
     // Mask delivery address (only show general area)
     orderObj.deliveryAddress = maskDeliveryAddressForPartner(orderObj.deliveryAddress);
 
-    return successResponse(res, orderObj, "Order details retrieved for partner");
+    const [partnerOrder] = await enrichDeliveryPartnerProfiles([orderObj]);
+    return successResponse(res, partnerOrder, "Order details retrieved for partner");
   } catch (err: any) {
     console.error("getPartnerOrderDetails error:", err);
     return errorResponse(res, "Failed to get order details");

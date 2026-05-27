@@ -29,45 +29,47 @@ const layout = (title: string, body: string) => `<!doctype html>
 router.get("/privacy", (_req, res) => {
   res.type("html").send(layout("Privacy Policy", `
     <h1>Privacy Policy</h1>
-    <p>Vyaha collects the information needed to operate customer ordering, restaurant partner, and delivery partner services.</p>
+    <p>Vyaha respects user privacy and only collects information needed to run the customer app, restaurant partner app, delivery partner app, website, and support tools.</p>
     <h2>Information We Collect</h2>
-    <p>We may collect phone number, name, address, order history, payment status, uploaded restaurant or delivery verification documents, location updates for delivery partners, and support messages.</p>
+    <p>We may collect phone number, name, email address, delivery address, order history, payment status, saved preferences, support messages, verification documents, and delivery partner location updates while jobs are active or permissions are enabled.</p>
     <h2>How We Use Information</h2>
-    <p>We use this data to authenticate users, process orders, verify partners and delivery partners, assign deliveries, support payments and refunds, prevent fraud, and provide customer support.</p>
+    <p>We use this information to authenticate accounts, show nearby restaurants, process and deliver orders, verify partners, complete refunds, prevent fraud, improve service quality, and respond to support requests.</p>
     <h2>Sharing</h2>
-    <p>We share only what is needed with restaurants, delivery partners, payment processors, cloud hosting, storage, analytics, and support providers. We do not sell personal data.</p>
-    <h2>Deletion</h2>
-    <p>Users can request in-app account deletion or visit <a href="/legal/delete-account">Delete Account</a>. Some transaction records may be retained where required by law, tax, fraud prevention, or dispute handling.</p>
+    <p>We share only the minimum information needed with restaurants, delivery partners, payment gateways, cloud hosting providers, analytics or crash reporting tools, and support vendors. We do not sell personal information.</p>
+    <h2>Retention And Deletion</h2>
+    <p>You can request account deletion in the app or via <a href="/legal/delete-account">Delete Account</a>. Some order, tax, payout, fraud prevention, or dispute records may be retained where required by law or legitimate business needs.</p>
     <h2>Contact</h2>
-    <p>Email support at support@vyaha.in with privacy questions.</p>
+    <p>Email <a href="mailto:privacy@vyaha.com">privacy@vyaha.com</a> or <a href="mailto:support@vyaha.com">support@vyaha.com</a> with privacy questions.</p>
   `));
 });
 
 router.get("/terms", (_req, res) => {
   res.type("html").send(layout("Terms of Service", `
     <h1>Terms of Service</h1>
-    <p>By using Vyaha, you agree to use the customer, restaurant partner, and delivery partner apps lawfully and only for their intended services.</p>
+    <p>By using Vyaha, you agree to use the platform lawfully, provide accurate information, and follow the rules that apply to customers, restaurants, delivery partners, and internal platform users.</p>
     <h2>Orders And Payments</h2>
-    <p>Customers are responsible for accurate delivery details. Online payments are processed through Razorpay. Cash-on-delivery payments are collected at delivery.</p>
+    <p>Customers are responsible for accurate delivery details, accessible contact information, and timely payment of order totals, taxes, delivery fees, and any clearly shown charges. Online payments may be processed through third-party gateways such as Razorpay, and cash-on-delivery orders may be collected at delivery.</p>
     <h2>Partner Responsibilities</h2>
-    <p>Restaurant and delivery partners must provide accurate identity, business, bank, and operational details and comply with applicable laws.</p>
+    <p>Restaurants and delivery partners must provide truthful identity, business, address, bank, tax, and operational details. Uploaded content, menu listings, and documents must be accurate and must not violate any law or third-party rights.</p>
     <h2>Account Safety</h2>
-    <p>Users must keep OTPs and account access secure. Vyaha may suspend accounts for fraud, unsafe behavior, or policy violations.</p>
+    <p>Users must keep OTPs, passwords, devices, and account access secure. Vyaha may limit or suspend accounts for fraud, unsafe behavior, abuse, repeated policy violations, or legal concerns.</p>
+    <h2>Service Updates</h2>
+    <p>Vyaha may update features, fees, policies, and availability from time to time. Continued use after an update means you accept the revised version.</p>
     <h2>Contact</h2>
-    <p>Email support at support@vyaha.in for terms or service questions.</p>
+    <p>Email <a href="mailto:support@vyaha.com">support@vyaha.com</a> for terms or service questions.</p>
   `));
 });
 
 router.get("/delete-account", (_req, res) => {
   res.type("html").send(layout("Delete Account", `
     <h1>Delete Account</h1>
-    <p>You can delete your Vyaha account from the profile or settings screen inside the app.</p>
+    <p>You can request deletion from the profile or settings area inside the Vyaha app. This page explains what happens when an account deletion request is submitted.</p>
     <h2>What Happens</h2>
-    <p>We deactivate your login session, remove or anonymize profile details, and redact address or document fields where possible.</p>
+    <p>We deactivate the login session, remove or anonymize profile fields where possible, and stop non-essential access to the account. Some linked records may be masked or retained to support payments, disputes, fraud prevention, or legal compliance.</p>
     <h2>Data We May Retain</h2>
-    <p>Order, payout, payment, tax, fraud-prevention, and dispute records may be retained if legally or operationally required.</p>
+    <p>Order, payout, payment, tax, refund, fraud, support, and dispute records may be retained if required by law or operational necessity. We do not delete everything instantly when records must be preserved for legal reasons.</p>
     <h2>Manual Request</h2>
-    <p>If you cannot access the app, email support@vyaha.in from your registered phone/account context and include your role: customer, partner, or delivery partner.</p>
+    <p>If you cannot access the app, email <a href="mailto:support@vyaha.com">support@vyaha.com</a> from your registered phone or account context and include your role: customer, partner, or delivery partner.</p>
   `));
 });
 

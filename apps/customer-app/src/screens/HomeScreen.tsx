@@ -17,6 +17,7 @@ import * as Location from "expo-location";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import { getPartners } from "../api/menu.api";
 import { useCart } from "../context/CartContext";
+import { getPublicAddressText, getPublicShopName } from "../utils/display";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
@@ -50,9 +51,10 @@ const categoryLabels: Record<string, string> = {
   all: "All",
   bakery: "Bakery",
   "tiffin-center": "Tiffins",
+  "cloud-kitchen": "Cloud Kitchen",
+  "mini-restaurant": "Restaurant",
   sweets: "Sweets",
   "fast-food": "Fast Food",
-  "mini-restaurant": "Restaurant",
   "ice-creams": "Ice Creams",
   other: "Local Shop"
 };
@@ -60,9 +62,12 @@ const categoryLabels: Record<string, string> = {
 const filterOptions = [
   { key: "all", label: "All", icon: "view-grid-outline" },
   { key: "tiffin-center", label: "Tiffins", icon: "food-outline" },
+  { key: "cloud-kitchen", label: "Cloud Kitchen", icon: "chef-hat" },
   { key: "mini-restaurant", label: "Restaurant", icon: "silverware-fork-knife" },
   { key: "bakery", label: "Bakery", icon: "cupcake-outline" },
-  { key: "fast-food", label: "Fast Food", icon: "hamburger" }
+  { key: "fast-food", label: "Fast Food", icon: "hamburger" },
+  { key: "sweets", label: "Sweets", icon: "cookie-outline" },
+  { key: "other", label: "More", icon: "storefront-outline" }
 ];
 
 const NEARBY_RADIUS_KM = 3;
@@ -73,6 +78,8 @@ const shopPlaceholders: Record<string, string> = {
     "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=240&q=80",
   "tiffin-center":
     "https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=240&q=80",
+  "cloud-kitchen":
+    "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=240&q=80",
   "mini-restaurant":
     "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=240&q=80",
   "fast-food":
@@ -154,7 +161,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   const formatAddress = (address: string | AddressObject): string => {
     if (!address) return "Address not available";
-    if (typeof address === "string") return address;
+    if (typeof address === "string") return getPublicAddressText(address);
     return [address.roadStreet, address.colony, address.area, address.city].filter(Boolean).join(", ");
   };
 
@@ -294,7 +301,7 @@ export default function HomeScreen({ navigation }: Props) {
   );
 
   const renderShopItem = ({ item }: { item: Shop }) => {
-    const displayName = item.shopName || item.restaurantName || "Local Shop";
+    const displayName = getPublicShopName(item.shopName || item.restaurantName || "Local Shop");
     const category = categoryLabels[item.category] || item.category;
     const address = formatAddress(item.address) || "Address not available";
     const imageUrl = item.shopImageUrl || shopPlaceholders[item.category] || shopPlaceholders["mini-restaurant"];

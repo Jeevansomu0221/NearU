@@ -51,9 +51,9 @@ function Footer() {
             <h4>Learn More</h4>
             <ul>
               <li><Link to="/policies">Guidelines and Policies</Link></li>
-              <li><Link to="/privacy">Privacy</Link></li>
+              <li><a href="https://www.vyaha.com/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></li>
               <li><Link to="/security">Security</Link></li>
-              <li><Link to="/terms">Terms of Service</Link></li>
+              <li><a href="https://www.vyaha.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></li>
               <li><Link to="/refunds">Cancellation and Refunds</Link></li>
               <li><Link to="/community-guidelines">Community Guidelines</Link></li>
               <li><Link to="/cookie-policy">Cookie Policy</Link></li>
@@ -78,7 +78,7 @@ function Footer() {
             <h4>Social Links</h4>
             <div className="social-links">
               {socialLinks.map((item) => (
-                <a key={item.name} href={item.href} className="social-icon" aria-label={item.name} target="_blank" rel="noreferrer">
+                <a key={item.name} href={item.href} className="social-icon" aria-label={item.name} target="_blank" rel="noreferrer noopener">
                   <svg aria-hidden="true" viewBox="0 0 24 24">
                     <path d={item.path} />
                   </svg>
@@ -87,10 +87,7 @@ function Footer() {
             </div>
             <div className="footer-app-links" style={{ marginTop: '20px' }}>
               <Link to="/apps" className="store-badge-small" style={{ display: 'block', marginBottom: '10px' }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App access page" style={{ width: '120px' }} />
-              </Link>
-              <Link to="/apps" className="store-badge-small" style={{ display: 'block' }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="App access page" style={{ width: '120px' }} />
+                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Vyaha Play Store release information" style={{ width: '120px' }} />
               </Link>
             </div>
           </div>

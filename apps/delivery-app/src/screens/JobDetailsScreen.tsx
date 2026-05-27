@@ -89,20 +89,41 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     return Location.getCurrentPositionAsync({});
   };
 
+  const returnToJobs = () => {
+    if (navigation.canGoBack?.()) {
+      navigation.goBack();
+      return;
+    }
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Main", params: { screen: "Jobs" } }],
+    });
+  };
+
+  const handleDetailsLoadFailure = (message: string) => {
+    if (initialJob) {
+      return;
+    }
+
+    Alert.alert("Error", message);
+    returnToJobs();
+  };
+
   const loadJobDetails = async () => {
     try {
-      setLoading(true);
+      if (!initialJob) {
+        setLoading(true);
+      }
       const response = await getJobDetails(orderId);
       if (response.success && response.data) {
         setJob(response.data);
       } else {
-        Alert.alert("Error", response.message || "Failed to load job details");
-        navigation.goBack();
+        handleDetailsLoadFailure(response.message || "Failed to load job details");
       }
     } catch (error) {
       console.error("Error loading job details:", error);
-      Alert.alert("Error", "Failed to load job details");
-      navigation.goBack();
+      handleDetailsLoadFailure("Failed to load job details");
     } finally {
       setLoading(false);
     }

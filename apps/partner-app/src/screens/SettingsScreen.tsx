@@ -14,9 +14,9 @@ import {
 import api from "../api/client";
 import { deleteAccount, logout } from "../api/auth.api";
 
-const PRIVACY_URL = "https://vyaha-app-backend.onrender.com/legal/privacy";
-const TERMS_URL = "https://vyaha-app-backend.onrender.com/legal/terms";
-const DELETE_URL = "https://vyaha-app-backend.onrender.com/legal/delete-account";
+const PRIVACY_URL = "https://vyaha-official.onrender.com/privacy";
+const TERMS_URL = "https://vyaha-official.onrender.com/terms";
+const DELETE_URL = "https://vyaha-official.onrender.com/delete-account";
 
 type SelfDeliveryPartner = {
   deliveryPartnerId?: string;
@@ -223,7 +223,7 @@ export default function SettingsScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Order</Text>
+        <Text style={[styles.sectionTitle, styles.sectionTitleStandalone]}>Order</Text>
         <View style={styles.switchRow}>
           <Text style={styles.label}>Auto accept orders</Text>
           <Switch
@@ -242,7 +242,16 @@ export default function SettingsScreen({ navigation }: any) {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Delivery</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionTitle, styles.sectionHeaderTitle]}>Delivery</Text>
+          <TouchableOpacity
+            style={[styles.smallSaveButton, saving && styles.smallSaveButtonDisabled]}
+            onPress={saveAllSettings}
+            disabled={saving}
+          >
+            {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.smallSaveButtonText}>Save</Text>}
+          </TouchableOpacity>
+        </View>
         <View style={styles.choiceRow}>
           {(["platform", "self"] as const).map((mode) => {
             const selected = settings.deliveryMode === mode;
@@ -317,7 +326,16 @@ export default function SettingsScreen({ navigation }: any) {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Payment & Notifications</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionTitle, styles.sectionHeaderTitle]}>Payment & Notifications</Text>
+          <TouchableOpacity
+            style={[styles.smallSaveButton, saving && styles.smallSaveButtonDisabled]}
+            onPress={saveAllSettings}
+            disabled={saving}
+          >
+            {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.smallSaveButtonText}>Save</Text>}
+          </TouchableOpacity>
+        </View>
         <Text style={styles.label}>UPI payout ID</Text>
         <TextInput
           style={styles.input}
@@ -349,10 +367,6 @@ export default function SettingsScreen({ navigation }: any) {
           />
         </View>
       </View>
-
-      <TouchableOpacity style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={saveAllSettings} disabled={saving}>
-        {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.saveButtonText}>Save Settings</Text>}
-      </TouchableOpacity>
 
       <View style={styles.card}>
         <TouchableOpacity style={styles.row} onPress={() => Linking.openURL(TERMS_URL)}>
@@ -397,7 +411,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 14
   },
-  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#143A66", marginBottom: 10 },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
+  },
+  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#143A66" },
+  sectionTitleStandalone: { marginBottom: 10 },
+  sectionHeaderTitle: { flex: 1, marginRight: 12 },
   label: { fontSize: 13, color: "#355877", fontWeight: "700" },
   helperText: { fontSize: 12, color: "#5E7897", lineHeight: 17, marginBottom: 10 },
   input: {
@@ -475,15 +497,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F6FB"
   },
   addRiderText: { color: "#2F80ED", fontSize: 13, fontWeight: "800" },
-  saveButton: {
+  smallSaveButton: {
     backgroundColor: "#2F80ED",
-    borderRadius: 16,
+    borderRadius: 999,
     alignItems: "center",
-    paddingVertical: 14,
-    marginBottom: 12
+    justifyContent: "center",
+    minWidth: 64,
+    minHeight: 32,
+    paddingHorizontal: 14,
+    paddingVertical: 7
   },
-  saveButtonDisabled: { backgroundColor: "#9FC8FF" },
-  saveButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  smallSaveButtonDisabled: { backgroundColor: "#9FC8FF" },
+  smallSaveButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
   row: {
     minHeight: 52,
     justifyContent: "center",

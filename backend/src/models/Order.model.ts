@@ -27,6 +27,12 @@ const OrderSchema = new Schema({
     ref: "User"
   },
 
+  deliveryRejectedBy: {
+    type: [Types.ObjectId],
+    ref: "User",
+    default: []
+  },
+
   selfDelivery: {
     mode: {
       type: String,
@@ -198,6 +204,7 @@ OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
 OrderSchema.index({ razorpayOrderId: 1 });
 OrderSchema.index({ status: 1, deliveryReadyAt: 1 });
+OrderSchema.index({ deliveryRejectedBy: 1, status: 1 });
 OrderSchema.index({ deliveryLocation: "2dsphere" });
 OrderSchema.index({ "selfDelivery.expiresAt": 1 });
 OrderSchema.index({ "selfDelivery.reservedFor": 1, status: 1 });

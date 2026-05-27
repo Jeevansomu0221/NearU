@@ -33,7 +33,7 @@ const seedDatabase = async () => {
     const users = await User.insertMany([
       {
         phone: '9876543210',
-        name: 'Test Customer',
+        name: 'Ananya Customer',
         role: 'customer',
         email: 'customer@nearu.com'
       },
@@ -61,10 +61,10 @@ const seedDatabase = async () => {
     // Create test partner
     const partner = await Partner.create({
       userId: users[1]._id,
-      shopName: 'Fresh Bread Bakery',
-      description: 'Freshly baked bread and pastries daily',
+      shopName: 'Sunrise Bakery Cafe',
+      description: 'Fresh bakery items, snacks, and daily specials',
       category: 'bakery',
-      address: '123 Main Street, Bangalore',
+      address: '18 Lake View Road, Indiranagar, Bengaluru',
       location: {
         type: 'Point',
         coordinates: [77.5946, 12.9716] // Bangalore coordinates
@@ -153,8 +153,8 @@ const seedDatabase = async () => {
     console.log('2. Partner - Phone: 9876543211, Password: (any OTP)');
     console.log('3. Delivery - Phone: 9876543212, Password: (any OTP)');
     console.log('4. Admin - Phone: 9876543213, Password: (any OTP)');
-    console.log('\n🏪 Test Shop: Fresh Bread Bakery (Bakery)');
-    console.log('\n📍 Location: Bangalore coordinates');
+    console.log('\n🏪 Test Shop: Sunrise Bakery Cafe (Bakery)');
+    console.log('\n📍 Location: Indiranagar, Bengaluru coordinates');
 
     process.exit(0);
 

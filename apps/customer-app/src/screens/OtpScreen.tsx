@@ -16,9 +16,10 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { verifyFirebaseOtp } from '../api/auth.api';
 import { getUserProfile } from '../api/user.api';
 import { confirmFirebaseOtp, sendFirebaseOtp } from '../services/firebasePhoneAuth';
+import { buildLegalUrl } from '../constants/legal';
 
-const TERMS_URL = "https://vyaha-app-backend.onrender.com/legal/terms";
-const PRIVACY_URL = "https://vyaha-app-backend.onrender.com/legal/privacy";
+const TERMS_URL = buildLegalUrl("terms");
+const PRIVACY_URL = buildLegalUrl("privacy");
 
 type OtpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Otp'>;
 type OtpScreenRouteProp = RouteProp<RootStackParamList, 'Otp'>;

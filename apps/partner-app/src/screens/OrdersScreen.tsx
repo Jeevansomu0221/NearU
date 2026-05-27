@@ -28,7 +28,7 @@ interface Order {
     name: string;
     phone: string;
   };
-  deliveryPartnerId?: {
+  deliveryPartnerId?: string | {
     name?: string;
     phone?: string;
   };
@@ -36,6 +36,19 @@ interface Order {
 }
 
 const isAwaitingPartnerAction = (status: string) => status === "CONFIRMED";
+
+const getDeliveryPartnerLabel = (deliveryPartner: Order["deliveryPartnerId"]) => {
+  if (!deliveryPartner) return "Delivery partner will appear after assignment";
+  if (typeof deliveryPartner === "string") return "Delivery partner assigned";
+
+  const name = deliveryPartner.name?.trim();
+  if (name) return `Delivery partner: ${name}`;
+
+  const phone = deliveryPartner.phone?.trim();
+  if (phone) return `Delivery partner: ${phone}`;
+
+  return "Delivery partner assigned";
+};
 
 interface OrdersResponse {
   success: boolean;
@@ -152,11 +165,7 @@ export default function OrdersScreen({ navigation }: any) {
         <View style={styles.handoffCard}>
           <Text style={styles.handoffLabel}>Parcel handoff</Text>
           <Text style={styles.handoffText}>Order ID #{item._id.slice(-6).toUpperCase()}</Text>
-          <Text style={styles.handoffSubtext}>
-            {item.deliveryPartnerId?.name
-              ? `Delivery partner: ${item.deliveryPartnerId.name}`
-              : "Delivery partner will appear after assignment"}
-          </Text>
+          <Text style={styles.handoffSubtext}>{getDeliveryPartnerLabel(item.deliveryPartnerId)}</Text>
         </View>
 
         {item.items?.slice(0, 2).map((orderItem, idx) => (

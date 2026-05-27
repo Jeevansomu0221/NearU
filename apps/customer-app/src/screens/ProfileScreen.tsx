@@ -36,6 +36,8 @@ import {
   type FAQEntry,
   type SupportTicket
 } from "../api/support.api";
+import { buildLegalUrl } from "../constants/legal";
+import { getPublicShopName } from "../utils/display";
 
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Start a support chat connected to Vyaha admin." },
@@ -44,8 +46,8 @@ const supportItems = [
 ] as const;
 
 const formatCurrency = (value?: number) => `Rs ${Number(value || 0).toFixed(0)}`;
-const PRIVACY_URL = "https://www.vyaha.com/privacy";
-const TERMS_URL = "https://www.vyaha.com/terms";
+const PRIVACY_URL = buildLegalUrl("privacy");
+const TERMS_URL = buildLegalUrl("terms");
 type AddressFormMode = "edit" | "add";
 
 const formatDate = (dateString?: string) => {
@@ -699,10 +701,11 @@ export default function ProfileScreen({ navigation, route }: any) {
   const favoriteRestaurants = useMemo(() => {
     const deduped = new Map<string, string>();
     orders.forEach((order) => {
-      const partnerName =
+      const partnerName = getPublicShopName(
         (order.partnerId as any)?.restaurantName ||
         (order.partnerId as any)?.shopName ||
-        "Local Partner";
+        "Local Partner"
+      );
       deduped.set(partnerName, partnerName);
     });
     return Array.from(deduped.values()).slice(0, 4);
@@ -908,9 +911,17 @@ export default function ProfileScreen({ navigation, route }: any) {
       >
         <View style={[styles.heroCard, forceComplete && styles.heroCardCompact]}>
           <View style={styles.heroRow}>
-            <View style={styles.avatarWrap}>
-              <Text style={styles.avatarText}>{profile?.name?.charAt(0).toUpperCase() || "U"}</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.avatarWrap}
+              onPress={() =>
+                handlePlaceholderAction("Profile Photo", "Profile photo updates are currently handled by Vyaha support.")
+              }
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Add profile photo"
+            >
+              <MaterialCommunityIcons name="camera-plus-outline" size={26} color="#FFFFFF" />
+            </TouchableOpacity>
             <View style={styles.heroMeta}>
               <Text style={styles.heroName}>{isGeneratedCustomerName(profile?.name) ? "Your Profile" : profile?.name || "Your Profile"}</Text>
               <Text style={styles.heroSubtext}>{profile?.phone}</Text>
@@ -920,18 +931,6 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <Text style={styles.memberSinceText}>Member since {memberSince}</Text>
               </View>
             </View>
-          </View>
-
-          <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 10 }}>
-            <TouchableOpacity
-              style={styles.photoButton}
-              onPress={() =>
-                handlePlaceholderAction("Profile Photo", "Profile photo updates are currently handled by Vyaha support.")
-              }
-            >
-              <MaterialCommunityIcons name="camera-outline" size={16} color="#FF6B35" />
-              <Text style={styles.photoButtonText}>Profile photo</Text>
-            </TouchableOpacity>
           </View>
 
           {!forceComplete && (
@@ -1271,7 +1270,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                           <View>
                             <Text style={styles.orderId}>Order #{order._id.slice(-6)}</Text>
                             <Text style={styles.orderPartner}>
-                              {(order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant"}
+                              {getPublicShopName((order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant")}
                             </Text>
                           </View>
                           <View style={[styles.orderStatusChip, { backgroundColor: tone.bg }]}>
@@ -1317,7 +1316,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <View key={order._id} style={styles.orderHistoryRow}>
                       <View style={styles.orderHistoryMeta}>
                         <Text style={styles.orderHistoryTitle}>
-                          {(order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant"}
+                          {getPublicShopName((order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant")}
                         </Text>
                         <Text style={styles.orderHistorySubtext}>
                           {formatDate(order.createdAt)} - {getStatusLabel(order.status)}

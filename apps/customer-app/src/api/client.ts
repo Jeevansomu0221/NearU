@@ -98,7 +98,7 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (error) {
-      console.error("Error getting token:", error);
+      logDebug("Error getting token:", error);
     }
     return config;
   },
@@ -180,7 +180,7 @@ api.interceptors.response.use(
       }
     }
 
-    console.error("API Error:", {
+    logDebug("API Error:", {
       message: error.message,
       status: error.response?.status,
       url: error.config?.url,

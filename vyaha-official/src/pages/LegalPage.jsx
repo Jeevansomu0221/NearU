@@ -4,7 +4,7 @@ import './LegalPage.css';
 
 const effectiveDate = 'May 27, 2026';
 const businessName = 'Vyaha';
-const serviceStage = 'development and pilot stage';
+const serviceStage = 'pilot rollout stage';
 const supportEmail = 'support@vyaha.com';
 const privacyEmail = 'privacy@vyaha.com';
 const securityEmail = 'security@vyaha.com';
@@ -206,7 +206,7 @@ const pageData = {
         <h3>7. Your Choices</h3>
         <ul>
           <li>You can update profile details and app permissions through your device or app settings where available.</li>
-          <li>You can request access, correction, deletion, or restriction of personal information by contacting us.</li>
+          <li>You can request access, correction, deletion, or restriction of personal information by contacting us or using the <Link to="/delete-account">account deletion instructions</Link>.</li>
           <li>You can opt out of non-essential promotional communications where such controls are provided.</li>
           <li>You can disable location permissions, but some ordering, delivery, or job assignment features may stop working correctly.</li>
         </ul>

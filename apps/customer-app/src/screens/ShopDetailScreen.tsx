@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RootStackParamList, Shop } from "../navigation/AppNavigator";
 import { getPartnerDetails, getPartnerMenu } from "../api/menu.api";
 import { useCart } from "../context/CartContext";
+import { getPublicShopName } from "../utils/display";
 
 type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, "ShopDetail">;
 
@@ -45,6 +46,8 @@ const shopPlaceholders: Record<string, string> = {
     "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=320&q=80",
   "tiffin-center":
     "https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=320&q=80",
+  "cloud-kitchen":
+    "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=320&q=80",
   "mini-restaurant":
     "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=320&q=80",
   "fast-food":
@@ -62,6 +65,7 @@ const menuPlaceholders = [
 const categoryIconMap: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
   bakery: "bread-slice-outline",
   "tiffin-center": "food-outline",
+  "cloud-kitchen": "chef-hat",
   "mini-restaurant": "silverware-fork-knife",
   "fast-food": "hamburger",
   sweets: "cookie-outline",
@@ -71,6 +75,7 @@ const categoryIconMap: Record<string, keyof typeof MaterialCommunityIcons.glyphM
 const categoryLabelMap: Record<string, string> = {
   bakery: "Bakery",
   "tiffin-center": "Tiffins",
+  "cloud-kitchen": "Cloud Kitchen",
   "mini-restaurant": "Restaurant",
   "fast-food": "Fast Food",
   sweets: "Sweets",
@@ -285,7 +290,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     return activeSection?.[1] || groupedMenu[0]?.[1] || [];
   }, [groupedMenu, menu, selectedCategory]);
 
-  const getShopName = () => shop?.restaurantName || shop?.shopName || "Restaurant";
+  const getShopName = () => getPublicShopName(shop?.restaurantName || shop?.shopName || "Restaurant");
 
   const getShopCategoryKey = () => shop?.category || "other";
 
@@ -347,6 +352,18 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     );
   };
 
+  const itemCount = getItemCount();
+  const totalAmount = getCartTotal();
+
+  useEffect(() => {
+    if (itemCount > 0) {
+      Animated.sequence([
+        Animated.timing(cartScaleAnim, { toValue: 1.25, duration: 100, useNativeDriver: true }),
+        Animated.spring(cartScaleAnim, { toValue: 1, friction: 3, tension: 40, useNativeDriver: true })
+      ]).start();
+    }
+  }, [cartScaleAnim, itemCount]);
+
   if (!shop && loading) {
     return (
       <View style={styles.centerContainer}>
@@ -364,18 +381,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     );
   }
 
-  const itemCount = getItemCount();
-  const totalAmount = getCartTotal();
   const bannerImage = shop.shopImageUrl || shopPlaceholders[getShopCategoryKey()] || shopPlaceholders["mini-restaurant"];
-
-  useEffect(() => {
-    if (itemCount > 0) {
-      Animated.sequence([
-        Animated.timing(cartScaleAnim, { toValue: 1.25, duration: 100, useNativeDriver: true }),
-        Animated.spring(cartScaleAnim, { toValue: 1, friction: 3, tension: 40, useNativeDriver: true })
-      ]).start();
-    }
-  }, [itemCount]);
 
   return (
     <View style={styles.container}>

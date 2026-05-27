@@ -14,9 +14,10 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { warmApi } from '../api/client';
 import { sendFirebaseOtp } from '../services/firebasePhoneAuth';
+import { buildLegalUrl } from '../constants/legal';
 
-const TERMS_URL = "https://www.vyaha.com/terms";
-const PRIVACY_URL = "https://www.vyaha.com/privacy";
+const TERMS_URL = buildLegalUrl("terms");
+const PRIVACY_URL = buildLegalUrl("privacy");
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -39,13 +40,9 @@ export default function LoginScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
-      console.log('📱 Sending OTP to:', cleanedPhone);
-      
       void warmApi();
       await sendFirebaseOtp(cleanedPhone);
-      
-      console.log('✅ OTP sent successfully');
-      
+
       // Navigate to OTP screen with phone number ONLY
       // Type is { phone: string } so only pass phone
       navigation.navigate('Otp', { 
@@ -53,8 +50,6 @@ export default function LoginScreen({ navigation }: Props) {
       });
       
     } catch (error: any) {
-      console.error('❌ OTP send error:', error);
-      
       // Check if it's the specific validation error from backend
       if (error.response?.data?.message === "Phone number and role are required") {
         Alert.alert('Error', 'Server configuration error. Please try again.');

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { getMyOrders } from "../api/order.api";
 import type { Order } from "../api/order.api";
+import { getPublicShopName } from "../utils/display";
 
 export default function OrdersScreen({ navigation }: any) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -104,7 +105,7 @@ export default function OrdersScreen({ navigation }: any) {
       </View>
 
       <Text style={styles.restaurantName}>
-        {(item.partnerId as any)?.restaurantName || (item.partnerId as any)?.shopName || "Restaurant"}
+        {getPublicShopName((item.partnerId as any)?.restaurantName || (item.partnerId as any)?.shopName || "Restaurant")}
       </Text>
 
       {item.items && Array.isArray(item.items) && item.items.length > 0 && (

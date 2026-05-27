@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  Linking,
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,9 +17,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 import { confirmFirebaseOtp, sendFirebaseOtp } from "../services/firebasePhoneAuth";
 import { partnerTheme } from "../theme";
+import { buildLegalUrl } from "../constants/legal";
 
 const TEST_LOGIN_PHONE = "1010101010";
 const TEST_LOGIN_OTP = "000000";
+const TERMS_URL = buildLegalUrl("terms");
+const PRIVACY_URL = buildLegalUrl("privacy");
 
 interface AuthResponse {
   success: boolean;
@@ -278,6 +282,15 @@ export default function LoginScreen({ navigation }: any) {
             </>
           )}
         </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            By continuing, you agree to our{" "}
+            <Text style={styles.footerLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Service</Text>
+            {" "}and{" "}
+            <Text style={styles.footerLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -393,6 +406,20 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: partnerTheme.colors.primary,
     fontSize: 14,
+    fontWeight: "700"
+  },
+  footer: {
+    marginTop: 20,
+    paddingHorizontal: 20
+  },
+  footerText: {
+    fontSize: 12,
+    color: partnerTheme.colors.muted,
+    textAlign: "center",
+    lineHeight: 18
+  },
+  footerLink: {
+    color: partnerTheme.colors.primary,
     fontWeight: "700"
   }
 });

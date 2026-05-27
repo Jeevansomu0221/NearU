@@ -34,8 +34,8 @@ type MenuSection = {
   items: MenuItem[];
 };
 
-const PRIVACY_URL = "https://vyaha-app-backend.onrender.com/legal/privacy";
-const TERMS_URL = "https://vyaha-app-backend.onrender.com/legal/terms";
+const PRIVACY_URL = "https://vyaha-official.onrender.com/privacy";
+const TERMS_URL = "https://vyaha-official.onrender.com/terms";
 
 export default function AccountProfileScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();

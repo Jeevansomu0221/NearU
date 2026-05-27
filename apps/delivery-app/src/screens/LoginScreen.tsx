@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { 
   View, 
   Text, 
+  Image,
   TextInput, 
   TouchableOpacity, 
   Alert, 
@@ -9,9 +10,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Linking
 } from "react-native";
 import { sendFirebaseOtp } from "../services/firebasePhoneAuth";
+import { buildLegalUrl } from "../constants/legal";
+
+const TERMS_URL = buildLegalUrl("terms");
+const PRIVACY_URL = buildLegalUrl("privacy");
 
 export default function LoginScreen({ navigation }: any) {
   const [phone, setPhone] = useState("");
@@ -54,7 +60,11 @@ export default function LoginScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Vyaha Delivery</Text>
+            <Image
+              source={require("../../assets/icon.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <Text style={styles.subtitle}>Delivery Partner Login</Text>
           </View>
           
@@ -94,8 +104,12 @@ export default function LoginScreen({ navigation }: any) {
           </TouchableOpacity>
           
           <View style={styles.footer}>
-            <Text style={styles.footerText}>By continuing, you agree to our</Text>
-            <Text style={styles.footerLink}>Terms & Conditions</Text>
+            <Text style={styles.footerText}>
+              By continuing, you agree to our{" "}
+              <Text style={styles.footerLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Service</Text>
+              {" "}and{" "}
+              <Text style={styles.footerLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -121,10 +135,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#4CAF50',
+  logo: {
+    width: 230,
+    height: 160,
     marginBottom: 8,
   },
   subtitle: {
@@ -218,15 +231,16 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'center',
     marginTop: 20,
+    paddingHorizontal: 20,
   },
   footerText: {
     fontSize: 12,
     color: '#999',
-    marginBottom: 4,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   footerLink: {
-    fontSize: 12,
     color: '#4CAF50',
-    fontWeight: '500',
+    fontWeight: '700',
   },
 });

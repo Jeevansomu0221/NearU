@@ -71,8 +71,6 @@ export const createShopOrder = (
     requestData.paymentMethod = paymentMethod;
   }
 
-  console.log("Creating order with data:", requestData);
-  
   return apiPost<Order>("/orders", requestData);
 };
 

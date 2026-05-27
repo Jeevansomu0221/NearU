@@ -11,10 +11,7 @@ function Home() {
           <p className="hero-subtitle">Enjoy your favorite local dishes at genuine menu prices<br />with the Vyaha app</p>
           <div className="hero-download-buttons">
             <Link to="/apps" className="store-badge">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" />
-            </Link>
-            <Link to="/apps" className="store-badge">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="Download on the App Store" />
+              <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Vyaha Play Store release information" />
             </Link>
           </div>
           <a href="mailto:support@vyaha.com" className="hero-email-link">support@vyaha.com &rarr;</a>
@@ -116,21 +113,19 @@ function Home() {
         <section className="download-section">
           <div className="download-box">
             <div className="download-text">
-              <h2>Download the app now</h2>
-              <p>Scan the QR code or use the store links to get started with Vyaha.</p>
+              <h2>Vyaha Customer is preparing for Play Store release</h2>
+              <p>Official store links will be published here after review approval. For early access or support, contact the Vyaha team directly.</p>
               <div className="hero-download-buttons">
                 <Link to="/apps" className="store-badge">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" />
+                  <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Vyaha Play Store release information" />
                 </Link>
-                <Link to="/apps" className="store-badge">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="Download on the App Store" />
-                </Link>
+                <a href="mailto:support@vyaha.com" className="launch-link">Contact support</a>
               </div>
             </div>
-            <div className="qr-container">
-              <div className="qr-phone-wrapper">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg" alt="QR Code" className="qr-code" />
-              </div>
+            <div className="launch-card" aria-label="Vyaha app launch status">
+              <span className="launch-status">Release status</span>
+              <strong>Android app under review</strong>
+              <p>Use only links from vyaha.com or official app stores.</p>
             </div>
           </div>
         </section>

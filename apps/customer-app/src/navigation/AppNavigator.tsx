@@ -2,7 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Text, TouchableOpacity } from 'react-native';
+import { TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
@@ -257,9 +258,24 @@ export default function AppNavigator() {
         name="Profile" 
         component={ProfileScreen}
         initialParams={{ forceComplete: initialRoute === 'Profile' }}
-        options={({ route }) => ({
+        options={({ navigation, route }) => ({
           title: route.params?.forceComplete ? 'Complete Registration' : 'My Profile',
-          headerLeft: route.params?.forceComplete ? () => null : undefined,
+          headerLeft: route.params?.forceComplete
+            ? () => null
+            : () => (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (navigation.canGoBack()) {
+                      navigation.goBack();
+                    } else {
+                      navigation.reset({ index: 0, routes: [{ name: "Home" }] });
+                    }
+                  }}
+                  style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+                >
+                  <Feather name="arrow-left" size={20} color="#fff" />
+                </TouchableOpacity>
+              ),
         })}
       />
       <Stack.Screen 
@@ -272,7 +288,7 @@ export default function AppNavigator() {
               onPress={() => navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
               style={{ paddingHorizontal: 12, paddingVertical: 8 }}
             >
-              <Text style={{ color: "#fff", fontWeight: "700" }}>Home</Text>
+              <Feather name="home" size={20} color="#fff" />
             </TouchableOpacity>
           )
         })}

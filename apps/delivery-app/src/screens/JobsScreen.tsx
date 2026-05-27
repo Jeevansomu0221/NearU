@@ -43,6 +43,7 @@ export default function JobsScreen({ navigation }: any) {
   const [selectedJobAction, setSelectedJobAction] = useState<{ job: CalculatedJob; action: "accept" | "reject" } | null>(null);
   const [emptyMessage, setEmptyMessage] = useState("When restaurants mark orders as READY, they will appear here for delivery.");
   const knownJobIds = useRef<Set<string>>(new Set());
+  const rejectedJobIds = useRef<Set<string>>(new Set());
   const firstLoadDone = useRef(false);
 
   const ensureAccountCanAccessJobs = useCallback(async () => {
@@ -146,15 +147,16 @@ export default function JobsScreen({ navigation }: any) {
       if (response.success && response.data) {
         setEmptyMessage(response.message || "When restaurants mark orders as READY, they will appear here for delivery.");
         const jobsWithCalculations = await Promise.all(response.data.map((job) => calculateJobDetails(job)));
-        const incomingIds = new Set(jobsWithCalculations.map((job) => job._id));
-        const newlyAdded = jobsWithCalculations.filter((job) => !knownJobIds.current.has(job._id));
+        const visibleJobs = jobsWithCalculations.filter((job) => !rejectedJobIds.current.has(job._id));
+        const incomingIds = new Set(visibleJobs.map((job) => job._id));
+        const newlyAdded = visibleJobs.filter((job) => !knownJobIds.current.has(job._id));
         knownJobIds.current = incomingIds;
 
         if (firstLoadDone.current && newlyAdded.length > 0) {
           setNewJobAlert(newlyAdded[0]);
         }
         firstLoadDone.current = true;
-        setJobs(jobsWithCalculations);
+        setJobs(visibleJobs);
       } else {
         setEmptyMessage(response.message || "When restaurants mark orders as READY, they will appear here for delivery.");
         setJobs([]);
@@ -268,6 +270,9 @@ export default function JobsScreen({ navigation }: any) {
     try {
       const response = action === "accept" ? await acceptJob(job._id) : await rejectJob(job._id);
       if (response.success) {
+        if (action === "reject") {
+          rejectedJobIds.current.add(job._id);
+        }
         setSelectedJobAction(null);
         setNewJobAlert(null);
         setJobs((current) => current.filter((entry) => entry._id !== job._id));

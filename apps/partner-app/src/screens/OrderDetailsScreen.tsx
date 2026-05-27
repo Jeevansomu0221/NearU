@@ -32,7 +32,7 @@ interface Order {
     name: string;
     phone: string;
   };
-  deliveryPartnerId?: {
+  deliveryPartnerId?: string | {
     name?: string;
     phone?: string;
     vehicleType?: string;
@@ -49,6 +49,19 @@ interface ApiResponse<T = any> {
   message?: string;
   data?: T;
 }
+
+const getDeliveryPartnerName = (deliveryPartner: Order["deliveryPartnerId"]) => {
+  if (!deliveryPartner) return "Not assigned yet";
+  if (typeof deliveryPartner === "string") return "Assigned";
+
+  const name = deliveryPartner.name?.trim();
+  if (name) return name;
+
+  const phone = deliveryPartner.phone?.trim();
+  if (phone) return phone;
+
+  return "Assigned";
+};
 
 type SwipeActionProps = {
   title: string;
@@ -455,7 +468,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Delivery Partner:</Text>
-            <Text style={styles.infoValue}>{order.deliveryPartnerId?.name || "Not assigned yet"}</Text>
+            <Text style={styles.infoValue}>{getDeliveryPartnerName(order.deliveryPartnerId)}</Text>
           </View>
           {order.note ? (
             <View style={styles.infoRow}>

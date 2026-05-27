@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { getOrderDetails } from "../api/order.api";
 import type { Order } from "../api/order.api";
+import { getPublicShopName } from "../utils/display";
 
 type TimelineStep = {
   status: string;
@@ -235,7 +236,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const statusTheme = getStatusTheme(order.status);
   const isClosedOrder = order.status === "CANCELLED" || order.status === "REJECTED";
   const restaurantName =
-    (order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant";
+    getPublicShopName((order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant");
   const deliveryPartner = order.deliveryPartnerId as any;
 
   return (
