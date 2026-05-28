@@ -16,6 +16,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getUserProfile,
   updateUserProfile,
@@ -145,6 +146,8 @@ const isGeneratedCustomerName = (value?: string) => {
 
 export default function ProfileScreen({ navigation, route }: any) {
   const forceComplete = Boolean(route?.params?.forceComplete);
+  const insets = useSafeAreaInsets();
+  const footerPaddingBottom = Math.max(insets.bottom, Platform.OS === "ios" ? 24 : 16);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const [addressesY, setAddressesY] = useState(0);
@@ -884,7 +887,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           </View>
         </ScrollView>
 
-        <View style={styles.footerBar}>
+        <View style={[styles.footerBar, { paddingBottom: footerPaddingBottom }]}>
           <TouchableOpacity style={styles.footerButton} onPress={handleSaveProfile} disabled={saving}>
             {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Complete Registration</Text>}
           </TouchableOpacity>
@@ -1392,7 +1395,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       </ScrollView>
 
       {forceComplete && editing && (
-        <View style={styles.footerBar}>
+        <View style={[styles.footerBar, { paddingBottom: footerPaddingBottom }]}>
           <TouchableOpacity style={styles.footerButton} onPress={handleSaveProfile} disabled={saving}>
             {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Complete Registration</Text>}
           </TouchableOpacity>

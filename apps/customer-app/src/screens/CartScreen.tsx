@@ -235,7 +235,7 @@ export default function CartScreen({ route, navigation }: any) {
 
   if (loadingProfile) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color="#FF6B35" />
         <Text style={styles.loadingText}>Loading cart...</Text>
       </View>
@@ -243,8 +243,8 @@ export default function CartScreen({ route, navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
         <Text style={styles.title}>Your Cart</Text>
         {items.length > 0 ? (
           <TouchableOpacity
@@ -399,6 +399,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
+    paddingTop: 10,
     paddingBottom: 12
   },
   title: {

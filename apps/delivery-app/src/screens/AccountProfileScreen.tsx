@@ -216,7 +216,7 @@ export default function AccountProfileScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <View style={styles.loading}>
+      <View style={[styles.loading, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
@@ -224,12 +224,13 @@ export default function AccountProfileScreen({ navigation }: any) {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 28 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.header}>
+    <View style={[styles.safeAreaScreen, { paddingTop: insets.top }]}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 28 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
         <View style={styles.avatarWrap}>
           {profile?.profilePhotoUrl ? (
             <Image source={{ uri: profile.profilePhotoUrl }} style={styles.avatar} />
@@ -249,49 +250,54 @@ export default function AccountProfileScreen({ navigation }: any) {
         <TouchableOpacity style={styles.editButton} onPress={() => showComingSoon("Edit Profile")} accessibilityLabel="Edit profile">
           <Ionicons name="create-outline" size={18} color="#FFFFFF" />
         </TouchableOpacity>
-      </View>
-
-      {sections.map((section) => (
-        <View key={section.title} style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name={section.icon} size={20} color="#4CAF50" />
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-          </View>
-          <View style={styles.sectionBody}>
-            {section.items.map((item, index) => (
-              <TouchableOpacity
-                key={item.title}
-                style={[styles.menuRow, index === section.items.length - 1 && styles.menuRowLast]}
-                onPress={item.toggle ? undefined : item.onPress}
-                activeOpacity={item.toggle ? 1 : 0.75}
-              >
-                <View style={[styles.menuIcon, item.danger && styles.menuIconDanger]}>
-                  <Ionicons name={item.icon} size={18} color={item.danger ? "#DC2626" : "#4B5563"} />
-                </View>
-                <Text style={[styles.menuTitle, item.danger && styles.menuTitleDanger]} numberOfLines={1}>{item.title}</Text>
-                {item.toggle ? (
-                  <Switch
-                    value={Boolean(item.value)}
-                    onValueChange={item.onToggle}
-                    trackColor={{ false: "#D1D5DB", true: "#BBF7D0" }}
-                    thumbColor={item.value ? "#4CAF50" : "#F9FAFB"}
-                  />
-                ) : (
-                  <>
-                    {item.rightText ? <Text style={styles.rightText} numberOfLines={1}>{item.rightText}</Text> : null}
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-                  </>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
-      ))}
-    </ScrollView>
+
+        {sections.map((section) => (
+          <View key={section.title} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name={section.icon} size={20} color="#4CAF50" />
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            </View>
+            <View style={styles.sectionBody}>
+              {section.items.map((item, index) => (
+                <TouchableOpacity
+                  key={item.title}
+                  style={[styles.menuRow, index === section.items.length - 1 && styles.menuRowLast]}
+                  onPress={item.toggle ? undefined : item.onPress}
+                  activeOpacity={item.toggle ? 1 : 0.75}
+                >
+                  <View style={[styles.menuIcon, item.danger && styles.menuIconDanger]}>
+                    <Ionicons name={item.icon} size={18} color={item.danger ? "#DC2626" : "#4B5563"} />
+                  </View>
+                  <Text style={[styles.menuTitle, item.danger && styles.menuTitleDanger]} numberOfLines={1}>{item.title}</Text>
+                  {item.toggle ? (
+                    <Switch
+                      value={Boolean(item.value)}
+                      onValueChange={item.onToggle}
+                      trackColor={{ false: "#D1D5DB", true: "#BBF7D0" }}
+                      thumbColor={item.value ? "#4CAF50" : "#F9FAFB"}
+                    />
+                  ) : (
+                    <>
+                      {item.rightText ? <Text style={styles.rightText} numberOfLines={1}>{item.rightText}</Text> : null}
+                      <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    </>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  safeAreaScreen: {
+    flex: 1,
+    backgroundColor: "#F5F7FA"
+  },
   container: {
     flex: 1,
     backgroundColor: "#F5F7FA"

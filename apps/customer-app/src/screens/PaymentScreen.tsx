@@ -268,10 +268,10 @@ export default function PaymentScreen({ route, navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
         style={styles.content}
-        contentContainerStyle={{ paddingTop: insets.top + 14, paddingBottom: 180 + insets.bottom }}
+        contentContainerStyle={{ paddingTop: 14, paddingBottom: 180 + insets.bottom }}
       >
         <View style={styles.headerSection}>
           <Text style={styles.headerEyebrow}>Checkout</Text>

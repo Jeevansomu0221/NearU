@@ -5,7 +5,7 @@ export const partnerTheme = {
     surface: "#F9FCFF",
     border: "#D9E6F7",
     borderSoft: "#E6EEF9",
-    primary: "#2F80ED",
+    primary: "#60A5FA",
     primaryDark: "#143A66",
     muted: "#5E7897",
     mutedDark: "#355877",

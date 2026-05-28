@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#2F80ED",
+    color: "#60A5FA",
     textTransform: "uppercase"
   },
   title: {
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   primaryButton: {
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     borderRadius: 16,
     alignItems: "center",
     paddingVertical: 15

@@ -213,7 +213,7 @@ export default function HomeScreen({ navigation }: Props) {
   );
 
   const renderHeader = () => (
-    <View style={[styles.headerWrap, { paddingTop: insets.top + 8 }]}>
+    <View style={styles.headerWrap}>
       <View style={styles.heroRow}>
         <View style={styles.heroTextBlock}>
           <Image source={require("../../assets/vyaha-wordmark.png")} style={styles.brandLogo} resizeMode="contain" />
@@ -385,14 +385,14 @@ export default function HomeScreen({ navigation }: Props) {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <FlatList
         data={filteredShops}
         keyExtractor={(item) => item._id}
         renderItem={renderShopItem}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={!loading ? renderEmpty : null}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom, 14) }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops(true)} tintColor="#FF6B35" />
         }
@@ -411,6 +411,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14
   },
   headerWrap: {
+    paddingTop: 8,
     paddingHorizontal: 14,
     paddingBottom: 6
   },

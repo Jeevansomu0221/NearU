@@ -155,7 +155,7 @@ export default function AppNavigator() {
   if (loading || initialRoute === "Loading") {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F8FF" }}>
-        <ActivityIndicator size="large" color="#2F80ED" />
+        <ActivityIndicator size="large" color="#60A5FA" />
         <Text style={{ marginTop: 20, fontSize: 16, color: "#5E7897" }}>
           Loading your account...
         </Text>

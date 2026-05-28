@@ -95,8 +95,8 @@ export default function DashboardScreen({ navigation }: any) {
 
   if (loading && !partner) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2F80ED" />
+      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color="#60A5FA" />
         <Text style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
@@ -104,17 +104,17 @@ export default function DashboardScreen({ navigation }: any) {
 
   if (!partner) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
         <Text style={styles.loadingText}>Unable to load partner details.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ paddingTop: insets.top + 6, paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={{ paddingTop: 6, paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerContainer}>
@@ -154,7 +154,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={styles.metricsValue}>Rs {stats.todayEarnings}</Text>
             </View>
             <View style={styles.earningsIconContainer}>
-              <Ionicons name="wallet-outline" size={24} color="#2F80ED" />
+              <Ionicons name="wallet-outline" size={24} color="#60A5FA" />
             </View>
           </View>
 
@@ -185,7 +185,7 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={styles.gridContainer}>
             <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Orders")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#EBF3FE" }]}>
-                <Ionicons name="cart" size={22} color="#2F80ED" />
+                <Ionicons name="cart" size={22} color="#60A5FA" />
               </View>
               <Text style={styles.gridCardTitle}>Orders</Text>
               <Text style={styles.gridCardDesc}>Live & past orders</Text>
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#2F80ED"
+    color: "#60A5FA"
   },
   gridContainer: {
     flexDirection: "row",

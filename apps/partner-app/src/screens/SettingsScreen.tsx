@@ -214,7 +214,7 @@ export default function SettingsScreen({ navigation }: any) {
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color="#2F80ED" />
+        <ActivityIndicator size="large" color="#60A5FA" />
         <Text style={styles.loadingText}>Loading settings...</Text>
       </View>
     );
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 8
   },
-  choicePillSelected: { backgroundColor: "#2F80ED" },
+  choicePillSelected: { backgroundColor: "#60A5FA" },
   choiceText: { fontSize: 12, color: "#355877", fontWeight: "700" },
   choiceTextSelected: { color: "#FFFFFF" },
   selfDeliveryBox: {
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   addRiderButton: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2F80ED",
+    borderColor: "#60A5FA",
     backgroundColor: "#EAF3FF",
     alignItems: "center",
     paddingVertical: 11
@@ -496,9 +496,9 @@ const styles = StyleSheet.create({
     borderColor: "#CFE0F5",
     backgroundColor: "#F2F6FB"
   },
-  addRiderText: { color: "#2F80ED", fontSize: 13, fontWeight: "800" },
+  addRiderText: { color: "#60A5FA", fontSize: 13, fontWeight: "800" },
   smallSaveButton: {
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -516,6 +516,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E6EEF9"
   },
   rowText: { fontSize: 14, fontWeight: "700", color: "#143A66" },
-  logoutText: { fontSize: 14, fontWeight: "800", color: "#2F80ED" },
+  logoutText: { fontSize: 14, fontWeight: "800", color: "#60A5FA" },
   deleteText: { fontSize: 14, fontWeight: "800", color: "#B42318" }
 });

@@ -65,7 +65,7 @@ export default function EarningsScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={styles.loadingText}>Loading earnings...</Text>
       </View>
@@ -73,13 +73,14 @@ export default function EarningsScreen({ navigation }: any) {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 34 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#4CAF50"]} tintColor="#4CAF50" />}
-    >
-      {/* Today's Earnings Card */}
-      <View style={styles.todayCard}>
+    <View style={[styles.safeAreaScreen, { paddingTop: insets.top }]}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 34 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#4CAF50"]} tintColor="#4CAF50" />}
+      >
+        {/* Today's Earnings Card */}
+        <View style={styles.todayCard}>
         <Text style={styles.todayLabel}>TODAY'S EARNINGS</Text>
         <Text style={styles.todayAmount}>{formatCurrency(todayEarnings)}</Text>
         <View style={styles.todayStats}>
@@ -247,12 +248,17 @@ export default function EarningsScreen({ navigation }: any) {
         <Text style={styles.footerText}>
           Earnings are updated in real-time after each delivery
         </Text>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  safeAreaScreen: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',

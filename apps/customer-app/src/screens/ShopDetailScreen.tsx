@@ -6,6 +6,7 @@ import {
   Modal,
   ScrollView,
   StyleSheet,
+  StatusBar,
   Text,
   TouchableOpacity,
   View,
@@ -366,7 +367,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
   if (!shop && loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={[styles.centerContainer, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color="#FF6B35" />
         <Text style={styles.loadingText}>Loading restaurant details...</Text>
       </View>
@@ -375,7 +376,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
   if (!shop) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={[styles.centerContainer, { paddingTop: insets.top }]}>
         <Text style={styles.emptyTitle}>Restaurant not found</Text>
       </View>
     );
@@ -384,22 +385,23 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const bannerImage = shop.shopImageUrl || shopPlaceholders[getShopCategoryKey()] || shopPlaceholders["mini-restaurant"];
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 118 + Math.max(insets.bottom, 12) }]}>
-        <View style={styles.headerBackground}>
-          <View style={[styles.topBar, { paddingTop: insets.top + 4 }]}>
-            <TouchableOpacity style={styles.topBarButton} onPress={() => navigation.goBack()}>
-              <Feather name="arrow-left" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.topBarTitle}>Restaurant Details</Text>
-            <TouchableOpacity
-              style={styles.topBarButton}
-              onPress={() => Alert.alert("Favorites", "Favorites are not available in this release.")}
-            >
-              <Feather name="heart" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#FF6B35" />
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.topBarButton} onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.topBarTitle}>Restaurant Details</Text>
+        <TouchableOpacity
+          style={styles.topBarButton}
+          onPress={() => Alert.alert("Favorites", "Favorites are not available in this release.")}
+        >
+          <Feather name="heart" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
 
+      <ScrollView style={styles.scrollArea} contentContainerStyle={[styles.content, { paddingBottom: 118 + Math.max(insets.bottom, 12) }]}>
+        <View style={styles.headerBackground}>
           <TouchableOpacity style={styles.bannerCard} activeOpacity={0.9} onPress={() => setPreviewImage(bannerImage)}>
             <Image source={{ uri: bannerImage }} style={styles.bannerImage} resizeMode="cover" />
           </TouchableOpacity>
@@ -557,6 +559,10 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#FF6B35"
+  },
+  scrollArea: {
+    flex: 1,
     backgroundColor: "#FBF8F4"
   },
   content: {
@@ -579,7 +585,10 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 28
   },
   topBar: {
+    backgroundColor: "#FF6B35",
     paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"

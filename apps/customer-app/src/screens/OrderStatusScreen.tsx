@@ -11,7 +11,6 @@ import {
   RefreshControl,
   Linking
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { getOrderDetails } from "../api/order.api";
 import type { Order } from "../api/order.api";
@@ -34,7 +33,6 @@ const STATUS_STEPS: TimelineStep[] = [
 
 export default function OrderStatusScreen({ route, navigation }: any) {
   const { orderId } = route.params;
-  const insets = useSafeAreaInsets();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -242,7 +240,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 14, paddingBottom: 32 }}
+      contentContainerStyle={{ paddingTop: 14, paddingBottom: 32 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#FF6B35"]} />}
     >
       <View style={styles.heroCard}>

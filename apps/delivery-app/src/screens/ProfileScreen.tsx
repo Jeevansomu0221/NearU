@@ -518,12 +518,13 @@ export default function ProfileScreen({ navigation, route }: any) {
   );
 
   const renderActiveProfile = () => (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 36 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.dashboardHero}>
+    <View style={[styles.safeAreaScreen, { paddingTop: insets.top }]}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 36 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.dashboardHero}>
         <View style={styles.dashboardHeaderRow}>
           <View style={styles.dashboardAvatarWrap}>
             {profilePhotoUrl ? (
@@ -669,8 +670,9 @@ export default function ProfileScreen({ navigation, route }: any) {
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 
   const mandatoryDocsComplete = useMemo(() => {
@@ -1007,7 +1009,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   if (loading) {
-    return <View style={styles.loading}><ActivityIndicator size="large" color="#FF6B35" /><Text style={styles.loadingText}>Loading profile...</Text></View>;
+    return <View style={[styles.loading, { paddingTop: insets.top }]}><ActivityIndicator size="large" color="#FF6B35" /><Text style={styles.loadingText}>Loading profile...</Text></View>;
   }
 
   const currentStatus = statusTone[profile?.status || "INACTIVE"];
@@ -1017,8 +1019,8 @@ export default function ProfileScreen({ navigation, route }: any) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 8}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 136 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView style={[styles.container, { paddingTop: insets.top }]} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 8}>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 136 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.heroTag}><Ionicons name="bicycle-outline" size={16} color="#C2410C" /><Text style={styles.heroTagText}>Delivery Partner Registration</Text></View>
           <Text style={styles.heroTitle}>Complete your rider profile</Text>
@@ -1070,6 +1072,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
+  safeAreaScreen: { flex: 1, backgroundColor: "#F8F5F0" },
   container: { flex: 1, backgroundColor: "#F8F5F0" },
   loading: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F8F5F0" },
   loadingText: { marginTop: 12, color: "#667085", fontSize: 15 },

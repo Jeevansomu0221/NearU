@@ -94,7 +94,7 @@ export default function PendingApprovalScreen({ navigation }: any) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2F80ED" />
+        <ActivityIndicator size="large" color="#60A5FA" />
         <Text style={styles.loadingText}>Checking review status...</Text>
       </View>
     );
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#2F80ED",
+    color: "#60A5FA",
     textTransform: "uppercase"
   },
   heroTitle: {
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     color: "#143A66"
   },
   primaryButton: {
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     borderRadius: 16,
     alignItems: "center",
     paddingVertical: 14,
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13
   },
   secondaryButtonText: {
-    color: "#2F80ED",
+    color: "#60A5FA",
     fontSize: 13,
     fontWeight: "800"
   }

@@ -51,6 +51,7 @@ type Documents = {
   restaurantPhotosUrls?: string[];
   reuploadFlags?: ReuploadFlags;
   reuploadNotes?: string;
+  isComplete?: boolean;
 };
 
 type PartnerSettings = {
@@ -153,6 +154,15 @@ const DOCUMENT_UPLOADS: Array<{ key: DocumentKey; title: string; subtitle: strin
   { key: "shopLicenseUrl", title: "Shop & establishment license", subtitle: "Optional - if applicable" },
   { key: "ownerPanUrl", title: "Owner PAN copy", subtitle: "Optional secondary copy" },
   { key: "menuProofUrl", title: "Menu list / proof", subtitle: "Optional - speeds approval" }
+];
+
+const REQUIRED_KYC_DETAILS: Array<{ key: keyof Documents; label: string }> = [
+  { key: "fssaiNumber", label: "FSSAI number" },
+  { key: "panNumber", label: "PAN number" },
+  { key: "aadhaarNumber", label: "Aadhaar number" },
+  { key: "bankAccountHolderName", label: "Bank account holder" },
+  { key: "bankAccountNumber", label: "Bank account number" },
+  { key: "bankIfsc", label: "IFSC code" }
 ];
 
 const getUploadMimeType = (filename: string) => {
@@ -539,10 +549,25 @@ export default function ProfileScreen({ navigation }: any) {
     return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   }, [capturedLocation, profile?.location?.coordinates]);
 
+  const profileCompletion = useMemo(() => {
+    const missingDetails = REQUIRED_KYC_DETAILS
+      .filter(({ key }) => !String(kyc[key] || "").trim())
+      .map(({ label }) => label);
+    const missingDocuments = DOCUMENT_UPLOADS
+      .filter((doc) => doc.mandatory && !String(kyc[doc.key] || "").trim())
+      .map((doc) => doc.title);
+    const missing = [...missingDetails, ...missingDocuments];
+
+    return {
+      isComplete: missing.length === 0,
+      missing
+    };
+  }, [kyc]);
+
   if (loading && !profile) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2F80ED" />
+        <ActivityIndicator size="large" color="#60A5FA" />
         <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
@@ -588,10 +613,10 @@ export default function ProfileScreen({ navigation }: any) {
             disabled={pickerBusy || saving || isBusy}
           >
             {isBusy ? (
-              <ActivityIndicator color="#2F80ED" />
+              <ActivityIndicator color="#60A5FA" />
             ) : (
               <>
-                <Ionicons name="image-outline" size={22} color="#2F80ED" />
+                <Ionicons name="image-outline" size={22} color="#60A5FA" />
                 <Text style={styles.placeholderHint}>Tap to upload</Text>
               </>
             )}
@@ -610,10 +635,7 @@ export default function ProfileScreen({ navigation }: any) {
     const hasValue = raw.trim().length > 0;
     const isEditing = kycEditingField === field;
     const display = options.mask ? maskValue(raw, 4) : raw;
-    // Once the admin has APPROVED the partner, every submitted detail is considered verified.
-    // We don't surface "Not on file" for approved partners — admin already validated their KYC.
-    const isApproved = profile?.status === "APPROVED";
-    const showVerified = hasValue || isApproved;
+    const showVerified = hasValue;
 
     return (
       <View style={styles.kycField} key={field as string}>
@@ -626,7 +648,7 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
           ) : (
             <View style={[styles.docBadge, styles.docBadgeMissing]}>
-              <Text style={[styles.docBadgeText, styles.docBadgeMissingText]}>Not on file</Text>
+              <Text style={[styles.docBadgeText, styles.docBadgeMissingText]}>Incomplete</Text>
             </View>
           )}
         </View>
@@ -659,7 +681,7 @@ export default function ProfileScreen({ navigation }: any) {
         ) : (
           <>
             <Text style={hasValue ? styles.kycFieldValue : styles.kycFieldValueEmpty}>
-              {hasValue ? display : isApproved ? "Submitted during registration" : "Not provided yet"}
+              {hasValue ? display : "Not provided yet - add this to complete profile"}
             </Text>
             <View style={styles.kycFieldActions}>
               <TouchableOpacity
@@ -667,7 +689,7 @@ export default function ProfileScreen({ navigation }: any) {
                 onPress={() => startEditKycField(field)}
                 disabled={saving}
               >
-                <Text style={styles.docActionGhostText}>{hasValue || isApproved ? "Change" : "Add"}</Text>
+                <Text style={styles.docActionGhostText}>{hasValue ? "Change" : "Add"}</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -681,8 +703,6 @@ export default function ProfileScreen({ navigation }: any) {
     const isBusy = uploadingKey === `doc:${doc.key}`;
     const reuploadRequested = Boolean(kyc.reuploadFlags?.[doc.key]);
     const hasFile = Boolean(url);
-    // Approved partners: treat every doc as Verified unless admin specifically asks to re-upload.
-    const isApproved = profile?.status === "APPROVED";
 
     let badgeStyle: any = styles.docBadgeVerified;
     let badgeTextStyle: any = styles.docBadgeVerifiedText;
@@ -700,12 +720,12 @@ export default function ProfileScreen({ navigation }: any) {
       actionLabel = hasFile ? "Re-upload" : "Upload";
       actionStyle = styles.docActionPrimary;
       actionTextStyle = styles.docActionPrimaryText;
-    } else if (!hasFile && !isApproved) {
+    } else if (!hasFile) {
       if (doc.mandatory) {
         badgeStyle = styles.docBadgeMissing;
         badgeTextStyle = styles.docBadgeMissingText;
-        badgeLabel = "Not on file";
-        statusLine = "Please upload to complete verification";
+        badgeLabel = "Incomplete";
+        statusLine = "Please upload to complete profile";
         actionLabel = "Upload";
         actionStyle = styles.docActionPrimary;
         actionTextStyle = styles.docActionPrimaryText;
@@ -755,7 +775,7 @@ export default function ProfileScreen({ navigation }: any) {
           disabled={pickerBusy || saving || Boolean(uploadingKey)}
         >
           {isBusy ? (
-            <ActivityIndicator size="small" color={reuploadRequested ? "#FFFFFF" : "#2F80ED"} />
+            <ActivityIndicator size="small" color={reuploadRequested ? "#FFFFFF" : "#60A5FA"} />
           ) : (
             <Text style={actionTextStyle}>{actionLabel}</Text>
           )}
@@ -765,47 +785,61 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 36 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.hero}>
-        <View style={styles.heroRow}>
-          <View style={styles.heroAvatarWrap}>
-            {images.shopImageUrl ? (
-              <Image source={{ uri: images.shopImageUrl }} style={styles.heroAvatar} />
-            ) : (
-              <View style={[styles.heroAvatar, styles.heroAvatarPlaceholder]}>
-                <Ionicons name="storefront" size={26} color="#2F80ED" />
-              </View>
-            )}
+    <View style={styles.safeAreaScreen}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingTop: 10, paddingBottom: insets.bottom + 36 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.hero}>
+          <View style={styles.heroRow}>
+            <View style={styles.heroAvatarWrap}>
+              {images.shopImageUrl ? (
+                <Image source={{ uri: images.shopImageUrl }} style={styles.heroAvatar} />
+              ) : (
+                <View style={[styles.heroAvatar, styles.heroAvatarPlaceholder]}>
+                  <Ionicons name="storefront" size={26} color="#60A5FA" />
+                </View>
+              )}
+            </View>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroEyebrow}>Partner Profile</Text>
+              <Text style={styles.heroTitle} numberOfLines={1}>
+                {profile.restaurantName}
+              </Text>
+              <Text style={styles.heroSubtitle}>
+                {CATEGORY_LABELS[profile.category] || profile.category} • {profile.status}
+              </Text>
+            </View>
           </View>
-          <View style={styles.heroCopy}>
-            <Text style={styles.heroEyebrow}>Partner Profile</Text>
-            <Text style={styles.heroTitle} numberOfLines={1}>
-              {profile.restaurantName}
-            </Text>
-            <Text style={styles.heroSubtitle}>
-              {CATEGORY_LABELS[profile.category] || profile.category} • {profile.status}
+          <View style={styles.heroStatsRow}>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatValue}>{profile.menuItemsCount || 0}</Text>
+              <Text style={styles.heroStatLabel}>Menu items</Text>
+            </View>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatValue}>{hours.isOpen ? "Open" : "Closed"}</Text>
+              <Text style={styles.heroStatLabel}>Shop status</Text>
+            </View>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatValue}>{profile.settings?.deliveryRadiusKm ?? 3}km</Text>
+              <Text style={styles.heroStatLabel}>Delivery</Text>
+            </View>
+          </View>
+        </View>
+
+      {!profileCompletion.isComplete ? (
+        <View style={styles.completionBanner}>
+          <Ionicons name="alert-circle" size={18} color="#8A5A00" />
+          <View style={styles.completionBannerCopy}>
+            <Text style={styles.completionBannerTitle}>Profile incomplete</Text>
+            <Text style={styles.completionBannerText}>
+              Add {profileCompletion.missing.slice(0, 3).join(", ")}
+              {profileCompletion.missing.length > 3 ? ` and ${profileCompletion.missing.length - 3} more item${profileCompletion.missing.length - 3 === 1 ? "" : "s"}` : ""}.
             </Text>
           </View>
         </View>
-        <View style={styles.heroStatsRow}>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatValue}>{profile.menuItemsCount || 0}</Text>
-            <Text style={styles.heroStatLabel}>Menu items</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatValue}>{hours.isOpen ? "Open" : "Closed"}</Text>
-            <Text style={styles.heroStatLabel}>Shop status</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatValue}>{profile.settings?.deliveryRadiusKm ?? 3}km</Text>
-            <Text style={styles.heroStatLabel}>Delivery</Text>
-          </View>
-        </View>
-      </View>
+      ) : null}
 
       {/* Basic Shop Details */}
       <View style={styles.card}>
@@ -965,7 +999,7 @@ export default function ProfileScreen({ navigation }: any) {
 
         <TouchableOpacity style={styles.secondaryButton} onPress={captureShopLocation} disabled={saving || capturingLocation}>
           {capturingLocation ? (
-            <ActivityIndicator color="#2F80ED" />
+            <ActivityIndicator color="#60A5FA" />
           ) : (
             <Text style={styles.secondaryButtonText}>
               {capturedLocation ? "Re-capture shop GPS pin" : "Use current shop GPS pin"}
@@ -1104,9 +1138,9 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={styles.card}>
         {renderSectionHeader(
           "KYC / Verification",
-          profile.status === "APPROVED"
-            ? "All your registration details are verified by our team. Tap Change to update anything."
-            : "Your registration details are on file. Tap Change to update something."
+          profileCompletion.isComplete
+            ? "All required registration details are on file. Tap Change to update anything."
+            : "Some required details are incomplete. Add the missing bank details or documents here."
         )}
 
         {kyc.reuploadNotes ? (
@@ -1176,11 +1210,16 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.primaryButtonText}>Open Settings</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  safeAreaScreen: {
+    flex: 1,
+    backgroundColor: "#F4F8FF"
+  },
   container: {
     flex: 1,
     backgroundColor: "#F4F8FF"
@@ -1199,7 +1238,7 @@ const styles = StyleSheet.create({
   hero: {
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     borderRadius: 22,
     padding: 18
   },
@@ -1270,6 +1309,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9E6F7",
     padding: 16
+  },
+  completionBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: "#FFF8E8",
+    borderColor: "#F5D48B",
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14
+  },
+  completionBannerCopy: {
+    flex: 1,
+    marginLeft: 10
+  },
+  completionBannerTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#7A4F00"
+  },
+  completionBannerText: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#7A4F00"
   },
   sectionHeader: {
     marginBottom: 12
@@ -1363,7 +1428,7 @@ const styles = StyleSheet.create({
     color: "#5E7897"
   },
   primaryButton: {
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     borderRadius: 14,
     alignItems: "center",
     paddingVertical: 14,
@@ -1382,7 +1447,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13
   },
   secondaryButtonText: {
-    color: "#2F80ED",
+    color: "#60A5FA",
     fontSize: 14,
     fontWeight: "800"
   },
@@ -1400,7 +1465,7 @@ const styles = StyleSheet.create({
     marginRight: 8
   },
   utilityButtonText: {
-    color: "#2F80ED",
+    color: "#60A5FA",
     fontSize: 13,
     fontWeight: "700"
   },
@@ -1443,7 +1508,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#2F80ED"
+    color: "#60A5FA"
   },
   logoPreview: {
     width: 120,
@@ -1524,7 +1589,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   dayPillSelected: {
-    backgroundColor: "#2F80ED"
+    backgroundColor: "#60A5FA"
   },
   dayPillText: {
     fontSize: 12,
@@ -1543,7 +1608,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   choicePillSelected: {
-    backgroundColor: "#2F80ED"
+    backgroundColor: "#60A5FA"
   },
   choicePillText: {
     fontSize: 12,
@@ -1585,7 +1650,7 @@ const styles = StyleSheet.create({
   documentLinkText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#2F80ED"
+    color: "#60A5FA"
   },
   smallUploadButton: {
     backgroundColor: "#EAF3FF",
@@ -1596,7 +1661,7 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   smallUploadText: {
-    color: "#2F80ED",
+    color: "#60A5FA",
     fontSize: 12,
     fontWeight: "800"
   },
@@ -1656,7 +1721,7 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   docActionGhostText: {
-    color: "#2F80ED",
+    color: "#60A5FA",
     fontSize: 12,
     fontWeight: "800"
   },
@@ -1744,7 +1809,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end"
   },
   kycSaveButton: {
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
