@@ -14,10 +14,13 @@ interface AuthRequest extends Request {
 }
 
 const withCommonCategories = (categories: string[]) => [...categories, "Hots", "Other"];
+const restaurantMenuCategories = withCommonCategories(["Veg Meals", "Non Veg Meals", "Biryani", "Curries", "Rice", "Combos"]);
 
 const CATEGORY_BY_SHOP_TYPE: Record<string, string[]> = {
   bakery: withCommonCategories(["Breads", "Cakes", "Pastries", "Cookies", "Puffs", "Buns"]),
-  "mini-restaurant": withCommonCategories(["Veg Meals", "Non Veg Meals", "Biryani", "Curries", "Rice", "Combos"]),
+  restaurant: restaurantMenuCategories,
+  "cloud-kitchen": restaurantMenuCategories,
+  "mini-restaurant": restaurantMenuCategories,
   grocery: withCommonCategories(["Staples", "Snacks", "Dairy", "Beverages", "Personal Care", "Household"]),
   "tiffin-center": withCommonCategories(["Idli", "Dosa", "Poori", "Uttapam", "Meals", "Snacks"]),
   "fast-food": withCommonCategories(["Pizza", "Burgers", "Fries", "Wraps", "Sandwiches", "Combos"]),

@@ -50,9 +50,13 @@ type PickerAsset = {
   uri: string;
   fileName?: string | null;
   mimeType?: string | null;
+  width?: number;
+  height?: number;
 };
 
 const withCommonCategories = (categories: string[]) => [...categories, "Hots", "Other"];
+const ALL_CATEGORIES_FILTER = "All";
+const MENU_IMAGE_TRANSFORMATION = "c_fill,w_1200,h_900,q_auto,f_auto";
 
 const CATEGORY_BY_SHOP_TYPE: Record<string, string[]> = {
   bakery: withCommonCategories(["Breads", "Cakes", "Pastries", "Cookies", "Puffs", "Buns"]),
@@ -91,6 +95,18 @@ const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
   return `${baseName}.${mimeExtension}`;
 };
 
+const getMenuImageUrl = (url: string) => {
+  if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
+    return url;
+  }
+
+  if (url.includes(`/${MENU_IMAGE_TRANSFORMATION}/`)) {
+    return url;
+  }
+
+  return url.replace("/upload/", `/upload/${MENU_IMAGE_TRANSFORMATION}/`);
+};
+
 export default function MenuScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -102,6 +118,7 @@ export default function MenuScreen({ navigation }: any) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [selectedImageAsset, setSelectedImageAsset] = useState<PickerAsset | null>(null);
   const [search, setSearch] = useState("");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState(ALL_CATEGORIES_FILTER);
   const [partnerCategory, setPartnerCategory] = useState<string>("other");
   const [form, setForm] = useState({
     name: "",
@@ -119,6 +136,16 @@ export default function MenuScreen({ navigation }: any) {
   }, []);
 
   const availableCategories = CATEGORY_BY_SHOP_TYPE[partnerCategory] || CATEGORY_BY_SHOP_TYPE.other;
+  const categoryFilters = [ALL_CATEGORIES_FILTER, ...availableCategories];
+
+  const menuStats = useMemo(() => {
+    const available = menuItems.filter((item) => item.isAvailable).length;
+    return {
+      total: menuItems.length,
+      available,
+      unavailable: menuItems.length - available
+    };
+  }, [menuItems]);
 
   const loadPartnerProfile = async () => {
     try {
@@ -136,9 +163,13 @@ export default function MenuScreen({ navigation }: any) {
   };
 
   const filteredItems = useMemo(() => {
-    if (!search.trim()) return menuItems;
-    return menuItems.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
-  }, [menuItems, search]);
+    const query = search.trim().toLowerCase();
+    return menuItems.filter((item) => {
+      const matchesSearch = !query || item.name.toLowerCase().includes(query);
+      const matchesCategory = selectedCategoryFilter === ALL_CATEGORIES_FILTER || item.category === selectedCategoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [menuItems, search, selectedCategoryFilter]);
 
   const loadMenuItems = async () => {
     try {
@@ -173,7 +204,7 @@ export default function MenuScreen({ navigation }: any) {
     if (!uploadData?.success || !uploadData?.data?.url) {
       throw new Error(uploadData.message || "Upload failed");
     }
-    return uploadData.data.url;
+    return getMenuImageUrl(uploadData.data.url);
   };
 
   const pickImage = async () => {
@@ -188,7 +219,9 @@ export default function MenuScreen({ navigation }: any) {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.6
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8
       });
 
       if (!result.canceled && result.assets[0]?.uri) {
@@ -329,10 +362,17 @@ export default function MenuScreen({ navigation }: any) {
     </View>
   );
 
+  const renderStatCard = (label: string, value: number, tone: "total" | "available" | "unavailable") => (
+    <View style={[styles.statCard, styles[`${tone}StatCard`]]}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+
   const renderItem = ({ item }: { item: MenuItem }) => (
     <View style={styles.menuItem}>
       {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
+        <Image source={{ uri: getMenuImageUrl(item.imageUrl) }} style={styles.itemImage} />
       ) : (
         <View style={[styles.itemImage, styles.placeholderImage]}>
           <Text style={styles.placeholderText}>No Image</Text>
@@ -361,7 +401,7 @@ export default function MenuScreen({ navigation }: any) {
               value={item.isAvailable}
               onValueChange={() => toggleAvailability(item)}
               trackColor={{ false: "#D9E6F7", true: "#9FC8FF" }}
-              thumbColor={item.isAvailable ? "#2F80ED" : "#9AB3CC"}
+              thumbColor={item.isAvailable ? "#60A5FA" : "#9AB3CC"}
               style={styles.itemSwitch}
             />
           </View>
@@ -381,7 +421,7 @@ export default function MenuScreen({ navigation }: any) {
   if (loading && menuItems.length === 0) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2F80ED" />
+        <ActivityIndicator size="large" color="#60A5FA" />
         <Text style={styles.loadingText}>Loading menu...</Text>
       </View>
     );
@@ -395,9 +435,15 @@ export default function MenuScreen({ navigation }: any) {
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Menu Management</Text>
-          <Text style={styles.subtitle}>Dishes, prices, and availability</Text>
+          <Text style={styles.subtitle}>Quick edits for prices, photos, and availability</Text>
         </View>
         <NotificationButton onPress={() => navigation.navigate("Orders")} />
+      </View>
+
+      <View style={styles.statsRow}>
+        {renderStatCard("Items", menuStats.total, "total")}
+        {renderStatCard("Live", menuStats.available, "available")}
+        {renderStatCard("Hidden", menuStats.unavailable, "unavailable")}
       </View>
 
       <View style={styles.searchWrap}>
@@ -410,9 +456,29 @@ export default function MenuScreen({ navigation }: any) {
             onChangeText={setSearch}
           />
           <TouchableOpacity style={styles.addButton} onPress={() => openEditor()}>
-            <Text style={styles.addButtonText}>+ Add</Text>
+            <Ionicons name="add" size={16} color="#FFFFFF" />
+            <Text style={styles.addButtonText}>Add</Text>
           </TouchableOpacity>
         </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScroll}
+        >
+          {categoryFilters.map((category) => {
+            const selected = selectedCategoryFilter === category;
+            return (
+              <TouchableOpacity
+                key={category}
+                style={[styles.filterChip, selected && styles.filterChipSelected]}
+                onPress={() => setSelectedCategoryFilter(category)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{category}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {filteredItems.length === 0 ? (
@@ -450,7 +516,7 @@ export default function MenuScreen({ navigation }: any) {
                   <Image source={{ uri: imageUri }} style={styles.selectedImage} />
                 ) : (
                   <View style={styles.imagePlaceholder}>
-                    <Ionicons name="image-outline" size={24} color="#2F80ED" />
+                    <Ionicons name="image-outline" size={24} color="#60A5FA" />
                     <Text style={styles.imagePlaceholderText}>Add photo</Text>
                   </View>
                 )}
@@ -572,7 +638,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingBottom: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
@@ -593,7 +659,7 @@ const styles = StyleSheet.create({
     marginRight: 10
   },
   title: {
-    fontSize: 23,
+    fontSize: 22,
     fontWeight: "800",
     color: "#143A66"
   },
@@ -603,19 +669,59 @@ const styles = StyleSheet.create({
     color: "#5E7897"
   },
   addButton: {
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 10
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center"
   },
   addButtonText: {
     color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: "800"
+    fontWeight: "800",
+    marginLeft: 3
+  },
+  statsRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    marginBottom: 12
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    borderWidth: 1
+  },
+  totalStatCard: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#D9E6F7"
+  },
+  availableStatCard: {
+    backgroundColor: "#EAF8EF",
+    borderColor: "#CDEFD8"
+  },
+  unavailableStatCard: {
+    backgroundColor: "#FFF4ED",
+    borderColor: "#FED7AA",
+    marginRight: 0
+  },
+  statValue: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: "#143A66"
+  },
+  statLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#5E7897"
   },
   searchWrap: {
     paddingHorizontal: 16,
-    paddingBottom: 12
+    paddingBottom: 10
   },
   searchRow: {
     flexDirection: "row",
@@ -632,6 +738,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#123456",
     marginRight: 10
+  },
+  filterScroll: {
+    paddingTop: 12,
+    paddingBottom: 4
+  },
+  filterChip: {
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    marginRight: 8
+  },
+  filterChipSelected: {
+    backgroundColor: "#143A66",
+    borderColor: "#143A66"
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#44678E"
+  },
+  filterChipTextSelected: {
+    color: "#FFFFFF"
   },
   menuItem: {
     flexDirection: "row",
@@ -678,7 +809,7 @@ const styles = StyleSheet.create({
   itemPrice: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#2F80ED"
+    color: "#60A5FA"
   },
   itemDescription: {
     fontSize: 11,
@@ -758,7 +889,7 @@ const styles = StyleSheet.create({
   editText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#2F80ED",
+    color: "#60A5FA",
     marginRight: 10
   },
   deleteText: {
@@ -786,7 +917,7 @@ const styles = StyleSheet.create({
     marginBottom: 18
   },
   emptyButton: {
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     borderRadius: 16,
     paddingHorizontal: 18,
     paddingVertical: 12
@@ -831,12 +962,12 @@ const styles = StyleSheet.create({
   },
   selectedImage: {
     width: "100%",
-    height: 132,
+    aspectRatio: 4 / 3,
     borderRadius: 14
   },
   imagePlaceholder: {
     width: "100%",
-    height: 92,
+    aspectRatio: 4 / 3,
     borderRadius: 14,
     backgroundColor: "#EEF5FF",
     borderWidth: 1,
@@ -848,7 +979,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     fontWeight: "700",
-    color: "#2F80ED"
+    color: "#60A5FA"
   },
   imagePlaceholderSubtext: {
     fontSize: 12,
@@ -890,7 +1021,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   categoryChipSelected: {
-    backgroundColor: "#2F80ED"
+    backgroundColor: "#60A5FA"
   },
   categoryChipText: {
     fontSize: 12,
@@ -930,7 +1061,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     flex: 1,
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     borderRadius: 16,
     alignItems: "center",
     paddingVertical: 15,
@@ -950,7 +1081,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 18,
-    backgroundColor: "#2F80ED",
+    backgroundColor: "#60A5FA",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#143A66",
