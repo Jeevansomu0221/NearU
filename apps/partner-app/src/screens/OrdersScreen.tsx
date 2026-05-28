@@ -33,6 +33,7 @@ interface Order {
     phone?: string;
   };
   grandTotal?: number;
+  itemTotal?: number;
 }
 
 const isAwaitingPartnerAction = (status: string) => status === "CONFIRMED";
@@ -149,6 +150,7 @@ export default function OrdersScreen({ navigation }: any) {
 
   const renderItem = ({ item }: { item: Order }) => {
     const statusTheme = getStatusTheme(item.status);
+    const foodTotal = item.itemTotal ?? item.items?.reduce((sum, orderItem) => sum + orderItem.quantity * orderItem.price, 0) ?? 0;
 
     return (
       <TouchableOpacity style={styles.orderCard} onPress={() => navigation.navigate("OrderDetails", { orderId: item._id })}>
@@ -180,8 +182,8 @@ export default function OrdersScreen({ navigation }: any) {
         {item.items && item.items.length > 2 ? <Text style={styles.moreItems}>+{item.items.length - 2} more items</Text> : null}
 
         <View style={styles.orderFooter}>
-          <Text style={styles.totalLabel}>Grand total</Text>
-          <Text style={styles.totalAmount}>Rs {item.grandTotal || 0}</Text>
+          <Text style={styles.totalLabel}>Food total</Text>
+          <Text style={styles.totalAmount}>Rs {foodTotal}</Text>
         </View>
       </TouchableOpacity>
     );

@@ -330,12 +330,6 @@ export default function PaymentScreen({ route, navigation }: any) {
                   <Text style={styles.itemPrice}>{formatAmount(item.quantity * item.price)}</Text>
                 </View>
               ))}
-              {typeof group.deliveryFee === "number" ? (
-                <Text style={styles.restaurantDelivery}>
-                  Delivery {formatAmount(group.deliveryFee)}
-                  {group.deliveryDistanceKm ? ` • ${group.deliveryDistanceKm} km distance slab` : ""}
-                </Text>
-              ) : null}
             </View>
           ))}
         </View>
@@ -591,12 +585,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#FF6B35"
-  },
-  restaurantDelivery: {
-    marginTop: 8,
-    fontSize: 12,
-    color: "#216E39",
-    fontWeight: "700"
   },
   itemRow: {
     flexDirection: "row",

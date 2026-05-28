@@ -39,7 +39,6 @@ interface Order {
   };
   grandTotal: number;
   itemTotal: number;
-  deliveryFee: number;
   paymentMethod: string;
   paymentStatus: string;
 }
@@ -527,17 +526,9 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Order Summary</Text>
         <View style={styles.infoCard}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Item Total</Text>
-            <Text style={styles.summaryValue}>Rs {order.itemTotal}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Delivery Fee</Text>
-            <Text style={styles.summaryValue}>Rs {order.deliveryFee || 49}</Text>
-          </View>
           <View style={styles.grandTotalRow}>
-            <Text style={styles.grandTotalLabel}>Total Amount</Text>
-            <Text style={styles.grandTotalValue}>Rs {order.grandTotal}</Text>
+            <Text style={styles.grandTotalLabel}>Food Total</Text>
+            <Text style={styles.grandTotalValue}>Rs {order.itemTotal}</Text>
           </View>
         </View>
       </View>
