@@ -160,44 +160,44 @@ function MenuCardItem({
           <View style={styles.menuInfo}>
             <View style={styles.menuInfoTop}>
               <View style={styles.menuTitleBlock}>
-                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
               </View>
-              <View style={styles.priceActionBlock}>
-                <Text style={styles.itemPrice}>Rs {item.price}</Text>
-                <View style={styles.stepper}>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleDecrement(item);
-                    }}
-                    disabled={quantity === 0}
-                  >
-                    <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.stepperValue}>{quantity}</Text>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handlePress();
-                    }}
-                  >
-                    <Text style={styles.stepperButtonText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+              <Text style={styles.itemPrice}>Rs {item.price}</Text>
             </View>
 
-            <Text style={styles.itemDescription} numberOfLines={3}>
-              {item.description || "Freshly prepared in-store with quality ingredients."}
-            </Text>
+            <View style={styles.menuCompactRow}>
+              <View style={styles.menuTextStack}>
+                <Text style={styles.itemDescription} numberOfLines={2}>
+                  {item.description || "Freshly prepared in-store with quality ingredients."}
+                </Text>
+                <View style={styles.readyRow}>
+                  <Feather name="clock" size={11} color="#7C7168" />
+                  <Text style={styles.readyText}>Ready in a few minutes</Text>
+                </View>
+              </View>
 
-            <View style={styles.menuInfoBottom}>
-              <View style={styles.readyRow}>
-                <Feather name="clock" size={12} color="#7C7168" />
-                <Text style={styles.readyText}>Ready in a few minutes</Text>
+              <View style={styles.stepper}>
+                <TouchableOpacity
+                  style={styles.stepperButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleDecrement(item);
+                  }}
+                  disabled={quantity === 0}
+                >
+                  <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepperValue}>{quantity}</Text>
+                <TouchableOpacity
+                  style={styles.stepperButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handlePress();
+                  }}
+                >
+                  <Text style={styles.stepperButtonText}>+</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -803,11 +803,11 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#EEE8E0",
-    padding: 9,
-    marginBottom: 8,
+    padding: 8,
+    marginBottom: 7,
     shadowColor: "#E7DCCF",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -818,11 +818,11 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 999,
     backgroundColor: "#FFF3E5",
-    marginBottom: 6
+    marginBottom: 5
   },
   bestSellerText: {
     marginLeft: 4,
@@ -834,14 +834,14 @@ const styles = StyleSheet.create({
     flexDirection: "row"
   },
   menuImage: {
-    width: 76,
-    height: 76,
-    borderRadius: 14,
+    width: 68,
+    height: 68,
+    borderRadius: 13,
     backgroundColor: "#F4E7DB"
   },
   menuInfo: {
     flex: 1,
-    paddingLeft: 10
+    paddingLeft: 9
   },
   menuInfoTop: {
     flexDirection: "row",
@@ -850,22 +850,23 @@ const styles = StyleSheet.create({
   },
   menuTitleBlock: {
     flex: 1,
-    paddingRight: 8
+    paddingRight: 6
   },
   itemName: {
-    fontSize: 16,
-    lineHeight: 19,
+    fontSize: 15,
+    lineHeight: 18,
     fontWeight: "900",
     color: "#201914"
   },
   itemSubtext: {
-    marginTop: 2,
-    fontSize: 11,
+    marginTop: 1,
+    fontSize: 10,
     fontWeight: "700",
     color: "#FF6B35"
   },
   itemPrice: {
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: "900",
     color: "#FF6B35"
   },
@@ -873,22 +874,30 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     minWidth: 92
   },
-  itemDescription: {
+  menuCompactRow: {
     marginTop: 5,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8
+  },
+  menuTextStack: {
+    flex: 1,
+    minWidth: 0
+  },
+  itemDescription: {
     fontSize: 11,
-    lineHeight: 16,
+    lineHeight: 14,
     color: "#72675E"
   },
-  menuInfoBottom: {
-    marginTop: 7
-  },
   readyRow: {
+    marginTop: 3,
     flexDirection: "row",
     alignItems: "center"
   },
   readyText: {
-    marginLeft: 5,
+    marginLeft: 4,
     fontSize: 10,
+    lineHeight: 12,
     color: "#7C7168"
   },
   actionsColumn: {
@@ -903,19 +912,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1C3AA",
     borderRadius: 999,
-    paddingHorizontal: 2,
-    height: 32,
-    marginTop: 9
+    paddingHorizontal: 1,
+    height: 28,
+    alignSelf: "center"
   },
   stepperButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center"
   },
   stepperButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: "#D76E35"
   },
@@ -923,9 +932,9 @@ const styles = StyleSheet.create({
     color: "#CFB8A8"
   },
   stepperValue: {
-    minWidth: 22,
+    minWidth: 20,
     textAlign: "center",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: "#201914"
   },

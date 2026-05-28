@@ -56,7 +56,8 @@ type PickerAsset = {
 
 const withCommonCategories = (categories: string[]) => [...categories, "Hots", "Other"];
 const ALL_CATEGORIES_FILTER = "All";
-const MENU_IMAGE_TRANSFORMATION = "c_fill,w_1200,h_900,q_auto,f_auto";
+const MENU_IMAGE_TRANSFORMATION = "c_pad,w_1200,h_900,b_auto,q_auto,f_auto";
+const LEGACY_MENU_IMAGE_TRANSFORMATIONS = ["c_fill,w_1200,h_900,q_auto,f_auto"];
 
 const CATEGORY_BY_SHOP_TYPE: Record<string, string[]> = {
   bakery: withCommonCategories(["Breads", "Cakes", "Pastries", "Cookies", "Puffs", "Buns"]),
@@ -104,6 +105,12 @@ const getMenuImageUrl = (url: string) => {
     return url;
   }
 
+  for (const transformation of LEGACY_MENU_IMAGE_TRANSFORMATIONS) {
+    if (url.includes(`/${transformation}/`)) {
+      return url.replace(`/${transformation}/`, `/${MENU_IMAGE_TRANSFORMATION}/`);
+    }
+  }
+
   return url.replace("/upload/", `/upload/${MENU_IMAGE_TRANSFORMATION}/`);
 };
 
@@ -126,7 +133,7 @@ export default function MenuScreen({ navigation }: any) {
     price: "",
     category: "Main Items",
     isVegetarian: true,
-    preparationTime: "15",
+    preparationTime: "",
     isAvailable: true
   });
 
@@ -219,8 +226,6 @@ export default function MenuScreen({ navigation }: any) {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
         quality: 0.8
       });
 
@@ -243,7 +248,7 @@ export default function MenuScreen({ navigation }: any) {
       price: "",
       category: availableCategories[0] || "Main Items",
       isVegetarian: true,
-      preparationTime: "15",
+      preparationTime: "",
       isAvailable: true
     });
     setImageUri(null);
@@ -259,7 +264,7 @@ export default function MenuScreen({ navigation }: any) {
         price: item.price.toString(),
         category: item.category || availableCategories[0] || "Main Items",
         isVegetarian: item.isVegetarian !== false,
-        preparationTime: item.preparationTime?.toString() || "15",
+        preparationTime: item.preparationTime?.toString() || "",
         isAvailable: item.isAvailable
       });
       setImageUri(item.imageUrl || null);
@@ -295,7 +300,7 @@ export default function MenuScreen({ navigation }: any) {
         price: parseFloat(form.price),
         category: form.category,
         isVegetarian: form.isVegetarian,
-        preparationTime: parseInt(form.preparationTime, 10) || 15,
+        preparationTime: form.preparationTime ? parseInt(form.preparationTime, 10) : undefined,
         isAvailable: form.isAvailable,
         imageUrl
       };
@@ -507,18 +512,37 @@ export default function MenuScreen({ navigation }: any) {
 
       <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => !saving && setModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={[
+              styles.modalScroll,
+              { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 18 }
+            ]}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
 
               <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving || pickerBusy}>
                 {imageUri ? (
-                  <Image source={{ uri: imageUri }} style={styles.selectedImage} />
+                  <>
+                    <Image source={{ uri: getMenuImageUrl(imageUri) }} style={styles.selectedImage} />
+                    <View style={styles.imagePickerCopy}>
+                      <Text style={styles.imagePlaceholderText}>Photo selected</Text>
+                      <Text style={styles.imagePlaceholderSubtext}>Tap to change. We resize it automatically.</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#7CA2C7" />
+                  </>
                 ) : (
-                  <View style={styles.imagePlaceholder}>
-                    <Ionicons name="image-outline" size={24} color="#60A5FA" />
-                    <Text style={styles.imagePlaceholderText}>Add photo</Text>
-                  </View>
+                  <>
+                    <View style={styles.imagePlaceholder}>
+                      <Ionicons name="image-outline" size={24} color="#60A5FA" />
+                    </View>
+                    <View style={styles.imagePickerCopy}>
+                      <Text style={styles.imagePlaceholderText}>Add photo</Text>
+                      <Text style={styles.imagePlaceholderSubtext}>Auto resized for menu cards.</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#7CA2C7" />
+                  </>
                 )}
               </TouchableOpacity>
 
@@ -933,8 +957,8 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 14
+    justifyContent: "flex-start",
+    paddingHorizontal: 14
   },
   modalContent: {
     backgroundColor: "#FFFFFF",
@@ -957,34 +981,46 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   imagePicker: {
+    minHeight: 78,
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12
+    marginBottom: 12,
+    borderRadius: 16,
+    backgroundColor: "#EEF5FF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    padding: 10
   },
   selectedImage: {
-    width: "100%",
-    aspectRatio: 4 / 3,
-    borderRadius: 14
+    width: 72,
+    height: 54,
+    borderRadius: 12,
+    backgroundColor: "#D9E6F7"
   },
   imagePlaceholder: {
-    width: "100%",
-    aspectRatio: 4 / 3,
-    borderRadius: 14,
-    backgroundColor: "#EEF5FF",
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#D9E6F7",
     justifyContent: "center",
     alignItems: "center"
   },
+  imagePickerCopy: {
+    flex: 1,
+    marginLeft: 12
+  },
   imagePlaceholderText: {
-    marginTop: 6,
     fontSize: 13,
-    fontWeight: "700",
-    color: "#60A5FA"
+    fontWeight: "800",
+    color: "#143A66"
   },
   imagePlaceholderSubtext: {
     fontSize: 12,
     color: "#6A86A8",
-    marginTop: 5
+    marginTop: 4,
+    lineHeight: 16
   },
   input: {
     borderWidth: 1,

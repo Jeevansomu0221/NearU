@@ -20,6 +20,35 @@ interface CreateOrderRequest {
   paymentMethod?: string;
 }
 
+export interface OrderPricingGroup {
+  partnerId: string;
+  shopName: string;
+  itemTotal: number;
+  deliveryFee: number;
+  foodGst: number;
+  deliveryGst: number;
+  platformFee: number;
+  taxDiscount: number;
+  riderToShopDistanceKm: number;
+  shopToCustomerDistanceKm: number;
+  deliveryDistanceKm: number;
+  grandTotal: number;
+  payableTotal: number;
+}
+
+export interface OrderPricingQuote {
+  groups: OrderPricingGroup[];
+  itemTotal: number;
+  deliveryFee: number;
+  foodGst: number;
+  deliveryGst: number;
+  platformFee: number;
+  taxDiscount: number;
+  deliveryDistanceKm: number;
+  grandTotal: number;
+  payableTotal: number;
+}
+
 // Define complete Order type with all fields
 export interface Order {
   _id: string;
@@ -37,6 +66,13 @@ export interface Order {
   items: OrderItem[];
   itemTotal?: number;
   deliveryFee?: number;
+  foodGst?: number;
+  deliveryGst?: number;
+  platformFee?: number;
+  taxDiscount?: number;
+  riderToShopDistanceKm?: number;
+  shopToCustomerDistanceKm?: number;
+  deliveryDistanceKm?: number;
   paymentStatus?: string;
   paymentMethod?: string;
   paymentId?: string;
@@ -72,6 +108,16 @@ export const createShopOrder = (
   }
 
   return apiPost<Order>("/orders", requestData);
+};
+
+export const quoteOrderPricing = (
+  groups: Array<{ partnerId: string; itemTotal: number }>,
+  deliveryLocation: { latitude: number; longitude: number }
+): Promise<ApiResponse<OrderPricingQuote>> => {
+  return apiPost<OrderPricingQuote>("/orders/pricing", {
+    groups,
+    deliveryLocation
+  });
 };
 
 /**

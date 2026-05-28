@@ -73,6 +73,11 @@ export interface OrderSummary {
   items: any[];
   subtotal: number;
   deliveryFee: number;
+  foodGst?: number;
+  deliveryGst?: number;
+  platformFee?: number;
+  taxDiscount?: number;
+  deliveryDistanceKm?: number;
   total: number;
   address: string;
   deliveryLocation?: {
@@ -85,6 +90,12 @@ export interface OrderSummary {
     shopName: string;
     items: any[];
     subtotal: number;
+    deliveryFee?: number;
+    foodGst?: number;
+    deliveryGst?: number;
+    platformFee?: number;
+    taxDiscount?: number;
+    deliveryDistanceKm?: number;
   }>;
 }
 

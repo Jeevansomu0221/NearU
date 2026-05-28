@@ -13,6 +13,7 @@ import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
+import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
 
 interface CartItem {
   _id?: string;
@@ -24,11 +25,18 @@ interface CartItem {
   menuItemId?: string;
 }
 
+const formatAmount = (value = 0) => {
+  const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
+  return `Rs ${rounded || "0"}`;
+};
+
 export default function CartScreen({ route, navigation }: any) {
   const { items, clear, removeItem, updateQuantity } = useCart();
   const [loading, setLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [pricingQuote, setPricingQuote] = useState<OrderPricingQuote | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
   const [note, setNote] = useState("");
   const insets = useSafeAreaInsets();
 
@@ -74,8 +82,12 @@ export default function CartScreen({ route, navigation }: any) {
     }));
   }, [items]);
 
-  const deliveryFee = groupedItems.length * 49;
   const subtotal = items.reduce((sum: number, item: CartItem) => sum + item.price * item.quantity, 0);
+  const deliveryFee = pricingQuote?.deliveryFee || 0;
+  const foodGst = pricingQuote?.foodGst ?? subtotal * 0.05;
+  const deliveryGst = pricingQuote?.deliveryGst ?? deliveryFee * 0.18;
+  const platformFee = pricingQuote?.platformFee ?? 0;
+  const taxDiscount = pricingQuote?.taxDiscount ?? foodGst + deliveryGst + platformFee;
   const total = subtotal + deliveryFee;
 
   const getSelectedAddress = (): SavedAddress | string | undefined => {
@@ -127,6 +139,56 @@ export default function CartScreen({ route, navigation }: any) {
 
     return undefined;
   };
+
+  const fetchPricingQuote = useCallback(
+    async (
+      deliveryLocation: { latitude: number; longitude: number },
+      options?: { showAlert?: boolean }
+    ) => {
+      if (groupedItems.length === 0) {
+        setPricingQuote(null);
+        return null;
+      }
+
+      try {
+        setPricingLoading(true);
+        const response = await quoteOrderPricing(
+          groupedItems.map((group) => ({
+            partnerId: group.shopId,
+            itemTotal: group.subtotal
+          })),
+          deliveryLocation
+        );
+
+        if (!response.success || !response.data) {
+          throw new Error(response.message || "Could not calculate delivery fee.");
+        }
+
+        setPricingQuote(response.data);
+        return response.data;
+      } catch (error: any) {
+        setPricingQuote(null);
+        if (options?.showAlert) {
+          Alert.alert("Pricing Error", error.message || "Could not calculate delivery fee.");
+        }
+        return null;
+      } finally {
+        setPricingLoading(false);
+      }
+    },
+    [groupedItems]
+  );
+
+  useEffect(() => {
+    const deliveryLocation = getDeliveryLocation();
+
+    if (!deliveryLocation || groupedItems.length === 0) {
+      setPricingQuote(null);
+      return;
+    }
+
+    fetchPricingQuote(deliveryLocation);
+  }, [fetchPricingQuote, groupedItems.length, userProfile]);
 
   const captureAndSaveDeliveryLocation = async () => {
     const address = getSelectedAddress();
@@ -193,17 +255,41 @@ export default function CartScreen({ route, navigation }: any) {
         return;
       }
 
+      const activeQuote = await fetchPricingQuote(deliveryLocation, { showAlert: true });
+      if (!activeQuote) {
+        return;
+      }
+
+      const quotesByShopId = new Map(activeQuote.groups.map((group) => [group.partnerId, group]));
+      const pricedGroupedItems = groupedItems.map((group) => {
+        const quote = quotesByShopId.get(group.shopId);
+        return {
+          ...group,
+          deliveryFee: quote?.deliveryFee || 0,
+          foodGst: quote?.foodGst || 0,
+          deliveryGst: quote?.deliveryGst || 0,
+          platformFee: quote?.platformFee || 0,
+          taxDiscount: quote?.taxDiscount || 0,
+          deliveryDistanceKm: quote?.deliveryDistanceKm || 0
+        };
+      });
+
       navigation.navigate("Payment", {
         userProfile,
         orderSummary: {
           items,
           subtotal,
-          deliveryFee,
-          total,
+          deliveryFee: activeQuote.deliveryFee,
+          foodGst: activeQuote.foodGst,
+          deliveryGst: activeQuote.deliveryGst,
+          platformFee: activeQuote.platformFee,
+          taxDiscount: activeQuote.taxDiscount,
+          deliveryDistanceKm: activeQuote.deliveryDistanceKm,
+          total: activeQuote.payableTotal,
           address: formatAddress(),
           deliveryLocation,
           note,
-          groupedShops: groupedItems
+          groupedShops: pricedGroupedItems
         }
       });
     } catch (error: any) {
@@ -215,7 +301,7 @@ export default function CartScreen({ route, navigation }: any) {
 
   const hasAddressPin = Boolean(getDeliveryLocation());
   const canCheckout =
-    Boolean(getSelectedAddress()) && !loading && items.length > 0;
+    Boolean(getSelectedAddress()) && !loading && !pricingLoading && items.length > 0;
 
   const handleRemoveItem = (item: CartItem) => {
       Alert.alert("Remove Item", "Remove this item from cart?", [
@@ -282,14 +368,14 @@ export default function CartScreen({ route, navigation }: any) {
                     <Text style={styles.shopName}>{group.shopName}</Text>
                     <Text style={styles.shopSubtext}>{group.items.length} item{group.items.length === 1 ? "" : "s"}</Text>
                   </View>
-                  <Text style={styles.shopSubtotal}>Rs {group.subtotal}</Text>
+                  <Text style={styles.shopSubtotal}>{formatAmount(group.subtotal)}</Text>
                 </View>
 
                 {group.items.map((item) => (
                   <View key={`${item.shopId}-${item.menuItemId || item.name}`} style={styles.itemCard}>
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemName}>{item.name}</Text>
-                      <Text style={styles.itemPrice}>Rs {item.price} each</Text>
+                      <Text style={styles.itemPrice}>{formatAmount(item.price)} each</Text>
                     </View>
 
                     <View style={styles.itemActions}>
@@ -347,23 +433,47 @@ export default function CartScreen({ route, navigation }: any) {
             <View style={styles.summaryCard}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Items Total</Text>
-                <Text style={styles.summaryValue}>Rs {subtotal}</Text>
+                <Text style={styles.summaryValue}>{formatAmount(subtotal)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Delivery Fee ({groupedItems.length} restaurant{groupedItems.length === 1 ? "" : "s"})</Text>
-                <Text style={styles.summaryValue}>Rs {deliveryFee}</Text>
+                <Text style={styles.summaryLabel}>Delivery Fee ({pricingQuote?.deliveryDistanceKm ? `${pricingQuote.deliveryDistanceKm} km` : "distance based"})</Text>
+                <Text style={styles.summaryValue}>
+                  {pricingLoading ? "Calculating..." : pricingQuote ? formatAmount(deliveryFee) : "After GPS pin"}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Food GST (5%)</Text>
+                <View style={styles.waivedValueGroup}>
+                  <Text style={styles.struckValue}>{formatAmount(foodGst)}</Text>
+                  <Text style={styles.freeValue}>Rs 0</Text>
+                </View>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Delivery GST (18%)</Text>
+                <View style={styles.waivedValueGroup}>
+                  <Text style={styles.struckValue}>{formatAmount(deliveryGst)}</Text>
+                  <Text style={styles.freeValue}>Rs 0</Text>
+                </View>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Platform fee</Text>
+                <View style={styles.waivedValueGroup}>
+                  <Text style={styles.struckValue}>{formatAmount(platformFee)}</Text>
+                  <Text style={styles.freeValue}>Rs 0</Text>
+                </View>
               </View>
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total Amount</Text>
-                <Text style={styles.totalValue}>Rs {total}</Text>
+                <Text style={styles.totalValue}>{formatAmount(total)}</Text>
               </View>
+              <Text style={styles.offerNote}>You saved {formatAmount(taxDiscount)} with waived GST and platform fee.</Text>
             </View>
           </ScrollView>
 
           <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
             <View>
               <Text style={styles.footerLabel}>Total</Text>
-              <Text style={styles.footerTotal}>Rs {total}</Text>
+              <Text style={styles.footerTotal}>{formatAmount(total)}</Text>
             </View>
             <TouchableOpacity
               style={[styles.checkoutButton, !canCheckout && styles.checkoutButtonDisabled]}
@@ -617,6 +727,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#2C2018"
+  },
+  waivedValueGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  struckValue: {
+    fontSize: 12,
+    color: "#9A8A7F",
+    textDecorationLine: "line-through"
+  },
+  freeValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#216E39"
+  },
+  offerNote: {
+    marginTop: 8,
+    fontSize: 11,
+    color: "#216E39",
+    fontWeight: "700"
   },
   totalRow: {
     flexDirection: "row",

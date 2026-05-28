@@ -112,7 +112,49 @@ const OrderSchema = new Schema({
   deliveryFee: {
     type: Number,
     required: true,
-    default: 49
+    default: 0
+  },
+
+  foodGst: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  deliveryGst: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  platformFee: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  taxDiscount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  riderToShopDistanceKm: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  shopToCustomerDistanceKm: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  deliveryDistanceKm: {
+    type: Number,
+    default: 0,
+    min: 0
   },
 
   grandTotal: {

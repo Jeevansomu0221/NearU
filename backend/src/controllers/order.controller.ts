@@ -16,6 +16,11 @@ const isConsumerAppRole = (role?: string) =>
 const RESTAURANT_ACCEPT_TIMEOUT_MS = 10 * 60 * 1000;
 const DELIVERY_ACCEPT_TIMEOUT_MS = 30 * 60 * 1000;
 const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
+const DELIVERY_FIRST_KM_FEE = 15;
+const DELIVERY_ADDITIONAL_KM_FEE = 10;
+const FOOD_GST_RATE = 0.05;
+const DELIVERY_GST_RATE = 0.18;
+const PLATFORM_FEE = 0;
 const AUTO_CANCEL_MESSAGE =
   "Sorry for the problem. We could not place this order. If online payment was done, the refund will be completed within today.";
 
@@ -369,6 +374,199 @@ const haversineKm = (from: [number, number], to: [number, number]) => {
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+const roundMoney = (value: number) => Number(value.toFixed(2));
+const roundDistance = (value: number) => Number(value.toFixed(2));
+
+const isValidCoordinates = (coordinates: any): coordinates is [number, number] =>
+  Array.isArray(coordinates) &&
+  coordinates.length === 2 &&
+  coordinates.every((value) => Number.isFinite(Number(value))) &&
+  !(Number(coordinates[0]) === 0 && Number(coordinates[1]) === 0);
+
+const normalizeCoordinates = (coordinates: any): [number, number] | undefined => {
+  if (!isValidCoordinates(coordinates)) return undefined;
+  return [Number(coordinates[0]), Number(coordinates[1])];
+};
+
+const calculateTaxOffer = (itemTotal: number, deliveryFee: number) => {
+  const foodGst = roundMoney(itemTotal * FOOD_GST_RATE);
+  const deliveryGst = roundMoney(deliveryFee * DELIVERY_GST_RATE);
+  const platformFee = PLATFORM_FEE;
+
+  return {
+    foodGst,
+    deliveryGst,
+    platformFee,
+    taxDiscount: roundMoney(foodGst + deliveryGst + platformFee)
+  };
+};
+
+const calculateDeliveryFee = (distanceKm: number) => {
+  const billableKm = Math.max(1, Math.ceil(distanceKm));
+  return DELIVERY_FIRST_KM_FEE + Math.max(0, billableKm - 1) * DELIVERY_ADDITIONAL_KM_FEE;
+};
+
+const findNearestRiderDistanceKm = async (
+  shopCoordinates: [number, number],
+  userIds?: string[]
+): Promise<number | null> => {
+  const filter: Record<string, any> = {
+    status: { $in: ["ACTIVE", "VERIFIED"] },
+    isAvailable: { $ne: false }
+  };
+
+  if (userIds?.length) {
+    filter.userId = {
+      $in: userIds
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        .map((id) => new mongoose.Types.ObjectId(id))
+    };
+  }
+
+  const riders = await DeliveryPartner.find(filter)
+    .select("currentLocation")
+    .lean();
+
+  let nearestDistance: number | null = null;
+
+  for (const rider of riders) {
+    const riderCoordinates = normalizeCoordinates((rider as any).currentLocation?.coordinates);
+    if (!riderCoordinates) continue;
+
+    const distance = haversineKm(riderCoordinates, shopCoordinates);
+    if (nearestDistance === null || distance < nearestDistance) {
+      nearestDistance = distance;
+    }
+  }
+
+  return nearestDistance;
+};
+
+const resolveRiderToShopDistanceKm = async (partner: any, shopCoordinates: [number, number]) => {
+  const selfDeliveryUserIds = getActiveSelfDeliveryUserIds(partner);
+  const selfDeliveryDistance = selfDeliveryUserIds.length
+    ? await findNearestRiderDistanceKm(shopCoordinates, selfDeliveryUserIds)
+    : null;
+
+  if (selfDeliveryDistance !== null) {
+    return selfDeliveryDistance;
+  }
+
+  return await findNearestRiderDistanceKm(shopCoordinates);
+};
+
+const calculateDeliveryPricing = async (partner: any, deliveryLocation: GeoPoint) => {
+  const shopLocation = normalizeLocationPayload(partner?.location);
+  const shopCoordinates = normalizeCoordinates(shopLocation?.coordinates);
+  const customerCoordinates = normalizeCoordinates(deliveryLocation.coordinates);
+
+  if (!shopCoordinates) {
+    throw new Error("Shop location is missing. Ask the restaurant to update its shop GPS pin.");
+  }
+
+  if (!customerCoordinates) {
+    throw new Error("Exact delivery map pin is required. Please save your address GPS location.");
+  }
+
+  const shopToCustomerDistanceKm = haversineKm(shopCoordinates, customerCoordinates);
+  const deliveryDistanceKm = shopToCustomerDistanceKm;
+
+  return {
+    riderToShopDistanceKm: 0,
+    shopToCustomerDistanceKm: roundDistance(shopToCustomerDistanceKm),
+    deliveryDistanceKm: roundDistance(deliveryDistanceKm),
+    deliveryFee: calculateDeliveryFee(deliveryDistanceKm)
+  };
+};
+
+/**
+ * ================================
+ * QUOTE ORDER PRICING
+ * ================================
+ */
+export const quoteOrderPricing = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+
+    if (!user || !isConsumerAppRole(user.role)) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const { groups, deliveryLocation } = req.body;
+    const normalizedDeliveryLocation = normalizeLocationPayload(deliveryLocation) || await resolveCustomerSavedLocation(user.id);
+
+    if (!normalizedDeliveryLocation) {
+      return errorResponse(res, "Exact delivery map pin is required. Please save your address GPS location.", 400);
+    }
+
+    if (!Array.isArray(groups) || groups.length === 0) {
+      return errorResponse(res, "At least one shop is required for pricing", 400);
+    }
+
+    const pricedGroups = [];
+
+    for (const group of groups) {
+      const partnerId = group.partnerId || group.shopId;
+      if (!partnerId || !mongoose.Types.ObjectId.isValid(partnerId)) {
+        return errorResponse(res, "Invalid shop in pricing request", 400);
+      }
+
+      const partner = await Partner.findById(partnerId);
+      if (!partner) {
+        return errorResponse(res, "Restaurant not found", 404);
+      }
+
+      if (partner.status !== "APPROVED") {
+        return errorResponse(res, "Restaurant is not approved for orders", 400);
+      }
+
+      const itemTotal = Math.max(0, roundMoney(Number(group.itemTotal || group.subtotal || 0)));
+      const deliveryPricing = await calculateDeliveryPricing(partner, normalizedDeliveryLocation);
+      const taxOffer = calculateTaxOffer(itemTotal, deliveryPricing.deliveryFee);
+
+      pricedGroups.push({
+        partnerId: idString(partner._id),
+        shopName: partner.restaurantName || partner.shopName || "Restaurant",
+        itemTotal,
+        ...deliveryPricing,
+        ...taxOffer,
+        grandTotal: roundMoney(itemTotal + deliveryPricing.deliveryFee),
+        payableTotal: roundMoney(itemTotal + deliveryPricing.deliveryFee)
+      });
+    }
+
+    const totals = pricedGroups.reduce(
+      (sum, group) => ({
+        itemTotal: roundMoney(sum.itemTotal + group.itemTotal),
+        deliveryFee: roundMoney(sum.deliveryFee + group.deliveryFee),
+        foodGst: roundMoney(sum.foodGst + group.foodGst),
+        deliveryGst: roundMoney(sum.deliveryGst + group.deliveryGst),
+        platformFee: roundMoney(sum.platformFee + group.platformFee),
+        taxDiscount: roundMoney(sum.taxDiscount + group.taxDiscount),
+        deliveryDistanceKm: roundDistance(sum.deliveryDistanceKm + group.deliveryDistanceKm),
+        grandTotal: roundMoney(sum.grandTotal + group.grandTotal),
+        payableTotal: roundMoney(sum.payableTotal + group.payableTotal)
+      }),
+      {
+        itemTotal: 0,
+        deliveryFee: 0,
+        foodGst: 0,
+        deliveryGst: 0,
+        platformFee: 0,
+        taxDiscount: 0,
+        deliveryDistanceKm: 0,
+        grandTotal: 0,
+        payableTotal: 0
+      }
+    );
+
+    return successResponse(res, { groups: pricedGroups, ...totals }, "Pricing calculated successfully");
+  } catch (err: any) {
+    console.error("quoteOrderPricing error:", err);
+    return errorResponse(res, `Failed to calculate pricing: ${err.message}`);
+  }
+};
+
 const markAutoCancelled = (order: any, reason: string) => {
   order.status = "CANCELLED";
   order.cancellationReason = reason;
@@ -518,9 +716,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Calculate totals
-    const deliveryFee = 49; // Fixed delivery fee for now
-    const grandTotal = itemTotal + deliveryFee;
+    // Calculate totals from shop-to-customer distance. GST and platform
+    // charges are recorded as waived so the payable amount remains transparent.
+    const deliveryPricing = await calculateDeliveryPricing(partner, normalizedDeliveryLocation);
+    const deliveryFee = deliveryPricing.deliveryFee;
+    const taxOffer = calculateTaxOffer(itemTotal, deliveryFee);
+    const grandTotal = roundMoney(itemTotal + deliveryFee);
 
     // Determine payment status based on payment method
     let paymentStatus: string;
@@ -547,6 +748,13 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       items: validatedItems,
       itemTotal,
       deliveryFee,
+      foodGst: taxOffer.foodGst,
+      deliveryGst: taxOffer.deliveryGst,
+      platformFee: taxOffer.platformFee,
+      taxDiscount: taxOffer.taxDiscount,
+      riderToShopDistanceKm: deliveryPricing.riderToShopDistanceKm,
+      shopToCustomerDistanceKm: deliveryPricing.shopToCustomerDistanceKm,
+      deliveryDistanceKm: deliveryPricing.deliveryDistanceKm,
       grandTotal,
       paymentMethod,
       paymentStatus,
@@ -864,7 +1072,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
         {
           $inc: {
             totalDeliveries: 1,
-            totalEarnings: order.deliveryFee || 49
+            totalEarnings: order.deliveryFee || 0
           }
         }
       );
@@ -872,7 +1080,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
     const responseOrder = order.toObject() as any;
     if (status === "DELIVERED") {
-      responseOrder.deliveryEarnings = order.deliveryFee || 49;
+      responseOrder.deliveryEarnings = order.deliveryFee || 0;
       responseOrder.collectedAmount = collectedAmount ? Number(collectedAmount) : undefined;
     }
 

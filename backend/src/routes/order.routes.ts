@@ -5,6 +5,7 @@ import { roleMiddleware } from "../middlewares/role.middleware";
 import { CONSUMER_APP_ROLES, ROLES } from "../config/roles";
 import {
   createOrder,
+  quoteOrderPricing,
   updateOrderStatus,
   assignDelivery,
   updateDeliveryStatus,
@@ -30,6 +31,13 @@ router.post(
   authMiddleware, 
   roleMiddleware([...CONSUMER_APP_ROLES]), 
   createOrder
+);
+
+router.post(
+  "/pricing",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  quoteOrderPricing
 );
 
 // Get my orders (customer only)

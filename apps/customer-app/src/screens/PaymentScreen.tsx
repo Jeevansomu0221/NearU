@@ -27,7 +27,18 @@ interface CheckoutGroup {
     menuItemId?: string;
   }>;
   subtotal: number;
+  deliveryFee?: number;
+  foodGst?: number;
+  deliveryGst?: number;
+  platformFee?: number;
+  taxDiscount?: number;
+  deliveryDistanceKm?: number;
 }
+
+const formatAmount = (value = 0) => {
+  const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
+  return `Rs ${rounded || "0"}`;
+};
 
 export default function PaymentScreen({ route, navigation }: any) {
   const { userProfile, orderSummary } = route.params;
@@ -64,6 +75,11 @@ export default function PaymentScreen({ route, navigation }: any) {
 
     return Array.from(grouped.values());
   }, [items, orderSummary?.groupedShops]);
+
+  const foodGst = orderSummary?.foodGst ?? (orderSummary?.subtotal || 0) * 0.05;
+  const deliveryGst = orderSummary?.deliveryGst ?? (orderSummary?.deliveryFee || 0) * 0.18;
+  const platformFee = orderSummary?.platformFee ?? 0;
+  const taxDiscount = orderSummary?.taxDiscount ?? foodGst + deliveryGst + platformFee;
 
   const getDeliveryTime = () => {
     const now = new Date();
@@ -291,7 +307,7 @@ export default function PaymentScreen({ route, navigation }: any) {
           </View>
           <Text style={styles.customerName}>{userProfile.name}</Text>
           <Text style={styles.customerPhone}>{userProfile.phone}</Text>
-          <Text style={styles.deliveryAddress}>{formatAddress(userProfile.address)}</Text>
+          <Text style={styles.deliveryAddress}>{orderSummary.address || formatAddress(userProfile.address)}</Text>
           <View style={styles.deliveryTimeBanner}>
             <Text style={styles.deliveryTimeTitle}>Estimated delivery</Text>
             <Text style={styles.deliveryTimeText}>30-45 min • By {getDeliveryTime()}</Text>
@@ -304,16 +320,22 @@ export default function PaymentScreen({ route, navigation }: any) {
             <View key={group.shopId} style={styles.restaurantBlock}>
               <View style={styles.restaurantHeader}>
                 <Text style={styles.restaurantName}>{group.shopName}</Text>
-                <Text style={styles.restaurantSubtotal}>Rs {group.subtotal}</Text>
+                <Text style={styles.restaurantSubtotal}>{formatAmount(group.subtotal)}</Text>
               </View>
               {group.items.map((item) => (
                 <View key={`${group.shopId}-${item.menuItemId || item.name}`} style={styles.itemRow}>
                   <Text style={styles.itemName}>
                     {item.quantity} x {item.name}
                   </Text>
-                  <Text style={styles.itemPrice}>Rs {item.quantity * item.price}</Text>
+                  <Text style={styles.itemPrice}>{formatAmount(item.quantity * item.price)}</Text>
                 </View>
               ))}
+              {typeof group.deliveryFee === "number" ? (
+                <Text style={styles.restaurantDelivery}>
+                  Delivery {formatAmount(group.deliveryFee)}
+                  {group.deliveryDistanceKm ? ` • ${group.deliveryDistanceKm} km distance slab` : ""}
+                </Text>
+              ) : null}
             </View>
           ))}
         </View>
@@ -333,17 +355,38 @@ export default function PaymentScreen({ route, navigation }: any) {
         <View style={styles.priceCard}>
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Items total</Text>
-            <Text style={styles.priceValue}>Rs {orderSummary.subtotal}</Text>
+            <Text style={styles.priceValue}>{formatAmount(orderSummary.subtotal)}</Text>
           </View>
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Delivery fee</Text>
-            <Text style={styles.priceValue}>Rs {orderSummary.deliveryFee}</Text>
+            <Text style={styles.priceLabel}>Delivery fee {orderSummary.deliveryDistanceKm ? `(${orderSummary.deliveryDistanceKm} km)` : ""}</Text>
+            <Text style={styles.priceValue}>{formatAmount(orderSummary.deliveryFee)}</Text>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Food GST (5%)</Text>
+            <View style={styles.waivedValueGroup}>
+              <Text style={styles.struckValue}>{formatAmount(foodGst)}</Text>
+              <Text style={styles.freeValue}>Rs 0</Text>
+            </View>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Delivery GST (18%)</Text>
+            <View style={styles.waivedValueGroup}>
+              <Text style={styles.struckValue}>{formatAmount(deliveryGst)}</Text>
+              <Text style={styles.freeValue}>Rs 0</Text>
+            </View>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Platform fee</Text>
+            <View style={styles.waivedValueGroup}>
+              <Text style={styles.struckValue}>{formatAmount(platformFee)}</Text>
+              <Text style={styles.freeValue}>Rs 0</Text>
+            </View>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Amount to pay</Text>
-            <Text style={styles.totalValue}>Rs {orderSummary.total}</Text>
+            <Text style={styles.totalValue}>{formatAmount(orderSummary.total)}</Text>
           </View>
-          <Text style={styles.taxNote}>Inclusive of all taxes</Text>
+          <Text style={styles.taxNote}>You saved {formatAmount(taxDiscount)}. GST and platform fee are waived for this offer.</Text>
         </View>
 
         {paymentMethod === "CASH_ON_DELIVERY" ? (
@@ -362,7 +405,7 @@ export default function PaymentScreen({ route, navigation }: any) {
       <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
         <View style={styles.footerSummary}>
           <Text style={styles.footerEstimate}>Estimated by {getDeliveryTime()}</Text>
-          <Text style={styles.footerTotal}>Rs {orderSummary.total}</Text>
+          <Text style={styles.footerTotal}>{formatAmount(orderSummary.total)}</Text>
         </View>
         <TouchableOpacity
           style={[styles.payButton, loading && styles.payButtonDisabled]}
@@ -549,6 +592,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FF6B35"
   },
+  restaurantDelivery: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#216E39",
+    fontWeight: "700"
+  },
   itemRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -630,6 +679,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#2C2018"
+  },
+  waivedValueGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  struckValue: {
+    fontSize: 12,
+    color: "#9A8A7F",
+    textDecorationLine: "line-through"
+  },
+  freeValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#216E39"
   },
   totalRow: {
     flexDirection: "row",

@@ -31,6 +31,11 @@ const STATUS_STEPS: TimelineStep[] = [
   { status: "DELIVERED", label: "Delivered", caption: "Order completed successfully" }
 ];
 
+const formatAmount = (value = 0) => {
+  const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
+  return `Rs ${rounded || "0"}`;
+};
+
 export default function OrderStatusScreen({ route, navigation }: any) {
   const { orderId } = route.params;
   const [order, setOrder] = useState<Order | null>(null);
@@ -236,6 +241,12 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const restaurantName =
     getPublicShopName((order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant");
   const deliveryPartner = order.deliveryPartnerId as any;
+  const itemTotal = order.itemTotal || 0;
+  const deliveryFee = order.deliveryFee || 0;
+  const foodGst = order.foodGst ?? itemTotal * 0.05;
+  const deliveryGst = order.deliveryGst ?? deliveryFee * 0.18;
+  const platformFee = order.platformFee ?? 0;
+  const taxDiscount = order.taxDiscount ?? foodGst + deliveryGst + platformFee;
 
   return (
     <ScrollView
@@ -260,7 +271,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         <View style={styles.heroStats}>
           <View style={styles.statPill}>
             <Text style={styles.statLabel}>Total</Text>
-            <Text style={styles.statValue}>Rs {order.grandTotal || 0}</Text>
+            <Text style={styles.statValue}>{formatAmount(order.grandTotal || 0)}</Text>
           </View>
           <View style={styles.statPill}>
             <Text style={styles.statLabel}>Payment</Text>
@@ -386,9 +397,9 @@ export default function OrderStatusScreen({ route, navigation }: any) {
           >
             <View style={styles.itemCopy}>
               <Text style={styles.itemName}>{item.quantity} x {item.name}</Text>
-              <Text style={styles.itemMeta}>Rs {item.price} each</Text>
+              <Text style={styles.itemMeta}>{formatAmount(item.price)} each</Text>
             </View>
-            <Text style={styles.itemTotal}>Rs {item.price * item.quantity}</Text>
+            <Text style={styles.itemTotal}>{formatAmount(item.price * item.quantity)}</Text>
           </View>
         ))}
       </View>
@@ -397,11 +408,32 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         <Text style={styles.sectionTitle}>Payment summary</Text>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Item total</Text>
-          <Text style={styles.summaryValue}>Rs {order.itemTotal || 0}</Text>
+          <Text style={styles.summaryValue}>{formatAmount(itemTotal)}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Delivery fee</Text>
-          <Text style={styles.summaryValue}>Rs {order.deliveryFee || 49}</Text>
+          <Text style={styles.summaryLabel}>Delivery fee {order.deliveryDistanceKm ? `(${order.deliveryDistanceKm} km)` : ""}</Text>
+          <Text style={styles.summaryValue}>{formatAmount(deliveryFee)}</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Food GST (5%)</Text>
+          <View style={styles.waivedValueGroup}>
+            <Text style={styles.struckValue}>{formatAmount(foodGst)}</Text>
+            <Text style={styles.freeValue}>Rs 0</Text>
+          </View>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Delivery GST (18%)</Text>
+          <View style={styles.waivedValueGroup}>
+            <Text style={styles.struckValue}>{formatAmount(deliveryGst)}</Text>
+            <Text style={styles.freeValue}>Rs 0</Text>
+          </View>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Platform fee</Text>
+          <View style={styles.waivedValueGroup}>
+            <Text style={styles.struckValue}>{formatAmount(platformFee)}</Text>
+            <Text style={styles.freeValue}>Rs 0</Text>
+          </View>
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Payment status</Text>
@@ -411,8 +443,9 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         </View>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Grand total</Text>
-          <Text style={styles.totalValue}>Rs {order.grandTotal || 0}</Text>
+          <Text style={styles.totalValue}>{formatAmount(order.grandTotal || 0)}</Text>
         </View>
+        <Text style={styles.offerNote}>You saved {formatAmount(taxDiscount)} with waived GST and platform fee.</Text>
       </View>
 
       <View style={styles.supportCard}>
@@ -719,6 +752,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#2C2018"
+  },
+  waivedValueGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  struckValue: {
+    fontSize: 12,
+    color: "#9A8A7F",
+    textDecorationLine: "line-through"
+  },
+  freeValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#216E39"
+  },
+  offerNote: {
+    marginTop: 8,
+    fontSize: 11,
+    color: "#216E39",
+    fontWeight: "700"
   },
   totalRow: {
     flexDirection: "row",
