@@ -1,11 +1,30 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, Button, Alert } from "react-native";
 import { verifyFirebaseOtp } from "../api/auth.api";
-import { confirmFirebaseOtp } from "../services/firebasePhoneAuth";
+import {
+  clearFirebaseOtpSession,
+  confirmFirebaseOtp,
+  isFirebaseOtpSessionExpiredError
+} from "../services/firebasePhoneAuth";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone, role } = route.params;
   const [otp, setOtp] = useState("");
+
+  const getOtpErrorMessage = (error: any) => {
+    const code = String(error?.code || "").toLowerCase();
+    const message = String(error?.message || "").toLowerCase();
+
+    if (code.includes("invalid-verification-code") || message.includes("invalid")) {
+      return "That code does not look right. Please check the SMS and try again.";
+    }
+
+    if (code.includes("session-expired") || message.includes("expired")) {
+      return "This OTP expired. Please request a fresh OTP and use only the newest SMS code.";
+    }
+
+    return "We could not verify this code. Please try again.";
+  };
 
   const handleVerify = async () => {
     if (otp.length !== 6) {
@@ -14,11 +33,17 @@ export default function OtpScreen({ route, navigation }: any) {
     }
 
     try {
-      const firebaseIdToken = await confirmFirebaseOtp(otp);
+      const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
       await verifyFirebaseOtp(phone, firebaseIdToken, role);
       navigation.replace("Orders");
     } catch (err: any) {
-      Alert.alert("Error", err?.message || "Invalid OTP");
+      if (isFirebaseOtpSessionExpiredError(err)) {
+        clearFirebaseOtpSession();
+        setOtp("");
+        Alert.alert("OTP Expired", "Please request a fresh OTP and use only the newest SMS code.");
+      } else {
+        Alert.alert("Error", getOtpErrorMessage(err));
+      }
     }
   };
 

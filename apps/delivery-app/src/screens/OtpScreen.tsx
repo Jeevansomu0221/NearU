@@ -12,7 +12,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { verifyFirebaseOtp } from "../api/auth.api";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
-import { confirmFirebaseOtp, sendFirebaseOtp } from "../services/firebasePhoneAuth";
+import {
+  clearFirebaseOtpSession,
+  confirmFirebaseOtp,
+  isFirebaseOtpSessionExpiredError,
+  sendFirebaseOtp
+} from "../services/firebasePhoneAuth";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone } = route.params;
@@ -20,6 +25,22 @@ export default function OtpScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
+  const [requiresFreshOtp, setRequiresFreshOtp] = useState(false);
+
+  const getOtpErrorMessage = (error: any) => {
+    const code = String(error?.code || "").toLowerCase();
+    const message = String(error?.message || "").toLowerCase();
+
+    if (code.includes("invalid-verification-code") || message.includes("invalid")) {
+      return "That code does not look right. Please check the SMS and try again.";
+    }
+
+    if (code.includes("session-expired") || message.includes("expired")) {
+      return "This SMS code has expired. Please resend OTP and use the newest code.";
+    }
+
+    return "We could not verify this code. Please try again or resend OTP.";
+  };
 
   useEffect(() => {
     if (timer > 0) {
@@ -37,6 +58,11 @@ export default function OtpScreen({ route, navigation }: any) {
   }, [timer]);
 
   const onVerify = async () => {
+    if (requiresFreshOtp) {
+      Alert.alert("Fresh OTP Required", "Please resend OTP and use the newest SMS code.");
+      return;
+    }
+
     if (otp.length !== 6) {
       Alert.alert("Error", "Please enter 6-digit OTP");
       return;
@@ -44,11 +70,11 @@ export default function OtpScreen({ route, navigation }: any) {
 
     try {
       setLoading(true);
-      const firebaseIdToken = await confirmFirebaseOtp(otp);
+      const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
       const response = await verifyFirebaseOtp(phone, firebaseIdToken);
 
       if (!response.success || !response.data?.token || !response.data?.user) {
-        Alert.alert("Error", response.message || "Invalid OTP. Please try again.");
+        Alert.alert("Error", getOtpErrorMessage({ message: response.message || "Invalid OTP" }));
         return;
       }
 
@@ -69,7 +95,16 @@ export default function OtpScreen({ route, navigation }: any) {
         routes: [{ name: nextRoute }],
       });
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to verify OTP. Please try again.");
+      if (isFirebaseOtpSessionExpiredError(error)) {
+        clearFirebaseOtpSession();
+        setOtp("");
+        setRequiresFreshOtp(true);
+        setCanResend(true);
+        setTimer(0);
+        Alert.alert("OTP Expired", "Please resend OTP and use only the newest SMS code.");
+      } else {
+        Alert.alert("Error", getOtpErrorMessage(error));
+      }
     } finally {
       setLoading(false);
     }
@@ -82,9 +117,10 @@ export default function OtpScreen({ route, navigation }: any) {
       setTimer(60);
       setCanResend(false);
       setOtp("");
+      setRequiresFreshOtp(false);
       await sendFirebaseOtp(phone);
-    } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to resend OTP");
+    } catch {
+      Alert.alert("Error", "Could not resend OTP right now. Please wait a moment and try again.");
       setCanResend(true);
     } finally {
       setLoading(false);
@@ -108,6 +144,7 @@ export default function OtpScreen({ route, navigation }: any) {
           style={styles.otpInput}
           maxLength={6}
           autoFocus
+          editable={!loading && !requiresFreshOtp}
         />
         <Text style={styles.otpHint}>Enter 6-digit OTP</Text>
       </View>
@@ -119,9 +156,9 @@ export default function OtpScreen({ route, navigation }: any) {
         </View>
       ) : (
         <TouchableOpacity
-          style={[styles.button, otp.length !== 6 && styles.buttonDisabled]}
+          style={[styles.button, (otp.length !== 6 || requiresFreshOtp) && styles.buttonDisabled]}
           onPress={onVerify}
-          disabled={otp.length !== 6 || loading}
+          disabled={otp.length !== 6 || loading || requiresFreshOtp}
         >
           <Text style={styles.buttonText}>Verify OTP</Text>
         </TouchableOpacity>

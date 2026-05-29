@@ -15,11 +15,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { verifyFirebaseOtp } from '../api/auth.api';
 import { getUserProfile } from '../api/user.api';
-import { confirmFirebaseOtp, sendFirebaseOtp } from '../services/firebasePhoneAuth';
+import {
+  clearFirebaseOtpSession,
+  confirmFirebaseOtp,
+  isFirebaseOtpSessionExpiredError,
+  sendFirebaseOtp
+} from '../services/firebasePhoneAuth';
 import { buildLegalUrl } from '../constants/legal';
 
 const TERMS_URL = buildLegalUrl("terms");
 const PRIVACY_URL = buildLegalUrl("privacy");
+const RESEND_COOLDOWN_SECONDS = 60;
 
 type OtpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Otp'>;
 type OtpScreenRouteProp = RouteProp<RootStackParamList, 'Otp'>;
@@ -34,6 +40,8 @@ export default function OtpScreen({ navigation, route }: Props) {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
+  const [requiresFreshOtp, setRequiresFreshOtp] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(RESEND_COOLDOWN_SECONDS);
   const lastSubmittedOtp = useRef('');
 
   const getOtpErrorMessage = (error: any) => {
@@ -46,10 +54,14 @@ export default function OtpScreen({ navigation, route }: Props) {
     }
 
     if (code.includes('session-expired') || lowerMessage.includes('expired')) {
-      return 'This SMS code has expired. Firebase controls the expiry time for security, so please resend a fresh OTP.';
+      return 'This SMS code has expired. Please resend OTP and use the newest code.';
     }
 
-    return message || 'Something went wrong. Please try again.';
+    if (code.includes('auth/') || lowerMessage.includes('firebase')) {
+      return 'We could not verify this code. Please try again or resend OTP.';
+    }
+
+    return message || 'We could not verify this code. Please try again.';
   };
 
   const isCustomerProfileComplete = (profile: {
@@ -106,6 +118,11 @@ export default function OtpScreen({ navigation, route }: Props) {
   };
 
   const handleVerifyOTP = async () => {
+    if (requiresFreshOtp) {
+      setOtpError('Please resend OTP and use the newest SMS code.');
+      return;
+    }
+
     if (!otp || otp.length !== 6) {
       Alert.alert('Error', 'Please enter 6-digit OTP');
       return;
@@ -119,11 +136,11 @@ export default function OtpScreen({ navigation, route }: Props) {
     setOtpError('');
     setLoading(true);
     try {
-      const firebaseIdToken = await confirmFirebaseOtp(otp);
+      const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
       const response = await verifyFirebaseOtp(phone, firebaseIdToken);
 
       if (!response.success || !response.data?.token || !response.data?.user) {
-        Alert.alert('Error', response.message || 'Invalid OTP');
+        Alert.alert('Error', getOtpErrorMessage({ message: response.message || 'Invalid OTP' }));
         return;
       }
 
@@ -147,28 +164,58 @@ export default function OtpScreen({ navigation, route }: Props) {
       });
     } catch (error: any) {
       lastSubmittedOtp.current = '';
-      setOtpError(getOtpErrorMessage(error));
+      if (isFirebaseOtpSessionExpiredError(error)) {
+        clearFirebaseOtpSession();
+        setOtp('');
+        setRequiresFreshOtp(true);
+        setOtpError('This SMS code can no longer be verified. Tap Resend OTP and use only the newest SMS code.');
+      } else {
+        setOtpError(getOtpErrorMessage(error));
+      }
     } finally {
       setLoading(false);
     }
   };
 
   React.useEffect(() => {
-    if (otp.length === 6 && !loading) {
+    if (otp.length === 6 && !loading && !requiresFreshOtp) {
       handleVerifyOTP();
     }
   }, [otp]);
 
+  React.useEffect(() => {
+    if (resendSeconds <= 0 || requiresFreshOtp) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setResendSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [resendSeconds, requiresFreshOtp]);
+
   const handleResendOTP = async () => {
+    if (loading) {
+      return;
+    }
+
+    if (resendSeconds > 0 && !requiresFreshOtp) {
+      setOtpError(`Please wait ${resendSeconds}s before requesting another OTP.`);
+      return;
+    }
+
     setLoading(true);
     try {
-      await sendFirebaseOtp(phone);
-      Alert.alert('Fresh OTP Sent', 'Please use the newest SMS code. Older codes will stop working.');
       setOtp('');
       setOtpError('');
+      setRequiresFreshOtp(false);
       lastSubmittedOtp.current = '';
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to resend OTP. Please try again.');
+      await sendFirebaseOtp(phone);
+      setResendSeconds(RESEND_COOLDOWN_SECONDS);
+      Alert.alert('Fresh OTP Sent', 'Please use the newest SMS code. Older codes will stop working.');
+    } catch {
+      Alert.alert('Error', 'Could not resend OTP right now. Please wait a moment and try again.');
     } finally {
       setLoading(false);
     }
@@ -201,7 +248,7 @@ export default function OtpScreen({ navigation, route }: Props) {
               }
             }}
             maxLength={6}
-            editable={!loading}
+            editable={!loading && !requiresFreshOtp}
             autoFocus
             textAlign="center"
           />
@@ -218,15 +265,22 @@ export default function OtpScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         <TouchableOpacity
-          style={[styles.button, (loading || otp.length !== 6) && styles.buttonDisabled]}
+          style={[styles.button, (loading || otp.length !== 6 || requiresFreshOtp) && styles.buttonDisabled]}
           onPress={handleVerifyOTP}
-          disabled={loading || otp.length !== 6}
+          disabled={loading || otp.length !== 6 || requiresFreshOtp}
           activeOpacity={0.8}
         >
           {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.buttonText}>Verify & Continue</Text>}
         </TouchableOpacity>
-        <TouchableOpacity style={styles.resendButton} onPress={handleResendOTP} disabled={loading}>
-          <Text style={styles.resendText}>Didn't receive code? <Text style={styles.resendLink}>Resend OTP</Text></Text>
+        <TouchableOpacity
+          style={styles.resendButton}
+          onPress={handleResendOTP}
+          disabled={loading || (resendSeconds > 0 && !requiresFreshOtp)}
+        >
+          <Text style={styles.resendText}>
+            {requiresFreshOtp ? 'Code expired? ' : resendSeconds > 0 ? `Resend OTP in ${resendSeconds}s` : "Didn't receive code? "}
+            {resendSeconds === 0 || requiresFreshOtp ? <Text style={styles.resendLink}>Resend OTP</Text> : null}
+          </Text>
         </TouchableOpacity>
         <View style={styles.footer}>
           <Text style={styles.footerText}>

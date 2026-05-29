@@ -15,7 +15,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
-import { confirmFirebaseOtp, sendFirebaseOtp } from "../services/firebasePhoneAuth";
+import {
+  clearFirebaseOtpSession,
+  confirmFirebaseOtp,
+  isFirebaseOtpSessionExpiredError,
+  sendFirebaseOtp
+} from "../services/firebasePhoneAuth";
 import { partnerTheme } from "../theme";
 import { buildLegalUrl } from "../constants/legal";
 
@@ -49,6 +54,25 @@ export default function LoginScreen({ navigation }: any) {
   const lastSubmittedOtp = useRef("");
   const insets = useSafeAreaInsets();
 
+  const getOtpErrorMessage = (error: any) => {
+    const code = String(error?.code || "").toLowerCase();
+    const message = String(error?.message || "").toLowerCase();
+
+    if (code.includes("too-many-requests") || message.includes("too many")) {
+      return "Too many OTP requests. Please wait a few minutes and try again.";
+    }
+
+    if (code.includes("invalid-verification-code") || message.includes("invalid")) {
+      return "That code does not look right. Please check the SMS and try again.";
+    }
+
+    if (code.includes("session-expired") || message.includes("expired")) {
+      return "This OTP expired. Tap Resend OTP and use only the newest SMS code.";
+    }
+
+    return "We could not verify this code. Please try again or resend OTP.";
+  };
+
   const handleSendOtp = async () => {
     const cleanedPhone = phone.replace(/\D/g, "");
 
@@ -73,7 +97,7 @@ export default function LoginScreen({ navigation }: any) {
       });
     } catch (error: any) {
       console.error("Send OTP error:", error);
-      setFeedback({ type: "error", text: error.response?.data?.message || "Failed to send OTP." });
+      setFeedback({ type: "error", text: getOtpErrorMessage(error) });
     } finally {
       setLoading(false);
     }
@@ -148,15 +172,23 @@ export default function LoginScreen({ navigation }: any) {
       try {
         verificationPayload = {
           phone,
-          firebaseIdToken: await confirmFirebaseOtp(otp),
+          firebaseIdToken: await confirmFirebaseOtp(otp, phone),
           role: "partner"
         };
-      } catch (firebaseError) {
-        if (phone !== TEST_LOGIN_PHONE || otp !== TEST_LOGIN_OTP) {
+      } catch (firebaseError: any) {
+        if (phone === TEST_LOGIN_PHONE && otp === TEST_LOGIN_OTP) {
+          verificationPayload = { phone, otp, role: "partner" };
+        } else if (isFirebaseOtpSessionExpiredError(firebaseError)) {
+          clearFirebaseOtpSession();
+          setOtp("");
+          setFeedback({
+            type: "error",
+            text: "This OTP expired. Tap Resend OTP and use only the newest SMS code."
+          });
+          return;
+        } else {
           throw firebaseError;
         }
-
-        verificationPayload = { phone, otp, role: "partner" };
       }
 
       const res = await api.post("/auth/verify-otp", verificationPayload);
@@ -187,7 +219,7 @@ export default function LoginScreen({ navigation }: any) {
     } catch (error: any) {
       console.error("OTP verification error:", error);
       lastSubmittedOtp.current = "";
-      setFeedback({ type: "error", text: error.response?.data?.message || "Invalid OTP. Please try again." });
+      setFeedback({ type: "error", text: getOtpErrorMessage(error) });
     } finally {
       setLoading(false);
     }
@@ -267,6 +299,10 @@ export default function LoginScreen({ navigation }: any) {
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleVerifyOtp} disabled={loading}>
                 {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Verify and Continue</Text>}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleSendOtp} disabled={loading}>
+                <Text style={styles.secondaryButtonText}>Resend OTP</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

@@ -29,6 +29,21 @@ export default function LoginScreen({ navigation }: Props) {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const getSendOtpErrorMessage = (error: any) => {
+    const code = String(error?.code || '').toLowerCase();
+    const message = String(error?.message || '').toLowerCase();
+
+    if (code.includes('too-many-requests') || message.includes('too many')) {
+      return 'Too many OTP requests. Please wait a few minutes and try again.';
+    }
+
+    if (message.includes('network')) {
+      return 'Cannot connect to server. Please check your internet connection.';
+    }
+
+    return 'Could not send OTP right now. Please try again.';
+  };
+
   const handleSendOTP = async () => {
     // Clean phone number (remove any spaces, dashes, etc.)
     const cleanedPhone = phone.replace(/\D/g, '');
@@ -50,14 +65,7 @@ export default function LoginScreen({ navigation }: Props) {
       });
       
     } catch (error: any) {
-      // Check if it's the specific validation error from backend
-      if (error.response?.data?.message === "Phone number and role are required") {
-        Alert.alert('Error', 'Server configuration error. Please try again.');
-      } else if (error.message && error.message.includes('Network Error')) {
-        Alert.alert('Connection Error', 'Cannot connect to server. Please check your internet connection.');
-      } else {
-        Alert.alert('Error', error.response?.data?.message || error.message || 'Failed to send OTP');
-      }
+      Alert.alert('Error', getSendOtpErrorMessage(error));
     } finally {
       setLoading(false);
     }
