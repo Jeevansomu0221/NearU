@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.vyaha.partner",
-      "versionCode": 8,
+      "versionCode": 10,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
