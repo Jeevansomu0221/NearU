@@ -169,10 +169,8 @@ export const verifyOTP = async (req: Request, res: Response) => {
         isActive: true,
         name: ""
       });
-    } else if (role === ROLES.ADMIN || user.role === ROLES.ADMIN) {
-      if (user.role !== role) {
-        return errorResponse(res, "Role mismatch for this account", 403);
-      }
+    } else if (role === ROLES.ADMIN && user.role !== ROLES.ADMIN) {
+      return errorResponse(res, "Admin account not found", 403);
     }
 
     user.lastLogin = new Date();
