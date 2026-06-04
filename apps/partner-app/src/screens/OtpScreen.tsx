@@ -11,9 +11,35 @@ export default function OtpScreen({ route, navigation }: any) {
   const { phone, role } = route.params;
   const [otp, setOtp] = useState("");
 
+  const extractServerMessage = (error: any): string => {
+    const data = error?.response?.data;
+    if (data && typeof data === "object" && typeof data.message === "string") {
+      return data.message;
+    }
+    if (typeof data === "string") {
+      return data;
+    }
+    return "";
+  };
+
+  const getRawErrorDetail = (error: any): string => {
+    const parts: string[] = [];
+    if (error?.code) parts.push(`code=${error.code}`);
+    const serverMessage = extractServerMessage(error);
+    if (serverMessage) parts.push(`server=${serverMessage}`);
+    if (error?.message) parts.push(`msg=${error.message}`);
+    if (error?.response?.status) parts.push(`http=${error.response.status}`);
+    return parts.join(" | ");
+  };
+
   const getOtpErrorMessage = (error: any) => {
     const code = String(error?.code || "").toLowerCase();
-    const message = String(error?.message || "").toLowerCase();
+    const serverMessage = extractServerMessage(error).toLowerCase();
+    const message = `${String(error?.message || "")} ${serverMessage}`.toLowerCase();
+
+    if (__DEV__) {
+      console.log("[OTP][partner] verify failure detail:", getRawErrorDetail(error));
+    }
 
     if (code.includes("invalid-verification-code") || message.includes("invalid")) {
       return "That code does not look right. Please check the SMS and try again.";
@@ -23,7 +49,22 @@ export default function OtpScreen({ route, navigation }: any) {
       return "This OTP expired. Please request a fresh OTP and use only the newest SMS code.";
     }
 
-    return "We could not verify this code. Please try again.";
+    if (message.includes("aud") || message.includes("audience") || message.includes("decoding firebase")) {
+      return "Sign-in is misconfigured (Firebase project mismatch). Please update the app to the latest version.";
+    }
+
+    if (message.includes("did not match this phone")) {
+      return "This code was verified for a different number. Please request a fresh OTP and try again.";
+    }
+
+    const userSafeServerMessage = extractServerMessage(error);
+    if (userSafeServerMessage && !userSafeServerMessage.toLowerCase().includes("firebase id token")) {
+      return userSafeServerMessage;
+    }
+
+    const detail = getRawErrorDetail(error);
+    const base = "We could not verify this code. Please try again.";
+    return __DEV__ && detail ? `${base}\n\n[debug] ${detail}` : base;
   };
 
   const handleVerify = async () => {

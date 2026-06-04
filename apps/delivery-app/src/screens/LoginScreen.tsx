@@ -45,8 +45,13 @@ export default function LoginScreen({ navigation }: any) {
       console.log("✅ OTP sent successfully");
       navigation.navigate("Otp", { phone });
     } catch (error: any) {
-      console.error("❌ Send OTP error:", error);
-      Alert.alert("Error", error.message || "Failed to send OTP. Please try again.");
+      const detail = [
+        error?.code ? `code=${error.code}` : "",
+        error?.message ? `msg=${error.message}` : ""
+      ].filter(Boolean).join(" | ");
+      console.error("❌ Send OTP error:", detail || error);
+      const base = error?.message || "Failed to send OTP. Please try again.";
+      Alert.alert("Error", __DEV__ && detail ? `${base}\n\n[debug] ${detail}` : base);
     } finally {
       setLoading(false);
     }

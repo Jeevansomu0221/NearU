@@ -44,10 +44,36 @@ export default function OtpScreen({ navigation, route }: Props) {
   const [resendSeconds, setResendSeconds] = useState(RESEND_COOLDOWN_SECONDS);
   const lastSubmittedOtp = useRef('');
 
+  const extractServerMessage = (error: any): string => {
+    const data = error?.response?.data;
+    if (data && typeof data === 'object' && typeof data.message === 'string') {
+      return data.message;
+    }
+    if (typeof data === 'string') {
+      return data;
+    }
+    return '';
+  };
+
+  const getRawErrorDetail = (error: any): string => {
+    const parts: string[] = [];
+    if (error?.code) parts.push(`code=${error.code}`);
+    const serverMessage = extractServerMessage(error);
+    if (serverMessage) parts.push(`server=${serverMessage}`);
+    if (error?.message) parts.push(`msg=${error.message}`);
+    if (error?.response?.status) parts.push(`http=${error.response.status}`);
+    return parts.join(' | ');
+  };
+
   const getOtpErrorMessage = (error: any) => {
-    const message = String(error?.message || '');
-    const code = String(error?.code || '');
-    const lowerMessage = message.toLowerCase();
+    const code = String(error?.code || '').toLowerCase();
+    const serverMessage = extractServerMessage(error).toLowerCase();
+    const lowerMessage = `${String(error?.message || '')} ${serverMessage}`.toLowerCase();
+    const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
+
+    if (isDev) {
+      console.log('[OTP][customer] verify failure detail:', getRawErrorDetail(error));
+    }
 
     if (code.includes('invalid-verification-code') || lowerMessage.includes('invalid')) {
       return 'That code does not look right. Please check the SMS and try again.';
@@ -57,11 +83,22 @@ export default function OtpScreen({ navigation, route }: Props) {
       return 'This SMS code has expired. Please resend OTP and use the newest code.';
     }
 
-    if (code.includes('auth/') || lowerMessage.includes('firebase')) {
-      return 'We could not verify this code. Please try again or resend OTP.';
+    if (lowerMessage.includes('aud') || lowerMessage.includes('audience') || lowerMessage.includes('decoding firebase')) {
+      return 'Sign-in is misconfigured (Firebase project mismatch). Please update the app to the latest version.';
     }
 
-    return message || 'We could not verify this code. Please try again.';
+    if (lowerMessage.includes('did not match this phone')) {
+      return 'This code was verified for a different number. Please resend OTP and try again.';
+    }
+
+    const userSafeServerMessage = extractServerMessage(error) || String(error?.message || '');
+    if (userSafeServerMessage && !userSafeServerMessage.toLowerCase().includes('firebase id token')) {
+      return userSafeServerMessage;
+    }
+
+    const detail = getRawErrorDetail(error);
+    const base = 'We could not verify this code. Please try again or resend OTP.';
+    return isDev && detail ? `${base}\n\n[debug] ${detail}` : base;
   };
 
   const isCustomerProfileComplete = (profile: {
@@ -140,7 +177,7 @@ export default function OtpScreen({ navigation, route }: Props) {
       const response = await verifyFirebaseOtp(phone, firebaseIdToken);
 
       if (!response.success || !response.data?.token || !response.data?.user) {
-        Alert.alert('Error', getOtpErrorMessage({ message: response.message || 'Invalid OTP' }));
+        Alert.alert('Error', getOtpErrorMessage(response.message ? response : { message: 'Invalid OTP' }));
         return;
       }
 

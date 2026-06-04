@@ -14,6 +14,7 @@ export interface AccessTokenPayload {
 
 export interface RefreshTokenPayload {
   id: string;
+  role?: string;
   sessionVersion: number;
   type: "refresh";
 }

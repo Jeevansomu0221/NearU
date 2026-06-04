@@ -17,29 +17,47 @@ const ADMIN_PHONE = process.env.ADMIN_PANEL_PHONE || "";
 const TEST_LOGIN_PHONE = process.env.TEST_LOGIN_PHONE || "1010101010";
 const TEST_LOGIN_OTP = process.env.TEST_LOGIN_OTP || "000000";
 
+const idsMatch = (left?: unknown, right?: unknown) =>
+  Boolean(left && right && left.toString() === right.toString());
+
+const getUserObjectId = (user: any) => new Types.ObjectId(user._id.toString());
+
 const buildTokens = async (user: any, requestedRole?: string) => {
   let partnerId: string | null = null;
   let deliveryPartnerId: string | null = null;
+  const tokenRole = requestedRole || user.role;
+  const userObjectId = getUserObjectId(user);
 
   let partner = await Partner.findOne({ userId: user._id }).select("_id").lean();
   if (!partner) {
-    const unlinkedPartner = await Partner.findOne({
-      phone: user.phone,
-      $or: [{ userId: { $exists: false } }, { userId: null }]
-    }).select("_id");
+    const phoneMatchedPartner = await Partner.findOne({ phone: user.phone }).select("_id userId");
 
-    if (unlinkedPartner) {
-      unlinkedPartner.userId = new Types.ObjectId(user._id);
-      await unlinkedPartner.save();
-      partner = { _id: unlinkedPartner._id } as any;
+    if (phoneMatchedPartner) {
+      if (!idsMatch(phoneMatchedPartner.userId, user._id)) {
+        phoneMatchedPartner.userId = userObjectId;
+        await phoneMatchedPartner.save();
+      }
+      partner = { _id: phoneMatchedPartner._id } as any;
     }
   }
   partnerId = partner?._id?.toString() || null;
 
   let deliveryPartner = await DeliveryPartner.findOne({ userId: user._id }).select("_id").lean();
-  if (!deliveryPartner && requestedRole === ROLES.DELIVERY) {
+  if (!deliveryPartner) {
+    const phoneMatchedDeliveryPartner = await DeliveryPartner.findOne({ phone: user.phone }).select("_id userId");
+
+    if (phoneMatchedDeliveryPartner) {
+      if (!idsMatch(phoneMatchedDeliveryPartner.userId, user._id)) {
+        phoneMatchedDeliveryPartner.userId = userObjectId;
+        await phoneMatchedDeliveryPartner.save();
+      }
+      deliveryPartner = { _id: phoneMatchedDeliveryPartner._id } as any;
+    }
+  }
+
+  if (!deliveryPartner && tokenRole === ROLES.DELIVERY) {
     const created = await DeliveryPartner.create({
-      userId: user._id,
+      userId: userObjectId,
       phone: user.phone,
       name: user.name || `Delivery ${String(user.phone).slice(-4)}`,
       isAvailable: false,
@@ -53,7 +71,7 @@ const buildTokens = async (user: any, requestedRole?: string) => {
   const accessToken = generateAccessToken({
     id: user._id.toString(),
     phone: user.phone,
-    role: user.role,
+    role: tokenRole,
     name: user.name,
     partnerId,
     deliveryPartnerId,
@@ -61,12 +79,14 @@ const buildTokens = async (user: any, requestedRole?: string) => {
   });
   const refreshToken = generateRefreshToken({
     id: user._id.toString(),
+    role: tokenRole,
     sessionVersion
   });
 
   return {
     accessToken,
     refreshToken,
+    role: tokenRole,
     partnerId,
     deliveryPartnerId
   };
@@ -158,18 +178,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
     user.lastLogin = new Date();
     await user.save();
 
-    if (role === ROLES.PARTNER) {
-      const partner = await Partner.findOne({
-        phone,
-        $or: [{ userId: { $exists: false } }, { userId: null }]
-      });
-      if (partner) {
-        partner.userId = new Types.ObjectId(user._id);
-        await partner.save();
-      }
-    }
-
-    const { accessToken, refreshToken, partnerId, deliveryPartnerId } = await buildTokens(user, role);
+    const { accessToken, refreshToken, partnerId, deliveryPartnerId, role: tokenRole } = await buildTokens(user, role);
 
     return successResponse(res, {
       token: accessToken,
@@ -178,7 +187,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
         id: user._id.toString(),
         phone: user.phone,
         name: user.name,
-        role: user.role,
+        role: tokenRole,
         partnerId,
         deliveryPartnerId
       }
@@ -189,6 +198,10 @@ export const verifyOTP = async (req: Request, res: Response) => {
       const message =
         duplicatedField === "email"
           ? "This email is already linked to another account."
+          : duplicatedField === "phone"
+            ? "This phone number is already linked. Please try logging in again or contact support."
+            : duplicatedField === "userId"
+              ? "This account is already linked. Please try logging in again or contact support."
           : "This account detail is already in use.";
 
       return errorResponse(res, message, 400);
@@ -217,7 +230,7 @@ export const refreshToken = async (req: Request, res: Response) => {
       return errorResponse(res, "Refresh token expired", 401);
     }
 
-    const tokens = await buildTokens(user);
+    const tokens = await buildTokens(user, decoded.role || user.role);
     return successResponse(res, {
       token: tokens.accessToken,
       refreshToken: tokens.refreshToken
@@ -260,7 +273,7 @@ export const adminPasswordLogin = async (req: Request, res: Response) => {
     user.lastLogin = new Date();
     await user.save();
 
-    const { accessToken, refreshToken } = await buildTokens(user);
+    const { accessToken, refreshToken, role } = await buildTokens(user, ROLES.ADMIN);
 
     return successResponse(res, {
       token: accessToken,
@@ -269,7 +282,7 @@ export const adminPasswordLogin = async (req: Request, res: Response) => {
         id: user._id.toString(),
         phone: user.phone,
         name: user.name,
-        role: user.role
+        role
       }
     }, "Admin login successful");
   } catch (error: any) {
