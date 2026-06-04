@@ -3,7 +3,7 @@
     "name": "Vyaha Delivery",
     "slug": "vyaha-delivery",
     "scheme": "vyaha-delivery",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.vyaha.delivery",
-      "versionCode": 8,
+      "versionCode": 10,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
