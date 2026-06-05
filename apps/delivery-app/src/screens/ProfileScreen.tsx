@@ -24,7 +24,7 @@ import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 
 const DRAFT_KEY = "delivery_registration_draft_v2";
 const STEPS = ["Basic", "Vehicle", "Documents", "Bank"] as const;
-const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "Motorcycle", "Cycle"];
+const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "Motorcycle", "Bicycle", "Cycle", "Car"];
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   "image/jpeg",
   "image/jpg",
@@ -80,6 +80,7 @@ type UploadField =
   | "aadhaarFrontUrl"
   | "aadhaarBackUrl"
   | "panFrontUrl"
+  | "selfiePhotoUrl"
   | "drivingLicenseFrontUrl"
   | "drivingLicenseBackUrl"
   | "vehicleRcFrontUrl"
@@ -119,7 +120,24 @@ type UploadApiResponse = {
   };
 };
 
-const PDF_UPLOAD_FIELDS: UploadField[] = ["bankStatementUrl"];
+const DOCUMENT_UPLOAD_FIELDS = new Set<UploadField>([
+  "aadhaarFrontUrl",
+  "aadhaarBackUrl",
+  "panFrontUrl",
+  "selfiePhotoUrl",
+  "drivingLicenseFrontUrl",
+  "drivingLicenseBackUrl",
+  "vehicleRcFrontUrl",
+  "vehicleRcBackUrl",
+  "aadhaarUrl",
+  "panUrl",
+  "drivingLicenseUrl",
+  "vehicleRcUrl",
+  "insuranceUrl",
+  "cancelledChequeUrl",
+  "bankPassbookUrl",
+  "bankStatementUrl"
+]);
 const FRONT_FIELD_ALIASES: Partial<Record<UploadField, keyof Docs>> = {
   aadhaarUrl: "aadhaarFrontUrl",
   drivingLicenseUrl: "drivingLicenseFrontUrl",
@@ -149,6 +167,7 @@ const emptyDocs = (): Docs => ({
   panNumber: "",
   panFrontUrl: "",
   panUrl: "",
+  selfiePhotoUrl: "",
   drivingLicenseFrontUrl: "",
   drivingLicenseBackUrl: "",
   drivingLicenseUrl: "",
@@ -230,11 +249,12 @@ const parseAddressString = (address?: string | null): AddressForm => {
 };
 
 const isPdfFile = (value?: string | null) => Boolean(value && /\.pdf($|\?)/i.test(value));
+const GENERIC_UPLOAD_ERROR = "Something went wrong. Please try again.";
 
 const uploadAssetToServer = async (asset: UploadAsset, field: UploadField) => {
   const token = await AsyncStorage.getItem("token");
   if (!token) {
-    throw new Error("Session expired. Please log in again.");
+    throw new Error(GENERIC_UPLOAD_ERROR);
   }
 
   const rawFileName = asset.name || asset.uri.split("/").pop() || null;
@@ -249,7 +269,7 @@ const uploadAssetToServer = async (asset: UploadAsset, field: UploadField) => {
     name: fileName
   });
 
-  let lastErrorMessage = "Upload failed";
+  let lastErrorMessage = GENERIC_UPLOAD_ERROR;
 
   for (const baseUrl of API_BASE_URLS) {
     try {
@@ -272,13 +292,13 @@ const uploadAssetToServer = async (asset: UploadAsset, field: UploadField) => {
       const responseData = await response.json() as UploadApiResponse;
 
       if (!response.ok || !responseData?.success || !responseData?.data?.url) {
-        lastErrorMessage = responseData?.message || `Upload failed (${response.status})`;
+        lastErrorMessage = GENERIC_UPLOAD_ERROR;
         continue;
       }
 
       return responseData.data.url;
     } catch (error: any) {
-      lastErrorMessage = error?.message || "Network Error";
+      lastErrorMessage = GENERIC_UPLOAD_ERROR;
       console.log(`Upload attempt failed for ${baseUrl}`, { message: lastErrorMessage });
     }
   }
@@ -303,7 +323,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [saving, setSaving] = useState(false);
   const [bankSaving, setBankSaving] = useState(false);
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
-  const [uploading, setUploading] = useState<UploadField | null>(null);
+  const [uploadingFields, setUploadingFields] = useState<UploadField[]>([]);
   const [profile, setProfile] = useState<DeliveryProfile | null>(null);
   const [step, setStep] = useState(0);
   const [editingBank, setEditingBank] = useState(false);
@@ -312,14 +332,19 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [addressForm, setAddressForm] = useState<AddressForm>(emptyAddress());
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
   const [vehicleType, setVehicleType] = useState<DeliveryProfile["vehicleType"]>("Bike");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [licenseNumber, setLicenseNumber] = useState("");
   const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
   const [isAvailable, setIsAvailable] = useState(true);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [documents, setDocuments] = useState<Docs>(emptyDocs());
   const formattedAddress = useMemo(() => buildAddressString(addressForm), [addressForm]);
+  const requiresMotorDocuments = !["Cycle", "Bicycle"].includes(vehicleType);
 
   const updateAddressField = (key: keyof AddressForm, value: string) => {
     setAddressForm((current) => ({
@@ -332,12 +357,16 @@ export default function ProfileScreen({ navigation, route }: any) {
     setProfile(data);
     setName(data.name || "");
     setEmail(data.email || "");
+    setDateOfBirth(data.dateOfBirth ? data.dateOfBirth.slice(0, 10) : "");
     setAddressForm(parseAddressString(data.address || ""));
+    setEmergencyContactName(data.emergencyContactName || "");
+    setEmergencyContactPhone(data.emergencyContactPhone || "");
     setVehicleType(data.vehicleType || "Bike");
     setVehicleNumber(data.vehicleNumber || "");
     setLicenseNumber(data.licenseNumber || "");
     setProfilePhotoUrl(data.profilePhotoUrl || "");
     setIsAvailable(typeof data.isAvailable === "boolean" ? data.isAvailable : true);
+    setTermsAccepted(Boolean(data.termsAcceptedAt));
     setDocuments(normalizeDocuments(data.documents));
   };
 
@@ -374,12 +403,16 @@ export default function ProfileScreen({ navigation, route }: any) {
             const parsed = JSON.parse(draft);
             setName(parsed.name || response.data.name || "");
             setEmail(parsed.email || response.data.email || "");
+            setDateOfBirth(parsed.dateOfBirth || (response.data.dateOfBirth ? response.data.dateOfBirth.slice(0, 10) : ""));
             setAddressForm(parsed.addressForm || parseAddressString(parsed.address || response.data.address || ""));
+            setEmergencyContactName(parsed.emergencyContactName || response.data.emergencyContactName || "");
+            setEmergencyContactPhone(parsed.emergencyContactPhone || response.data.emergencyContactPhone || "");
             setVehicleType(parsed.vehicleType || response.data.vehicleType || "Bike");
             setVehicleNumber(parsed.vehicleNumber || response.data.vehicleNumber || "");
             setLicenseNumber(parsed.licenseNumber || response.data.licenseNumber || "");
             setProfilePhotoUrl(parsed.profilePhotoUrl || response.data.profilePhotoUrl || "");
             setIsAvailable(typeof parsed.isAvailable === "boolean" ? parsed.isAvailable : response.data.isAvailable);
+            setTermsAccepted(typeof parsed.termsAccepted === "boolean" ? parsed.termsAccepted : Boolean(response.data.termsAcceptedAt));
             setDocuments(normalizeDocuments({ ...(response.data.documents || {}), ...(parsed.documents || {}) }));
             setStep(typeof parsed.step === "number" ? Math.min(Math.max(parsed.step, 0), 3) : 0);
           }
@@ -402,18 +435,22 @@ export default function ProfileScreen({ navigation, route }: any) {
       JSON.stringify({
         name,
         email,
+        dateOfBirth,
         address: formattedAddress,
         addressForm,
+        emergencyContactName,
+        emergencyContactPhone,
         vehicleType,
         vehicleNumber,
         licenseNumber,
         profilePhotoUrl,
         isAvailable,
+        termsAccepted,
         documents,
         step
       })
     ).catch(() => {});
-  }, [name, email, formattedAddress, addressForm, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, documents, step]);
+  }, [name, email, dateOfBirth, formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step]);
 
   const isActiveDashboard = !forceComplete && profile?.status === "ACTIVE";
 
@@ -424,14 +461,29 @@ export default function ProfileScreen({ navigation, route }: any) {
     return trimmed ? trimmed : fallback;
   };
 
+  const isAdultDateOfBirth = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return false;
+    const parsed = new Date(`${value.trim()}T00:00:00`);
+    if (Number.isNaN(parsed.getTime()) || parsed > new Date()) return false;
+    const today = new Date();
+    let age = today.getFullYear() - parsed.getFullYear();
+    const monthDelta = today.getMonth() - parsed.getMonth();
+    if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < parsed.getDate())) {
+      age -= 1;
+    }
+    return age >= 18;
+  };
+
   const employeeId = profile?._id ? `DLV-${profile._id.slice(-6).toUpperCase()}` : "Assigned after verification";
 
   const verificationStatusLabel = profile?.status === "ACTIVE" ? "Approved" : statusTone[profile?.status || "INACTIVE"].label;
 
   const documentStatusItems = [
-    { label: "Driving license", ready: Boolean(documents.drivingLicenseFrontUrl && documents.drivingLicenseBackUrl) },
-    { label: "Vehicle RC", ready: Boolean(documents.vehicleRcFrontUrl && documents.vehicleRcBackUrl) },
-    { label: "Insurance", ready: Boolean(documents.insuranceUrl) },
+    { label: "Profile photo", ready: Boolean(profilePhotoUrl) },
+    { label: "Selfie verification", ready: Boolean(documents.selfiePhotoUrl) },
+    { label: "Driving license", ready: !requiresMotorDocuments || Boolean(documents.drivingLicenseFrontUrl && documents.drivingLicenseBackUrl) },
+    { label: "Vehicle RC", ready: !requiresMotorDocuments || Boolean(documents.vehicleRcFrontUrl && documents.vehicleRcBackUrl) },
+    { label: "Insurance", ready: !requiresMotorDocuments || Boolean(documents.insuranceUrl) },
     { label: "ID proof", ready: Boolean((documents.aadhaarFrontUrl && documents.aadhaarBackUrl) || documents.panFrontUrl) }
   ];
 
@@ -463,12 +515,12 @@ export default function ProfileScreen({ navigation, route }: any) {
       Alert.alert("Missing details", "Account holder name is required.");
       return;
     }
-    if (!documents.bankAccountNumber?.trim()) {
-      Alert.alert("Missing details", "Bank account number is required.");
-      return;
-    }
     if (!documents.bankIfsc?.trim()) {
       Alert.alert("Missing details", "IFSC code is required.");
+      return;
+    }
+    if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) {
+      Alert.alert("Invalid details", "Bank account number must be numeric.");
       return;
     }
 
@@ -478,7 +530,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         documents: {
           ...documents,
           bankAccountHolderName: documents.bankAccountHolderName?.trim(),
-          bankAccountNumber: documents.bankAccountNumber?.trim(),
+          bankAccountNumber: documents.bankAccountNumber?.trim() || "",
           bankIfsc: documents.bankIfsc?.trim().toUpperCase()
         }
       });
@@ -555,10 +607,12 @@ export default function ProfileScreen({ navigation, route }: any) {
         <Text style={styles.cardTitle}>Basic Profile Details</Text>
         {renderInfoRow("Full name", safeValue(name || profile?.name))}
         {renderInfoRow("Phone number", safeValue(profile?.phone))}
+        {renderInfoRow("Date of birth", safeValue(dateOfBirth))}
         {renderInfoRow("Partner / Employee ID", employeeId)}
         {renderInfoRow("Vehicle type", safeValue(vehicleType))}
         {renderInfoRow("Email", safeValue(email))}
-        {renderInfoRow("Delivery address", safeValue(formattedAddress))}
+
+        {renderInfoRow("Emergency contact", safeValue(emergencyContactName && emergencyContactPhone ? `${emergencyContactName} (${emergencyContactPhone})` : ""))}
       </View>
 
       <View style={styles.card}>
@@ -599,8 +653,8 @@ export default function ProfileScreen({ navigation, route }: any) {
           <>
             <Text style={styles.label}>Account Holder Name</Text>
             <TextInput style={styles.input} value={documents.bankAccountHolderName || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountHolderName: value }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-            <Text style={styles.label}>Bank Account Number</Text>
-            <TextInput style={styles.input} value={documents.bankAccountNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountNumber: value.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+            <Text style={styles.label}>Bank Account Number (Optional for now)</Text>
+        <TextInput style={styles.input} value={documents.bankAccountNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountNumber: value.replace(/\D/g, "") }))} placeholder="Enter bank account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
             <Text style={styles.label}>IFSC Code</Text>
             <TextInput style={styles.input} value={documents.bankIfsc || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankIfsc: value.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
             <Text style={styles.label}>UPI ID</Text>
@@ -678,25 +732,25 @@ export default function ProfileScreen({ navigation, route }: any) {
   const mandatoryDocsComplete = useMemo(() => {
     const normalized = normalizeDocuments(documents);
     return Boolean(
-      normalized.aadhaarFrontUrl &&
+      profilePhotoUrl &&
+        normalized.aadhaarFrontUrl &&
         normalized.aadhaarBackUrl &&
         normalized.panFrontUrl &&
-        normalized.drivingLicenseFrontUrl &&
-        normalized.drivingLicenseBackUrl &&
-        normalized.vehicleRcFrontUrl &&
-        normalized.vehicleRcBackUrl &&
-        normalized.insuranceUrl &&
-        normalized.bankAccountHolderName &&
-        normalized.bankAccountNumber &&
-        normalized.bankIfsc &&
-        normalized.bankDocumentType &&
-        (normalized.cancelledChequeUrl || normalized.bankPassbookUrl || normalized.bankStatementUrl)
+        normalized.selfiePhotoUrl &&
+        (!requiresMotorDocuments ||
+          (normalized.drivingLicenseFrontUrl &&
+            normalized.drivingLicenseBackUrl &&
+            normalized.vehicleRcFrontUrl &&
+            normalized.vehicleRcBackUrl &&
+            normalized.insuranceUrl))
     );
-  }, [documents]);
+  }, [documents, profilePhotoUrl, requiresMotorDocuments]);
 
   const validateStep = (index: number) => {
     if (index === 0) {
       if (name.trim().length < 3) return "Please enter your full name.";
+      if (!profilePhotoUrl) return "Profile photo is required.";
+      if (!isAdultDateOfBirth(dateOfBirth)) return "Enter date of birth as YYYY-MM-DD. Delivery partners must be at least 18.";
       if (!addressForm.flatNo.trim()) return "Flat / house number is required.";
       if (!addressForm.apartment.trim()) return "Apartment / building name is required.";
       if (!addressForm.colony.trim()) return "Colony / society is required.";
@@ -704,12 +758,16 @@ export default function ProfileScreen({ navigation, route }: any) {
       if (!addressForm.city.trim()) return "City is required.";
       if (!addressForm.state.trim()) return "State is required.";
       if (!/^[0-9]{6}$/.test(addressForm.pincode.trim())) return "Pincode must be 6 digits.";
+      if (emergencyContactName.trim().length < 3) return "Emergency contact name is required.";
+      if (!/^[0-9]{10}$/.test(emergencyContactPhone.trim())) return "Emergency contact phone must be 10 digits.";
     }
     if (index === 1) {
-      if (!vehicleNumber.trim()) return "Vehicle number is required.";
-      if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,12}$/i.test(vehicleNumber.trim())) return "Vehicle number format looks invalid.";
-      if (!licenseNumber.trim()) return "Driving license is required.";
-      if (!/^[A-Z]{2}[0-9]{2}[0-9A-Z]{8,14}$/i.test(licenseNumber.trim())) return "Driving license format looks invalid.";
+      if (requiresMotorDocuments) {
+        if (!vehicleNumber.trim()) return "Vehicle number is required.";
+        if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,12}$/i.test(vehicleNumber.trim())) return "Vehicle number format looks invalid.";
+        if (!licenseNumber.trim()) return "Driving license is required.";
+        if (!/^[A-Z]{2}[0-9]{2}[0-9A-Z]{8,14}$/i.test(licenseNumber.trim())) return "Driving license format looks invalid.";
+      }
     }
     if (index === 2) {
       const aadhaarNumber = documents.aadhaarNumber?.trim() || "";
@@ -720,26 +778,39 @@ export default function ProfileScreen({ navigation, route }: any) {
       if (!normalized.aadhaarFrontUrl || !normalized.aadhaarBackUrl || !normalized.panFrontUrl) {
         return "Aadhaar front/back and PAN front are mandatory.";
       }
-      if (!normalized.drivingLicenseFrontUrl || !normalized.drivingLicenseBackUrl || !normalized.vehicleRcFrontUrl || !normalized.vehicleRcBackUrl || !normalized.insuranceUrl) {
+      if (!normalized.selfiePhotoUrl) return "Selfie/photo verification is required.";
+      if (requiresMotorDocuments && (!normalized.drivingLicenseFrontUrl || !normalized.drivingLicenseBackUrl || !normalized.vehicleRcFrontUrl || !normalized.vehicleRcBackUrl || !normalized.insuranceUrl)) {
         return "Driving license front/back, vehicle RC front/back, and insurance document are mandatory.";
       }
     }
     if (index === 3) {
-      if (!documents.bankAccountHolderName?.trim()) return "Account holder name is required.";
-      if (!documents.bankAccountNumber?.trim()) return "Bank account number is required.";
-      if (!/^[0-9]+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric.";
-      if (!documents.bankIfsc?.trim()) return "IFSC code is required.";
-      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC code format is invalid.";
-      if (!documents.bankDocumentType || (!documents.cancelledChequeUrl && !documents.bankPassbookUrl && !documents.bankStatementUrl)) {
-        return "Upload any one bank proof: cancelled cheque, passbook, or bank statement.";
+      const hasAnyBankInput = Boolean(
+        documents.bankAccountHolderName?.trim() ||
+        documents.bankAccountNumber?.trim() ||
+        documents.bankIfsc?.trim() ||
+        documents.bankDocumentType ||
+        documents.cancelledChequeUrl ||
+        documents.bankPassbookUrl ||
+        documents.bankStatementUrl
+      );
+
+      if (hasAnyBankInput) {
+        if (!documents.bankAccountHolderName?.trim()) return "Account holder name is required if you add bank details.";
+        if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric.";
+        if (!documents.bankIfsc?.trim()) return "IFSC code is required if you add bank details.";
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC code format is invalid.";
+        if (!documents.bankDocumentType || (!documents.cancelledChequeUrl && !documents.bankPassbookUrl && !documents.bankStatementUrl)) {
+          return "Upload one bank proof if you add bank details.";
+        }
       }
+      if (!termsAccepted) return "Please accept the delivery partner terms and conditions.";
     }
     return null;
   };
 
   const pickDocument = async (field: UploadField): Promise<UploadAsset | null> => {
     const result = await DocumentPicker.getDocumentAsync({
-      type: PDF_UPLOAD_FIELDS.includes(field) ? ["image/*", "application/pdf"] : ["image/*"],
+      type: ["image/*", "application/pdf"],
       copyToCacheDirectory: true,
       multiple: false
     });
@@ -756,7 +827,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     };
   };
 
-  const pickImage = async (): Promise<UploadAsset | null> => {
+  const pickImage = async (field?: UploadField): Promise<UploadAsset | null> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") {
       Alert.alert("Permission needed", "Please allow gallery access to upload images.");
@@ -765,7 +836,8 @@ export default function ProfileScreen({ navigation, route }: any) {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: field === "profilePhotoUrl",
+      aspect: field === "profilePhotoUrl" ? [1, 1] : undefined,
       quality: 0.6
     });
 
@@ -781,13 +853,47 @@ export default function ProfileScreen({ navigation, route }: any) {
     };
   };
 
+  const pickLiveSelfie = async (): Promise<UploadAsset | null> => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (permission.status !== "granted") {
+      Alert.alert("Camera permission needed", GENERIC_UPLOAD_ERROR);
+      return null;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      cameraType: ImagePicker.CameraType.front,
+      allowsEditing: false,
+      quality: 0.8
+    });
+
+    if (result.canceled || !result.assets[0]?.uri) {
+      return null;
+    }
+
+    const asset = result.assets[0];
+    return {
+      uri: asset.uri,
+      name: asset.fileName || asset.uri.split("/").pop() || `selfie-${Date.now()}.jpg`,
+      mimeType: asset.mimeType
+    };
+  };
+
   const uploadFile = async (field: UploadField) => {
+    if (uploadingFields.includes(field)) {
+      return;
+    }
+
     try {
-      const shouldUseDocumentPicker = PDF_UPLOAD_FIELDS.includes(field);
-      const asset = shouldUseDocumentPicker ? await pickDocument(field) : await pickImage();
+      const shouldUseDocumentPicker = DOCUMENT_UPLOAD_FIELDS.has(field);
+      const asset = field === "selfiePhotoUrl"
+        ? await pickLiveSelfie()
+        : shouldUseDocumentPicker
+          ? await pickDocument(field)
+          : await pickImage(field);
       if (!asset?.uri) return;
 
-      setUploading(field);
+      setUploadingFields((current) => (current.includes(field) ? current : [...current, field]));
       const url = await uploadAssetToServer(asset, field);
 
       if (field === "profilePhotoUrl") {
@@ -803,16 +909,16 @@ export default function ProfileScreen({ navigation, route }: any) {
         });
       }
     } catch (error: any) {
-      Alert.alert("Upload failed", error.message || "Please try again.");
+      Alert.alert("Something went wrong", GENERIC_UPLOAD_ERROR);
     } finally {
-      setUploading(null);
+      setUploadingFields((current) => current.filter((item) => item !== field));
     }
   };
 
   const handleSaveDraft = async () => {
     await AsyncStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ name, email, address: formattedAddress, addressForm, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, documents, step })
+      JSON.stringify({ name, email, dateOfBirth, address: formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step })
     );
     Alert.alert("Saved", "Your draft is saved on this device.");
   };
@@ -829,26 +935,32 @@ export default function ProfileScreen({ navigation, route }: any) {
 
     try {
       setSaving(true);
+      const normalizedDocuments = normalizeDocuments(documents);
       const response = await updateDeliveryProfile({
         name: name.trim(),
         email: email.trim() || undefined,
+        dateOfBirth: dateOfBirth.trim(),
         address: formattedAddress,
+        emergencyContactName: emergencyContactName.trim(),
+        emergencyContactPhone: emergencyContactPhone.trim(),
         vehicleType,
-        vehicleNumber: vehicleNumber.trim().toUpperCase(),
-        licenseNumber: licenseNumber.trim().toUpperCase(),
+        vehicleNumber: requiresMotorDocuments ? vehicleNumber.trim().toUpperCase() : undefined,
+        licenseNumber: requiresMotorDocuments ? licenseNumber.trim().toUpperCase() : undefined,
         profilePhotoUrl,
         isAvailable,
+        termsAccepted,
         status: "PENDING",
         documents: {
-          ...documents,
-          aadhaarNumber: documents.aadhaarNumber?.trim(),
-          aadhaarFrontUrl: documents.aadhaarUrl,
-          panNumber: documents.panNumber?.trim().toUpperCase(),
-          panFrontUrl: documents.panFrontUrl,
-          drivingLicenseFrontUrl: documents.drivingLicenseUrl,
-          vehicleRcFrontUrl: documents.vehicleRcUrl,
+          ...normalizedDocuments,
+          aadhaarNumber: normalizedDocuments.aadhaarNumber?.trim(),
+          aadhaarFrontUrl: normalizedDocuments.aadhaarFrontUrl,
+          panNumber: normalizedDocuments.panNumber?.trim().toUpperCase(),
+          panFrontUrl: normalizedDocuments.panFrontUrl,
+          selfiePhotoUrl: normalizedDocuments.selfiePhotoUrl,
+          drivingLicenseFrontUrl: normalizedDocuments.drivingLicenseFrontUrl,
+          vehicleRcFrontUrl: normalizedDocuments.vehicleRcFrontUrl,
           bankAccountHolderName: documents.bankAccountHolderName?.trim(),
-          bankAccountNumber: documents.bankAccountNumber?.trim(),
+          bankAccountNumber: documents.bankAccountNumber?.trim() || "",
           bankIfsc: documents.bankIfsc?.trim().toUpperCase()
         }
       });
@@ -859,7 +971,26 @@ export default function ProfileScreen({ navigation, route }: any) {
       }
 
       syncProfile(response.data);
-      await AsyncStorage.removeItem(DRAFT_KEY);
+      await AsyncStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({
+          name,
+          email,
+          dateOfBirth,
+          address: formattedAddress,
+          addressForm,
+          emergencyContactName,
+          emergencyContactPhone,
+          vehicleType,
+          vehicleNumber,
+          licenseNumber,
+          profilePhotoUrl,
+          isAvailable,
+          termsAccepted,
+          documents,
+          step
+        })
+      );
       Alert.alert("Submitted", "Your delivery profile is now pending admin verification.");
       navigation.reset({ index: 0, routes: [{ name: resolveDeliveryRoute(response.data) }] });
     } catch (error: any) {
@@ -872,10 +1003,18 @@ export default function ProfileScreen({ navigation, route }: any) {
   const renderUpload = (field: UploadField, title: string, subtitle: string, required?: boolean) => {
     const url = field === "profilePhotoUrl" ? profilePhotoUrl : documents[field as keyof Docs];
     const showImagePreview = typeof url === "string" && url && !isPdfFile(url);
+    const uploadModeText = field === "profilePhotoUrl" ? "Image only" : field === "selfiePhotoUrl" ? "Live camera" : "Image or PDF";
     return (
       <View style={styles.uploadCard} key={field}>
-        <Text style={styles.uploadTitle}>{title}{required ? " *" : ""}</Text>
-        <Text style={styles.uploadSubtitle}>{subtitle}</Text>
+        <View style={styles.uploadHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.uploadTitle}>{title}{required ? " *" : ""}</Text>
+            <Text style={styles.uploadSubtitle}>{subtitle}</Text>
+          </View>
+          <View style={styles.uploadBadge}>
+            <Text style={styles.uploadBadgeText}>{uploadModeText}</Text>
+          </View>
+        </View>
         {showImagePreview ? (
           <Image source={{ uri: url }} style={styles.preview} />
         ) : typeof url === "string" && url ? (
@@ -889,8 +1028,18 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={styles.placeholderText}>No file uploaded yet</Text>
           </View>
         )}
-        <TouchableOpacity style={styles.uploadButton} onPress={() => uploadFile(field)} disabled={uploading === field}>
-          {uploading === field ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.uploadButtonText}>{url ? "Replace File" : "Upload File"}</Text>}
+        <TouchableOpacity style={styles.uploadButton} onPress={() => uploadFile(field)} disabled={uploadingFields.includes(field)}>
+          {uploadingFields.includes(field) ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.uploadButtonText}>
+              {field === "profilePhotoUrl"
+                ? (url ? "Change Photo" : "Choose & Crop Photo")
+                : field === "selfiePhotoUrl"
+                  ? (url ? "Retake Selfie" : "Take Live Selfie")
+                  : url ? "Replace File" : "Browse File"}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     );
@@ -902,14 +1051,16 @@ export default function ProfileScreen({ navigation, route }: any) {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Basic Details</Text>
           <Text style={styles.cardText}>Add the identity and address details the admin will verify.</Text>
-          {renderUpload("profilePhotoUrl", "Profile Photo", "Optional but recommended for easy identification")}
+          {renderUpload("profilePhotoUrl", "Profile Photo", "Required for easy identification", true)}
           <Text style={styles.label}>Full Name</Text>
           <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Enter full name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
           <Text style={styles.label}>Phone Number</Text>
           <View style={styles.readOnly}><Text style={styles.readOnlyText}>{profile?.phone || "Verified with OTP"}</Text></View>
           <Text style={styles.label}>Email</Text>
           <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Enter email address" placeholderTextColor="#98A2B3" autoCapitalize="none" keyboardType="email-address" selectionColor="#FF6B35" />
-          <Text style={styles.label}>Delivery Address</Text>
+          <Text style={styles.label}>Date of Birth</Text>
+          <TextInput style={styles.input} value={dateOfBirth} onChangeText={(value) => setDateOfBirth(value.replace(/[^0-9-]/g, "").slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor="#98A2B3" keyboardType="numbers-and-punctuation" selectionColor="#FF6B35" />
+          <Text style={styles.label}>Current Address</Text>
           <TextInput style={styles.input} value={addressForm.flatNo} onChangeText={(value) => updateAddressField("flatNo", value)} placeholder="Flat / house no." placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
           <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.apartment} onChangeText={(value) => updateAddressField("apartment", value)} placeholder="Apartment / building name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
           <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.colony} onChangeText={(value) => updateAddressField("colony", value)} placeholder="Colony / society" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
@@ -917,10 +1068,10 @@ export default function ProfileScreen({ navigation, route }: any) {
           <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.city} onChangeText={(value) => updateAddressField("city", value)} placeholder="City" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
           <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.state} onChangeText={(value) => updateAddressField("state", value)} placeholder="State" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
           <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.pincode} onChangeText={(value) => updateAddressField("pincode", value)} placeholder="Pincode" placeholderTextColor="#98A2B3" keyboardType="number-pad" maxLength={6} selectionColor="#FF6B35" />
-          <View style={styles.addressPreview}>
-            <Text style={styles.addressPreviewLabel}>Saved format</Text>
-            <Text style={styles.addressPreviewText}>{formattedAddress || "Flat no, apartment, colony, area, city, state, pincode"}</Text>
-          </View>
+          <Text style={styles.label}>Emergency Contact Name</Text>
+          <TextInput style={styles.input} value={emergencyContactName} onChangeText={setEmergencyContactName} placeholder="Name (Father)" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+          <Text style={styles.label}>Emergency Contact Phone</Text>
+          <TextInput style={styles.input} value={emergencyContactPhone} onChangeText={(value) => setEmergencyContactPhone(value.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile number" placeholderTextColor="#98A2B3" keyboardType="number-pad" maxLength={10} selectionColor="#FF6B35" />
         </View>
       );
     }
@@ -938,14 +1089,14 @@ export default function ProfileScreen({ navigation, route }: any) {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.label}>Vehicle Number</Text>
-          <TextInput style={styles.input} value={vehicleNumber} onChangeText={setVehicleNumber} placeholder="TS09AB1234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
-          <Text style={styles.label}>Driving License Number</Text>
-          <TextInput style={styles.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder="TS0120230012345" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+          <Text style={styles.label}>Vehicle Number{requiresMotorDocuments ? "" : " (Optional)"}</Text>
+          <TextInput style={styles.input} value={vehicleNumber} onChangeText={setVehicleNumber} placeholder={requiresMotorDocuments ? "TS09AB1234" : "Optional for bicycle"} placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+          <Text style={styles.label}>Driving License Number{requiresMotorDocuments ? "" : " (Not required for bicycle)"}</Text>
+          <TextInput style={styles.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder={requiresMotorDocuments ? "TS0120230012345" : "Not required"} placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" editable={requiresMotorDocuments} />
           <TouchableOpacity style={styles.availability} onPress={() => setIsAvailable((current) => !current)}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.availabilityTitle}>Set account available after activation</Text>
-              <Text style={styles.availabilityText}>You can still change this later from the profile.</Text>
+              <Text style={styles.availabilityTitle}>Account availability</Text>
+              <Text style={styles.availabilityText}>Turn this on when you are ready to accept jobs.</Text>
             </View>
             <View style={[styles.badge, isAvailable && styles.badgeActive]}>
               <Text style={[styles.badgeText, isAvailable && styles.badgeTextActive]}>{isAvailable ? "Yes" : "No"}</Text>
@@ -967,26 +1118,27 @@ export default function ProfileScreen({ navigation, route }: any) {
           {renderUpload("aadhaarUrl", "Aadhaar - Upload Front Side", "Mandatory for KYC and identity verification", true)}
           {renderUpload("aadhaarBackUrl", "Aadhaar - Upload Back Side", "Mandatory for address/KYC verification", true)}
           {renderUpload("panFrontUrl", "PAN Card - Upload Front Side", "Mandatory identity proof", true)}
-          {renderUpload("drivingLicenseUrl", "Driving License - Upload Front Side", "Mandatory for bike and scooter delivery", true)}
-          {renderUpload("drivingLicenseBackUrl", "Driving License - Upload Back Side", "Mandatory license back side", true)}
-          {renderUpload("vehicleRcUrl", "Vehicle RC - Upload Front Side", "Mandatory vehicle ownership proof", true)}
-          {renderUpload("vehicleRcBackUrl", "Vehicle RC - Upload Back Side", "Mandatory vehicle ownership proof", true)}
-          {renderUpload("insuranceUrl", "Vehicle Insurance", "Mandatory single document", true)}
+          {renderUpload("selfiePhotoUrl", "Live Selfie Verification", "Use the front camera to capture a live selfie for verification", true)}
+          {renderUpload("drivingLicenseUrl", "Driving License - Upload Front Side", requiresMotorDocuments ? "Mandatory for motor vehicle delivery" : "Optional for bicycle riders", requiresMotorDocuments)}
+          {renderUpload("drivingLicenseBackUrl", "Driving License - Upload Back Side", requiresMotorDocuments ? "Mandatory license back side" : "Optional for bicycle riders", requiresMotorDocuments)}
+          {renderUpload("vehicleRcUrl", "Vehicle RC - Upload Front Side", requiresMotorDocuments ? "Mandatory vehicle ownership proof" : "Optional for bicycle riders", requiresMotorDocuments)}
+          {renderUpload("vehicleRcBackUrl", "Vehicle RC - Upload Back Side", requiresMotorDocuments ? "Mandatory vehicle ownership proof" : "Optional for bicycle riders", requiresMotorDocuments)}
+          {renderUpload("insuranceUrl", "Vehicle Insurance", requiresMotorDocuments ? "Mandatory single document" : "Optional for bicycle riders", requiresMotorDocuments)}
         </View>
       );
     }
 
     return (
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Bank and Submit</Text>
-        <Text style={styles.cardText}>Payout details are mandatory before the account can move from Pending to Verified.</Text>
+        <Text style={styles.cardTitle}>Bank Details</Text>
+        <Text style={styles.cardText}>Add payout identity details. You can add or update them later from Profile.</Text>
         <Text style={styles.label}>Account Holder Name</Text>
         <TextInput style={styles.input} value={documents.bankAccountHolderName || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountHolderName: value }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
         <Text style={styles.label}>Bank Account Number</Text>
         <TextInput style={styles.input} value={documents.bankAccountNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountNumber: value.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
         <Text style={styles.label}>IFSC Code</Text>
         <TextInput style={styles.input} value={documents.bankIfsc || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankIfsc: value.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
-        <Text style={styles.cardText}>Upload any one: Cancelled Cheque (Recommended) / Passbook / Bank Statement</Text>
+        <Text style={styles.cardText}>Upload any one: Cancelled Cheque (Recommended) / Passbook / Bank Statement. You can finish this later if needed.</Text>
         <View style={styles.chips}>
           {(["cheque", "passbook", "statement"] as const).map((type) => (
             <TouchableOpacity key={type} style={[styles.chip, documents.bankDocumentType === type && styles.chipActive]} onPress={() => setDocuments((current) => ({ ...current, bankDocumentType: type }))}>
@@ -999,6 +1151,10 @@ export default function ProfileScreen({ navigation, route }: any) {
           : documents.bankDocumentType === "statement"
             ? renderUpload("bankStatementUrl", "Recent Bank Statement", "Accepted payout proof", true)
             : renderUpload("cancelledChequeUrl", "Cancelled Cheque", "Recommended payout proof", true)}
+        <TouchableOpacity style={styles.termsRow} onPress={() => setTermsAccepted((current) => !current)}>
+          <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={22} color={termsAccepted ? "#FF6B35" : "#667085"} />
+          <Text style={styles.termsText}>I agree to the delivery partner terms and conditions.</Text>
+        </TouchableOpacity>
         <View style={styles.summary}>
           <Text style={styles.summaryTitle}>Review checklist</Text>
           <Text style={styles.summaryItem}>{mandatoryDocsComplete ? "Mandatory documents look complete." : "Mandatory documents are still missing."}</Text>
@@ -1019,12 +1175,12 @@ export default function ProfileScreen({ navigation, route }: any) {
   }
 
   return (
-    <KeyboardAvoidingView style={[styles.container, { paddingTop: insets.top }]} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 8}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 136 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 8}>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: 2, paddingBottom: insets.bottom + 136 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.heroTag}><Ionicons name="bicycle-outline" size={16} color="#C2410C" /><Text style={styles.heroTagText}>Delivery Partner Registration</Text></View>
           <Text style={styles.heroTitle}>Complete your rider profile</Text>
-          <Text style={styles.heroSubtitle}>Upload the mandatory KYC, vehicle, and payout documents so the admin team can verify and activate your account.</Text>
+          <Text style={styles.heroSubtitle}>Upload the mandatory KYC, vehicle, and payout documents so the admin team can verify your account.</Text>
         </View>
 
         <View style={[styles.statusCard, { backgroundColor: currentStatus.bg }]}>
@@ -1046,25 +1202,35 @@ export default function ProfileScreen({ navigation, route }: any) {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
-        <TouchableOpacity style={styles.saveDraft} onPress={handleSaveDraft}><Text style={styles.saveDraftText}>Save Draft</Text></TouchableOpacity>
         <View style={styles.footerRow}>
-          {step > 0 ? <TouchableOpacity style={styles.secondaryButton} onPress={() => setStep((current) => current - 1)}><Text style={styles.secondaryButtonText}>Back</Text></TouchableOpacity> : <View style={styles.spacer} />}
-          {step < STEPS.length - 1 ? (
-            <TouchableOpacity style={styles.primaryButton} onPress={() => {
-              const error = validateStep(step);
-              if (error) {
-                Alert.alert("Missing details", error);
-                return;
-              }
-              setStep((current) => current + 1);
-            }}>
-              <Text style={styles.primaryButtonText}>Next Step</Text>
+          {step > 0 ? (
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => setStep((current) => current - 1)}>
+              <Text style={styles.secondaryButtonText}>Back</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={[styles.primaryButton, saving && styles.disabled]} onPress={handleSubmit} disabled={saving}>
-              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.primaryButtonText}>Submit for Review</Text>}
-            </TouchableOpacity>
+            <View style={styles.spacer} />
           )}
+          <View style={styles.sideBySide}>
+            <TouchableOpacity style={styles.saveDraft} onPress={handleSaveDraft}>
+              <Text style={styles.saveDraftText}>Save Draft</Text>
+            </TouchableOpacity>
+            {step < STEPS.length - 1 ? (
+              <TouchableOpacity style={styles.primaryButton} onPress={() => {
+                const error = validateStep(step);
+                if (error) {
+                  Alert.alert("Missing details", error);
+                  return;
+                }
+                setStep((current) => current + 1);
+              }}>
+                <Text style={styles.primaryButtonText}>Next Step</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={[styles.primaryButton, saving && styles.disabled]} onPress={handleSubmit} disabled={saving}>
+                {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.primaryButtonText}>Submit for Review</Text>}
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -1088,15 +1254,15 @@ const styles = StyleSheet.create({
   liveBadgeText: { fontSize: 12, fontWeight: "800", color: "#667085" },
   liveBadgeTextActive: { color: "#087443" },
   dashboardSubtitle: { marginTop: 16, fontSize: 14, lineHeight: 22, color: "#475467" },
-  hero: { margin: 16, padding: 20, borderRadius: 24, backgroundColor: "#FFF4EE", borderWidth: 1, borderColor: "#FFD9C9" },
+  hero: { marginHorizontal: 16, marginTop: 8, marginBottom: 12, padding: 20, borderRadius: 26, backgroundColor: "#FFF4EE", borderWidth: 1, borderColor: "#FFD9C9" },
   heroTag: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: "#fff" },
   heroTagText: { fontSize: 12, fontWeight: "700", color: "#C2410C" },
   heroTitle: { marginTop: 14, fontSize: 25, fontWeight: "800", color: "#1D2939" },
   heroSubtitle: { marginTop: 8, fontSize: 14, lineHeight: 21, color: "#475467" },
-  statusCard: { marginHorizontal: 16, marginTop: -2, padding: 16, borderRadius: 20 },
+  statusCard: { marginHorizontal: 16, marginTop: 0, padding: 16, borderRadius: 20 },
   statusLabel: { fontSize: 15, fontWeight: "800" },
   statusText: { marginTop: 6, fontSize: 13, lineHeight: 19, color: "#475467" },
-  progressCard: { marginHorizontal: 16, marginTop: 14, padding: 16, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
+  progressCard: { marginHorizontal: 16, marginTop: 12, padding: 16, borderRadius: 22, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
   progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   progressText: { fontSize: 12, fontWeight: "700", color: "#667085" },
   progressTextActive: { fontSize: 13, fontWeight: "800", color: "#FF6B35" },
@@ -1107,7 +1273,8 @@ const styles = StyleSheet.create({
   dotActive: { backgroundColor: "#FF6B35" },
   dotText: { fontSize: 13, fontWeight: "800", color: "#667085" },
   dotTextActive: { color: "#fff" },
-  card: { marginHorizontal: 16, marginTop: 14, padding: 18, borderRadius: 22, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
+
+  card: { marginHorizontal: 16, marginTop: 12, padding: 18, borderRadius: 22, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
   cardTitle: { fontSize: 21, fontWeight: "800", color: "#1D2939" },
   cardText: { marginTop: 6, fontSize: 13, lineHeight: 20, color: "#667085" },
   infoRow: { marginTop: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "#F2F4F7" },
@@ -1144,8 +1311,11 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 12, fontWeight: "800", color: "#475467" },
   badgeTextActive: { color: "#fff" },
   uploadCard: { marginTop: 14, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: "#ECECEC", backgroundColor: "#FCFCFD" },
+  uploadHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   uploadTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
   uploadSubtitle: { marginTop: 4, fontSize: 12, lineHeight: 18, color: "#667085" },
+  uploadBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "#FFF1E8" },
+  uploadBadgeText: { fontSize: 10, lineHeight: 12, fontWeight: "800", color: "#C2410C", textTransform: "uppercase" },
   placeholder: { marginTop: 12, height: 72, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "#D0D5DD", alignItems: "center", justifyContent: "center", backgroundColor: "#fff" },
   placeholderText: { marginTop: 6, fontSize: 12, color: "#98A2B3" },
   fileBadge: { marginTop: 12, padding: 14, borderRadius: 14, backgroundColor: "#ECFDF3", borderWidth: 1, borderColor: "#ABEFC6", flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1153,9 +1323,9 @@ const styles = StyleSheet.create({
   preview: { width: "100%", height: 120, borderRadius: 14, marginTop: 12, backgroundColor: "#F2F4F7" },
   uploadButton: { marginTop: 12, alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: "#FF6B35", minWidth: 110, alignItems: "center" },
   uploadButtonText: { fontSize: 13, fontWeight: "800", color: "#fff" },
-  addressPreview: { marginTop: 12, padding: 14, borderRadius: 16, backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#E4E7EC" },
-  addressPreviewLabel: { fontSize: 12, fontWeight: "700", color: "#667085" },
-  addressPreviewText: { marginTop: 6, fontSize: 13, lineHeight: 20, color: "#344054" },
+  termsRow: { marginTop: 16, padding: 14, borderRadius: 16, backgroundColor: "#FFF7ED", flexDirection: "row", alignItems: "center", gap: 10 },
+  termsText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "700", color: "#344054" },
+  addressHelperText: { marginTop: 12, fontSize: 12, lineHeight: 18, color: "#667085" },
   summary: { marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: "#F8FAFC" },
   summaryTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
   summaryItem: { marginTop: 6, fontSize: 13, color: "#667085" },
@@ -1172,6 +1342,7 @@ const styles = StyleSheet.create({
   secondaryButton: { paddingHorizontal: 20, paddingVertical: 15, borderRadius: 16, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E4E7EC" },
   secondaryButtonText: { fontSize: 14, fontWeight: "800", color: "#344054" },
   spacer: { width: 90 },
+  sideBySide: { flexDirection: 'row', flex: 1, justifyContent: 'space-between' },
   primaryButton: { flex: 1, minHeight: 54, borderRadius: 18, backgroundColor: "#FF6B35", alignItems: "center", justifyContent: "center" },
   primaryButtonText: { fontSize: 15, fontWeight: "800", color: "#fff" },
   disabled: { opacity: 0.75 }

@@ -24,6 +24,7 @@ export default function DeliveryPartners() {
   const [selected, setSelected] = useState<DeliveryPartnerRecord | null>(null);
   const [reviewing, setReviewing] = useState<{ partner: DeliveryPartnerRecord; nextStatus: DeliveryPartnerRecord["status"] } | null>(null);
   const [reviewComment, setReviewComment] = useState("");
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   const loadPartners = async () => {
     setLoading(true);
@@ -64,6 +65,9 @@ export default function DeliveryPartners() {
     [partners]
   );
 
+  const selectedRequiresMotorDocs = selected ? !["Cycle", "Bicycle"].includes(selected.vehicleType || "") : true;
+  const isImageUrl = (url?: string | null) => Boolean(url && !/\.pdf($|\?)/i.test(url));
+
   const submitStatus = async () => {
     if (!reviewing) return;
     if (reviewing.nextStatus === "REJECTED" && !reviewComment.trim()) {
@@ -80,14 +84,16 @@ export default function DeliveryPartners() {
 
   const documentRows = selected
     ? [
+        { label: "Profile Photo", url: selected.profilePhotoUrl, required: true },
         { label: `Aadhaar Front${selected.documents?.aadhaarNumber ? ` (${selected.documents.aadhaarNumber})` : ""}`, url: selected.documents?.aadhaarFrontUrl || selected.documents?.aadhaarUrl, required: true },
         { label: "Aadhaar Back", url: selected.documents?.aadhaarBackUrl, required: true },
         { label: `PAN Front${selected.documents?.panNumber ? ` (${selected.documents.panNumber})` : ""}`, url: selected.documents?.panFrontUrl || selected.documents?.panUrl, required: true },
-        { label: "Driving License Front", url: selected.documents?.drivingLicenseFrontUrl || selected.documents?.drivingLicenseUrl, required: true },
-        { label: "Driving License Back", url: selected.documents?.drivingLicenseBackUrl, required: true },
-        { label: "Vehicle RC Front", url: selected.documents?.vehicleRcFrontUrl || selected.documents?.vehicleRcUrl, required: true },
-        { label: "Vehicle RC Back", url: selected.documents?.vehicleRcBackUrl, required: true },
-        { label: "Vehicle Insurance", url: selected.documents?.insuranceUrl, required: true },
+        { label: "Selfie / Verification Photo", url: selected.documents?.selfiePhotoUrl, required: true },
+        { label: "Driving License Front", url: selected.documents?.drivingLicenseFrontUrl || selected.documents?.drivingLicenseUrl, required: selectedRequiresMotorDocs },
+        { label: "Driving License Back", url: selected.documents?.drivingLicenseBackUrl, required: selectedRequiresMotorDocs },
+        { label: "Vehicle RC Front", url: selected.documents?.vehicleRcFrontUrl || selected.documents?.vehicleRcUrl, required: selectedRequiresMotorDocs },
+        { label: "Vehicle RC Back", url: selected.documents?.vehicleRcBackUrl, required: selectedRequiresMotorDocs },
+        { label: "Vehicle Insurance", url: selected.documents?.insuranceUrl, required: selectedRequiresMotorDocs },
         { label: `Bank Proof${selected.documents?.bankDocumentType ? ` (${selected.documents.bankDocumentType})` : ""}`, url: selected.documents?.cancelledChequeUrl || selected.documents?.bankPassbookUrl || selected.documents?.bankStatementUrl, required: true }
       ]
     : [];
@@ -217,8 +223,21 @@ export default function DeliveryPartners() {
               <div>{selected.userId?.phone || selected.phone || "Not available"}</div>
             </div>
             <div>
+              <Typography.Text type="secondary">Email</Typography.Text>
+              <div>{selected.userId?.email || selected.email || "Not provided"}</div>
+            </div>
+            <div>
+              <Typography.Text type="secondary">Date of Birth</Typography.Text>
+              <div>{selected.dateOfBirth ? new Date(selected.dateOfBirth).toLocaleDateString() : "Not provided"}</div>
+            </div>
+            <div>
               <Typography.Text type="secondary">Address</Typography.Text>
               <div>{selected.address || "Not provided"}</div>
+            </div>
+            <div>
+              <Typography.Text type="secondary">Emergency Contact</Typography.Text>
+              <div>{selected.emergencyContactName || "Name not provided"}</div>
+              <div>{selected.emergencyContactPhone || "Phone not provided"}</div>
             </div>
             <div>
               <Typography.Text type="secondary">Vehicle Type</Typography.Text>
@@ -235,7 +254,7 @@ export default function DeliveryPartners() {
             <div>
               <Typography.Text type="secondary">Bank Details</Typography.Text>
               <div>{selected.documents?.bankAccountHolderName || "Account holder not provided"}</div>
-              <div>{selected.documents?.bankAccountNumber || "Not provided"}</div>
+              <div>{selected.documents?.bankAccountNumber || "Account number skipped"}</div>
               <Typography.Text type="secondary">IFSC</Typography.Text>
               <div>{selected.documents?.bankIfsc || "Not provided"}</div>
             </div>
@@ -244,14 +263,49 @@ export default function DeliveryPartners() {
               <Space direction="vertical" size={8} style={{ width: "100%", marginTop: 8 }}>
                 {documentRows.map((doc) => (
                   <Card key={doc.label} size="small">
-                    <Typography.Text strong>{doc.label} {doc.required ? "(Mandatory)" : "(If applicable)"}</Typography.Text>
-                    <div style={{ marginTop: 6 }}>
-                      {doc.url ? (
-                        <Typography.Link href={doc.url} target="_blank" rel="noreferrer">Open uploaded document</Typography.Link>
-                      ) : (
-                        <Typography.Text type="secondary">Not uploaded</Typography.Text>
-                      )}
-                    </div>
+                    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                      <Space size={8} wrap>
+                        <Typography.Text strong>
+                          {doc.label} {doc.required ? "(Mandatory)" : "(If applicable)"}
+                        </Typography.Text>
+                        {doc.url ? <Tag color="green">Uploaded</Tag> : <Tag color="default">Not uploaded</Tag>}
+                      </Space>
+                      {doc.url && isImageUrl(doc.url) ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImageUrl(doc.url || null)}
+                          style={{
+                            border: "none",
+                            padding: 0,
+                            background: "transparent",
+                            cursor: "pointer",
+                            textAlign: "left"
+                          }}
+                        >
+                          <img
+                            src={doc.url}
+                            alt={doc.label}
+                            style={{
+                              width: "100%",
+                              maxHeight: 220,
+                              objectFit: "cover",
+                              borderRadius: 12,
+                              border: "1px solid #e5e7eb",
+                              marginTop: 4
+                            }}
+                          />
+                        </button>
+                      ) : null}
+                      <div style={{ marginTop: 6 }}>
+                        {doc.url ? (
+                          <Typography.Link href={doc.url} target="_blank" rel="noreferrer">
+                            Open uploaded document
+                          </Typography.Link>
+                        ) : (
+                          <Typography.Text type="secondary">Not uploaded</Typography.Text>
+                        )}
+                      </div>
+                    </Space>
                   </Card>
                 ))}
               </Space>
@@ -259,6 +313,10 @@ export default function DeliveryPartners() {
             <div>
               <Typography.Text type="secondary">Current Status</Typography.Text>
               <div>{selected.status}</div>
+            </div>
+            <div>
+              <Typography.Text type="secondary">Terms Accepted</Typography.Text>
+              <div>{selected.termsAcceptedAt ? new Date(selected.termsAcceptedAt).toLocaleString() : "Not accepted"}</div>
             </div>
             {selected.reviewComment ? (
               <div>
@@ -273,6 +331,27 @@ export default function DeliveryPartners() {
           </Space>
         ) : null}
       </Drawer>
+
+      <Modal
+        open={Boolean(previewImageUrl)}
+        onCancel={() => setPreviewImageUrl(null)}
+        footer={null}
+        centered
+        title="Document preview"
+      >
+        {previewImageUrl ? (
+          <img
+            src={previewImageUrl}
+            alt="Document preview"
+            style={{
+              width: "100%",
+              maxHeight: "70vh",
+              objectFit: "contain",
+              borderRadius: 12
+            }}
+          />
+        ) : null}
+      </Modal>
 
       <Modal
         title={`${reviewing?.nextStatus === "REJECTED" ? "Reject" : reviewing?.nextStatus === "ACTIVE" ? "Activate" : "Verify"} ${reviewing?.partner.userId?.name || reviewing?.partner.name || "delivery partner"}`}

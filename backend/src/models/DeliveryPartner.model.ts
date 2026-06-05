@@ -5,7 +5,11 @@ export interface IDeliveryPartner extends Document {
   phone: string;
   name: string;
   email?: string;
+  dateOfBirth?: Date;
   address?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  termsAcceptedAt?: Date;
   vehicleType: string;
   vehicleNumber?: string;
   licenseNumber?: string;
@@ -19,6 +23,7 @@ export interface IDeliveryPartner extends Document {
     panNumber?: string;
     panFrontUrl?: string;
     panUrl?: string;
+    selfiePhotoUrl?: string;
     drivingLicenseFrontUrl?: string;
     drivingLicenseBackUrl?: string;
     drivingLicenseUrl?: string;
@@ -70,13 +75,29 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     email: {
       type: String
     },
+    dateOfBirth: {
+      type: Date,
+      default: null
+    },
     address: {
       type: String,
       default: ""
     },
+    emergencyContactName: {
+      type: String,
+      default: ""
+    },
+    emergencyContactPhone: {
+      type: String,
+      default: ""
+    },
+    termsAcceptedAt: {
+      type: Date,
+      default: null
+    },
     vehicleType: {
       type: String,
-      enum: ["Bike", "Cycle", "Scooter", "Motorcycle"],
+      enum: ["Bike", "Cycle", "Bicycle", "Scooter", "Motorcycle", "Car"],
       default: "Bike"
     },
     vehicleNumber: {
@@ -101,6 +122,7 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
       panNumber: { type: String, default: "" },
       panFrontUrl: { type: String, default: "" },
       panUrl: { type: String, default: "" },
+      selfiePhotoUrl: { type: String, default: "" },
       drivingLicenseFrontUrl: { type: String, default: "" },
       drivingLicenseBackUrl: { type: String, default: "" },
       drivingLicenseUrl: { type: String, default: "" },

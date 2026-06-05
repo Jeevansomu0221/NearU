@@ -61,7 +61,7 @@ const buildTokens = async (user: any, requestedRole?: string) => {
       phone: user.phone,
       name: user.name || `Delivery ${String(user.phone).slice(-4)}`,
       isAvailable: false,
-      status: "PENDING"
+      status: "INACTIVE"
     });
     deliveryPartner = { _id: created._id } as any;
   }

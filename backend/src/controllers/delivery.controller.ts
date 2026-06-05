@@ -28,13 +28,29 @@ const ensureDeliveryUser = (req: AuthRequest, res: Response) => {
 
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const aadhaarRegex = /^[0-9]{12}$/;
-const dlRegex = /^[A-Z]{2}[0-9]{2}[0-9]{11}$/;
+const dlRegex = /^[A-Z]{2}[0-9]{2}[0-9A-Z]{8,14}$/;
 const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+const emergencyPhoneRegex = /^[0-9]{10}$/;
 
 const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
 
 const safeTrimmedString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+const hasValidDateOfBirth = (value?: string | Date | null) => {
+  if (!value) return false;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime()) || date > new Date()) return false;
+
+  const today = new Date();
+  let age = today.getFullYear() - date.getFullYear();
+  const monthDelta = today.getMonth() - date.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < date.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 18;
+};
 
 const findDeliveryPartnerForUser = (user: NonNullable<AuthRequest["user"]>) => {
   const filters = [];
@@ -60,7 +76,12 @@ const updateDeliveryPartnerForUser = (user: NonNullable<AuthRequest["user"]>, up
 
 const isDeliveryProfileComplete = (profile: {
   name?: string;
+  dateOfBirth?: string | Date | null;
   address?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  profilePhotoUrl?: string;
+  termsAcceptedAt?: string | Date | null;
   vehicleType?: string;
   vehicleNumber?: string;
   licenseNumber?: string;
@@ -71,6 +92,7 @@ const isDeliveryProfileComplete = (profile: {
     aadhaarUrl?: string;
     panNumber?: string;
     panFrontUrl?: string;
+    selfiePhotoUrl?: string;
     drivingLicenseFrontUrl?: string;
     drivingLicenseBackUrl?: string;
     drivingLicenseUrl?: string;
@@ -87,6 +109,7 @@ const isDeliveryProfileComplete = (profile: {
     bankStatementUrl?: string;
   };
 }) => {
+  const requiresMotorDocuments = !["Cycle", "Bicycle"].includes(safeTrimmedString(profile.vehicleType));
   const hasRealName =
     !!safeTrimmedString(profile.name) &&
     !/^Delivery\s\d{4}$/.test(safeTrimmedString(profile.name)) &&
@@ -95,27 +118,29 @@ const isDeliveryProfileComplete = (profile: {
   const hasMandatoryDocuments = Boolean(
     (safeTrimmedString(profile.documents?.aadhaarFrontUrl) || safeTrimmedString(profile.documents?.aadhaarUrl)) &&
       safeTrimmedString(profile.documents?.aadhaarBackUrl) &&
+      safeTrimmedString(profile.documents?.aadhaarNumber) &&
+      safeTrimmedString(profile.documents?.panNumber) &&
       safeTrimmedString(profile.documents?.panFrontUrl) &&
-      (safeTrimmedString(profile.documents?.drivingLicenseFrontUrl) || safeTrimmedString(profile.documents?.drivingLicenseUrl)) &&
-      safeTrimmedString(profile.documents?.drivingLicenseBackUrl) &&
-      (safeTrimmedString(profile.documents?.vehicleRcFrontUrl) || safeTrimmedString(profile.documents?.vehicleRcUrl)) &&
-      safeTrimmedString(profile.documents?.vehicleRcBackUrl) &&
-      safeTrimmedString(profile.documents?.insuranceUrl) &&
-      safeTrimmedString(profile.documents?.bankAccountHolderName) &&
-      safeTrimmedString(profile.documents?.bankAccountNumber) &&
-      safeTrimmedString(profile.documents?.bankIfsc) &&
-      safeTrimmedString(profile.documents?.bankDocumentType) &&
-      (safeTrimmedString(profile.documents?.cancelledChequeUrl) ||
-        safeTrimmedString(profile.documents?.bankPassbookUrl) ||
-        safeTrimmedString(profile.documents?.bankStatementUrl))
+      safeTrimmedString(profile.documents?.selfiePhotoUrl) &&
+      (!requiresMotorDocuments ||
+        ((safeTrimmedString(profile.documents?.drivingLicenseFrontUrl) || safeTrimmedString(profile.documents?.drivingLicenseUrl)) &&
+          safeTrimmedString(profile.documents?.drivingLicenseBackUrl) &&
+          (safeTrimmedString(profile.documents?.vehicleRcFrontUrl) || safeTrimmedString(profile.documents?.vehicleRcUrl)) &&
+          safeTrimmedString(profile.documents?.vehicleRcBackUrl) &&
+          safeTrimmedString(profile.documents?.insuranceUrl)))
   );
 
   return Boolean(
     hasRealName &&
+      hasValidDateOfBirth(profile.dateOfBirth) &&
       safeTrimmedString(profile.address) &&
+      safeTrimmedString(profile.profilePhotoUrl) &&
+      safeTrimmedString(profile.emergencyContactName) &&
+      emergencyPhoneRegex.test(safeTrimmedString(profile.emergencyContactPhone)) &&
+      Boolean(profile.termsAcceptedAt) &&
       safeTrimmedString(profile.vehicleType) &&
-      safeTrimmedString(profile.vehicleNumber) &&
-      safeTrimmedString(profile.licenseNumber) &&
+      (!requiresMotorDocuments || safeTrimmedString(profile.vehicleNumber)) &&
+      (!requiresMotorDocuments || safeTrimmedString(profile.licenseNumber)) &&
       hasMandatoryDocuments
   );
 };
@@ -142,7 +167,11 @@ export const getDeliveryProfile = async (req: AuthRequest, res: Response) => {
         name: userDoc.name,
         phone: userDoc.phone,
         email: userDoc.email,
+        dateOfBirth: deliveryPartner.dateOfBirth,
         address: deliveryPartner.address,
+        emergencyContactName: deliveryPartner.emergencyContactName,
+        emergencyContactPhone: deliveryPartner.emergencyContactPhone,
+        termsAcceptedAt: deliveryPartner.termsAcceptedAt,
         vehicleType: deliveryPartner.vehicleType,
         vehicleNumber: deliveryPartner.vehicleNumber,
         licenseNumber: deliveryPartner.licenseNumber,
@@ -157,7 +186,12 @@ export const getDeliveryProfile = async (req: AuthRequest, res: Response) => {
         ratingCount: deliveryPartner.ratingCount,
         isProfileComplete: isDeliveryProfileComplete({
           name: userDoc.name,
+          dateOfBirth: deliveryPartner.dateOfBirth,
           address: deliveryPartner.address,
+          emergencyContactName: deliveryPartner.emergencyContactName,
+          emergencyContactPhone: deliveryPartner.emergencyContactPhone,
+          profilePhotoUrl: deliveryPartner.profilePhotoUrl,
+          termsAcceptedAt: deliveryPartner.termsAcceptedAt,
           vehicleType: deliveryPartner.vehicleType,
           vehicleNumber: deliveryPartner.vehicleNumber,
           licenseNumber: deliveryPartner.licenseNumber,
@@ -180,7 +214,11 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
     const {
       name,
       email,
+      dateOfBirth,
       address,
+      emergencyContactName,
+      emergencyContactPhone,
+      termsAccepted,
       vehicleType,
       vehicleNumber,
       licenseNumber,
@@ -205,6 +243,14 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       updateUser.email = typeof email === "string" ? email.trim().toLowerCase() : "";
     }
 
+    if (dateOfBirth !== undefined) {
+      const parsedDate = new Date(dateOfBirth);
+      if (!hasValidDateOfBirth(parsedDate)) {
+        return errorResponse(res, "Delivery partner must be at least 18 years old", 400);
+      }
+      updateDelivery.dateOfBirth = parsedDate;
+    }
+
     if (address !== undefined) {
       if (typeof address !== "string" || address.trim().length < 10) {
         return errorResponse(res, "Address must be at least 10 characters", 400);
@@ -212,8 +258,29 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       updateDelivery.address = address.trim();
     }
 
+    if (emergencyContactName !== undefined) {
+      if (typeof emergencyContactName !== "string" || emergencyContactName.trim().length < 3) {
+        return errorResponse(res, "Emergency contact name is required", 400);
+      }
+      updateDelivery.emergencyContactName = emergencyContactName.trim();
+    }
+
+    if (emergencyContactPhone !== undefined) {
+      if (typeof emergencyContactPhone !== "string" || !emergencyPhoneRegex.test(emergencyContactPhone.trim())) {
+        return errorResponse(res, "Emergency contact phone must be a 10-digit mobile number", 400);
+      }
+      updateDelivery.emergencyContactPhone = emergencyContactPhone.trim();
+    }
+
+    if (termsAccepted !== undefined) {
+      if (termsAccepted !== true) {
+        return errorResponse(res, "Delivery partner terms must be accepted before submission", 400);
+      }
+      updateDelivery.termsAcceptedAt = new Date();
+    }
+
     if (vehicleType !== undefined) {
-      const validVehicleTypes = ["Bike", "Cycle", "Scooter", "Motorcycle"];
+      const validVehicleTypes = ["Bike", "Cycle", "Bicycle", "Scooter", "Motorcycle", "Car"];
       if (!validVehicleTypes.includes(vehicleType)) {
         return errorResponse(res, `Vehicle type must be one of: ${validVehicleTypes.join(", ")}`, 400);
       }
@@ -263,6 +330,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         aadhaarBackUrl: firstString(nextDocuments.aadhaarBackUrl, nextDocuments.aadhaar_back_url),
         panNumber: firstString(nextDocuments.panNumber, nextDocuments.pan_number).toUpperCase(),
         panFrontUrl: firstString(nextDocuments.panFrontUrl, nextDocuments.pan_front_url, nextDocuments.panUrl),
+        selfiePhotoUrl: firstString(nextDocuments.selfiePhotoUrl, nextDocuments.selfie_photo_url),
         drivingLicenseFrontUrl: firstString(nextDocuments.drivingLicenseFrontUrl, nextDocuments.dlFrontUrl, nextDocuments.dl_front_url, nextDocuments.drivingLicenseUrl),
         drivingLicenseBackUrl: firstString(nextDocuments.drivingLicenseBackUrl, nextDocuments.dlBackUrl, nextDocuments.dl_back_url),
         vehicleRcFrontUrl: firstString(nextDocuments.vehicleRcFrontUrl, nextDocuments.vehicle_rc_front_url, nextDocuments.vehicleRcUrl),
@@ -289,24 +357,21 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         return errorResponse(res, "IFSC code format is invalid", 400);
       }
 
+      const nextVehicleType = typeof vehicleType === "string" ? vehicleType : currentPartner.vehicleType;
+      const requiresMotorDocuments = !["Cycle", "Bicycle"].includes(safeTrimmedString(nextVehicleType));
       const hasMandatoryDocuments = Boolean(
         normalizedDocuments.aadhaarNumber &&
           normalizedDocuments.aadhaarFrontUrl &&
           normalizedDocuments.aadhaarBackUrl &&
           normalizedDocuments.panNumber &&
           normalizedDocuments.panFrontUrl &&
-          normalizedDocuments.drivingLicenseFrontUrl &&
-          normalizedDocuments.drivingLicenseBackUrl &&
-          normalizedDocuments.vehicleRcFrontUrl &&
-          normalizedDocuments.vehicleRcBackUrl &&
-          normalizedDocuments.insuranceUrl?.trim() &&
-          normalizedDocuments.bankAccountHolderName &&
-          normalizedDocuments.bankAccountNumber &&
-          normalizedDocuments.bankIfsc &&
-          normalizedDocuments.bankDocumentType &&
-          (normalizedDocuments.cancelledChequeUrl ||
-            normalizedDocuments.bankPassbookUrl ||
-            normalizedDocuments.bankStatementUrl)
+          normalizedDocuments.selfiePhotoUrl &&
+          (!requiresMotorDocuments ||
+            (normalizedDocuments.drivingLicenseFrontUrl &&
+              normalizedDocuments.drivingLicenseBackUrl &&
+              normalizedDocuments.vehicleRcFrontUrl &&
+              normalizedDocuments.vehicleRcBackUrl &&
+              normalizedDocuments.insuranceUrl?.trim()))
       );
 
       updateDelivery.documents = {
@@ -360,7 +425,11 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         name: userDoc.name,
         phone: userDoc.phone,
         email: userDoc.email,
+        dateOfBirth: deliveryPartner.dateOfBirth,
         address: deliveryPartner.address,
+        emergencyContactName: deliveryPartner.emergencyContactName,
+        emergencyContactPhone: deliveryPartner.emergencyContactPhone,
+        termsAcceptedAt: deliveryPartner.termsAcceptedAt,
         vehicleType: deliveryPartner.vehicleType,
         vehicleNumber: deliveryPartner.vehicleNumber,
         licenseNumber: deliveryPartner.licenseNumber,
@@ -375,7 +444,12 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         ratingCount: deliveryPartner.ratingCount,
         isProfileComplete: isDeliveryProfileComplete({
           name: userDoc.name,
+          dateOfBirth: deliveryPartner.dateOfBirth,
           address: deliveryPartner.address,
+          emergencyContactName: deliveryPartner.emergencyContactName,
+          emergencyContactPhone: deliveryPartner.emergencyContactPhone,
+          profilePhotoUrl: deliveryPartner.profilePhotoUrl,
+          termsAcceptedAt: deliveryPartner.termsAcceptedAt,
           vehicleType: deliveryPartner.vehicleType,
           vehicleNumber: deliveryPartner.vehicleNumber,
           licenseNumber: deliveryPartner.licenseNumber,
@@ -524,6 +598,27 @@ export const updateDeliveryPartnerStatusByAdmin = async (req: AuthRequest, res: 
     const deliveryPartner = await DeliveryPartner.findById(deliveryPartnerId);
     if (!deliveryPartner) {
       return errorResponse(res, "Delivery partner not found", 404);
+    }
+
+    if (["VERIFIED", "ACTIVE"].includes(status)) {
+      const userDoc = await User.findById(deliveryPartner.userId).select("name");
+      const isComplete = isDeliveryProfileComplete({
+        name: userDoc?.name,
+        dateOfBirth: deliveryPartner.dateOfBirth,
+        address: deliveryPartner.address,
+        emergencyContactName: deliveryPartner.emergencyContactName,
+        emergencyContactPhone: deliveryPartner.emergencyContactPhone,
+        profilePhotoUrl: deliveryPartner.profilePhotoUrl,
+        termsAcceptedAt: deliveryPartner.termsAcceptedAt,
+        vehicleType: deliveryPartner.vehicleType,
+        vehicleNumber: deliveryPartner.vehicleNumber,
+        licenseNumber: deliveryPartner.licenseNumber,
+        documents: deliveryPartner.documents
+      });
+
+      if (!isComplete) {
+        return errorResponse(res, "Cannot approve until the delivery partner completes registration documents", 400);
+      }
     }
 
     deliveryPartner.status = status;
