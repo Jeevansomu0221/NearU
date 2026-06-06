@@ -2,7 +2,13 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
-import { notifyPartnerApplicationStatus, notifyPartnerDocumentReupload } from "../services/notification.service";
+import {
+  notifyCustomerOrderStatus,
+  notifyDeliveryJobReady,
+  notifyPartnerApplicationStatus,
+  notifyPartnerDeliveryStatus,
+  notifyPartnerDocumentReupload
+} from "../services/notification.service";
 
 // Create a type for authenticated requests
 interface AuthRequest extends Request {
@@ -329,16 +335,30 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const order = await Order.findByIdAndUpdate(
-      orderId,
-      { status },
-      { new: true }
-    );
-
+    const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({
         success: false,
         message: "Order not found"
+      });
+    }
+
+    const previousStatus = order.status;
+    order.status = status;
+    if (status === "READY" && previousStatus !== "READY") {
+      order.deliveryReadyAt = new Date();
+    }
+    await order.save();
+
+    if (previousStatus !== status) {
+      void Promise.all([
+        notifyCustomerOrderStatus(order, status),
+        status === "READY" && previousStatus !== "READY" ? notifyDeliveryJobReady(order) : Promise.resolve(),
+        ["PICKED_UP", "DELIVERED", "CANCELLED"].includes(status)
+          ? notifyPartnerDeliveryStatus(order, status)
+          : Promise.resolve()
+      ]).catch((error) => {
+        console.error("Failed to notify admin order status update:", error);
       });
     }
 

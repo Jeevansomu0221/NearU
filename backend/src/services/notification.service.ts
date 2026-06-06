@@ -17,6 +17,45 @@ type SendOptions = {
   app?: NotificationApp;
 };
 
+const CUSTOMER_ORDER_COPY: Record<string, { title: string; body: string }> = {
+  CONFIRMED: {
+    title: "Order confirmed",
+    body: "Your order is confirmed. The shop will start preparing it soon."
+  },
+  ACCEPTED: {
+    title: "Order accepted",
+    body: "The shop accepted your order."
+  },
+  PREPARING: {
+    title: "Preparing your order",
+    body: "Your food is being prepared now."
+  },
+  READY: {
+    title: "Order ready",
+    body: "Your order is packed and ready for pickup."
+  },
+  ASSIGNED: {
+    title: "Delivery partner assigned",
+    body: "A delivery partner has accepted your order."
+  },
+  PICKED_UP: {
+    title: "Order on the way",
+    body: "Your delivery partner has picked up the order."
+  },
+  DELIVERED: {
+    title: "Order delivered",
+    body: "Your order has been delivered."
+  },
+  CANCELLED: {
+    title: "Order cancelled",
+    body: "Your order was cancelled."
+  },
+  REJECTED: {
+    title: "Order cancelled",
+    body: "The shop could not accept this order."
+  }
+};
+
 const INVALID_TOKEN_CODES = new Set([
   "messaging/invalid-registration-token",
   "messaging/registration-token-not-registered",
@@ -108,7 +147,6 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
         android: {
           priority: "high",
           notification: {
-            channelId: "default",
             sound: "default"
           }
         },
@@ -144,42 +182,33 @@ export const notifyPartnerNewOrder = async (order: any) => {
   const partnerUserId = idString((partner as any)?.userId);
   if (!partnerUserId || (partner as any)?.notifications?.newOrderAlerts === false) return;
 
+  const shopName = (partner as any)?.restaurantName || (partner as any)?.shopName || "your shop";
   await sendNotificationToUsers([partnerUserId], {
     app: "partner",
     title: "New order received",
-    body: `Order #${idString(order._id).slice(-6)} is waiting for acceptance.`,
+    body: `Order #${idString(order._id).slice(-6)} is waiting for acceptance at ${shopName}.`,
     data: {
       type: "NEW_ORDER",
-      orderId: idString(order._id)
+      orderId: idString(order._id),
+      status: order.status || "CONFIRMED"
     }
   });
 };
 
 export const notifyCustomerOrderStatus = async (order: any, status: string) => {
   const orderId = idString(order._id);
-  const titles: Record<string, string> = {
-    ACCEPTED: "Order accepted",
-    PREPARING: "Order is being prepared",
-    READY: "Order is ready",
-    PICKED_UP: "Order picked up",
-    DELIVERED: "Order delivered",
-    CANCELLED: "Order cancelled",
-    REJECTED: "Order cancelled"
-  };
-  const bodies: Record<string, string> = {
-    ACCEPTED: "The shop accepted your order.",
-    PREPARING: "Your order is now being prepared.",
-    READY: "Your order is ready for pickup by a delivery partner.",
-    PICKED_UP: "Your delivery partner has picked up the order.",
-    DELIVERED: "Your order has been delivered.",
-    CANCELLED: order.customerCancellationMessage || "Your order was cancelled.",
-    REJECTED: order.customerCancellationMessage || "The shop could not accept this order."
+  const copy = CUSTOMER_ORDER_COPY[status] || {
+    title: "Order update",
+    body: `Order #${orderId.slice(-6)} status changed to ${status}.`
   };
 
   await sendNotificationToUsers([order.customerId], {
     app: "customer",
-    title: titles[status] || "Order update",
-    body: bodies[status] || `Order #${orderId.slice(-6)} status changed to ${status}.`,
+    title: copy.title,
+    body:
+      status === "CANCELLED" || status === "REJECTED"
+        ? order.customerCancellationMessage || copy.body
+        : copy.body,
     data: {
       type: "ORDER_STATUS",
       orderId,
@@ -209,7 +238,8 @@ export const notifyDeliveryJobReady = async (order: any) => {
     data: {
       type: "DELIVERY_JOB_READY",
       orderId: idString(order._id),
-      jobId: idString(order._id)
+      jobId: idString(order._id),
+      status: "READY"
     }
   });
 };
