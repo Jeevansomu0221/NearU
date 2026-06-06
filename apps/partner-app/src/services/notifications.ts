@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Alert, Platform } from "react-native";
+import { Alert, PermissionsAndroid, Platform } from "react-native";
 import api from "../api/client";
 
 const NOTIFICATION_APP = "partner";
@@ -43,10 +43,27 @@ const setupBackgroundHandler = () => {
   didSetBackgroundHandler = true;
 };
 
+const requestAndroidNotificationPermission = async () => {
+  if (Platform.OS !== "android" || Number(Platform.Version) < 33) return true;
+
+  const permission = (PermissionsAndroid.PERMISSIONS as any).POST_NOTIFICATIONS;
+  if (!permission) return true;
+
+  const alreadyGranted = await PermissionsAndroid.check(permission);
+  if (alreadyGranted) return true;
+
+  const result = await PermissionsAndroid.request(permission);
+  return result === PermissionsAndroid.RESULTS.GRANTED;
+};
+
 const hasNotificationPermission = async () => {
   const messagingModule = getMessagingModule();
   const messaging = getMessaging();
   if (!messaging || !messagingModule) return false;
+
+  const androidPermission = await requestAndroidNotificationPermission();
+  if (!androidPermission) return false;
+  if (Platform.OS === "android") return true;
 
   const status = await messaging.requestPermission();
   return (

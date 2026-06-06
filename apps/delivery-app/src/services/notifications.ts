@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Alert, Linking, Platform } from "react-native";
+import { Alert, Linking, PermissionsAndroid, Platform } from "react-native";
 import api from "../api/client";
 
 const NOTIFICATION_APP = "delivery";
@@ -43,10 +43,30 @@ const setupBackgroundHandler = () => {
   didSetBackgroundHandler = true;
 };
 
+const getAndroidNotificationPermission = () => {
+  if (Platform.OS !== "android" || Number(Platform.Version) < 33) return null;
+  return (PermissionsAndroid.PERMISSIONS as any).POST_NOTIFICATIONS || null;
+};
+
+const requestAndroidNotificationPermission = async () => {
+  const permission = getAndroidNotificationPermission();
+  if (!permission) return true;
+
+  const alreadyGranted = await PermissionsAndroid.check(permission);
+  if (alreadyGranted) return true;
+
+  const result = await PermissionsAndroid.request(permission);
+  return result === PermissionsAndroid.RESULTS.GRANTED;
+};
+
 const hasNotificationPermission = async () => {
   const messagingModule = getMessagingModule();
   const messaging = getMessaging();
   if (!messaging || !messagingModule) return false;
+
+  const androidPermission = await requestAndroidNotificationPermission();
+  if (!androidPermission) return false;
+  if (Platform.OS === "android") return true;
 
   const status = await messaging.requestPermission();
   return (
@@ -138,6 +158,12 @@ export const getNotificationPermissionLabel = async () => {
   const messaging = getMessaging();
   if (!messaging || !messagingModule) {
     return "Notifications require a rebuilt app with Firebase Messaging installed.";
+  }
+
+  const androidPermission = getAndroidNotificationPermission();
+  if (androidPermission) {
+    const granted = await PermissionsAndroid.check(androidPermission);
+    return granted ? "Notifications are enabled." : "Notifications are off. Enable them to receive delivery job alerts.";
   }
 
   const status = await messaging.hasPermission();
