@@ -449,6 +449,7 @@ export const deleteMyAccount = async (req: AuthRequest, res: Response) => {
         name: "Deleted User",
         address: emptyAddress,
         fcmToken: "",
+        notificationTokens: [],
         isActive: false
       },
       $unset: { email: "" },

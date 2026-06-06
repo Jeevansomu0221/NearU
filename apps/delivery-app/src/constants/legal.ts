@@ -3,5 +3,5 @@ const rawOfficialSiteUrl =
 
 export const OFFICIAL_SITE_URL = rawOfficialSiteUrl.replace(/\/$/, "");
 
-export const buildLegalUrl = (path: "terms" | "privacy" | "delete-account") =>
+export const buildLegalUrl = (path: "terms" | "privacy" | "delete-account" | "delivery-policy") =>
   `${OFFICIAL_SITE_URL}/${path}`;

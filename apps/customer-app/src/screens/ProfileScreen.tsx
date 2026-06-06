@@ -39,6 +39,7 @@ import {
 } from "../api/support.api";
 import { buildLegalUrl } from "../constants/legal";
 import { getPublicShopName } from "../utils/display";
+import { unregisterPushNotifications } from "../services/notifications";
 
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Start a support chat connected to Vyaha admin." },
@@ -468,10 +469,12 @@ export default function ProfileScreen({ navigation, route }: any) {
         text: "Logout",
         style: "destructive",
         onPress: () => {
-          AsyncStorage.multiRemove(["token", "user"]).finally(() => {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }]
+          unregisterPushNotifications().finally(() => {
+            AsyncStorage.multiRemove(["token", "refreshToken", "user"]).finally(() => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "Login" }]
+              });
             });
           });
         }
@@ -486,11 +489,12 @@ export default function ProfileScreen({ navigation, route }: any) {
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Delete",
+          text: "Delete Account",
           style: "destructive",
           onPress: async () => {
             try {
               setSaving(true);
+              await unregisterPushNotifications().catch(() => {});
               const response = await deleteMyAccount();
               if (!response.success) {
                 Alert.alert("Error", response.message || "Failed to delete account");

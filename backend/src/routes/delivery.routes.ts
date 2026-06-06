@@ -14,6 +14,7 @@ import {
   getTodaysEarnings,
   getAllDeliveryPartnersForAdmin,
   updateDeliveryPartnerStatusByAdmin,
+  requestDeliveryPartnerDocumentReupload,
   updateDeliveryLocation,
   calculateDeliveryDistance
 } from "../controllers/delivery.controller";
@@ -35,6 +36,7 @@ router.get("/earnings/today", getTodaysEarnings);
 // =================== ADMIN DELIVERY VERIFICATION ===================
 router.get("/admin/all", roleMiddleware(["admin"]), getAllDeliveryPartnersForAdmin);
 router.put("/admin/:deliveryPartnerId/status", roleMiddleware(["admin"]), updateDeliveryPartnerStatusByAdmin);
+router.put("/admin/:deliveryPartnerId/documents/reupload", roleMiddleware(["admin"]), requestDeliveryPartnerDocumentReupload);
 
 // =================== DELIVERY JOBS ===================
 router.get("/available-jobs", getAvailableDeliveryJobs);

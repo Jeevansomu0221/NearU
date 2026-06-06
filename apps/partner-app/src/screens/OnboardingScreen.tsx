@@ -65,6 +65,35 @@ type DocumentState = {
   menuProofUrl: string;
 };
 
+const BANK_DOCUMENT_TYPES = new Set<DocumentState["bankDocumentType"]>(["cheque", "passbook", "statement"]);
+const DEFAULT_BANK_DOCUMENT_TYPE: DocumentState["bankDocumentType"] = "cheque";
+
+const normalizeBankDocumentType = (value: unknown): DocumentState["bankDocumentType"] => {
+  const bankDocumentType = String(value || "") as DocumentState["bankDocumentType"];
+  return BANK_DOCUMENT_TYPES.has(bankDocumentType) ? bankDocumentType : DEFAULT_BANK_DOCUMENT_TYPE;
+};
+
+const hasBankInput = (documents: DocumentState) =>
+  Boolean(
+    documents.bankAccountHolderName.trim() ||
+      documents.bankAccountNumber.trim() ||
+      documents.bankIfsc.trim() ||
+      documents.cancelledChequeUrl ||
+      documents.bankPassbookUrl ||
+      documents.bankStatementUrl
+  );
+
+const clearBankDetails = (documents: DocumentState): DocumentState => ({
+  ...documents,
+  bankDocumentType: DEFAULT_BANK_DOCUMENT_TYPE,
+  bankAccountHolderName: "",
+  cancelledChequeUrl: "",
+  bankPassbookUrl: "",
+  bankStatementUrl: "",
+  bankAccountNumber: "",
+  bankIfsc: ""
+});
+
 interface UploadResponse {
   success: boolean;
   data?: {
@@ -221,7 +250,7 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
       aadhaarNumber: String(safeDocuments.aadhaarNumber || ""),
       aadhaarFrontUrl: String(safeDocuments.aadhaarFrontUrl || ""),
       aadhaarBackUrl: String(safeDocuments.aadhaarBackUrl || ""),
-      bankDocumentType: String(safeDocuments.bankDocumentType || "") as DocumentState["bankDocumentType"],
+      bankDocumentType: normalizeBankDocumentType(safeDocuments.bankDocumentType),
       bankAccountHolderName: String(safeDocuments.bankAccountHolderName || ""),
       cancelledChequeUrl: String(safeDocuments.cancelledChequeUrl || ""),
       bankPassbookUrl: String(safeDocuments.bankPassbookUrl || ""),
@@ -275,7 +304,7 @@ export default function OnboardingScreen({ navigation }: any) {
     aadhaarNumber: "",
     aadhaarFrontUrl: "",
     aadhaarBackUrl: "",
-    bankDocumentType: "",
+    bankDocumentType: DEFAULT_BANK_DOCUMENT_TYPE,
     bankAccountHolderName: "",
     cancelledChequeUrl: "",
     bankPassbookUrl: "",
@@ -564,22 +593,16 @@ export default function OnboardingScreen({ navigation }: any) {
       }
     }
 
-    const hasAnyBankInput = Boolean(
-      documents.bankAccountHolderName.trim() ||
-      documents.bankAccountNumber.trim() ||
-      documents.bankIfsc.trim() ||
-      documents.bankDocumentType ||
-      documents.cancelledChequeUrl ||
-      documents.bankPassbookUrl ||
-      documents.bankStatementUrl
-    );
+    if (step === 4) {
+      const hasAnyBankInput = hasBankInput(documents);
 
-    if (hasAnyBankInput) {
-      if (!documents.bankAccountHolderName.trim()) return "Account holder name is required if you add bank details";
-      if (!/^\d+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric";
-      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC format is invalid";
-      if (!documents.bankDocumentType || (!documents.cancelledChequeUrl && !documents.bankPassbookUrl && !documents.bankStatementUrl)) {
-        return "Upload one bank proof if you add bank details";
+      if (hasAnyBankInput) {
+        if (!documents.bankAccountHolderName.trim()) return "Account holder name is required if you add bank details";
+        if (!/^\d+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric";
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC format is invalid";
+        if (!documents.bankDocumentType || (!documents.cancelledChequeUrl && !documents.bankPassbookUrl && !documents.bankStatementUrl)) {
+          return "Upload one bank proof if you add bank details";
+        }
       }
     }
 
@@ -598,10 +621,15 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const goBack = () => setActiveStep((current) => Math.max(current - 1, 0));
 
-  const skipToNext = () => setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
+  const skipToNext = () => {
+    if (activeStep === 4) {
+      setDocuments(clearBankDetails);
+    }
+    setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
+  };
 
   const submit = async () => {
-    const validationError = validateStep(0) || validateStep(1) || validateStep(2) || validateStep(3);
+    const validationError = validateStep(0) || validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4);
     if (validationError) {
       Alert.alert("Missing Details", validationError);
       return;
@@ -612,6 +640,8 @@ export default function OnboardingScreen({ navigation }: any) {
       const userId = (await AsyncStorage.getItem("userId")) || "";
       const userStr = await AsyncStorage.getItem("user");
       const fallbackUserId = userStr ? JSON.parse(userStr).id : "";
+      const shouldSubmitBankDetails = hasBankInput(documents);
+      const bankProofUrl = shouldSubmitBankDetails ? documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl || "" : "";
 
       const requestData: any = {
         ownerName: form.ownerName.trim(),
@@ -639,10 +669,14 @@ export default function OnboardingScreen({ navigation }: any) {
           aadhaarNumber: documents.aadhaarNumber.trim(),
           ownerIdProofUrl: documents.aadhaarFrontUrl,
           ownerPanUrl: documents.panFrontUrl,
-          bankProofUrl: documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl || "",
-          bankAccountHolderName: documents.bankAccountHolderName.trim(),
-          bankAccountNumber: documents.bankAccountNumber.trim(),
-          bankIfsc: documents.bankIfsc.trim().toUpperCase()
+          bankDocumentType: shouldSubmitBankDetails ? normalizeBankDocumentType(documents.bankDocumentType) : "",
+          bankProofUrl,
+          cancelledChequeUrl: shouldSubmitBankDetails ? documents.cancelledChequeUrl : "",
+          bankPassbookUrl: shouldSubmitBankDetails ? documents.bankPassbookUrl : "",
+          bankStatementUrl: shouldSubmitBankDetails ? documents.bankStatementUrl : "",
+          bankAccountHolderName: shouldSubmitBankDetails ? documents.bankAccountHolderName.trim() : "",
+          bankAccountNumber: shouldSubmitBankDetails ? documents.bankAccountNumber.trim() : "",
+          bankIfsc: shouldSubmitBankDetails ? documents.bankIfsc.trim().toUpperCase() : ""
         }
       };
 

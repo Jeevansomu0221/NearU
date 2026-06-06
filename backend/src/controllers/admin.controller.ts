@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
+import { notifyPartnerApplicationStatus, notifyPartnerDocumentReupload } from "../services/notification.service";
 
 // Create a type for authenticated requests
 interface AuthRequest extends Request {
@@ -124,6 +125,10 @@ export const updatePartnerStatus = async (req: AuthRequest, res: Response) => {
 
     await partner.save();
 
+    void notifyPartnerApplicationStatus(partner).catch((error) => {
+      console.error("Failed to notify partner status update:", error);
+    });
+
     res.json({
       success: true,
       data: partner,
@@ -185,21 +190,34 @@ export const requestPartnerDocumentReupload = async (req: AuthRequest, res: Resp
         documents.reuploadNotes = "";
       }
     } else {
+      const reuploadNote = String(note || "").trim();
       if (!sanitizedKeys.length) {
         return res.status(400).json({
           success: false,
           message: "Provide at least one document key to request re-upload."
         });
       }
+      if (!reuploadNote) {
+        return res.status(400).json({
+          success: false,
+          message: "Provide a reason for the re-upload request."
+        });
+      }
       sanitizedKeys.forEach((key) => {
         documents.reuploadFlags[key] = true;
       });
-      documents.reuploadNotes = String(note || "").trim();
+      documents.reuploadNotes = reuploadNote;
     }
 
     partner.documents = documents;
     partner.markModified("documents");
     await partner.save();
+
+    if (!clear) {
+      void notifyPartnerDocumentReupload(partner).catch((error) => {
+        console.error("Failed to notify partner document re-upload:", error);
+      });
+    }
 
     res.json({
       success: true,

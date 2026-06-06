@@ -1,5 +1,6 @@
 import api from "./client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { registerForPushNotifications, unregisterPushNotifications } from "../services/notifications";
 
 interface VerifyOtpPayload {
   token: string;
@@ -78,6 +79,10 @@ export const verifyOtp = async (phone: string, otp: string, role: string) => {
     await AsyncStorage.removeItem("refreshToken");
   }
 
+  registerForPushNotifications().catch((error) => {
+    console.log("Failed to register push notifications:", error);
+  });
+
   return payload;
 };
 
@@ -107,6 +112,10 @@ export const verifyFirebaseOtp = async (phone: string, firebaseIdToken: string, 
     await AsyncStorage.removeItem("refreshToken");
   }
 
+  registerForPushNotifications().catch((error) => {
+    console.log("Failed to register push notifications:", error);
+  });
+
   return payload;
 };
 
@@ -135,6 +144,7 @@ export const getCurrentUser = async () => {
 
 export const logout = async () => {
   try {
+    await unregisterPushNotifications().catch(() => {});
     await clearAuthData();
     return true;
   } catch {
@@ -144,6 +154,7 @@ export const logout = async () => {
 
 export const deleteAccount = async () => {
   try {
+    await unregisterPushNotifications().catch(() => {});
     await api.delete("/users/me");
     await clearAuthData();
     return true;

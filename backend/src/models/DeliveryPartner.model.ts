@@ -40,6 +40,8 @@ export interface IDeliveryPartner extends Document {
     bankIfsc?: string;
     submittedAt?: Date;
     isComplete?: boolean;
+    reuploadFlags?: Record<string, boolean>;
+    reuploadNotes?: string;
   };
   isAvailable: boolean;
   status: "PENDING" | "VERIFIED" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "INACTIVE";
@@ -138,7 +140,21 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
       bankAccountNumber: { type: String, default: "" },
       bankIfsc: { type: String, default: "" },
       submittedAt: { type: Date, default: null },
-      isComplete: { type: Boolean, default: false }
+      isComplete: { type: Boolean, default: false },
+      reuploadFlags: {
+        profilePhotoUrl: { type: Boolean, default: false },
+        aadhaarFrontUrl: { type: Boolean, default: false },
+        aadhaarBackUrl: { type: Boolean, default: false },
+        panFrontUrl: { type: Boolean, default: false },
+        selfiePhotoUrl: { type: Boolean, default: false },
+        drivingLicenseFrontUrl: { type: Boolean, default: false },
+        drivingLicenseBackUrl: { type: Boolean, default: false },
+        vehicleRcFrontUrl: { type: Boolean, default: false },
+        vehicleRcBackUrl: { type: Boolean, default: false },
+        insuranceUrl: { type: Boolean, default: false },
+        bankProofUrl: { type: Boolean, default: false }
+      },
+      reuploadNotes: { type: String, default: "" }
     },
     isAvailable: {
       type: Boolean,

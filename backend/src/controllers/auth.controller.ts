@@ -294,7 +294,11 @@ export const logout = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    await User.findByIdAndUpdate(req.user.id, { $inc: { sessionVersion: 1 } });
+    const notificationToken = typeof req.body?.notificationToken === "string" ? req.body.notificationToken.trim() : "";
+    await User.findByIdAndUpdate(req.user.id, {
+      $inc: { sessionVersion: 1 },
+      ...(notificationToken ? { $pull: { notificationTokens: { token: notificationToken } } } : {})
+    });
     return successResponse(res, null, "Logged out successfully");
   } catch (error: any) {
     return errorResponse(res, error.message || "Failed to logout");

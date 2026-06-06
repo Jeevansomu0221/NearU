@@ -21,6 +21,7 @@ import {
   isFirebaseOtpSessionExpiredError,
   sendFirebaseOtp
 } from "../services/firebasePhoneAuth";
+import { registerForPushNotifications } from "../services/notifications";
 import { partnerTheme } from "../theme";
 import { buildLegalUrl } from "../constants/legal";
 
@@ -257,6 +258,10 @@ export default function LoginScreen({ navigation }: any) {
       } else {
         await AsyncStorage.removeItem("refreshToken");
       }
+
+      registerForPushNotifications().catch((error) => {
+        console.log("Failed to register push notifications:", error);
+      });
 
       await checkPartnerStatus(phone);
     } catch (error: any) {

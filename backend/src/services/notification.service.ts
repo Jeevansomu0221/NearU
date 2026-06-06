@@ -1,0 +1,335 @@
+import admin from "firebase-admin";
+import mongoose from "mongoose";
+import DeliveryPartner from "../models/DeliveryPartner.model";
+import Order from "../models/Order.model";
+import Partner from "../models/Partner.model";
+import User from "../models/User.model";
+import { getFirebaseApp } from "./firebaseAuth.service";
+
+export type NotificationApp = "customer" | "partner" | "delivery";
+
+type NotificationData = Record<string, string | number | boolean | null | undefined>;
+
+type SendOptions = {
+  title: string;
+  body: string;
+  data?: NotificationData;
+  app?: NotificationApp;
+};
+
+const INVALID_TOKEN_CODES = new Set([
+  "messaging/invalid-registration-token",
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-argument"
+]);
+
+const idString = (value: any) => {
+  const rawId = value?._id || value;
+  if (!rawId) return "";
+  return typeof rawId.toString === "function" ? rawId.toString() : String(rawId);
+};
+
+const compactIds = (values: any[]) =>
+  Array.from(new Set(values.map((value) => idString(value)).filter(Boolean)));
+
+const toStringData = (data: NotificationData = {}) =>
+  Object.entries(data).reduce<Record<string, string>>((acc, [key, value]) => {
+    if (value !== undefined && value !== null) {
+      acc[key] = String(value);
+    }
+    return acc;
+  }, {});
+
+const chunk = <T>(items: T[], size: number) => {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+};
+
+const getEnabledTokensForUsers = async (userIds: string[], app?: NotificationApp) => {
+  const normalizedIds = compactIds(userIds);
+  if (!normalizedIds.length) return [];
+
+  const users = await User.find({
+    _id: { $in: normalizedIds.map((id) => new mongoose.Types.ObjectId(id)) }
+  })
+    .select("notificationTokens")
+    .lean();
+
+  const tokens = users.flatMap((user: any) =>
+    (Array.isArray(user.notificationTokens) ? user.notificationTokens : [])
+      .filter((entry: any) => entry?.enabled !== false && entry?.token && (!app || entry.app === app))
+      .map((entry: any) => String(entry.token))
+  );
+
+  return Array.from(new Set(tokens));
+};
+
+const disableInvalidTokens = async (tokens: string[]) => {
+  const uniqueTokens = Array.from(new Set(tokens.filter(Boolean)));
+  if (!uniqueTokens.length) return;
+
+  await User.updateMany(
+    { "notificationTokens.token": { $in: uniqueTokens } },
+    {
+      $set: {
+        "notificationTokens.$[token].enabled": false,
+        "notificationTokens.$[token].disabledAt": new Date()
+      }
+    },
+    { arrayFilters: [{ "token.token": { $in: uniqueTokens } }] }
+  );
+};
+
+export const sendNotificationToUsers = async (userIds: any[], options: SendOptions) => {
+  try {
+    const tokens = await getEnabledTokensForUsers(compactIds(userIds), options.app);
+    if (!tokens.length) {
+      return { sent: 0, failed: 0 };
+    }
+
+    getFirebaseApp();
+    const messaging = admin.messaging();
+    const data = toStringData(options.data);
+    const invalidTokens: string[] = [];
+    let sent = 0;
+    let failed = 0;
+
+    for (const tokenBatch of chunk(tokens, 500)) {
+      const response = await messaging.sendEachForMulticast({
+        tokens: tokenBatch,
+        notification: {
+          title: options.title,
+          body: options.body
+        },
+        data,
+        android: {
+          priority: "high",
+          notification: {
+            channelId: "default",
+            sound: "default"
+          }
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: "default"
+            }
+          }
+        }
+      });
+
+      sent += response.successCount;
+      failed += response.failureCount;
+      response.responses.forEach((result, index) => {
+        const code = result.error?.code;
+        if (code && INVALID_TOKEN_CODES.has(code)) {
+          invalidTokens.push(tokenBatch[index]);
+        }
+      });
+    }
+
+    await disableInvalidTokens(invalidTokens);
+    return { sent, failed };
+  } catch (error) {
+    console.error("Notification send failed:", error);
+    return { sent: 0, failed: 0 };
+  }
+};
+
+export const notifyPartnerNewOrder = async (order: any) => {
+  const partner = await Partner.findById(order.partnerId).select("userId restaurantName shopName notifications").lean();
+  const partnerUserId = idString((partner as any)?.userId);
+  if (!partnerUserId || (partner as any)?.notifications?.newOrderAlerts === false) return;
+
+  await sendNotificationToUsers([partnerUserId], {
+    app: "partner",
+    title: "New order received",
+    body: `Order #${idString(order._id).slice(-6)} is waiting for acceptance.`,
+    data: {
+      type: "NEW_ORDER",
+      orderId: idString(order._id)
+    }
+  });
+};
+
+export const notifyCustomerOrderStatus = async (order: any, status: string) => {
+  const orderId = idString(order._id);
+  const titles: Record<string, string> = {
+    ACCEPTED: "Order accepted",
+    PREPARING: "Order is being prepared",
+    READY: "Order is ready",
+    PICKED_UP: "Order picked up",
+    DELIVERED: "Order delivered",
+    CANCELLED: "Order cancelled",
+    REJECTED: "Order cancelled"
+  };
+  const bodies: Record<string, string> = {
+    ACCEPTED: "The shop accepted your order.",
+    PREPARING: "Your order is now being prepared.",
+    READY: "Your order is ready for pickup by a delivery partner.",
+    PICKED_UP: "Your delivery partner has picked up the order.",
+    DELIVERED: "Your order has been delivered.",
+    CANCELLED: order.customerCancellationMessage || "Your order was cancelled.",
+    REJECTED: order.customerCancellationMessage || "The shop could not accept this order."
+  };
+
+  await sendNotificationToUsers([order.customerId], {
+    app: "customer",
+    title: titles[status] || "Order update",
+    body: bodies[status] || `Order #${orderId.slice(-6)} status changed to ${status}.`,
+    data: {
+      type: "ORDER_STATUS",
+      orderId,
+      status
+    }
+  });
+};
+
+export const notifyDeliveryJobReady = async (order: any) => {
+  const selfDelivery = order.selfDelivery || {};
+  const reservedFor = compactIds(Array.isArray(selfDelivery.reservedFor) ? selfDelivery.reservedFor : []);
+  const targetUserIds = reservedFor.length
+    ? reservedFor
+    : compactIds(
+        (await DeliveryPartner.find({
+          status: { $in: ["ACTIVE", "VERIFIED"] },
+          isAvailable: { $ne: false }
+        })
+          .select("userId")
+          .lean()).map((partner: any) => partner.userId)
+      );
+
+  await sendNotificationToUsers(targetUserIds, {
+    app: "delivery",
+    title: "New delivery job available",
+    body: `Order #${idString(order._id).slice(-6)} is ready for pickup.`,
+    data: {
+      type: "DELIVERY_JOB_READY",
+      orderId: idString(order._id),
+      jobId: idString(order._id)
+    }
+  });
+};
+
+export const notifyDeliveryAssigned = async (order: any) => {
+  const partner = await Partner.findById(order.partnerId).select("userId").lean();
+  await Promise.all([
+    sendNotificationToUsers([order.customerId], {
+      app: "customer",
+      title: "Delivery partner assigned",
+      body: "A delivery partner has accepted your order.",
+      data: {
+        type: "ORDER_STATUS",
+        orderId: idString(order._id),
+        status: "ASSIGNED"
+      }
+    }),
+    sendNotificationToUsers([(partner as any)?.userId], {
+      app: "partner",
+      title: "Delivery partner assigned",
+      body: `Order #${idString(order._id).slice(-6)} has a delivery partner.`,
+      data: {
+        type: "ORDER_STATUS",
+        orderId: idString(order._id),
+        status: "ASSIGNED"
+      }
+    })
+  ]);
+};
+
+export const notifyAssignedDeliveryPartner = async (order: any) => {
+  await sendNotificationToUsers([order.deliveryPartnerId], {
+    app: "delivery",
+    title: "Delivery assigned",
+    body: `Order #${idString(order._id).slice(-6)} has been assigned to you.`,
+    data: {
+      type: "DELIVERY_ASSIGNED",
+      orderId: idString(order._id),
+      jobId: idString(order._id)
+    }
+  });
+};
+
+export const notifyPartnerDeliveryStatus = async (order: any, status: string) => {
+  const partner = await Partner.findById(order.partnerId).select("userId").lean();
+  const titles: Record<string, string> = {
+    PICKED_UP: "Order picked up",
+    DELIVERED: "Order delivered",
+    CANCELLED: "Order cancelled"
+  };
+
+  await sendNotificationToUsers([(partner as any)?.userId], {
+    app: "partner",
+    title: titles[status] || "Order update",
+    body: `Order #${idString(order._id).slice(-6)} status changed to ${status}.`,
+    data: {
+      type: "ORDER_STATUS",
+      orderId: idString(order._id),
+      status
+    }
+  });
+};
+
+export const notifyPartnerApplicationStatus = async (partner: any) => {
+  await sendNotificationToUsers([partner.userId], {
+    app: "partner",
+    title: partner.status === "APPROVED" ? "Shop approved" : "Shop application updated",
+    body:
+      partner.status === "APPROVED"
+        ? "Your shop is approved and ready to receive orders."
+        : partner.rejectionReason || "Please check your partner application status.",
+    data: {
+      type: "PARTNER_STATUS",
+      status: partner.status
+    }
+  });
+};
+
+export const notifyPartnerDocumentReupload = async (partner: any) => {
+  await sendNotificationToUsers([partner.userId], {
+    app: "partner",
+    title: "Document re-upload requested",
+    body: partner.documents?.reuploadNotes || "Please update the requested shop documents.",
+    data: {
+      type: "PARTNER_REUPLOAD",
+      status: partner.status || "PENDING"
+    }
+  });
+};
+
+export const notifyDeliveryApplicationStatus = async (deliveryPartner: any) => {
+  await sendNotificationToUsers([deliveryPartner.userId], {
+    app: "delivery",
+    title: ["VERIFIED", "ACTIVE"].includes(deliveryPartner.status) ? "Delivery profile approved" : "Delivery profile updated",
+    body:
+      ["VERIFIED", "ACTIVE"].includes(deliveryPartner.status)
+        ? "You can now receive delivery jobs."
+        : deliveryPartner.reviewComment || "Please check your delivery profile status.",
+    data: {
+      type: "DELIVERY_STATUS",
+      status: deliveryPartner.status
+    }
+  });
+};
+
+export const notifyDeliveryDocumentReupload = async (deliveryPartner: any) => {
+  await sendNotificationToUsers([deliveryPartner.userId], {
+    app: "delivery",
+    title: "Document re-upload requested",
+    body: deliveryPartner.documents?.reuploadNotes || deliveryPartner.reviewComment || "Please update the requested delivery documents.",
+    data: {
+      type: "DELIVERY_REUPLOAD",
+      status: deliveryPartner.status || "REJECTED"
+    }
+  });
+};
+
+export const notifyPaymentConfirmed = async (orderId: string) => {
+  const order = await Order.findById(orderId).select("_id partnerId status").lean();
+  if (order?.status === "CONFIRMED") {
+    await notifyPartnerNewOrder(order);
+  }
+};

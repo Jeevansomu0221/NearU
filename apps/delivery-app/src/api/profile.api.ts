@@ -6,8 +6,12 @@ export interface DeliveryProfile {
   name: string;
   phone: string;
   email?: string;
+  dateOfBirth?: string;
   address?: string;
-  vehicleType: "Bike" | "Cycle" | "Scooter" | "Motorcycle";
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  termsAcceptedAt?: string;
+  vehicleType: "Bike" | "Cycle" | "Bicycle" | "Scooter" | "Motorcycle" | "Car";
   vehicleNumber?: string;
   licenseNumber?: string;
   profilePhotoUrl?: string;
@@ -20,6 +24,7 @@ export interface DeliveryProfile {
     panNumber?: string;
     panFrontUrl?: string;
     panUrl?: string;
+    selfiePhotoUrl?: string;
     drivingLicenseFrontUrl?: string;
     drivingLicenseBackUrl?: string;
     drivingLicenseUrl?: string;
@@ -36,6 +41,21 @@ export interface DeliveryProfile {
     bankIfsc?: string;
     submittedAt?: string;
     isComplete?: boolean;
+    reuploadFlags?: Partial<Record<
+      | "profilePhotoUrl"
+      | "aadhaarFrontUrl"
+      | "aadhaarBackUrl"
+      | "panFrontUrl"
+      | "selfiePhotoUrl"
+      | "drivingLicenseFrontUrl"
+      | "drivingLicenseBackUrl"
+      | "vehicleRcFrontUrl"
+      | "vehicleRcBackUrl"
+      | "insuranceUrl"
+      | "bankProofUrl",
+      boolean
+    >>;
+    reuploadNotes?: string;
   };
   isAvailable: boolean;
   status: "PENDING" | "VERIFIED" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "INACTIVE";
@@ -53,7 +73,11 @@ export const getDeliveryProfile = (): Promise<ApiResponse<DeliveryProfile>> => {
 export const updateDeliveryProfile = (payload: {
   name?: string;
   email?: string;
+  dateOfBirth?: string;
   address?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  termsAccepted?: boolean;
   vehicleType?: DeliveryProfile["vehicleType"];
   vehicleNumber?: string;
   licenseNumber?: string;

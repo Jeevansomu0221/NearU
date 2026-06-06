@@ -68,6 +68,19 @@ export type DocumentReuploadKey =
   | "ownerPanUrl"
   | "menuProofUrl";
 
+export type DeliveryDocumentReuploadKey =
+  | "profilePhotoUrl"
+  | "aadhaarFrontUrl"
+  | "aadhaarBackUrl"
+  | "panFrontUrl"
+  | "selfiePhotoUrl"
+  | "drivingLicenseFrontUrl"
+  | "drivingLicenseBackUrl"
+  | "vehicleRcFrontUrl"
+  | "vehicleRcBackUrl"
+  | "insuranceUrl"
+  | "bankProofUrl";
+
 export interface OrderRecord {
   _id: string;
   status: string;
@@ -116,8 +129,12 @@ export interface DeliveryPartnerRecord {
   name?: string;
   phone?: string;
   email?: string;
+  dateOfBirth?: string;
   address?: string;
-  vehicleType?: "Bike" | "Cycle" | "Scooter" | "Motorcycle";
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  termsAcceptedAt?: string;
+  vehicleType?: "Bike" | "Cycle" | "Bicycle" | "Scooter" | "Motorcycle" | "Car";
   vehicleNumber?: string;
   licenseNumber?: string;
   profilePhotoUrl?: string;
@@ -134,6 +151,7 @@ export interface DeliveryPartnerRecord {
     panNumber?: string;
     panFrontUrl?: string;
     panUrl?: string;
+    selfiePhotoUrl?: string;
     drivingLicenseFrontUrl?: string;
     drivingLicenseBackUrl?: string;
     drivingLicenseUrl?: string;
@@ -150,6 +168,8 @@ export interface DeliveryPartnerRecord {
     bankIfsc?: string;
     submittedAt?: string;
     isComplete?: boolean;
+    reuploadFlags?: Partial<Record<DeliveryDocumentReuploadKey, boolean>>;
+    reuploadNotes?: string;
   };
 }
 
@@ -246,6 +266,19 @@ export const updateDeliveryPartnerStatus = async (
     status,
     reviewComment
   });
+  return response.data;
+};
+
+export const requestDeliveryPartnerDocumentReupload = async (
+  deliveryPartnerId: string,
+  payload: { keys: DeliveryDocumentReuploadKey[]; note?: string; clear?: boolean }
+) => {
+  const response = await api.put<ApiEnvelope<{
+    reuploadFlags: Partial<Record<DeliveryDocumentReuploadKey, boolean>>;
+    reuploadNotes: string;
+    status: DeliveryPartnerRecord["status"];
+    reviewComment?: string;
+  }>>(`/delivery/admin/${deliveryPartnerId}/documents/reupload`, payload);
   return response.data;
 };
 

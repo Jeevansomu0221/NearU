@@ -5,6 +5,7 @@ import DeliveryPartner from "../models/DeliveryPartner.model";
 import User from "../models/User.model";
 import { successResponse, errorResponse } from "../utils/response";
 import { config } from "../config/env";
+import { notifyDeliveryApplicationStatus, notifyDeliveryDocumentReupload } from "../services/notification.service";
 
 interface AuthRequest extends Request {
   user?: {
@@ -36,6 +37,32 @@ const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
 
 const safeTrimmedString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+const DELIVERY_REUPLOAD_KEYS = new Set([
+  "profilePhotoUrl",
+  "aadhaarFrontUrl",
+  "aadhaarBackUrl",
+  "panFrontUrl",
+  "selfiePhotoUrl",
+  "drivingLicenseFrontUrl",
+  "drivingLicenseBackUrl",
+  "vehicleRcFrontUrl",
+  "vehicleRcBackUrl",
+  "insuranceUrl",
+  "bankProofUrl"
+]);
+
+const clearReuploadFlagIfChanged = (
+  flags: Record<string, boolean>,
+  key: string,
+  nextUrl: string,
+  previousUrls: Array<string | undefined | null>
+) => {
+  if (!flags[key] || !nextUrl) return false;
+  const normalizedPreviousUrls = previousUrls.filter((url): url is string => typeof url === "string" && url.trim().length > 0);
+  if (normalizedPreviousUrls.includes(nextUrl)) return false;
+  flags[key] = false;
+  return true;
+};
 
 const hasValidDateOfBirth = (value?: string | Date | null) => {
   if (!value) return false;
@@ -308,18 +335,27 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       updateDelivery.isAvailable = isAvailable;
     }
 
+    const needsCurrentPartner = profilePhotoUrl !== undefined || documents !== undefined;
+    const currentPartner = needsCurrentPartner ? await findDeliveryPartnerForUser(user)?.lean() : null;
+    if (needsCurrentPartner && !currentPartner) {
+      return errorResponse(res, "Delivery profile not found", 404);
+    }
+
+    const existingDocuments: any = currentPartner?.documents || {};
+    const nextReuploadFlags = { ...(existingDocuments.reuploadFlags || {}) } as Record<string, boolean>;
+    let didUpdateReuploadFlags = false;
+
     if (profilePhotoUrl !== undefined) {
-      updateDelivery.profilePhotoUrl = typeof profilePhotoUrl === "string" ? profilePhotoUrl.trim() : "";
+      const nextProfilePhotoUrl = typeof profilePhotoUrl === "string" ? profilePhotoUrl.trim() : "";
+      updateDelivery.profilePhotoUrl = nextProfilePhotoUrl;
+      didUpdateReuploadFlags =
+        clearReuploadFlagIfChanged(nextReuploadFlags, "profilePhotoUrl", nextProfilePhotoUrl, [currentPartner?.profilePhotoUrl]) ||
+        didUpdateReuploadFlags;
     }
 
     if (documents !== undefined) {
-      const currentPartner = await findDeliveryPartnerForUser(user)?.lean();
-      if (!currentPartner) {
-        return errorResponse(res, "Delivery profile not found", 404);
-      }
-
       const nextDocuments: any = {
-        ...(currentPartner.documents || {}),
+        ...existingDocuments,
         ...documents
       };
 
@@ -357,7 +393,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         return errorResponse(res, "IFSC code format is invalid", 400);
       }
 
-      const nextVehicleType = typeof vehicleType === "string" ? vehicleType : currentPartner.vehicleType;
+      const nextVehicleType = typeof vehicleType === "string" ? vehicleType : currentPartner?.vehicleType;
       const requiresMotorDocuments = !["Cycle", "Bicycle"].includes(safeTrimmedString(nextVehicleType));
       const hasMandatoryDocuments = Boolean(
         normalizedDocuments.aadhaarNumber &&
@@ -374,6 +410,35 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
               normalizedDocuments.insuranceUrl?.trim()))
       );
 
+      const replacementChecks = [
+        { key: "aadhaarFrontUrl", nextUrl: normalizedDocuments.aadhaarFrontUrl, previousUrls: [existingDocuments.aadhaarFrontUrl, existingDocuments.aadhaarUrl] },
+        { key: "aadhaarBackUrl", nextUrl: normalizedDocuments.aadhaarBackUrl, previousUrls: [existingDocuments.aadhaarBackUrl] },
+        { key: "panFrontUrl", nextUrl: normalizedDocuments.panFrontUrl, previousUrls: [existingDocuments.panFrontUrl, existingDocuments.panUrl] },
+        { key: "selfiePhotoUrl", nextUrl: normalizedDocuments.selfiePhotoUrl, previousUrls: [existingDocuments.selfiePhotoUrl] },
+        {
+          key: "drivingLicenseFrontUrl",
+          nextUrl: normalizedDocuments.drivingLicenseFrontUrl,
+          previousUrls: [existingDocuments.drivingLicenseFrontUrl, existingDocuments.drivingLicenseUrl]
+        },
+        { key: "drivingLicenseBackUrl", nextUrl: normalizedDocuments.drivingLicenseBackUrl, previousUrls: [existingDocuments.drivingLicenseBackUrl] },
+        {
+          key: "vehicleRcFrontUrl",
+          nextUrl: normalizedDocuments.vehicleRcFrontUrl,
+          previousUrls: [existingDocuments.vehicleRcFrontUrl, existingDocuments.vehicleRcUrl]
+        },
+        { key: "vehicleRcBackUrl", nextUrl: normalizedDocuments.vehicleRcBackUrl, previousUrls: [existingDocuments.vehicleRcBackUrl] },
+        { key: "insuranceUrl", nextUrl: normalizedDocuments.insuranceUrl, previousUrls: [existingDocuments.insuranceUrl] },
+        {
+          key: "bankProofUrl",
+          nextUrl: firstString(normalizedDocuments.cancelledChequeUrl, normalizedDocuments.bankPassbookUrl, normalizedDocuments.bankStatementUrl),
+          previousUrls: [existingDocuments.cancelledChequeUrl, existingDocuments.bankPassbookUrl, existingDocuments.bankStatementUrl]
+        }
+      ];
+
+      replacementChecks.forEach(({ key, nextUrl, previousUrls }) => {
+        didUpdateReuploadFlags = clearReuploadFlagIfChanged(nextReuploadFlags, key, nextUrl, previousUrls) || didUpdateReuploadFlags;
+      });
+
       updateDelivery.documents = {
         ...normalizedDocuments,
         aadhaarUrl: normalizedDocuments.aadhaarFrontUrl,
@@ -381,13 +446,21 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         drivingLicenseUrl: normalizedDocuments.drivingLicenseFrontUrl,
         vehicleRcUrl: normalizedDocuments.vehicleRcFrontUrl,
         bankIfsc: normalizedDocuments.bankIfsc,
-        submittedAt: hasMandatoryDocuments ? new Date() : currentPartner.documents?.submittedAt || null,
+        reuploadFlags: nextReuploadFlags,
+        reuploadNotes: existingDocuments.reuploadNotes || "",
+        submittedAt: hasMandatoryDocuments ? new Date() : currentPartner?.documents?.submittedAt || null,
         isComplete: hasMandatoryDocuments
       };
 
       if (hasMandatoryDocuments && status === undefined && reviewComment === undefined) {
         updateDelivery.status = "PENDING";
       }
+    } else if (didUpdateReuploadFlags) {
+      updateDelivery.documents = {
+        ...existingDocuments,
+        reuploadFlags: nextReuploadFlags,
+        reuploadNotes: existingDocuments.reuploadNotes || ""
+      };
     }
 
     if (status !== undefined) {
@@ -625,10 +698,83 @@ export const updateDeliveryPartnerStatusByAdmin = async (req: AuthRequest, res: 
     deliveryPartner.reviewComment = typeof reviewComment === "string" ? reviewComment.trim() : "";
     await deliveryPartner.save();
 
+    void notifyDeliveryApplicationStatus(deliveryPartner).catch((error) => {
+      console.error("Failed to notify delivery status update:", error);
+    });
+
     return successResponse(res, deliveryPartner, "Delivery partner status updated successfully");
   } catch (error) {
     console.error("updateDeliveryPartnerStatusByAdmin error:", error);
     return errorResponse(res, "Failed to update delivery partner status");
+  }
+};
+
+export const requestDeliveryPartnerDocumentReupload = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user || req.user.role !== "admin") {
+      return errorResponse(res, "Admin access only", 403);
+    }
+
+    const { deliveryPartnerId } = req.params;
+    const { keys, note, clear } = req.body as { keys?: string[]; note?: string; clear?: boolean };
+    const deliveryPartner = await DeliveryPartner.findById(deliveryPartnerId);
+
+    if (!deliveryPartner) {
+      return errorResponse(res, "Delivery partner not found", 404);
+    }
+
+    const documents: any = deliveryPartner.documents || {};
+    documents.reuploadFlags = documents.reuploadFlags || {};
+
+    const sanitizedKeys = Array.isArray(keys)
+      ? keys.filter((key) => DELIVERY_REUPLOAD_KEYS.has(key))
+      : [];
+
+    if (clear) {
+      const targetKeys = sanitizedKeys.length ? sanitizedKeys : Array.from(DELIVERY_REUPLOAD_KEYS);
+      targetKeys.forEach((key) => {
+        documents.reuploadFlags[key] = false;
+      });
+      documents.reuploadNotes = sanitizedKeys.length ? String(note || documents.reuploadNotes || "").trim() : "";
+    } else {
+      const reuploadNote = String(note || "").trim();
+      if (!sanitizedKeys.length) {
+        return errorResponse(res, "Provide at least one document key to request re-upload.", 400);
+      }
+      if (!reuploadNote) {
+        return errorResponse(res, "Provide a reason for the re-upload request.", 400);
+      }
+      sanitizedKeys.forEach((key) => {
+        documents.reuploadFlags[key] = true;
+      });
+      documents.reuploadNotes = reuploadNote;
+      deliveryPartner.reviewComment = reuploadNote;
+      deliveryPartner.status = "REJECTED";
+    }
+
+    deliveryPartner.documents = documents;
+    deliveryPartner.markModified("documents");
+    await deliveryPartner.save();
+
+    if (!clear) {
+      void notifyDeliveryDocumentReupload(deliveryPartner).catch((error) => {
+        console.error("Failed to notify delivery document re-upload:", error);
+      });
+    }
+
+    return successResponse(
+      res,
+      {
+        reuploadFlags: documents.reuploadFlags,
+        reuploadNotes: documents.reuploadNotes,
+        status: deliveryPartner.status,
+        reviewComment: deliveryPartner.reviewComment
+      },
+      clear ? "Re-upload requirement cleared" : "Re-upload requested"
+    );
+  } catch (error) {
+    console.error("requestDeliveryPartnerDocumentReupload error:", error);
+    return errorResponse(res, "Failed to update re-upload request");
   }
 };
 

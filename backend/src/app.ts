@@ -13,6 +13,7 @@ import uploadRoutes from "./routes/upload.routes";
 import paymentRoutes from "./routes/payment.routes";
 import legalRoutes from "./routes/legal.routes";
 import supportRoutes from "./routes/support.routes";
+import notificationRoutes from "./routes/notification.routes";
 import { config } from "./config/env";
 import { errorMiddleware } from "./middlewares/error.middleware";
 
@@ -86,6 +87,7 @@ app.use("/api/delivery", deliveryRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/support", supportRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/legal", legalRoutes);
 
 app.get("/health", (_req, res) => {

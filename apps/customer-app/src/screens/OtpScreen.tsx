@@ -21,6 +21,7 @@ import {
   isFirebaseOtpSessionExpiredError,
   sendFirebaseOtp
 } from '../services/firebasePhoneAuth';
+import { registerForPushNotifications } from '../services/notifications';
 import { buildLegalUrl } from '../constants/legal';
 
 const TERMS_URL = buildLegalUrl("terms");
@@ -188,6 +189,10 @@ export default function OtpScreen({ navigation, route }: Props) {
       } else {
         await AsyncStorage.removeItem('refreshToken');
       }
+
+      registerForPushNotifications().catch((error) => {
+        console.log("Failed to register push notifications:", error);
+      });
 
       const profileResponse = await getUserProfile();
       const nextRoute =

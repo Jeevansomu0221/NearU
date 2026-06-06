@@ -4,6 +4,7 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 import { successResponse, errorResponse } from "../utils/response";
 import { PaymentService } from "../services/payment.service";
 import { config } from "../config/env";
+import { notifyPartnerNewOrder, notifyPaymentConfirmed } from "../services/notification.service";
 
 export const createPaymentOrder = async (req: AuthRequest, res: Response) => {
   try {
@@ -96,10 +97,17 @@ export const verifyPayment = async (req: AuthRequest, res: Response) => {
     order.razorpaySignature = razorpay_signature;
     order.paymentMethod = "RAZORPAY";
     order.paymentStatus = "PAID";
-    if (order.status === "PENDING") {
+    const didConfirmOrder = order.status === "PENDING";
+    if (didConfirmOrder) {
       order.status = "CONFIRMED";
     }
     await order.save();
+
+    if (didConfirmOrder) {
+      void notifyPartnerNewOrder(order).catch((error) => {
+        console.error("Failed to notify partner about verified payment:", error);
+      });
+    }
 
     return successResponse(res, order, "Payment verified successfully");
   } catch (error: any) {
@@ -137,6 +145,9 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
           paymentId: paymentEntity?.id,
           razorpayPaymentId: paymentEntity?.id,
           status: "CONFIRMED"
+        });
+        void notifyPaymentConfirmed(orderId).catch((error) => {
+          console.error("Failed to notify partner from payment webhook:", error);
         });
       }
     }

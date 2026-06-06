@@ -66,7 +66,7 @@ export default function LoginScreen({ navigation }: any) {
         <View style={styles.content}>
           <View style={styles.header}>
             <Image
-              source={require("../../assets/icon.png")}
+              source={require("../../assets/vyaha-delivery-text-logo.png")}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -141,8 +141,8 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   logo: {
-    width: 230,
-    height: 160,
+    width: 240,
+    height: 120,
     marginBottom: 8,
   },
   subtitle: {

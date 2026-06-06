@@ -1,9 +1,11 @@
-import { Button, Card, Drawer, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, SearchOutlined } from "@ant-design/icons";
+import { Button, Card, Checkbox, Drawer, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
+import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import {
   getDeliveryPartners,
+  requestDeliveryPartnerDocumentReupload,
   updateDeliveryPartnerStatus,
+  type DeliveryDocumentReuploadKey,
   type DeliveryPartnerRecord
 } from "../api/admin.api";
 
@@ -16,6 +18,20 @@ const statusColor: Record<DeliveryPartnerRecord["status"], string> = {
   INACTIVE: "default"
 };
 
+const REUPLOAD_OPTIONS: Array<{ key: DeliveryDocumentReuploadKey; label: string }> = [
+  { key: "profilePhotoUrl", label: "Profile photo" },
+  { key: "aadhaarFrontUrl", label: "Aadhaar front" },
+  { key: "aadhaarBackUrl", label: "Aadhaar back" },
+  { key: "panFrontUrl", label: "PAN card" },
+  { key: "selfiePhotoUrl", label: "Selfie / verification photo" },
+  { key: "drivingLicenseFrontUrl", label: "Driving license front" },
+  { key: "drivingLicenseBackUrl", label: "Driving license back" },
+  { key: "vehicleRcFrontUrl", label: "Vehicle RC front" },
+  { key: "vehicleRcBackUrl", label: "Vehicle RC back" },
+  { key: "insuranceUrl", label: "Vehicle insurance" },
+  { key: "bankProofUrl", label: "Bank proof" }
+];
+
 export default function DeliveryPartners() {
   const [loading, setLoading] = useState(true);
   const [partners, setPartners] = useState<DeliveryPartnerRecord[]>([]);
@@ -25,6 +41,10 @@ export default function DeliveryPartners() {
   const [reviewing, setReviewing] = useState<{ partner: DeliveryPartnerRecord; nextStatus: DeliveryPartnerRecord["status"] } | null>(null);
   const [reviewComment, setReviewComment] = useState("");
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [reuploadPartner, setReuploadPartner] = useState<DeliveryPartnerRecord | null>(null);
+  const [reuploadKeys, setReuploadKeys] = useState<DeliveryDocumentReuploadKey[]>([]);
+  const [reuploadNote, setReuploadNote] = useState("");
+  const [reuploadSubmitting, setReuploadSubmitting] = useState(false);
 
   const loadPartners = async () => {
     setLoading(true);
@@ -66,7 +86,73 @@ export default function DeliveryPartners() {
   );
 
   const selectedRequiresMotorDocs = selected ? !["Cycle", "Bicycle"].includes(selected.vehicleType || "") : true;
-  const isImageUrl = (url?: string | null) => Boolean(url && !/\.pdf($|\?)/i.test(url));
+  const isPdfUrl = (url?: string | null) => Boolean(url && /\.pdf($|\?)/i.test(url));
+  const getCloudinaryPdfPreviewUrl = (url?: string | null) => {
+    if (!url || !url.includes("res.cloudinary.com") || !url.includes("/image/upload/") || !isPdfUrl(url)) {
+      return null;
+    }
+
+    return url.replace("/image/upload/", "/image/upload/pg_1/").replace(/\.pdf($|\?)/i, ".jpg$1");
+  };
+  const getDocumentPreviewUrl = (url?: string | null) => getCloudinaryPdfPreviewUrl(url) || url;
+  const isPreviewableUrl = (url?: string | null) => Boolean(url && !isPdfUrl(url));
+  const reuploadFlags = (selected?.documents?.reuploadFlags || {}) as Partial<Record<DeliveryDocumentReuploadKey, boolean>>;
+
+  const openReuploadModal = (partner: DeliveryPartnerRecord) => {
+    const flags = (partner.documents?.reuploadFlags || {}) as Partial<Record<DeliveryDocumentReuploadKey, boolean>>;
+    setReuploadPartner(partner);
+    setReuploadKeys(REUPLOAD_OPTIONS.filter((option) => flags[option.key]).map((option) => option.key));
+    setReuploadNote(partner.documents?.reuploadNotes || partner.reviewComment || "");
+  };
+
+  const closeReuploadModal = () => {
+    setReuploadPartner(null);
+    setReuploadKeys([]);
+    setReuploadNote("");
+    setReuploadSubmitting(false);
+  };
+
+  const handleSubmitReupload = async () => {
+    if (!reuploadPartner) return;
+    if (!reuploadKeys.length) {
+      message.warning("Select at least one document the delivery partner should re-upload.");
+      return;
+    }
+    if (!reuploadNote.trim()) {
+      message.warning("Add a reason so the delivery partner knows what to fix.");
+      return;
+    }
+
+    try {
+      setReuploadSubmitting(true);
+      await requestDeliveryPartnerDocumentReupload(reuploadPartner._id, {
+        keys: reuploadKeys,
+        note: reuploadNote.trim()
+      });
+      message.success(`Re-upload request sent to ${reuploadPartner.userId?.name || reuploadPartner.name || "delivery partner"}`);
+      closeReuploadModal();
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to request re-upload");
+    } finally {
+      setReuploadSubmitting(false);
+    }
+  };
+
+  const handleClearReupload = async () => {
+    if (!reuploadPartner) return;
+    try {
+      setReuploadSubmitting(true);
+      await requestDeliveryPartnerDocumentReupload(reuploadPartner._id, { keys: [], clear: true, note: "" });
+      message.success(`Re-upload requirements cleared for ${reuploadPartner.userId?.name || reuploadPartner.name || "delivery partner"}`);
+      closeReuploadModal();
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to clear re-upload request");
+    } finally {
+      setReuploadSubmitting(false);
+    }
+  };
 
   const submitStatus = async () => {
     if (!reviewing) return;
@@ -82,19 +168,19 @@ export default function DeliveryPartners() {
     loadPartners();
   };
 
-  const documentRows = selected
+  const documentRows: Array<{ label: string; url?: string; required: boolean; reuploadKey: DeliveryDocumentReuploadKey }> = selected
     ? [
-        { label: "Profile Photo", url: selected.profilePhotoUrl, required: true },
-        { label: `Aadhaar Front${selected.documents?.aadhaarNumber ? ` (${selected.documents.aadhaarNumber})` : ""}`, url: selected.documents?.aadhaarFrontUrl || selected.documents?.aadhaarUrl, required: true },
-        { label: "Aadhaar Back", url: selected.documents?.aadhaarBackUrl, required: true },
-        { label: `PAN Front${selected.documents?.panNumber ? ` (${selected.documents.panNumber})` : ""}`, url: selected.documents?.panFrontUrl || selected.documents?.panUrl, required: true },
-        { label: "Selfie / Verification Photo", url: selected.documents?.selfiePhotoUrl, required: true },
-        { label: "Driving License Front", url: selected.documents?.drivingLicenseFrontUrl || selected.documents?.drivingLicenseUrl, required: selectedRequiresMotorDocs },
-        { label: "Driving License Back", url: selected.documents?.drivingLicenseBackUrl, required: selectedRequiresMotorDocs },
-        { label: "Vehicle RC Front", url: selected.documents?.vehicleRcFrontUrl || selected.documents?.vehicleRcUrl, required: selectedRequiresMotorDocs },
-        { label: "Vehicle RC Back", url: selected.documents?.vehicleRcBackUrl, required: selectedRequiresMotorDocs },
-        { label: "Vehicle Insurance", url: selected.documents?.insuranceUrl, required: selectedRequiresMotorDocs },
-        { label: `Bank Proof${selected.documents?.bankDocumentType ? ` (${selected.documents.bankDocumentType})` : ""}`, url: selected.documents?.cancelledChequeUrl || selected.documents?.bankPassbookUrl || selected.documents?.bankStatementUrl, required: true }
+        { label: "Profile Photo", url: selected.profilePhotoUrl, required: true, reuploadKey: "profilePhotoUrl" },
+        { label: `Aadhaar Front${selected.documents?.aadhaarNumber ? ` (${selected.documents.aadhaarNumber})` : ""}`, url: selected.documents?.aadhaarFrontUrl || selected.documents?.aadhaarUrl, required: true, reuploadKey: "aadhaarFrontUrl" },
+        { label: "Aadhaar Back", url: selected.documents?.aadhaarBackUrl, required: true, reuploadKey: "aadhaarBackUrl" },
+        { label: `PAN Front${selected.documents?.panNumber ? ` (${selected.documents.panNumber})` : ""}`, url: selected.documents?.panFrontUrl || selected.documents?.panUrl, required: true, reuploadKey: "panFrontUrl" },
+        { label: "Selfie / Verification Photo", url: selected.documents?.selfiePhotoUrl, required: true, reuploadKey: "selfiePhotoUrl" },
+        { label: "Driving License Front", url: selected.documents?.drivingLicenseFrontUrl || selected.documents?.drivingLicenseUrl, required: selectedRequiresMotorDocs, reuploadKey: "drivingLicenseFrontUrl" },
+        { label: "Driving License Back", url: selected.documents?.drivingLicenseBackUrl, required: selectedRequiresMotorDocs, reuploadKey: "drivingLicenseBackUrl" },
+        { label: "Vehicle RC Front", url: selected.documents?.vehicleRcFrontUrl || selected.documents?.vehicleRcUrl, required: selectedRequiresMotorDocs, reuploadKey: "vehicleRcFrontUrl" },
+        { label: "Vehicle RC Back", url: selected.documents?.vehicleRcBackUrl, required: selectedRequiresMotorDocs, reuploadKey: "vehicleRcBackUrl" },
+        { label: "Vehicle Insurance", url: selected.documents?.insuranceUrl, required: selectedRequiresMotorDocs, reuploadKey: "insuranceUrl" },
+        { label: `Bank Proof${selected.documents?.bankDocumentType ? ` (${selected.documents.bankDocumentType})` : ""}`, url: selected.documents?.cancelledChequeUrl || selected.documents?.bankPassbookUrl || selected.documents?.bankStatementUrl, required: true, reuploadKey: "bankProofUrl" }
       ]
     : [];
 
@@ -215,7 +301,19 @@ export default function DeliveryPartners() {
         </Card>
       </Space>
 
-      <Drawer width={420} title={selected?.userId?.name || selected?.name || "Delivery Partner"} open={Boolean(selected)} onClose={() => setSelected(null)}>
+      <Drawer
+        width={420}
+        title={selected?.userId?.name || selected?.name || "Delivery Partner"}
+        open={Boolean(selected)}
+        onClose={() => setSelected(null)}
+        extra={
+          selected ? (
+            <Button icon={<ReloadOutlined />} onClick={() => openReuploadModal(selected)}>
+              Request re-upload
+            </Button>
+          ) : null
+        }
+      >
         {selected ? (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <div>
@@ -261,7 +359,11 @@ export default function DeliveryPartners() {
             <div>
               <Typography.Text type="secondary">Documents</Typography.Text>
               <Space direction="vertical" size={8} style={{ width: "100%", marginTop: 8 }}>
-                {documentRows.map((doc) => (
+                {documentRows.map((doc) => {
+                  const previewUrl = getDocumentPreviewUrl(doc.url);
+                  const originalIsPdf = isPdfUrl(doc.url);
+
+                  return (
                   <Card key={doc.label} size="small">
                     <Space direction="vertical" size={8} style={{ width: "100%" }}>
                       <Space size={8} wrap>
@@ -269,11 +371,13 @@ export default function DeliveryPartners() {
                           {doc.label} {doc.required ? "(Mandatory)" : "(If applicable)"}
                         </Typography.Text>
                         {doc.url ? <Tag color="green">Uploaded</Tag> : <Tag color="default">Not uploaded</Tag>}
+                        {reuploadFlags[doc.reuploadKey] ? <Tag color="red">Re-upload requested</Tag> : null}
+                        {originalIsPdf ? <Tag color="blue">PDF preview</Tag> : null}
                       </Space>
-                      {doc.url && isImageUrl(doc.url) ? (
+                      {previewUrl && isPreviewableUrl(previewUrl) ? (
                         <button
                           type="button"
-                          onClick={() => setPreviewImageUrl(doc.url || null)}
+                          onClick={() => setPreviewImageUrl(previewUrl)}
                           style={{
                             border: "none",
                             padding: 0,
@@ -283,7 +387,7 @@ export default function DeliveryPartners() {
                           }}
                         >
                           <img
-                            src={doc.url}
+                            src={previewUrl}
                             alt={doc.label}
                             style={{
                               width: "100%",
@@ -298,8 +402,8 @@ export default function DeliveryPartners() {
                       ) : null}
                       <div style={{ marginTop: 6 }}>
                         {doc.url ? (
-                          <Typography.Link href={doc.url} target="_blank" rel="noreferrer">
-                            Open uploaded document
+                          <Typography.Link href={previewUrl || doc.url} target="_blank" rel="noreferrer">
+                            {originalIsPdf ? "Open PDF preview" : "Open uploaded document"}
                           </Typography.Link>
                         ) : (
                           <Typography.Text type="secondary">Not uploaded</Typography.Text>
@@ -307,7 +411,16 @@ export default function DeliveryPartners() {
                       </div>
                     </Space>
                   </Card>
-                ))}
+                  );
+                })}
+                {selected.documents?.reuploadNotes ? (
+                  <Card size="small" style={{ borderColor: "#fca5a5" }}>
+                    <Typography.Text type="warning" strong>
+                      Re-upload note to delivery partner:{" "}
+                    </Typography.Text>
+                    <Typography.Text>{selected.documents.reuploadNotes}</Typography.Text>
+                  </Card>
+                ) : null}
               </Space>
             </div>
             <div>
@@ -373,6 +486,54 @@ export default function DeliveryPartners() {
               ? "Share what needs to be fixed before the rider can reapply."
               : "Optional note for the rider."
           }
+        />
+      </Modal>
+
+      <Modal
+        title={`Request re-upload from ${reuploadPartner?.userId?.name || reuploadPartner?.name || "delivery partner"}`}
+        open={Boolean(reuploadPartner)}
+        onCancel={closeReuploadModal}
+        onOk={handleSubmitReupload}
+        okText="Send request"
+        confirmLoading={reuploadSubmitting}
+        footer={[
+          <Button key="clear" onClick={handleClearReupload} disabled={reuploadSubmitting}>
+            Clear existing request
+          </Button>,
+          <Button key="cancel" onClick={closeReuploadModal} disabled={reuploadSubmitting}>
+            Cancel
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={reuploadSubmitting}
+            onClick={handleSubmitReupload}
+          >
+            Send request
+          </Button>
+        ]}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          Select which documents the delivery partner must re-upload. Their app will show a "Re-upload required"
+          badge and your reason until they submit replacement files.
+        </Typography.Paragraph>
+        <Checkbox.Group
+          value={reuploadKeys}
+          onChange={(values) => setReuploadKeys(values as DeliveryDocumentReuploadKey[])}
+          style={{ display: "flex", flexDirection: "column", gap: 8 }}
+        >
+          {REUPLOAD_OPTIONS.map((option) => (
+            <Checkbox key={option.key} value={option.key}>
+              {option.label}
+            </Checkbox>
+          ))}
+        </Checkbox.Group>
+        <Input.TextArea
+          rows={3}
+          value={reuploadNote}
+          onChange={(event) => setReuploadNote(event.target.value)}
+          placeholder="Reason for the delivery partner (e.g. Aadhaar photo is blurred)."
+          style={{ marginTop: 16 }}
         />
       </Modal>
     </>

@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,11 +19,19 @@ import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URLS } from "../api/client";
+import { buildLegalUrl } from "../constants/legal";
 import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { getDeliveryStats, getTodaysEarnings, type DeliveryStats } from "../api/delivery.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
+import {
+  getNotificationPermissionLabel,
+  openNotificationSettings,
+  registerForPushNotifications,
+  unregisterPushNotifications
+} from "../services/notifications";
 
 const DRAFT_KEY = "delivery_registration_draft_v2";
+const TERMS_URL = buildLegalUrl("delivery-policy");
 const STEPS = ["Basic", "Vehicle", "Documents", "Bank"] as const;
 const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "Motorcycle", "Bicycle", "Cycle", "Car"];
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
@@ -95,6 +104,7 @@ type UploadField =
   | "bankStatementUrl";
 
 type Docs = NonNullable<DeliveryProfile["documents"]>;
+type ReuploadKey = keyof NonNullable<Docs["reuploadFlags"]>;
 
 type AddressForm = {
   flatNo: string;
@@ -143,6 +153,25 @@ const FRONT_FIELD_ALIASES: Partial<Record<UploadField, keyof Docs>> = {
   drivingLicenseUrl: "drivingLicenseFrontUrl",
   vehicleRcUrl: "vehicleRcFrontUrl"
 };
+const REUPLOAD_FIELD_KEYS: Partial<Record<UploadField, ReuploadKey>> = {
+  profilePhotoUrl: "profilePhotoUrl",
+  aadhaarUrl: "aadhaarFrontUrl",
+  aadhaarFrontUrl: "aadhaarFrontUrl",
+  aadhaarBackUrl: "aadhaarBackUrl",
+  panUrl: "panFrontUrl",
+  panFrontUrl: "panFrontUrl",
+  selfiePhotoUrl: "selfiePhotoUrl",
+  drivingLicenseUrl: "drivingLicenseFrontUrl",
+  drivingLicenseFrontUrl: "drivingLicenseFrontUrl",
+  drivingLicenseBackUrl: "drivingLicenseBackUrl",
+  vehicleRcUrl: "vehicleRcFrontUrl",
+  vehicleRcFrontUrl: "vehicleRcFrontUrl",
+  vehicleRcBackUrl: "vehicleRcBackUrl",
+  insuranceUrl: "insuranceUrl",
+  cancelledChequeUrl: "bankProofUrl",
+  bankPassbookUrl: "bankProofUrl",
+  bankStatementUrl: "bankProofUrl"
+};
 
 const normalizeDocuments = (input?: Partial<Docs> | null): Docs => {
   const next = { ...emptyDocs(), ...(input || {}) } as Docs;
@@ -155,6 +184,9 @@ const normalizeDocuments = (input?: Partial<Docs> | null): Docs => {
   next.drivingLicenseUrl = next.drivingLicenseUrl || next.drivingLicenseFrontUrl || "";
   next.vehicleRcFrontUrl = next.vehicleRcFrontUrl || next.vehicleRcUrl || "";
   next.vehicleRcUrl = next.vehicleRcUrl || next.vehicleRcFrontUrl || "";
+  next.bankDocumentType = next.bankDocumentType || "cheque";
+  next.reuploadFlags = next.reuploadFlags || {};
+  next.reuploadNotes = next.reuploadNotes || "";
 
   return next;
 };
@@ -175,7 +207,7 @@ const emptyDocs = (): Docs => ({
   vehicleRcBackUrl: "",
   vehicleRcUrl: "",
   insuranceUrl: "",
-  bankDocumentType: "",
+  bankDocumentType: "cheque",
   bankAccountHolderName: "",
   cancelledChequeUrl: "",
   bankPassbookUrl: "",
@@ -183,7 +215,9 @@ const emptyDocs = (): Docs => ({
   bankAccountNumber: "",
   bankIfsc: "",
   submittedAt: "",
-  isComplete: false
+  isComplete: false,
+  reuploadFlags: {},
+  reuploadNotes: ""
 });
 
 const emptyAddress = (): AddressForm => ({
@@ -488,8 +522,18 @@ export default function ProfileScreen({ navigation, route }: any) {
   ];
 
   const handleLogout = async () => {
-    await AsyncStorage.multiRemove(["token", "user"]);
+    await unregisterPushNotifications().catch(() => {});
+    await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  };
+
+  const handleNotificationPreferences = async () => {
+    await registerForPushNotifications().catch(() => {});
+    const permissionLabel = await getNotificationPermissionLabel();
+    Alert.alert("Notifications", permissionLabel, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Open Settings", onPress: openNotificationSettings }
+    ]);
   };
 
   const handleAvailabilityToggle = async () => {
@@ -601,6 +645,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       <View style={[styles.statusCard, { backgroundColor: currentStatus.bg }]}>
         <Text style={[styles.statusLabel, { color: currentStatus.fg }]}>{currentStatus.label}</Text>
         <Text style={styles.statusText}>You can now access jobs while keeping profile, payout, and support details updated.</Text>
+        {documents.reuploadNotes ? <Text style={styles.statusText}>Admin re-upload note: {documents.reuploadNotes}</Text> : null}
       </View>
 
       <View style={styles.card}>
@@ -714,7 +759,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Settings</Text>
-        {renderShortcut("notifications-outline", "Notification preferences", "Choose job and payout alerts.", () => Alert.alert("Notifications", "Notification preferences will be available soon."))}
+        {renderShortcut("notifications-outline", "Notification preferences", "Choose job and payout alerts.", handleNotificationPreferences)}
         {renderShortcut("language-outline", "Language settings", "Change your preferred app language.", () => Alert.alert("Language", "Language settings will be available soon."))}
         {renderShortcut("options-outline", "App preferences", "Control app behavior and display options.", () => Alert.alert("Preferences", "App preferences will be available soon."))}
         {renderShortcut("gift-outline", "Referral program", "Invite other riders and earn rewards.", () => Alert.alert("Referral program", "Referral tracking will be added soon."))}
@@ -788,19 +833,24 @@ export default function ProfileScreen({ navigation, route }: any) {
         documents.bankAccountHolderName?.trim() ||
         documents.bankAccountNumber?.trim() ||
         documents.bankIfsc?.trim() ||
-        documents.bankDocumentType ||
         documents.cancelledChequeUrl ||
         documents.bankPassbookUrl ||
         documents.bankStatementUrl
       );
 
       if (hasAnyBankInput) {
+        const selectedBankProofUrl =
+          documents.bankDocumentType === "passbook"
+            ? documents.bankPassbookUrl
+            : documents.bankDocumentType === "statement"
+              ? documents.bankStatementUrl
+              : documents.cancelledChequeUrl;
         if (!documents.bankAccountHolderName?.trim()) return "Account holder name is required if you add bank details.";
         if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric.";
         if (!documents.bankIfsc?.trim()) return "IFSC code is required if you add bank details.";
         if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC code format is invalid.";
-        if (!documents.bankDocumentType || (!documents.cancelledChequeUrl && !documents.bankPassbookUrl && !documents.bankStatementUrl)) {
-          return "Upload one bank proof if you add bank details.";
+        if (!selectedBankProofUrl) {
+          return "Upload the selected bank proof if you add bank details.";
         }
       }
       if (!termsAccepted) return "Please accept the delivery partner terms and conditions.";
@@ -895,15 +945,25 @@ export default function ProfileScreen({ navigation, route }: any) {
 
       setUploadingFields((current) => (current.includes(field) ? current : [...current, field]));
       const url = await uploadAssetToServer(asset, field);
+      const reuploadKey = REUPLOAD_FIELD_KEYS[field];
 
       if (field === "profilePhotoUrl") {
         setProfilePhotoUrl(url);
+        if (reuploadKey) {
+          setDocuments((current) => normalizeDocuments({
+            ...current,
+            reuploadFlags: { ...(current.reuploadFlags || {}), [reuploadKey]: false }
+          }));
+        }
       } else {
         setDocuments((current) => {
           const next = { ...current, [field]: url } as Docs;
           const aliasField = FRONT_FIELD_ALIASES[field];
           if (aliasField) {
             next[aliasField] = url as never;
+          }
+          if (reuploadKey) {
+            next.reuploadFlags = { ...(current.reuploadFlags || {}), [reuploadKey]: false };
           }
           return normalizeDocuments(next);
         });
@@ -959,6 +1019,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           selfiePhotoUrl: normalizedDocuments.selfiePhotoUrl,
           drivingLicenseFrontUrl: normalizedDocuments.drivingLicenseFrontUrl,
           vehicleRcFrontUrl: normalizedDocuments.vehicleRcFrontUrl,
+          bankDocumentType: normalizedDocuments.bankDocumentType || "cheque",
           bankAccountHolderName: documents.bankAccountHolderName?.trim(),
           bankAccountNumber: documents.bankAccountNumber?.trim() || "",
           bankIfsc: documents.bankIfsc?.trim().toUpperCase()
@@ -1002,6 +1063,8 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const renderUpload = (field: UploadField, title: string, subtitle: string, required?: boolean) => {
     const url = field === "profilePhotoUrl" ? profilePhotoUrl : documents[field as keyof Docs];
+    const reuploadKey = REUPLOAD_FIELD_KEYS[field];
+    const reuploadRequested = reuploadKey ? Boolean(documents.reuploadFlags?.[reuploadKey]) : false;
     const showImagePreview = typeof url === "string" && url && !isPdfFile(url);
     const uploadModeText = field === "profilePhotoUrl" ? "Image only" : field === "selfiePhotoUrl" ? "Live camera" : "Image or PDF";
     return (
@@ -1015,6 +1078,14 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={styles.uploadBadgeText}>{uploadModeText}</Text>
           </View>
         </View>
+        {reuploadRequested ? (
+          <View style={styles.reuploadNotice}>
+            <Ionicons name="alert-circle-outline" size={18} color="#B42318" />
+            <Text style={styles.reuploadNoticeText}>
+              {documents.reuploadNotes || "Admin requested a replacement for this document."}
+            </Text>
+          </View>
+        ) : null}
         {showImagePreview ? (
           <Image source={{ uri: url }} style={styles.preview} />
         ) : typeof url === "string" && url ? (
@@ -1093,15 +1164,6 @@ export default function ProfileScreen({ navigation, route }: any) {
           <TextInput style={styles.input} value={vehicleNumber} onChangeText={setVehicleNumber} placeholder={requiresMotorDocuments ? "TS09AB1234" : "Optional for bicycle"} placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
           <Text style={styles.label}>Driving License Number{requiresMotorDocuments ? "" : " (Not required for bicycle)"}</Text>
           <TextInput style={styles.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder={requiresMotorDocuments ? "TS0120230012345" : "Not required"} placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" editable={requiresMotorDocuments} />
-          <TouchableOpacity style={styles.availability} onPress={() => setIsAvailable((current) => !current)}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.availabilityTitle}>Account availability</Text>
-              <Text style={styles.availabilityText}>Turn this on when you are ready to accept jobs.</Text>
-            </View>
-            <View style={[styles.badge, isAvailable && styles.badgeActive]}>
-              <Text style={[styles.badgeText, isAvailable && styles.badgeTextActive]}>{isAvailable ? "Yes" : "No"}</Text>
-            </View>
-          </TouchableOpacity>
         </View>
       );
     }
@@ -1138,7 +1200,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         <TextInput style={styles.input} value={documents.bankAccountNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountNumber: value.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
         <Text style={styles.label}>IFSC Code</Text>
         <TextInput style={styles.input} value={documents.bankIfsc || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankIfsc: value.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
-        <Text style={styles.cardText}>Upload any one: Cancelled Cheque (Recommended) / Passbook / Bank Statement. You can finish this later if needed.</Text>
+        <Text style={styles.cardText}>Cheque is selected by default. You can switch to Passbook or Statement if that proof is easier.</Text>
         <View style={styles.chips}>
           {(["cheque", "passbook", "statement"] as const).map((type) => (
             <TouchableOpacity key={type} style={[styles.chip, documents.bankDocumentType === type && styles.chipActive]} onPress={() => setDocuments((current) => ({ ...current, bankDocumentType: type }))}>
@@ -1151,10 +1213,18 @@ export default function ProfileScreen({ navigation, route }: any) {
           : documents.bankDocumentType === "statement"
             ? renderUpload("bankStatementUrl", "Recent Bank Statement", "Accepted payout proof", true)
             : renderUpload("cancelledChequeUrl", "Cancelled Cheque", "Recommended payout proof", true)}
-        <TouchableOpacity style={styles.termsRow} onPress={() => setTermsAccepted((current) => !current)}>
+        <View style={styles.termsRow}>
+          <TouchableOpacity onPress={() => setTermsAccepted((current) => !current)} hitSlop={10}>
           <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={22} color={termsAccepted ? "#FF6B35" : "#667085"} />
-          <Text style={styles.termsText}>I agree to the delivery partner terms and conditions.</Text>
-        </TouchableOpacity>
+          </TouchableOpacity>
+          <Text style={styles.termsText}>
+            I agree to the delivery partner{" "}
+            <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>
+              terms and conditions
+            </Text>
+            .
+          </Text>
+        </View>
         <View style={styles.summary}>
           <Text style={styles.summaryTitle}>Review checklist</Text>
           <Text style={styles.summaryItem}>{mandatoryDocsComplete ? "Mandatory documents look complete." : "Mandatory documents are still missing."}</Text>
@@ -1187,6 +1257,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Text style={[styles.statusLabel, { color: currentStatus.fg }]}>{currentStatus.label}</Text>
           <Text style={styles.statusText}>{mandatoryDocsComplete ? "Required documents look complete." : "Finish all mandatory sections before submitting."}</Text>
           {profile?.reviewComment ? <Text style={styles.statusText}>Admin note: {profile.reviewComment}</Text> : null}
+          {documents.reuploadNotes ? <Text style={styles.statusText}>Re-upload request: {documents.reuploadNotes}</Text> : null}
         </View>
 
         <View style={styles.progressCard}>
@@ -1316,6 +1387,8 @@ const styles = StyleSheet.create({
   uploadSubtitle: { marginTop: 4, fontSize: 12, lineHeight: 18, color: "#667085" },
   uploadBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "#FFF1E8" },
   uploadBadgeText: { fontSize: 10, lineHeight: 12, fontWeight: "800", color: "#C2410C", textTransform: "uppercase" },
+  reuploadNotice: { marginTop: 12, padding: 12, borderRadius: 14, backgroundColor: "#FEF3F2", borderWidth: 1, borderColor: "#FECDCA", flexDirection: "row", gap: 8 },
+  reuploadNoticeText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: "700", color: "#B42318" },
   placeholder: { marginTop: 12, height: 72, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "#D0D5DD", alignItems: "center", justifyContent: "center", backgroundColor: "#fff" },
   placeholderText: { marginTop: 6, fontSize: 12, color: "#98A2B3" },
   fileBadge: { marginTop: 12, padding: 14, borderRadius: 14, backgroundColor: "#ECFDF3", borderWidth: 1, borderColor: "#ABEFC6", flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1325,6 +1398,7 @@ const styles = StyleSheet.create({
   uploadButtonText: { fontSize: 13, fontWeight: "800", color: "#fff" },
   termsRow: { marginTop: 16, padding: 14, borderRadius: 16, backgroundColor: "#FFF7ED", flexDirection: "row", alignItems: "center", gap: 10 },
   termsText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "700", color: "#344054" },
+  termsLink: { color: "#C2410C", textDecorationLine: "underline" },
   addressHelperText: { marginTop: 12, fontSize: 12, lineHeight: 18, color: "#667085" },
   summary: { marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: "#F8FAFC" },
   summaryTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },

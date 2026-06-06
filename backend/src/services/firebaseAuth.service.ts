@@ -10,7 +10,7 @@ const normalizePhone = (phone?: string) => {
   return digits.length > 10 ? digits.slice(-10) : digits;
 };
 
-const getFirebaseApp = () => {
+export const getFirebaseApp = () => {
   if (admin.apps.length) {
     return admin.app();
   }

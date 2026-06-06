@@ -78,6 +78,42 @@ const AddressSchema = new Schema({
   timestamps: true
 });
 
+const NotificationTokenSchema = new Schema({
+  token: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  app: {
+    type: String,
+    enum: ["customer", "partner", "delivery"],
+    required: true
+  },
+  platform: {
+    type: String,
+    enum: ["ios", "android", "web", "unknown"],
+    default: "unknown"
+  },
+  deviceId: {
+    type: String,
+    default: "",
+    trim: true
+  },
+  enabled: {
+    type: Boolean,
+    default: true
+  },
+  lastSeenAt: {
+    type: Date,
+    default: Date.now
+  },
+  disabledAt: {
+    type: Date
+  }
+}, {
+  _id: false
+});
+
 const UserSchema = new Schema({
   phone: {
     type: String,
@@ -171,6 +207,10 @@ const UserSchema = new Schema({
   fcmToken: {
     type: String
   },
+  notificationTokens: {
+    type: [NotificationTokenSchema],
+    default: []
+  },
   partnerOnboardingDraft: {
     type: Schema.Types.Mixed,
     default: null
@@ -197,6 +237,7 @@ UserSchema.index(
     partialFilterExpression: { email: { $type: "string" } }
   }
 );
+UserSchema.index({ "notificationTokens.token": 1 });
 
 const User = model("User", UserSchema);
 

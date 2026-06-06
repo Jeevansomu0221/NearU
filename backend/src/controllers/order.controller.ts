@@ -9,6 +9,14 @@ import User from "../models/User.model";
 import { CONSUMER_APP_ROLES, ROLES } from "../config/roles";
 import { successResponse, errorResponse } from "../utils/response";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import {
+  notifyAssignedDeliveryPartner,
+  notifyCustomerOrderStatus,
+  notifyDeliveryAssigned,
+  notifyDeliveryJobReady,
+  notifyPartnerDeliveryStatus,
+  notifyPartnerNewOrder
+} from "../services/notification.service";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
@@ -777,6 +785,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     console.log(`📱 Order ${order._id} created for partner ${partnerId}`);
     console.log(`💰 Payment Method: ${paymentMethod}, Payment Status: ${paymentStatus}, Order Status: ${initialStatus}`);
 
+    if (initialStatus === "CONFIRMED") {
+      void notifyPartnerNewOrder(order).catch((error) => {
+        console.error("Failed to notify partner about new order:", error);
+      });
+    }
+
     return successResponse(res, populatedOrder, "Order created successfully");
 
   } catch (err: any) {
@@ -839,7 +853,8 @@ export const updateOrderPayment = async (req: AuthRequest, res: Response) => {
     if (paymentStatus) order.paymentStatus = paymentStatus;
     
     // If payment is successful and order was PENDING, update to CONFIRMED
-    if (paymentStatus === "PAID" && order.status === "PENDING") {
+    const didConfirmOrder = paymentStatus === "PAID" && order.status === "PENDING";
+    if (didConfirmOrder) {
       order.status = "CONFIRMED";
       order.cancellationReason = "";
       order.customerCancellationMessage = "";
@@ -852,6 +867,12 @@ export const updateOrderPayment = async (req: AuthRequest, res: Response) => {
     const updatedOrder = await Order.findById(orderId)
       .populate("partnerId", "restaurantName phone shopName")
       .populate("customerId", "name phone");
+
+    if (didConfirmOrder) {
+      void notifyPartnerNewOrder(order).catch((error) => {
+        console.error("Failed to notify partner about paid order:", error);
+      });
+    }
 
     return successResponse(res, updatedOrder, "Payment status updated successfully");
 
@@ -932,6 +953,16 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     }
     await order.save();
 
+    void notifyCustomerOrderStatus(order, status === "REJECTED" ? "REJECTED" : order.status).catch((error) => {
+      console.error("Failed to notify customer about order status:", error);
+    });
+
+    if (status === "READY" && previousStatus !== "READY") {
+      void notifyDeliveryJobReady(order).catch((error) => {
+        console.error("Failed to notify delivery partners about ready order:", error);
+      });
+    }
+
     return successResponse(
       res,
       order,
@@ -999,6 +1030,13 @@ export const assignDelivery = async (req: AuthRequest, res: Response) => {
     order.status = "ASSIGNED";
 
     await order.save();
+
+    void Promise.all([
+      notifyAssignedDeliveryPartner(order),
+      notifyDeliveryAssigned(order)
+    ]).catch((error) => {
+      console.error("Failed to notify delivery assignment:", error);
+    });
 
     return successResponse(res, order, "Delivery partner assigned");
   } catch (err: any) {
@@ -1083,6 +1121,13 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       responseOrder.deliveryEarnings = order.deliveryFee || 0;
       responseOrder.collectedAmount = collectedAmount ? Number(collectedAmount) : undefined;
     }
+
+    void Promise.all([
+      notifyCustomerOrderStatus(order, status),
+      notifyPartnerDeliveryStatus(order, status)
+    ]).catch((error) => {
+      console.error("Failed to notify delivery status:", error);
+    });
 
     return successResponse(res, responseOrder, `Order ${status.toLowerCase()} successfully`);
   } catch (err: any) {
@@ -1443,6 +1488,10 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
 
     console.log(`🚚 Delivery partner ${user.id} accepted job for order ${orderId}`);
 
+    void notifyDeliveryAssigned(order).catch((error) => {
+      console.error("Failed to notify accepted delivery job:", error);
+    });
+
     const responseOrder = populatedOrder
       ? await ensureDeliveryLocationForResponse(populatedOrder.toObject())
       : populatedOrder;
@@ -1570,6 +1619,10 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     }
 
     await order.save();
+
+    void notifyPartnerDeliveryStatus(order, "CANCELLED").catch((error) => {
+      console.error("Failed to notify partner about cancelled order:", error);
+    });
 
     return successResponse(res, order, "Order cancelled successfully");
   } catch (err: any) {

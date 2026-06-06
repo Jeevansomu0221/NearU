@@ -115,6 +115,10 @@ export default function Partners() {
       message.warning("Select at least one document the partner should re-upload.");
       return;
     }
+    if (!reuploadNote.trim()) {
+      message.warning("Add a reason so the partner knows what to fix.");
+      return;
+    }
     try {
       setReuploadSubmitting(true);
       await requestPartnerDocumentReupload(reuploadPartner._id, {
@@ -147,6 +151,14 @@ export default function Partners() {
   };
 
   const reuploadFlags = (selectedPartner?.documents?.reuploadFlags || {}) as Partial<Record<DocumentReuploadKey, boolean>>;
+  const isPdfUrl = (url?: string | null) => Boolean(url && /\.pdf($|\?)/i.test(url));
+  const getCloudinaryPdfPreviewUrl = (url?: string | null) => {
+    if (!url || !url.includes("res.cloudinary.com") || !url.includes("/image/upload/") || !isPdfUrl(url)) {
+      return null;
+    }
+
+    return url.replace("/image/upload/", "/image/upload/pg_1/").replace(/\.pdf($|\?)/i, ".jpg$1");
+  };
 
   const documentItems: Array<{ label: string; url?: string; required: boolean; reuploadKey: DocumentReuploadKey }> = selectedPartner
     ? [
@@ -357,6 +369,7 @@ export default function Partners() {
               <Space direction="vertical" size={8} style={{ width: "100%", marginTop: 8 }}>
                 {documentItems.map((doc) => {
                   const reupload = Boolean(reuploadFlags[doc.reuploadKey]);
+                  const previewUrl = getCloudinaryPdfPreviewUrl(doc.url);
                   return (
                     <Card key={doc.label} size="small">
                       <Space direction="vertical" size={4} style={{ width: "100%" }}>
@@ -366,10 +379,11 @@ export default function Partners() {
                           </Typography.Text>
                           {doc.url ? <Tag color="green">Verified</Tag> : <Tag color="default">Not uploaded</Tag>}
                           {reupload ? <Tag color="red">Re-upload requested</Tag> : null}
+                          {previewUrl ? <Tag color="blue">PDF preview</Tag> : null}
                         </Space>
                         {doc.url ? (
-                          <Typography.Link href={doc.url} target="_blank" rel="noreferrer">
-                            Open uploaded document
+                          <Typography.Link href={previewUrl || doc.url} target="_blank" rel="noreferrer">
+                            {previewUrl ? "Open PDF preview" : "Open uploaded document"}
                           </Typography.Link>
                         ) : (
                           <Typography.Text type="secondary">Not uploaded</Typography.Text>
@@ -447,7 +461,7 @@ export default function Partners() {
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
           Select which documents the partner must re-upload. The partner app will show a "Re-upload required"
-          badge for these items until they submit new files.
+          badge and your reason for these items until they submit new files.
         </Typography.Paragraph>
         <Checkbox.Group
           value={reuploadKeys}
@@ -464,7 +478,7 @@ export default function Partners() {
           rows={3}
           value={reuploadNote}
           onChange={(event) => setReuploadNote(event.target.value)}
-          placeholder="Optional note to the partner (e.g. PAN scan was blurred)."
+          placeholder="Reason for the partner (e.g. PAN scan was blurred)."
           style={{ marginTop: 16 }}
         />
       </Modal>

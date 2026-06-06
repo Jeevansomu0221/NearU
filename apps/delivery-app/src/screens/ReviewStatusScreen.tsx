@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
+import { unregisterPushNotifications } from "../services/notifications";
 
 const statusContent: Record<DeliveryProfile["status"], { title: string; body: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
   PENDING: {
@@ -99,7 +100,8 @@ export default function ReviewStatusScreen({ navigation }: any) {
   const content = useMemo(() => statusContent[profile?.status || "INACTIVE"], [profile]);
 
   const handleLogout = async () => {
-    await AsyncStorage.multiRemove(["token", "user"]);
+    await unregisterPushNotifications().catch(() => {});
+    await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
   };
 

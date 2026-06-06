@@ -1,5 +1,6 @@
 import api, { ApiResponse } from "./client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { unregisterPushNotifications } from "../services/notifications";
 
 interface SendOtpResponse {
   phone: string;
@@ -35,6 +36,7 @@ export const verifyFirebaseOtp = (
 
 export const logout = async () => {
   try {
+    await unregisterPushNotifications().catch(() => {});
     await api.post("/auth/logout");
   } catch (_error) {
     // best effort
@@ -45,6 +47,7 @@ export const logout = async () => {
 
 export const deleteAccount = async () => {
   try {
+    await unregisterPushNotifications().catch(() => {});
     const response = await api.delete("/users/me");
     return response;
   } finally {

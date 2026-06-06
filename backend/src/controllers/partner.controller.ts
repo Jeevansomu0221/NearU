@@ -5,6 +5,7 @@ import User from "../models/User.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import Order from "../models/Order.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
+import { notifyPartnerApplicationStatus } from "../services/notification.service";
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
@@ -422,9 +423,9 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       normalizedDocs.bankAccountHolderName ||
       normalizedDocs.bankAccountNumber ||
       normalizedDocs.bankIfsc ||
-      normalizedDocs.bankDocumentType ||
       normalizedDocs.bankProofUrl
     );
+    const normalizedBankDocumentType = hasAnyBankInput ? normalizedDocs.bankDocumentType || "cheque" : "";
 
     if (!fssaiRegex.test(normalizedDocs.fssaiNumber)) {
       return res.status(400).json({ success: false, message: "FSSAI number must be 14 digits" });
@@ -446,7 +447,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       if (!ifscRegex.test(normalizedDocs.bankIfsc)) {
         return res.status(400).json({ success: false, message: "IFSC code format is invalid" });
       }
-      if (!normalizedDocs.bankDocumentType || !normalizedDocs.bankProofUrl) {
+      if (!normalizedDocs.bankProofUrl) {
         return res.status(400).json({ success: false, message: "Add one bank proof if you enter bank details" });
       }
     }
@@ -467,13 +468,13 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     }
 
     const normalizedBankProofUrl = hasAnyBankInput ? normalizedDocs.bankProofUrl : "";
-    const normalizedBankDocumentType = hasAnyBankInput ? normalizedDocs.bankDocumentType : "";
     const normalizedBankAccountHolderName = hasAnyBankInput ? normalizedDocs.bankAccountHolderName : "";
     const normalizedBankAccountNumber = hasAnyBankInput ? normalizedDocs.bankAccountNumber : "";
     const normalizedBankIfsc = hasAnyBankInput ? normalizedDocs.bankIfsc : "";
     const documentsForCompletion = {
       ...normalizedDocs,
       bankProofUrl: normalizedBankProofUrl,
+      bankDocumentType: normalizedBankDocumentType,
       bankAccountHolderName: normalizedBankAccountHolderName,
       bankAccountNumber: normalizedBankAccountNumber,
       bankIfsc: normalizedBankIfsc,
@@ -704,6 +705,10 @@ export const updatePartnerStatus = async (req: Request, res: Response) => {
     }
 
     await partner.save();
+
+    void notifyPartnerApplicationStatus(partner).catch((error) => {
+      console.error("Failed to notify partner status update:", error);
+    });
 
     return res.json({
       success: true,

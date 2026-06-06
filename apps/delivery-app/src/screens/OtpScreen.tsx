@@ -18,6 +18,7 @@ import {
   isFirebaseOtpSessionExpiredError,
   sendFirebaseOtp
 } from "../services/firebasePhoneAuth";
+import { registerForPushNotifications } from "../services/notifications";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone } = route.params;
@@ -126,6 +127,10 @@ export default function OtpScreen({ route, navigation }: any) {
         ["refreshToken", response.data.refreshToken || ""],
         ["user", JSON.stringify(response.data.user)]
       ]);
+
+      registerForPushNotifications().catch((error) => {
+        console.log("Failed to register push notifications:", error);
+      });
 
       const profileResponse = await getDeliveryProfile();
       const nextRoute =
