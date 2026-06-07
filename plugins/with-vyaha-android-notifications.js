@@ -15,6 +15,8 @@ const CHANNEL_ID = "vyaha_alerts";
 const DEFAULT_COLOR = "#0F9D58";
 const ICON_RESOURCE = "vyaha_notification_icon";
 const COLOR_RESOURCE = "vyaha_notification_color";
+const FIREBASE_JSON_FILE = "firebase.json";
+const REACT_NATIVE_FIREBASE_ROOT = "react-native";
 
 const NOTIFICATION_ICON_XML = `<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -39,11 +41,47 @@ const addOrUpdateMetaData = (application, name, attrs) => {
   application["meta-data"] = metaData;
 };
 
+const removeMetaData = (application, names) => {
+  const metaData = application["meta-data"] || [];
+  application["meta-data"] = metaData.filter((item) => !names.includes(item.$?.["android:name"]));
+};
+
 const ensureResources = (projectRoot) => {
   const resPath = path.join(projectRoot, "android", "app", "src", "main", "res");
   const drawablePath = path.join(resPath, "drawable");
   fs.mkdirSync(drawablePath, { recursive: true });
   fs.writeFileSync(path.join(drawablePath, `${ICON_RESOURCE}.xml`), NOTIFICATION_ICON_XML);
+};
+
+const ensureFirebaseJson = (projectRoot) => {
+  const firebaseJsonPath = path.join(projectRoot, FIREBASE_JSON_FILE);
+  let firebaseJson = {};
+
+  if (fs.existsSync(firebaseJsonPath)) {
+    try {
+      firebaseJson = JSON.parse(fs.readFileSync(firebaseJsonPath, "utf8"));
+    } catch (error) {
+      throw new Error(`Unable to parse ${firebaseJsonPath}: ${error.message}`);
+    }
+  }
+
+  const reactNativeConfig = firebaseJson[REACT_NATIVE_FIREBASE_ROOT] || {};
+  if (
+    typeof reactNativeConfig !== "object" ||
+    Array.isArray(reactNativeConfig)
+  ) {
+    throw new Error(
+      `${firebaseJsonPath} must use an object for "${REACT_NATIVE_FIREBASE_ROOT}" config.`
+    );
+  }
+
+  firebaseJson[REACT_NATIVE_FIREBASE_ROOT] = {
+    ...reactNativeConfig,
+    messaging_android_notification_channel_id: CHANNEL_ID,
+    messaging_android_notification_color: `@color/${COLOR_RESOURCE}`
+  };
+
+  fs.writeFileSync(firebaseJsonPath, `${JSON.stringify(firebaseJson, null, 2)}\n`);
 };
 
 const addChannelToKotlin = (contents, channelName, channelDescription) => {
@@ -149,14 +187,12 @@ const withVyahaAndroidNotifications = (config, props = {}) => {
 
   config = withAndroidManifest(config, (androidConfig) => {
     const application = AndroidConfig.Manifest.getMainApplicationOrThrow(androidConfig.modResults);
+    removeMetaData(application, [
+      "com.google.firebase.messaging.default_notification_color",
+      "com.google.firebase.messaging.default_notification_channel_id"
+    ]);
     addOrUpdateMetaData(application, "com.google.firebase.messaging.default_notification_icon", {
       "android:resource": `@drawable/${ICON_RESOURCE}`
-    });
-    addOrUpdateMetaData(application, "com.google.firebase.messaging.default_notification_color", {
-      "android:resource": `@color/${COLOR_RESOURCE}`
-    });
-    addOrUpdateMetaData(application, "com.google.firebase.messaging.default_notification_channel_id", {
-      "android:value": CHANNEL_ID
     });
     return androidConfig;
   });
@@ -165,6 +201,7 @@ const withVyahaAndroidNotifications = (config, props = {}) => {
     "android",
     (androidConfig) => {
       ensureResources(androidConfig.modRequest.projectRoot);
+      ensureFirebaseJson(androidConfig.modRequest.projectRoot);
       return androidConfig;
     }
   ]);
