@@ -41,6 +41,14 @@
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
       [
+        "../../plugins/with-vyaha-android-notifications",
+        {
+          "color": "#174EA6",
+          "channelName": "Vyaha Partner alerts",
+          "channelDescription": "Important order and shop account alerts."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Vyaha Partner needs photo access so you can upload restaurant photos, menu images, and business verification documents.",

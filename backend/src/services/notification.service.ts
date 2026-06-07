@@ -62,6 +62,14 @@ const INVALID_TOKEN_CODES = new Set([
   "messaging/invalid-argument"
 ]);
 
+const ANDROID_NOTIFICATION_CHANNEL_ID = "vyaha_alerts";
+const ANDROID_NOTIFICATION_ICON = "vyaha_notification_icon";
+const ANDROID_NOTIFICATION_COLORS: Record<NotificationApp, string> = {
+  customer: "#0F9D58",
+  delivery: "#0F9D58",
+  partner: "#174EA6"
+};
+
 const idString = (value: any) => {
   const rawId = value?._id || value;
   if (!rawId) return "";
@@ -147,6 +155,10 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
         android: {
           priority: "high",
           notification: {
+            channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+            color: ANDROID_NOTIFICATION_COLORS[options.app || "customer"],
+            icon: ANDROID_NOTIFICATION_ICON,
+            priority: "high",
             sound: "default"
           }
         },

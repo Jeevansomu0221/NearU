@@ -41,6 +41,14 @@
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
       [
+        "../../plugins/with-vyaha-android-notifications",
+        {
+          "color": "#0F9D58",
+          "channelName": "Vyaha Delivery alerts",
+          "channelDescription": "Important delivery job and profile alerts."
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Vyaha Delivery uses your location while you are working to show nearby jobs, calculate distance, and update delivery progress."
