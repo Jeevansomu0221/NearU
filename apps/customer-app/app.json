@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -60,11 +60,14 @@
         "projectId": "ef3786d8-9d3b-435c-b8e1-347b75c0daff"
       }
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
-  "url": "https://u.expo.dev/ef3786d8-9d3b-435c-b8e1-347b75c0daff",
-  "fallbackToCacheTimeout": 0,
-  "enabled": true
-},
-"owner": "jeevansomu"
+      "url": "https://u.expo.dev/ef3786d8-9d3b-435c-b8e1-347b75c0daff",
+      "fallbackToCacheTimeout": 0,
+      "enabled": true
+    },
+    "owner": "jeevansomu"
   }
 }
