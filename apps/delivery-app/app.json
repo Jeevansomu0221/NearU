@@ -66,11 +66,14 @@
         "projectId": "5c93a2d3-d4bd-4df7-90ba-a0565eb94ccb"
       }
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
-  "url": "https://u.expo.dev/5c93a2d3-d4bd-4df7-90ba-a0565eb94ccb",
-  "fallbackToCacheTimeout": 0,
-  "enabled": true
-},
-"owner": "jeevansomu"
+      "url": "https://u.expo.dev/5c93a2d3-d4bd-4df7-90ba-a0565eb94ccb",
+      "fallbackToCacheTimeout": 0,
+      "enabled": true
+    },
+    "owner": "jeevansomu"
   }
 }
