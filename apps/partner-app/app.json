@@ -67,6 +67,11 @@
         "projectId": "61203aa1-4f84-4edb-8e66-595df6a26a53"
       }
     },
-    "owner": "jeevansomu"
+    "updates": {
+  "url": "https://u.expo.dev/61203aa1-4f84-4edb-8e66-595df6a26a53",
+  "fallbackToCacheTimeout": 0,
+  "enabled": true
+},
+"owner": "jeevansomu"
   }
 }

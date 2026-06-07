@@ -1,12 +1,15 @@
+const fs = require("fs");
+const { createRequire } = require("module");
+const path = require("path");
+
+const requireFromApp = createRequire(path.join(process.cwd(), "package.json"));
 const {
   AndroidConfig,
   withAndroidColors,
   withAndroidManifest,
   withDangerousMod,
   withMainApplication
-} = require("@expo/config-plugins");
-const fs = require("fs");
-const path = require("path");
+} = requireFromApp("@expo/config-plugins");
 
 const CHANNEL_ID = "vyaha_alerts";
 const DEFAULT_COLOR = "#0F9D58";

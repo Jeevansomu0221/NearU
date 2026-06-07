@@ -56,13 +56,13 @@ jobs:
     steps:
       - name: Checkout repository
         if: ${{ github.event_name == 'push' || github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
         if: ${{ github.event_name == 'push' || github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: ${{ matrix.app_dir }}/package-lock.json
 
@@ -76,7 +76,7 @@ jobs:
 
       - name: Set up Android SDK
         if: ${{ github.event_name == 'push' || github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name }}
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install dependencies
         if: ${{ github.event_name == 'push' || github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name }}
@@ -116,7 +116,7 @@ jobs:
 
       - name: Upload AAB
         if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_prefix }}-production-aab
           path: ${{ matrix.artifact_prefix }}-production.aab
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload development APK
         if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'development-apk')) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_prefix }}-development-apk
           path: ${{ matrix.artifact_prefix }}-development.apk
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload APK
         if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'apk') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_prefix }}-preview-apk
           path: ${{ matrix.artifact_prefix }}-preview.apk

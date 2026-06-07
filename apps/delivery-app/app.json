@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.vyaha.delivery",
-      "versionCode": 12,
+      "versionCode": 14,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.POST_NOTIFICATIONS"
@@ -66,6 +66,11 @@
         "projectId": "5c93a2d3-d4bd-4df7-90ba-a0565eb94ccb"
       }
     },
-    "owner": "jeevansomu"
+    "updates": {
+  "url": "https://u.expo.dev/5c93a2d3-d4bd-4df7-90ba-a0565eb94ccb",
+  "fallbackToCacheTimeout": 0,
+  "enabled": true
+},
+"owner": "jeevansomu"
   }
 }
