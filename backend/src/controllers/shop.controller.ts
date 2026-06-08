@@ -26,6 +26,18 @@ const findApprovedShops = () =>
     .select("_id restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime")
     .lean();
 
+const buildApprovedShopsFallback = async (radiusKm: number, message: string) => {
+  const shops = await findApprovedShops();
+
+  return {
+    success: true,
+    data: shops,
+    radiusKm,
+    locationApplied: false,
+    message
+  };
+};
+
 export const getShopsWithImages = async (req: Request, res: Response) => {
   try {
     const latitude = parseCoordinate(req.query.latitude);
@@ -71,6 +83,13 @@ export const getShopsWithImages = async (req: Request, res: Response) => {
           }
         ]);
 
+        if (shops.length === 0) {
+          return res.json(await buildApprovedShopsFallback(
+            radiusKm,
+            `No shops found within ${radiusKm} km. Showing approved shops instead.`
+          ));
+        }
+
         return res.json({
           success: true,
           data: shops,
@@ -79,15 +98,10 @@ export const getShopsWithImages = async (req: Request, res: Response) => {
         });
       } catch (geoError) {
         console.error("❌ Geo shop lookup failed, falling back to approved shops:", geoError);
-        const shops = await findApprovedShops();
-
-        return res.json({
-          success: true,
-          data: shops,
+        return res.json(await buildApprovedShopsFallback(
           radiusKm,
-          locationApplied: false,
-          message: "Showing approved shops while nearby lookup is unavailable"
-        });
+          "Showing approved shops while nearby lookup is unavailable"
+        ));
       }
     }
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -71,7 +72,7 @@ const filterOptions = [
 ];
 
 const NEARBY_RADIUS_KM = 3;
-const SHOW_APPROVED_FALLBACK_IN_DEV = typeof __DEV__ !== "undefined" && __DEV__;
+const LOCATION_TIMEOUT_MS = 8000;
 
 const shopPlaceholders: Record<string, string> = {
   bakery:
@@ -88,6 +89,26 @@ const shopPlaceholders: Record<string, string> = {
     "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=240&q=80"
 };
 
+const extractShops = (response: any): Shop[] => Array.isArray(response?.data) ? response.data : [];
+
+const getCurrentPositionWithTimeout = async () => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timeoutId = setTimeout(() => resolve(null), LOCATION_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      timeout
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { getItemCount } = useCart();
@@ -102,6 +123,14 @@ export default function HomeScreen({ navigation }: Props) {
     loadNearbyShops();
   }, []);
 
+  const loadApprovedShops = async (messageForCount: (count: number) => string) => {
+    const fallbackResponse = await getPartners();
+    const approvedShops = extractShops(fallbackResponse);
+
+    setShops(approvedShops);
+    setLocationMessage(messageForCount(approvedShops.length));
+  };
+
   const loadNearbyShops = async (showRefresh = false) => {
     try {
       if (showRefresh) {
@@ -112,47 +141,57 @@ export default function HomeScreen({ navigation }: Props) {
 
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status !== "granted") {
-        setLocationMessage("Enable location to show shops within 3 km.");
-        setShops([]);
+        await loadApprovedShops((count) =>
+          count > 0
+            ? "Showing approved shops. Enable location to sort by nearby shops within 3 km."
+            : "No approved shops found. Check partner approval and setup status."
+        );
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
+      const location = await getCurrentPositionWithTimeout();
+      if (!location) {
+        await loadApprovedShops((count) =>
+          count > 0
+            ? "Showing approved shops while we wait for your location. Pull to refresh to try nearby shops."
+            : "No approved shops found. Check partner approval and setup status."
+        );
+        return;
+      }
+
       const response = await getPartners({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         radiusKm: NEARBY_RADIUS_KM
       });
 
-      const nearbyShops = Array.isArray(response?.data)
-        ? response.data
-        : Array.isArray((response as any)?.data)
-          ? (response as any).data
-          : null;
+      const nearbyShops = extractShops(response);
 
-      if (nearbyShops && nearbyShops.length > 0) {
+      if (nearbyShops.length > 0) {
         setShops(nearbyShops);
-        setLocationMessage(`Showing shops within ${NEARBY_RADIUS_KM} km of your current location`);
-      } else if (nearbyShops && SHOW_APPROVED_FALLBACK_IN_DEV) {
-        const fallbackResponse = await getPartners();
-        const approvedShops = Array.isArray(fallbackResponse?.data)
-          ? fallbackResponse.data
-          : Array.isArray((fallbackResponse as any)?.data)
-            ? (fallbackResponse as any).data
-            : [];
-
-        setShops(approvedShops);
         setLocationMessage(
-          approvedShops.length > 0
-            ? `No shops found within ${NEARBY_RADIUS_KM} km. Showing approved shops for development testing while shop GPS pins are updated.`
-            : `No approved shops found. Check partner approval and setup status.`
+          (response as any)?.locationApplied === false && (response as any)?.message
+            ? (response as any).message
+            : `Showing shops within ${NEARBY_RADIUS_KM} km of your current location`
         );
       } else {
-        setShops([]);
+        await loadApprovedShops((count) =>
+          count > 0
+            ? `No shops found within ${NEARBY_RADIUS_KM} km. Showing approved shops instead.`
+            : "No approved shops found. Check partner approval and setup status."
+        );
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to load shops");
-      setShops([]);
+      try {
+        await loadApprovedShops((count) =>
+          count > 0
+            ? "Showing approved shops while nearby lookup is unavailable."
+            : "No approved shops found. Check partner approval and setup status."
+        );
+      } catch (fallbackError: any) {
+        Alert.alert("Error", fallbackError.message || error.message || "Failed to load shops");
+        setShops([]);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -384,6 +423,13 @@ export default function HomeScreen({ navigation }: Props) {
     </View>
   );
 
+  const renderLoading = () => (
+    <View style={styles.loadingState}>
+      <ActivityIndicator size="large" color="#FF6B35" />
+      <Text style={styles.loadingText}>Finding shops near you...</Text>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <FlatList
@@ -391,7 +437,7 @@ export default function HomeScreen({ navigation }: Props) {
         keyExtractor={(item) => item._id}
         renderItem={renderShopItem}
         ListHeaderComponent={renderHeader}
-        ListEmptyComponent={!loading ? renderEmpty : null}
+        ListEmptyComponent={loading ? renderLoading : renderEmpty}
         contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom, 14) }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops(true)} tintColor="#FF6B35" />
@@ -850,6 +896,22 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 11,
+    color: "#7A7168"
+  },
+  loadingState: {
+    marginHorizontal: 14,
+    marginTop: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#EEE8E0",
+    alignItems: "center"
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: "700",
     color: "#7A7168"
   }
 });
