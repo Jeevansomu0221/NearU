@@ -3,7 +3,7 @@
     "name": "Vyaha Partner",
     "slug": "vyaha-partner",
     "scheme": "vyaha-partner",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/vyaha-partner-app-icon.png",
     "userInterfaceStyle": "light",
@@ -18,9 +18,11 @@
     },
     "android": {
       "package": "com.vyaha.partner",
-      "versionCode": 14,
+      "versionCode": 15,
       "googleServicesFile": "./google-services.json",
       "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
@@ -43,6 +45,7 @@
       [
         "../../plugins/with-vyaha-android-notifications",
         {
+          "iconSource": "./assets/vyaha-partner-app-icon.png",
           "color": "#174EA6",
           "channelName": "Vyaha Partner alerts",
           "channelDescription": "Important order and shop account alerts."

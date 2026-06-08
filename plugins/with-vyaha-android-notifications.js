@@ -46,8 +46,36 @@ const removeMetaData = (application, names) => {
   application["meta-data"] = metaData.filter((item) => !names.includes(item.$?.["android:name"]));
 };
 
-const ensureResources = (projectRoot) => {
+const removeExistingIconResources = (resPath) => {
+  if (!fs.existsSync(resPath)) return;
+
+  for (const entry of fs.readdirSync(resPath, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith("drawable")) continue;
+    const resourcePath = path.join(resPath, entry.name);
+    for (const file of fs.readdirSync(resourcePath)) {
+      if (file.startsWith(`${ICON_RESOURCE}.`)) {
+        fs.rmSync(path.join(resourcePath, file), { force: true });
+      }
+    }
+  }
+};
+
+const ensureResources = (projectRoot, iconSource) => {
   const resPath = path.join(projectRoot, "android", "app", "src", "main", "res");
+  removeExistingIconResources(resPath);
+
+  if (iconSource) {
+    const iconPath = path.resolve(projectRoot, iconSource);
+    if (!fs.existsSync(iconPath)) {
+      throw new Error(`Notification icon source not found: ${iconPath}`);
+    }
+
+    const drawableNoDpiPath = path.join(resPath, "drawable-nodpi");
+    fs.mkdirSync(drawableNoDpiPath, { recursive: true });
+    fs.copyFileSync(iconPath, path.join(drawableNoDpiPath, `${ICON_RESOURCE}${path.extname(iconPath) || ".png"}`));
+    return;
+  }
+
   const drawablePath = path.join(resPath, "drawable");
   fs.mkdirSync(drawablePath, { recursive: true });
   fs.writeFileSync(path.join(drawablePath, `${ICON_RESOURCE}.xml`), NOTIFICATION_ICON_XML);
@@ -78,7 +106,8 @@ const ensureFirebaseJson = (projectRoot) => {
   firebaseJson[REACT_NATIVE_FIREBASE_ROOT] = {
     ...reactNativeConfig,
     messaging_android_notification_channel_id: CHANNEL_ID,
-    messaging_android_notification_color: `@color/${COLOR_RESOURCE}`
+    messaging_android_notification_color: `@color/${COLOR_RESOURCE}`,
+    messaging_android_notification_icon: `@drawable/${ICON_RESOURCE}`
   };
 
   fs.writeFileSync(firebaseJsonPath, `${JSON.stringify(firebaseJson, null, 2)}\n`);
@@ -173,6 +202,7 @@ const withVyahaAndroidNotifications = (config, props = {}) => {
   const color = props.color || DEFAULT_COLOR;
   const channelName = props.channelName || "Vyaha alerts";
   const channelDescription = props.channelDescription || "Important order, job, and account alerts.";
+  const iconSource = props.iconSource;
 
   config = withAndroidColors(config, (androidConfig) => {
     androidConfig.modResults = AndroidConfig.Colors.setColorItem(
@@ -200,7 +230,7 @@ const withVyahaAndroidNotifications = (config, props = {}) => {
   config = withDangerousMod(config, [
     "android",
     (androidConfig) => {
-      ensureResources(androidConfig.modRequest.projectRoot);
+      ensureResources(androidConfig.modRequest.projectRoot, iconSource);
       ensureFirebaseJson(androidConfig.modRequest.projectRoot);
       return androidConfig;
     }
