@@ -42,6 +42,7 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
+      "../../plugins/with-vyaha-gradle-config",
       [
         "../../plugins/with-vyaha-android-notifications",
         {
