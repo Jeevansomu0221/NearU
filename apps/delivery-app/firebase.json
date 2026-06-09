@@ -1,0 +1,7 @@
+{
+  "react-native": {
+    "messaging_android_notification_channel_id": "vyaha_alerts",
+    "messaging_android_notification_color": "@color/vyaha_notification_color",
+    "messaging_android_notification_icon": "@drawable/vyaha_notification_icon"
+  }
+}
