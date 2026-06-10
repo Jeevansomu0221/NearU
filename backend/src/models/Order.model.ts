@@ -233,6 +233,69 @@ const OrderSchema = new Schema({
 
   autoCancelledAt: {
     type: Date
+  },
+
+  deliveredAt: {
+    type: Date
+  },
+
+  codCollection: {
+    collectedAmount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    collectedAt: {
+      type: Date
+    },
+    collectedBy: {
+      type: Types.ObjectId,
+      ref: "User"
+    },
+    cashLedgerEntryId: {
+      type: Types.ObjectId,
+      ref: "CashLedgerEntry"
+    }
+  },
+
+  partnerPayout: {
+    status: {
+      type: String,
+      enum: ["PENDING", "PAID"],
+      default: "PENDING"
+    },
+    payoutId: {
+      type: Types.ObjectId,
+      ref: "Payout"
+    },
+    amount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    settledAt: {
+      type: Date
+    }
+  },
+
+  deliveryPayout: {
+    status: {
+      type: String,
+      enum: ["PENDING", "PAID"],
+      default: "PENDING"
+    },
+    payoutId: {
+      type: Types.ObjectId,
+      ref: "Payout"
+    },
+    amount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    settledAt: {
+      type: Date
+    }
   }
 }, { 
   timestamps: true 
@@ -244,6 +307,9 @@ OrderSchema.index({ partnerId: 1, createdAt: -1 });
 OrderSchema.index({ deliveryPartnerId: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
+OrderSchema.index({ status: 1, deliveredAt: -1 });
+OrderSchema.index({ "partnerPayout.status": 1, deliveredAt: -1 });
+OrderSchema.index({ "deliveryPayout.status": 1, deliveredAt: -1 });
 OrderSchema.index({ razorpayOrderId: 1 });
 OrderSchema.index({ status: 1, deliveryReadyAt: 1 });
 OrderSchema.index({ deliveryRejectedBy: 1, status: 1 });

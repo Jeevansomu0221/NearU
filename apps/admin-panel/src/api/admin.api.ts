@@ -203,6 +203,127 @@ export interface SupportTicketRecord {
   updatedAt: string;
 }
 
+export type PayoutRecipientType = "PARTNER" | "DELIVERY_PARTNER";
+export type PayoutPeriodType = "WEEKLY" | "MONTHLY";
+
+export interface PayoutBankDetails {
+  accountHolderName: string;
+  accountNumber: string;
+  ifsc: string;
+  bankDocumentType: string;
+  upiId?: string;
+}
+
+export interface PayoutOrderSummary {
+  _id: string;
+  createdAt: string;
+  deliveredAt: string;
+  itemTotal: number;
+  deliveryFee: number;
+  grandTotal: number;
+  amount: number;
+}
+
+export interface PayoutSummaryRow {
+  key: string;
+  recipientType: PayoutRecipientType;
+  recipientId: string;
+  name: string;
+  secondaryName: string;
+  phone: string;
+  bankDetails: PayoutBankDetails;
+  missingBankDetails: boolean;
+  periodType: PayoutPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  orderCount: number;
+  grossEarnings?: number;
+  cashHeld?: number;
+  offsetApplied?: number;
+  netPayable?: number;
+  cashDueToPlatform?: number;
+  pendingDepositAmount?: number;
+  amount: number;
+  orders: PayoutOrderSummary[];
+}
+
+export interface PayoutSummary {
+  periodType: PayoutPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  totals: {
+    partnerAmount: number;
+    partnerCount: number;
+    deliveryGrossAmount?: number;
+    deliveryCashOffset?: number;
+    deliveryCashDueToPlatform?: number;
+    deliveryAmount: number;
+    deliveryCount: number;
+    totalAmount: number;
+  };
+  partners: PayoutSummaryRow[];
+  deliveryPartners: PayoutSummaryRow[];
+}
+
+export interface PayoutRecord {
+  _id: string;
+  recipientType: PayoutRecipientType;
+  recipientId: string;
+  recipientSnapshot: {
+    name: string;
+    phone: string;
+    secondaryName: string;
+  };
+  periodType: PayoutPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  amount: number;
+  payoutBreakdown?: {
+    grossEarnings: number;
+    cashHeldBeforeOffset: number;
+    offsetApplied: number;
+    netPayable: number;
+    cashDueAfterOffset: number;
+  };
+  orderCount: number;
+  orderIds: string[];
+  bankSnapshot: PayoutBankDetails;
+  status: "PAID";
+  paidReference: string;
+  paidNotes: string;
+  paidAt: string;
+  paidBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CashDepositRecord {
+  _id: string;
+  deliveryPartnerId?: {
+    _id: string;
+    name?: string;
+    phone?: string;
+    cashBalance?: number;
+    pendingDepositAmount?: number;
+  };
+  userId?: {
+    _id: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+  };
+  type: "CASH_DEPOSIT_SUBMITTED";
+  amount: number;
+  balanceDelta: number;
+  status: "PENDING" | "VERIFIED" | "REJECTED";
+  reference?: string;
+  proofUrl?: string;
+  note?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
 interface ApiEnvelope<T> {
   success: boolean;
   data: T;
@@ -317,6 +438,53 @@ export const replyToSupportTicket = async (ticketId: string, message: string, st
 export const updateSupportTicketStatus = async (ticketId: string, status: SupportTicketRecord["status"]) => {
   const response = await api.put<ApiEnvelope<SupportTicketRecord>>(`/admin/support/tickets/${ticketId}/status`, {
     status
+  });
+  return response.data;
+};
+
+export const getPayoutSummary = async (params: { periodType: PayoutPeriodType; date?: string }) => {
+  const response = await api.get<ApiEnvelope<PayoutSummary>>("/admin/payouts/summary", { params });
+  return response.data.data;
+};
+
+export const getPayoutHistory = async (recipientType?: PayoutRecipientType) => {
+  const response = await api.get<ApiEnvelope<PayoutRecord[]>>("/admin/payouts/history", {
+    params: recipientType ? { recipientType } : undefined
+  });
+  return response.data.data;
+};
+
+export const createPayout = async (payload: {
+  recipientType: PayoutRecipientType;
+  recipientId: string;
+  periodType: PayoutPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  paidReference?: string;
+  paidNotes?: string;
+}) => {
+  const response = await api.post<ApiEnvelope<PayoutRecord>>("/admin/payouts", payload);
+  return response.data;
+};
+
+export const getCashDeposits = async (status: "PENDING" | "VERIFIED" | "REJECTED" | "ALL" = "PENDING") => {
+  const response = await api.get<ApiEnvelope<CashDepositRecord[]>>("/admin/cash-deposits", {
+    params: { status }
+  });
+  return response.data.data;
+};
+
+export const verifyCashDeposit = async (depositId: string, payload?: { reference?: string; note?: string }) => {
+  const response = await api.post<ApiEnvelope<{ deposit: CashDepositRecord }>>(
+    `/admin/cash-deposits/${depositId}/verify`,
+    payload || {}
+  );
+  return response.data;
+};
+
+export const rejectCashDeposit = async (depositId: string, rejectionReason: string) => {
+  const response = await api.post<ApiEnvelope<CashDepositRecord>>(`/admin/cash-deposits/${depositId}/reject`, {
+    rejectionReason
   });
   return response.data;
 };

@@ -1205,6 +1205,19 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
 
       <View style={styles.card}>
+        {renderSectionHeader("Payments", "Track wallet balance, weekly Vyaha payouts, and bank transfer history.")}
+        <TouchableOpacity style={styles.linkRow} onPress={() => navigation.navigate("PaymentHistory")}>
+          <View style={styles.linkRowLeft}>
+            <View style={[styles.linkIconCircle, { backgroundColor: "#EAF3FF" }]}>
+              <Ionicons name="wallet-outline" size={18} color="#60A5FA" />
+            </View>
+            <Text style={styles.linkRowText}>Payment history</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#8AA4C2" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.card}>
         {renderSectionHeader("App Settings", "Order, delivery, payout, and notification settings are in Settings screen.")}
         <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate("Settings")}>
           <Text style={styles.primaryButtonText}>Open Settings</Text>
@@ -1857,6 +1870,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#E6EEF9"
+  },
+  linkRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1
+  },
+  linkIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10
   },
   linkRowText: {
     fontSize: 14,

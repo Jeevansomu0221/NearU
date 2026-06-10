@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   ActivityIndicator,
@@ -48,6 +48,37 @@ interface ApiResponse<T = any> {
   message?: string;
   data?: T;
 }
+
+type OrderStatusUpdate = "ACCEPTED" | "REJECTED" | "PREPARING" | "READY";
+
+type OrderDetailsRouteParams = {
+  orderId: string;
+  orderStatus?: OrderStatusUpdate;
+  orderStatusUpdatedAt?: number;
+};
+
+const ORDER_STATUS_RANK: Record<string, number> = {
+  CONFIRMED: 1,
+  ACCEPTED: 2,
+  PREPARING: 3,
+  READY: 4,
+  ASSIGNED: 5,
+  PICKED_UP: 6,
+  DELIVERED: 7
+};
+
+const TERMINAL_ORDER_STATUSES = new Set(["CANCELLED", "REJECTED", "DELIVERED"]);
+
+const applyStatusOverride = (nextOrder: Order, statusOverride: OrderStatusUpdate | undefined, orderId: string) => {
+  if (!statusOverride || nextOrder._id !== orderId) return nextOrder;
+  if (TERMINAL_ORDER_STATUSES.has(nextOrder.status) && nextOrder.status !== statusOverride) return nextOrder;
+
+  const serverRank = ORDER_STATUS_RANK[nextOrder.status] || 0;
+  const overrideRank = ORDER_STATUS_RANK[statusOverride] || serverRank;
+  if (serverRank > overrideRank) return nextOrder;
+
+  return { ...nextOrder, status: statusOverride };
+};
 
 const getDeliveryPartnerName = (deliveryPartner: Order["deliveryPartnerId"]) => {
   if (!deliveryPartner) return "Not assigned yet";
@@ -173,20 +204,22 @@ function SwipeAction({ title, subtitle, actionLabel, accentColor, onConfirm, dis
 }
 
 export default function OrderDetailsScreen({ route, navigation }: any) {
-  const { orderId } = route.params;
+  const { orderId, orderStatus, orderStatusUpdatedAt } = route.params as OrderDetailsRouteParams;
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<OrderStatusUpdate | null>(null);
+  const [localStatusOverride, setLocalStatusOverride] = useState<OrderStatusUpdate | null>(null);
 
-  const loadOrderDetails = async () => {
+  const loadOrderDetails = useCallback(async (statusOverride?: OrderStatusUpdate) => {
     try {
       const res = await api.get(`/orders/partner/${orderId}`);
       const response = res.data as ApiResponse<Order>;
 
       if (response.success && response.data) {
-        setOrder(response.data);
+        const activeStatusOverride = statusOverride || localStatusOverride || orderStatus;
+        setOrder(applyStatusOverride(response.data, activeStatusOverride, orderId));
       } else {
         Alert.alert("Error", response.message || "Failed to load order details");
       }
@@ -197,26 +230,36 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [localStatusOverride, orderId, orderStatus]);
 
   useEffect(() => {
     loadOrderDetails();
-  }, [orderId]);
+  }, [loadOrderDetails]);
+
+  useEffect(() => {
+    if (!orderStatus || !orderStatusUpdatedAt) return;
+
+    setLocalStatusOverride(orderStatus);
+    setPendingStatus(null);
+    setOrder((current) => (current?._id === orderId ? { ...current, status: orderStatus } : current));
+  }, [orderId, orderStatus, orderStatusUpdatedAt]);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadOrderDetails();
   };
 
-  const performStatusUpdate = async (status: string) => {
+  const performStatusUpdate = async (status: OrderStatusUpdate) => {
     try {
       setUpdating(true);
       const res = await api.post(`/orders/partner/${orderId}/status`, { status });
       const response = res.data as ApiResponse<Order>;
 
       if (response.success) {
+        setLocalStatusOverride(status);
         setPendingStatus(null);
-        await loadOrderDetails();
+        setOrder((current) => (current ? { ...current, status } : current));
+        await loadOrderDetails(status);
       } else {
         Alert.alert("Error", response.message || "Failed to update order");
       }

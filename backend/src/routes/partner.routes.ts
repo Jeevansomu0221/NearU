@@ -7,6 +7,7 @@ import {
   getAllPartners,
   updateShopStatus,
   getPartnerStats,
+  getPartnerWallet,
   getMyStatus,
   completeSetup,
   getPartnerProfile,
@@ -44,6 +45,7 @@ router.delete("/onboarding-draft", authMiddleware, clearPartnerOnboardingDraft);
 ====================================================== */
 router.put("/shop-status", authMiddleware, updateShopStatus);
 router.get("/stats", authMiddleware, getPartnerStats);
+router.get("/wallet", authMiddleware, getPartnerWallet);
 
 // Profile Management
 router.get("/profile", authMiddleware, getPartnerProfile);

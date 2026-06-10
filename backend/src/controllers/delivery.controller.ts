@@ -209,6 +209,10 @@ export const getDeliveryProfile = async (req: AuthRequest, res: Response) => {
         status: deliveryPartner.status,
         totalDeliveries: deliveryPartner.totalDeliveries,
         totalEarnings: deliveryPartner.totalEarnings,
+        cashBalance: deliveryPartner.cashBalance || 0,
+        pendingDepositAmount: deliveryPartner.pendingDepositAmount || 0,
+        lastCashActivityAt: deliveryPartner.lastCashActivityAt,
+        lastCashActivityType: deliveryPartner.lastCashActivityType,
         rating: deliveryPartner.rating,
         ratingCount: deliveryPartner.ratingCount,
         isProfileComplete: isDeliveryProfileComplete({
@@ -513,6 +517,10 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         status: deliveryPartner.status,
         totalDeliveries: deliveryPartner.totalDeliveries,
         totalEarnings: deliveryPartner.totalEarnings,
+        cashBalance: deliveryPartner.cashBalance || 0,
+        pendingDepositAmount: deliveryPartner.pendingDepositAmount || 0,
+        lastCashActivityAt: deliveryPartner.lastCashActivityAt,
+        lastCashActivityType: deliveryPartner.lastCashActivityType,
         rating: deliveryPartner.rating,
         ratingCount: deliveryPartner.ratingCount,
         isProfileComplete: isDeliveryProfileComplete({
@@ -593,7 +601,10 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
           (sum, order) => sum + (typeof order.deliveryFee === "number" ? order.deliveryFee : 0),
           0
         ),
-        averageDeliveryTime
+        averageDeliveryTime,
+        cashBalance: deliveryPartner.cashBalance || 0,
+        pendingDepositAmount: deliveryPartner.pendingDepositAmount || 0,
+        cashDueToPlatform: Math.max((deliveryPartner.cashBalance || 0) - (deliveryPartner.pendingDepositAmount || 0), 0)
       },
       "Delivery stats retrieved successfully"
     );
@@ -629,7 +640,15 @@ export const getTodaysEarnings = async (req: AuthRequest, res: Response) => {
       0
     );
 
-    return successResponse(res, { earnings }, "Today's earnings retrieved successfully");
+    return successResponse(
+      res,
+      {
+        earnings,
+        cashBalance: deliveryPartner.cashBalance || 0,
+        pendingDepositAmount: deliveryPartner.pendingDepositAmount || 0
+      },
+      "Today's earnings retrieved successfully"
+    );
   } catch (error) {
     console.error("getTodaysEarnings error:", error);
     return errorResponse(res, "Failed to get today's earnings");

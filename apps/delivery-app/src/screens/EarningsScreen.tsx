@@ -7,9 +7,17 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl
+  RefreshControl,
+  Modal,
+  TextInput
 } from "react-native";
-import { getDeliveryStats, getTodaysEarnings } from "../api/delivery.api";
+import {
+  getCashLedger,
+  getDeliveryStats,
+  getTodaysEarnings,
+  submitCashDeposit,
+  type CashLedgerSummary
+} from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -20,6 +28,13 @@ export default function EarningsScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
+  const [cashLedger, setCashLedger] = useState<CashLedgerSummary | null>(null);
+  const [depositModalVisible, setDepositModalVisible] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositReference, setDepositReference] = useState("");
+  const [depositProofUrl, setDepositProofUrl] = useState("");
+  const [depositNote, setDepositNote] = useState("");
+  const [submittingDeposit, setSubmittingDeposit] = useState(false);
 
   useEffect(() => {
     loadEarningsData();
@@ -41,6 +56,11 @@ export default function EarningsScreen({ navigation }: any) {
         setStats(statsResponse.data);
         setTodayEarnings(statsResponse.data.todaysEarnings ?? todayEarnings);
       }
+
+      const cashResponse = await getCashLedger();
+      if (cashResponse.success && cashResponse.data) {
+        setCashLedger(cashResponse.data);
+      }
     } catch (error: any) {
       console.error("Error loading earnings:", error);
       Alert.alert("Error", "Failed to load earnings data");
@@ -57,6 +77,42 @@ export default function EarningsScreen({ navigation }: any) {
 
   const formatCurrency = (amount: number) => {
     return `₹${amount.toLocaleString('en-IN')}`;
+  };
+
+  const handleSubmitDeposit = async () => {
+    const amount = Number(depositAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert("Invalid amount", "Enter the amount you deposited back to the platform.");
+      return;
+    }
+    if (amount > (cashLedger?.cashBalance || 0)) {
+      Alert.alert("Invalid amount", "Deposit amount cannot be more than your current cash balance.");
+      return;
+    }
+
+    try {
+      setSubmittingDeposit(true);
+      const response = await submitCashDeposit({
+        amount,
+        reference: depositReference.trim(),
+        proofUrl: depositProofUrl.trim(),
+        note: depositNote.trim()
+      });
+      if (!response.success) {
+        Alert.alert("Deposit failed", response.message || "Could not submit deposit details.");
+        return;
+      }
+
+      Alert.alert("Submitted", "Your cash deposit is waiting for admin verification.");
+      setDepositModalVisible(false);
+      setDepositAmount("");
+      setDepositReference("");
+      setDepositProofUrl("");
+      setDepositNote("");
+      loadEarningsData();
+    } finally {
+      setSubmittingDeposit(false);
+    }
   };
 
   const earningsHistory = [
@@ -165,6 +221,41 @@ export default function EarningsScreen({ navigation }: any) {
         </View>
       </View>
 
+      <View style={styles.cashCard}>
+        <View style={styles.withdrawalHeader}>
+          <Ionicons name="wallet-outline" size={24} color="#B45309" />
+          <Text style={styles.withdrawalTitle}>COD Cash Balance</Text>
+        </View>
+        <Text style={styles.cashAmount}>{formatCurrency(cashLedger?.cashBalance || stats?.cashBalance || 0)}</Text>
+        <Text style={styles.withdrawalNote}>
+          Cash collected from COD orders is adjusted against your rider earnings first. Any remaining amount must be deposited back to the platform.
+        </Text>
+        <View style={styles.cashSummaryRow}>
+          <Text style={styles.cashSummaryLabel}>Pending deposit verification</Text>
+          <Text style={styles.cashSummaryValue}>
+            {formatCurrency(cashLedger?.pendingDepositAmount || stats?.pendingDepositAmount || 0)}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.depositButton, (cashLedger?.cashBalance || stats?.cashBalance || 0) <= 0 && styles.disabledButton]}
+          disabled={(cashLedger?.cashBalance || stats?.cashBalance || 0) <= 0}
+          onPress={() => setDepositModalVisible(true)}
+        >
+          <Text style={styles.withdrawButtonText}>Submit Cash Deposit</Text>
+        </TouchableOpacity>
+        {cashLedger?.entries?.slice(0, 3).map((entry) => (
+          <View key={entry._id} style={styles.ledgerItem}>
+            <View>
+              <Text style={styles.ledgerTitle}>{entry.type.replace(/_/g, " ")}</Text>
+              <Text style={styles.ledgerMeta}>{new Date(entry.createdAt).toLocaleString()} · {entry.status}</Text>
+            </View>
+            <Text style={[styles.ledgerAmount, entry.balanceDelta < 0 && styles.ledgerAmountNegative]}>
+              {entry.balanceDelta < 0 ? "-" : "+"}{formatCurrency(Math.abs(entry.balanceDelta || entry.amount))}
+            </Text>
+          </View>
+        ))}
+      </View>
+
       {/* Earnings Breakdown */}
       <View style={styles.breakdownCard}>
         <Text style={styles.breakdownTitle}>Earnings Breakdown</Text>
@@ -250,6 +341,56 @@ export default function EarningsScreen({ navigation }: any) {
         </Text>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={depositModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDepositModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.depositModal}>
+            <Text style={styles.modalTitle}>Submit Cash Deposit</Text>
+            <Text style={styles.modalDescription}>
+              Enter details after depositing COD cash back to the platform. Admin will verify before your balance is reduced.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              keyboardType="numeric"
+              placeholder="Amount"
+              value={depositAmount}
+              onChangeText={setDepositAmount}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Reference / UTR"
+              value={depositReference}
+              onChangeText={setDepositReference}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Proof URL (optional)"
+              value={depositProofUrl}
+              onChangeText={setDepositProofUrl}
+            />
+            <TextInput
+              style={[styles.modalInput, styles.modalTextarea]}
+              placeholder="Note (optional)"
+              multiline
+              value={depositNote}
+              onChangeText={setDepositNote}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDepositModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSubmitButton} onPress={handleSubmitDeposit} disabled={submittingDeposit}>
+                <Text style={styles.withdrawButtonText}>{submittingDeposit ? "Submitting..." : "Submit"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -507,6 +648,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
+  cashCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
   withdrawalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -524,6 +679,12 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     marginBottom: 8,
   },
+  cashAmount: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#B45309',
+    marginBottom: 8,
+  },
   withdrawalNote: {
     fontSize: 13,
     color: '#666',
@@ -536,10 +697,126 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+  depositButton: {
+    backgroundColor: '#B45309',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
   withdrawButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  cashSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#FDE68A',
+  },
+  cashSummaryLabel: {
+    fontSize: 13,
+    color: '#92400E',
+    flex: 1,
+  },
+  cashSummaryValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  ledgerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  ledgerTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+  },
+  ledgerMeta: {
+    fontSize: 11,
+    color: '#777',
+    marginTop: 2,
+  },
+  ledgerAmount: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  ledgerAmountNegative: {
+    color: '#027A48',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  depositModal: {
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 8,
+  },
+  modalDescription: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    marginBottom: 12,
+    backgroundColor: '#FAFAFA',
+  },
+  modalTextarea: {
+    minHeight: 84,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  modalSubmitButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#B45309',
   },
   footer: {
     padding: 16,

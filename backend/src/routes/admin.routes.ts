@@ -17,6 +17,16 @@ import {
   replyToSupportTicket,
   updateSupportTicketStatus
 } from "../controllers/support.controller";
+import {
+  createPayout,
+  getPayoutHistory,
+  getPayoutSummary
+} from "../controllers/payout.controller";
+import {
+  getAdminCashDeposits,
+  rejectCashDeposit,
+  verifyCashDeposit
+} from "../controllers/cash.controller";
 
 const router = Router();
 
@@ -31,6 +41,14 @@ router.get("/dashboard/stats", getDashboardStats);
 router.get("/orders", getAllOrders);
 router.get("/orders/:orderId", getOrderDetails);
 router.put("/orders/:orderId/status", updateOrderStatus);
+
+// Payout Management
+router.get("/payouts/summary", getPayoutSummary);
+router.get("/payouts/history", getPayoutHistory);
+router.post("/payouts", createPayout);
+router.get("/cash-deposits", getAdminCashDeposits);
+router.post("/cash-deposits/:depositId/verify", verifyCashDeposit);
+router.post("/cash-deposits/:depositId/reject", rejectCashDeposit);
 
 // Partner Management
 router.get("/partners", getPartnerRequests);

@@ -18,6 +18,10 @@ import {
   updateDeliveryLocation,
   calculateDeliveryDistance
 } from "../controllers/delivery.controller";
+import {
+  getMyCashLedger,
+  submitCashDeposit
+} from "../controllers/cash.controller";
 import { roleMiddleware } from "../middlewares/role.middleware";
 
 const router = express.Router();
@@ -32,6 +36,8 @@ router.put("/profile", updateDeliveryProfile);
 // =================== STATS ===================
 router.get("/stats", getDeliveryStats);
 router.get("/earnings/today", getTodaysEarnings);
+router.get("/cash-ledger", getMyCashLedger);
+router.post("/cash-deposits", submitCashDeposit);
 
 // =================== ADMIN DELIVERY VERIFICATION ===================
 router.get("/admin/all", roleMiddleware(["admin"]), getAllDeliveryPartnersForAdmin);

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -21,8 +22,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URLS } from "../api/client";
 import { buildLegalUrl } from "../constants/legal";
 import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
+import { deleteAccount } from "../api/auth.api";
 import { getDeliveryStats, getTodaysEarnings, type DeliveryStats } from "../api/delivery.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
+import SupportModal from "../components/SupportModal";
 import {
   getNotificationPermissionLabel,
   openNotificationSettings,
@@ -32,24 +35,25 @@ import {
 
 const DRAFT_KEY = "delivery_registration_draft_v2";
 const TERMS_URL = buildLegalUrl("delivery-policy");
+const DELETE_ACCOUNT_URL = buildLegalUrl("delete-account");
 const STEPS = ["Basic", "Vehicle", "Documents", "Bank"] as const;
 const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "Motorcycle", "Bicycle", "Cycle", "Car"];
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-  "application/pdf"
+  "image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"
 ]);
+
+const VEHICLE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Bike: "bicycle-outline",
+  Scooter: "bicycle-outline",
+  Motorcycle: "bicycle-outline",
+  Bicycle: "bicycle-outline",
+  Cycle: "bicycle-outline",
+  Car: "car-outline"
+};
 
 const getUploadMimeType = (filename: string, mimeType?: string | null) => {
   const normalizedMimeType = mimeType === "image/jpg" ? "image/jpeg" : mimeType?.toLowerCase();
-  if (normalizedMimeType && ALLOWED_UPLOAD_MIME_TYPES.has(normalizedMimeType)) {
-    return normalizedMimeType;
-  }
-
+  if (normalizedMimeType && ALLOWED_UPLOAD_MIME_TYPES.has(normalizedMimeType)) return normalizedMimeType;
   const extension = filename.split(".").pop()?.toLowerCase();
   if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
   if (extension === "png") return "image/png";
@@ -61,10 +65,7 @@ const getUploadMimeType = (filename: string, mimeType?: string | null) => {
 };
 
 const ensureUploadFileName = (filename: string, mimeType: string) => {
-  if (/\.[A-Za-z0-9]+$/.test(filename)) {
-    return filename;
-  }
-
+  if (/\.[A-Za-z0-9]+$/.test(filename)) return filename;
   if (mimeType === "application/pdf") return `${filename}.pdf`;
   if (mimeType === "image/png") return `${filename}.png`;
   if (mimeType === "image/webp") return `${filename}.webp`;
@@ -76,32 +77,16 @@ const ensureUploadFileName = (filename: string, mimeType: string) => {
 const createUploadFileName = (field: UploadField, mimeType: string, originalName?: string | null) => {
   const safeBase = `${field}-${Date.now()}`;
   const trimmedName = originalName?.trim();
-
-  if (trimmedName && /\.[A-Za-z0-9]+$/.test(trimmedName)) {
-    return trimmedName.replace(/[^A-Za-z0-9._-]/g, "_");
-  }
-
+  if (trimmedName && /\.[A-Za-z0-9]+$/.test(trimmedName)) return trimmedName.replace(/[^A-Za-z0-9._-]/g, "_");
   return ensureUploadFileName(safeBase, mimeType);
 };
 
 type UploadField =
-  | "profilePhotoUrl"
-  | "aadhaarFrontUrl"
-  | "aadhaarBackUrl"
-  | "panFrontUrl"
-  | "selfiePhotoUrl"
-  | "drivingLicenseFrontUrl"
-  | "drivingLicenseBackUrl"
-  | "vehicleRcFrontUrl"
-  | "vehicleRcBackUrl"
-  | "aadhaarUrl"
-  | "panUrl"
-  | "drivingLicenseUrl"
-  | "vehicleRcUrl"
-  | "insuranceUrl"
-  | "cancelledChequeUrl"
-  | "bankPassbookUrl"
-  | "bankStatementUrl";
+  | "profilePhotoUrl" | "aadhaarFrontUrl" | "aadhaarBackUrl" | "panFrontUrl"
+  | "selfiePhotoUrl" | "drivingLicenseFrontUrl" | "drivingLicenseBackUrl"
+  | "vehicleRcFrontUrl" | "vehicleRcBackUrl" | "aadhaarUrl" | "panUrl"
+  | "drivingLicenseUrl" | "vehicleRcUrl" | "insuranceUrl"
+  | "cancelledChequeUrl" | "bankPassbookUrl" | "bankStatementUrl";
 
 type Docs = NonNullable<DeliveryProfile["documents"]>;
 type ReuploadKey = keyof NonNullable<Docs["reuploadFlags"]>;
@@ -116,66 +101,33 @@ type AddressForm = {
   pincode: string;
 };
 
-type UploadAsset = {
-  uri: string;
-  name: string;
-  mimeType?: string | null;
-};
-
-type UploadApiResponse = {
-  success?: boolean;
-  message?: string;
-  data?: {
-    url?: string;
-  };
-};
+type UploadAsset = { uri: string; name: string; mimeType?: string | null };
+type UploadApiResponse = { success?: boolean; message?: string; data?: { url?: string } };
+type ActiveDocumentItem = { field: UploadField; title: string; subtitle: string; required: boolean; url?: string };
 
 const DOCUMENT_UPLOAD_FIELDS = new Set<UploadField>([
-  "aadhaarFrontUrl",
-  "aadhaarBackUrl",
-  "panFrontUrl",
-  "selfiePhotoUrl",
-  "drivingLicenseFrontUrl",
-  "drivingLicenseBackUrl",
-  "vehicleRcFrontUrl",
-  "vehicleRcBackUrl",
-  "aadhaarUrl",
-  "panUrl",
-  "drivingLicenseUrl",
-  "vehicleRcUrl",
-  "insuranceUrl",
-  "cancelledChequeUrl",
-  "bankPassbookUrl",
-  "bankStatementUrl"
+  "aadhaarFrontUrl", "aadhaarBackUrl", "panFrontUrl", "selfiePhotoUrl",
+  "drivingLicenseFrontUrl", "drivingLicenseBackUrl", "vehicleRcFrontUrl",
+  "vehicleRcBackUrl", "aadhaarUrl", "panUrl", "drivingLicenseUrl",
+  "vehicleRcUrl", "insuranceUrl", "cancelledChequeUrl", "bankPassbookUrl", "bankStatementUrl"
 ]);
+
 const FRONT_FIELD_ALIASES: Partial<Record<UploadField, keyof Docs>> = {
-  aadhaarUrl: "aadhaarFrontUrl",
-  drivingLicenseUrl: "drivingLicenseFrontUrl",
-  vehicleRcUrl: "vehicleRcFrontUrl"
+  aadhaarUrl: "aadhaarFrontUrl", drivingLicenseUrl: "drivingLicenseFrontUrl", vehicleRcUrl: "vehicleRcFrontUrl"
 };
+
 const REUPLOAD_FIELD_KEYS: Partial<Record<UploadField, ReuploadKey>> = {
-  profilePhotoUrl: "profilePhotoUrl",
-  aadhaarUrl: "aadhaarFrontUrl",
-  aadhaarFrontUrl: "aadhaarFrontUrl",
-  aadhaarBackUrl: "aadhaarBackUrl",
-  panUrl: "panFrontUrl",
-  panFrontUrl: "panFrontUrl",
-  selfiePhotoUrl: "selfiePhotoUrl",
-  drivingLicenseUrl: "drivingLicenseFrontUrl",
-  drivingLicenseFrontUrl: "drivingLicenseFrontUrl",
-  drivingLicenseBackUrl: "drivingLicenseBackUrl",
-  vehicleRcUrl: "vehicleRcFrontUrl",
-  vehicleRcFrontUrl: "vehicleRcFrontUrl",
-  vehicleRcBackUrl: "vehicleRcBackUrl",
-  insuranceUrl: "insuranceUrl",
-  cancelledChequeUrl: "bankProofUrl",
-  bankPassbookUrl: "bankProofUrl",
-  bankStatementUrl: "bankProofUrl"
+  profilePhotoUrl: "profilePhotoUrl", aadhaarUrl: "aadhaarFrontUrl", aadhaarFrontUrl: "aadhaarFrontUrl",
+  aadhaarBackUrl: "aadhaarBackUrl", panUrl: "panFrontUrl", panFrontUrl: "panFrontUrl",
+  selfiePhotoUrl: "selfiePhotoUrl", drivingLicenseUrl: "drivingLicenseFrontUrl",
+  drivingLicenseFrontUrl: "drivingLicenseFrontUrl", drivingLicenseBackUrl: "drivingLicenseBackUrl",
+  vehicleRcUrl: "vehicleRcFrontUrl", vehicleRcFrontUrl: "vehicleRcFrontUrl",
+  vehicleRcBackUrl: "vehicleRcBackUrl", insuranceUrl: "insuranceUrl",
+  cancelledChequeUrl: "bankProofUrl", bankPassbookUrl: "bankProofUrl", bankStatementUrl: "bankProofUrl"
 };
 
 const normalizeDocuments = (input?: Partial<Docs> | null): Docs => {
   const next = { ...emptyDocs(), ...(input || {}) } as Docs;
-
   next.aadhaarFrontUrl = next.aadhaarFrontUrl || next.aadhaarUrl || "";
   next.aadhaarUrl = next.aadhaarUrl || next.aadhaarFrontUrl || "";
   next.panFrontUrl = next.panFrontUrl || next.panUrl || "";
@@ -187,90 +139,50 @@ const normalizeDocuments = (input?: Partial<Docs> | null): Docs => {
   next.bankDocumentType = next.bankDocumentType || "cheque";
   next.reuploadFlags = next.reuploadFlags || {};
   next.reuploadNotes = next.reuploadNotes || "";
-
   return next;
 };
 
 const emptyDocs = (): Docs => ({
-  aadhaarNumber: "",
-  aadhaarFrontUrl: "",
-  aadhaarBackUrl: "",
-  aadhaarUrl: "",
-  panNumber: "",
-  panFrontUrl: "",
-  panUrl: "",
-  selfiePhotoUrl: "",
-  drivingLicenseFrontUrl: "",
-  drivingLicenseBackUrl: "",
-  drivingLicenseUrl: "",
-  vehicleRcFrontUrl: "",
-  vehicleRcBackUrl: "",
-  vehicleRcUrl: "",
-  insuranceUrl: "",
-  bankDocumentType: "cheque",
-  bankAccountHolderName: "",
-  cancelledChequeUrl: "",
-  bankPassbookUrl: "",
-  bankStatementUrl: "",
-  bankAccountNumber: "",
-  bankIfsc: "",
-  submittedAt: "",
-  isComplete: false,
-  reuploadFlags: {},
-  reuploadNotes: ""
+  aadhaarNumber: "", aadhaarFrontUrl: "", aadhaarBackUrl: "", aadhaarUrl: "",
+  panNumber: "", panFrontUrl: "", panUrl: "", selfiePhotoUrl: "",
+  drivingLicenseFrontUrl: "", drivingLicenseBackUrl: "", drivingLicenseUrl: "",
+  vehicleRcFrontUrl: "", vehicleRcBackUrl: "", vehicleRcUrl: "", insuranceUrl: "",
+  bankDocumentType: "cheque", bankAccountHolderName: "", cancelledChequeUrl: "",
+  bankPassbookUrl: "", bankStatementUrl: "", bankAccountNumber: "", bankIfsc: "",
+  submittedAt: "", isComplete: false, reuploadFlags: {}, reuploadNotes: ""
 });
 
 const emptyAddress = (): AddressForm => ({
-  flatNo: "",
-  apartment: "",
-  colony: "",
-  area: "",
-  city: "",
-  state: "",
-  pincode: ""
+  flatNo: "", apartment: "", colony: "", area: "", city: "", state: "", pincode: ""
 });
 
 const ADDRESS_LABELS: { key: keyof AddressForm; label: string }[] = [
-  { key: "flatNo", label: "Flat No" },
-  { key: "apartment", label: "Apartment" },
-  { key: "colony", label: "Colony" },
-  { key: "area", label: "Area" },
-  { key: "city", label: "City" },
-  { key: "state", label: "State" },
-  { key: "pincode", label: "Pincode" }
+  { key: "flatNo", label: "Flat No" }, { key: "apartment", label: "Apartment" },
+  { key: "colony", label: "Colony" }, { key: "area", label: "Area" },
+  { key: "city", label: "City" }, { key: "state", label: "State" }, { key: "pincode", label: "Pincode" }
 ];
 
 const buildAddressString = (form: AddressForm) => {
   const line1 = [form.flatNo.trim(), form.apartment.trim()].filter(Boolean).join(", ");
   const line2 = [form.colony.trim(), form.area.trim()].filter(Boolean).join(", ");
   const line3 = [form.city.trim(), form.state.trim(), form.pincode.trim()].filter(Boolean).join(", ");
-
   return [line1, line2, line3].filter(Boolean).join(", ");
 };
 
 const parseAddressString = (address?: string | null): AddressForm => {
   const next = emptyAddress();
   if (!address) return next;
-
   const labelledValueFound = ADDRESS_LABELS.some(({ label }) =>
     new RegExp(`${label}\\s*:`,"i").test(address)
   );
-
   if (labelledValueFound) {
     for (const { key, label } of ADDRESS_LABELS) {
       const match = address.match(new RegExp(`${label}\\s*:\\s*([^|\\n]+)`, "i"));
-      if (match?.[1]) {
-        next[key] = match[1].trim();
-      }
+      if (match?.[1]) next[key] = match[1].trim();
     }
     return next;
   }
-
-  const parts = address
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
+  const parts = address.split(",").map((item) => item.trim()).filter(Boolean);
   if (parts.length >= 1) next.flatNo = parts[0] || "";
   if (parts.length >= 2) next.apartment = parts[1] || "";
   if (parts.length >= 3) next.colony = parts[2] || "";
@@ -278,7 +190,6 @@ const parseAddressString = (address?: string | null): AddressForm => {
   if (parts.length >= 5) next.city = parts[4] || "";
   if (parts.length >= 6) next.state = parts[5] || "";
   if (parts.length >= 7) next.pincode = parts[6] || "";
-
   return next;
 };
 
@@ -287,66 +198,41 @@ const GENERIC_UPLOAD_ERROR = "Something went wrong. Please try again.";
 
 const uploadAssetToServer = async (asset: UploadAsset, field: UploadField) => {
   const token = await AsyncStorage.getItem("token");
-  if (!token) {
-    throw new Error(GENERIC_UPLOAD_ERROR);
-  }
-
+  if (!token) throw new Error(GENERIC_UPLOAD_ERROR);
   const rawFileName = asset.name || asset.uri.split("/").pop() || null;
   const mimeType = getUploadMimeType(rawFileName || field, asset.mimeType);
   const fileName = createUploadFileName(field, mimeType, rawFileName);
   const formData = new FormData();
-
-  // @ts-ignore React Native FormData
-  formData.append("image", {
-    uri: asset.uri,
-    type: mimeType,
-    name: fileName
-  });
-
+  // @ts-ignore
+  formData.append("image", { uri: asset.uri, type: mimeType, name: fileName });
   let lastErrorMessage = GENERIC_UPLOAD_ERROR;
-
   for (const baseUrl of API_BASE_URLS) {
     try {
-      console.log(`Uploading file via fetch to ${baseUrl}/upload/image`, {
-        field,
-        uri: asset.uri,
-        mimeType,
-        fileName
-      });
-
       const response = await fetch(`${baseUrl}/upload/image`, {
         method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`
-        },
+        headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
         body: formData
       });
-
       const responseData = await response.json() as UploadApiResponse;
-
       if (!response.ok || !responseData?.success || !responseData?.data?.url) {
         lastErrorMessage = GENERIC_UPLOAD_ERROR;
         continue;
       }
-
       return responseData.data.url;
-    } catch (error: any) {
+    } catch {
       lastErrorMessage = GENERIC_UPLOAD_ERROR;
-      console.log(`Upload attempt failed for ${baseUrl}`, { message: lastErrorMessage });
     }
   }
-
   throw new Error(lastErrorMessage);
 };
 
-const statusTone: Record<DeliveryProfile["status"], { bg: string; fg: string; label: string }> = {
-  PENDING: { bg: "#FFF4E8", fg: "#C2410C", label: "Pending Review" },
-  VERIFIED: { bg: "#ECFDF3", fg: "#027A48", label: "Verified" },
-  ACTIVE: { bg: "#E8FFF3", fg: "#087443", label: "Active" },
-  REJECTED: { bg: "#FEF3F2", fg: "#B42318", label: "Rejected" },
-  SUSPENDED: { bg: "#FDECEC", fg: "#B42318", label: "Suspended" },
-  INACTIVE: { bg: "#F2F4F7", fg: "#475467", label: "Incomplete" }
+const statusTone: Record<DeliveryProfile["status"], { bg: string; fg: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  PENDING: { bg: "#FFF4E8", fg: "#C2410C", label: "Pending Review", icon: "time-outline" },
+  VERIFIED: { bg: "#ECFDF3", fg: "#027A48", label: "Verified", icon: "checkmark-circle-outline" },
+  ACTIVE: { bg: "#E8FFF3", fg: "#087443", label: "Active", icon: "checkmark-circle-outline" },
+  REJECTED: { bg: "#FEF3F2", fg: "#B42318", label: "Rejected", icon: "close-circle-outline" },
+  SUSPENDED: { bg: "#FDECEC", fg: "#B42318", label: "Suspended", icon: "shield-outline" },
+  INACTIVE: { bg: "#F2F4F7", fg: "#475467", label: "Incomplete", icon: "ellipse-outline" }
 };
 
 export default function ProfileScreen({ navigation, route }: any) {
@@ -363,6 +249,8 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [editingBank, setEditingBank] = useState(false);
   const [stats, setStats] = useState<DeliveryStats | null>(null);
   const [todayEarnings, setTodayEarnings] = useState(0);
+  const [supportModalVisible, setSupportModalVisible] = useState(false);
+  const [stepAnim] = useState(() => new Animated.Value(0));
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -387,6 +275,10 @@ export default function ProfileScreen({ navigation, route }: any) {
     }));
   };
 
+  useEffect(() => {
+    Animated.spring(stepAnim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 9 }).start();
+  }, [step]);
+
   const syncProfile = (data: DeliveryProfile) => {
     setProfile(data);
     setName(data.name || "");
@@ -407,17 +299,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const loadDashboardStats = async () => {
     try {
       const [statsResponse, earningsResponse] = await Promise.all([
-        getDeliveryStats(),
-        getTodaysEarnings()
+        getDeliveryStats(), getTodaysEarnings()
       ]);
-
-      if (statsResponse.success && statsResponse.data) {
-        setStats(statsResponse.data);
-      }
-
-      if (earningsResponse.success && earningsResponse.data) {
-        setTodayEarnings(earningsResponse.data.earnings);
-      }
+      if (statsResponse.success && statsResponse.data) setStats(statsResponse.data);
+      if (earningsResponse.success && earningsResponse.data) setTodayEarnings(earningsResponse.data.earnings);
     } catch (error) {
       console.log("Failed to load delivery dashboard stats", error);
     }
@@ -429,9 +314,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         const response = await getDeliveryProfile();
         if (response.success && response.data) {
           syncProfile(response.data);
-          if (response.data.status === "ACTIVE") {
-            loadDashboardStats().catch(() => {});
-          }
+          if (response.data.status === "ACTIVE") loadDashboardStats().catch(() => {});
           const draft = await AsyncStorage.getItem(DRAFT_KEY);
           if ((forceComplete || !response.data.isProfileComplete) && draft) {
             const parsed = JSON.parse(draft);
@@ -459,37 +342,19 @@ export default function ProfileScreen({ navigation, route }: any) {
         setLoading(false);
       }
     };
-
     load();
   }, []);
 
   useEffect(() => {
-    AsyncStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({
-        name,
-        email,
-        dateOfBirth,
-        address: formattedAddress,
-        addressForm,
-        emergencyContactName,
-        emergencyContactPhone,
-        vehicleType,
-        vehicleNumber,
-        licenseNumber,
-        profilePhotoUrl,
-        isAvailable,
-        termsAccepted,
-        documents,
-        step
-      })
-    ).catch(() => {});
+    AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
+      name, email, dateOfBirth, address: formattedAddress, addressForm,
+      emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber,
+      licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step
+    })).catch(() => {});
   }, [name, email, dateOfBirth, formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step]);
 
   const isActiveDashboard = !forceComplete && profile?.status === "ACTIVE";
-
   const formatCurrency = (amount?: number | null) => `Rs ${(amount || 0).toLocaleString("en-IN")}`;
-
   const safeValue = (value?: string | null, fallback = "Not added") => {
     const trimmed = value?.trim();
     return trimmed ? trimmed : fallback;
@@ -502,29 +367,50 @@ export default function ProfileScreen({ navigation, route }: any) {
     const today = new Date();
     let age = today.getFullYear() - parsed.getFullYear();
     const monthDelta = today.getMonth() - parsed.getMonth();
-    if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < parsed.getDate())) {
-      age -= 1;
-    }
+    if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < parsed.getDate())) age -= 1;
     return age >= 18;
   };
 
   const employeeId = profile?._id ? `DLV-${profile._id.slice(-6).toUpperCase()}` : "Assigned after verification";
-
   const verificationStatusLabel = profile?.status === "ACTIVE" ? "Approved" : statusTone[profile?.status || "INACTIVE"].label;
 
-  const documentStatusItems = [
-    { label: "Profile photo", ready: Boolean(profilePhotoUrl) },
-    { label: "Selfie verification", ready: Boolean(documents.selfiePhotoUrl) },
-    { label: "Driving license", ready: !requiresMotorDocuments || Boolean(documents.drivingLicenseFrontUrl && documents.drivingLicenseBackUrl) },
-    { label: "Vehicle RC", ready: !requiresMotorDocuments || Boolean(documents.vehicleRcFrontUrl && documents.vehicleRcBackUrl) },
-    { label: "Insurance", ready: !requiresMotorDocuments || Boolean(documents.insuranceUrl) },
-    { label: "ID proof", ready: Boolean((documents.aadhaarFrontUrl && documents.aadhaarBackUrl) || documents.panFrontUrl) }
+  const bankProofField: UploadField =
+    documents.bankDocumentType === "passbook" ? "bankPassbookUrl"
+      : documents.bankDocumentType === "statement" ? "bankStatementUrl"
+        : "cancelledChequeUrl";
+
+  const activeDocumentItems: ActiveDocumentItem[] = [
+    { field: "profilePhotoUrl", title: "Profile photo", subtitle: "Used to identify you during pickup and delivery", required: true, url: profilePhotoUrl },
+    { field: "aadhaarUrl", title: "Aadhaar front", subtitle: "Government ID proof", required: true, url: documents.aadhaarFrontUrl || documents.aadhaarUrl },
+    { field: "aadhaarBackUrl", title: "Aadhaar back", subtitle: "Address side of Aadhaar", required: true, url: documents.aadhaarBackUrl },
+    { field: "panFrontUrl", title: "PAN card", subtitle: "Tax identity proof", required: true, url: documents.panFrontUrl || documents.panUrl },
+    { field: "selfiePhotoUrl", title: "Selfie verification", subtitle: "Live selfie for verification", required: true, url: documents.selfiePhotoUrl },
+    { field: "drivingLicenseUrl", title: "Driving license front", subtitle: requiresMotorDocuments ? "Required for motor vehicle delivery" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.drivingLicenseFrontUrl || documents.drivingLicenseUrl },
+    { field: "drivingLicenseBackUrl", title: "Driving license back", subtitle: requiresMotorDocuments ? "Required for motor vehicle delivery" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.drivingLicenseBackUrl },
+    { field: "vehicleRcUrl", title: "Vehicle RC front", subtitle: requiresMotorDocuments ? "Vehicle registration proof" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.vehicleRcFrontUrl || documents.vehicleRcUrl },
+    { field: "vehicleRcBackUrl", title: "Vehicle RC back", subtitle: requiresMotorDocuments ? "Vehicle registration proof" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.vehicleRcBackUrl },
+    { field: "insuranceUrl", title: "Vehicle insurance", subtitle: requiresMotorDocuments ? "Active insurance document" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.insuranceUrl },
+    { field: bankProofField, title: "Bank proof", subtitle: "Cancelled cheque, passbook, or bank statement", required: true, url: documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl }
   ];
 
   const handleLogout = async () => {
     await unregisterPushNotifications().catch(() => {});
     await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert("Delete account", "This will deactivate your delivery login and anonymize profile, document, and address details where possible. Some payout, tax, or delivery records may be retained where required.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        try {
+          await deleteAccount();
+          navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+        } catch (error: any) {
+          Alert.alert("Error", error.response?.data?.message || error.message || "Failed to delete account");
+        }
+      }}
+    ]);
   };
 
   const handleNotificationPreferences = async () => {
@@ -542,9 +428,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     setAvailabilitySaving(true);
     try {
       const response = await updateDeliveryProfile({ isAvailable: nextValue });
-      if (!response.success || !response.data) {
-        throw new Error(response.message || "Failed to update availability");
-      }
+      if (!response.success || !response.data) throw new Error(response.message || "Failed to update availability");
       syncProfile(response.data);
     } catch (error: any) {
       setIsAvailable(!nextValue);
@@ -555,34 +439,15 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const handleSaveBankDetails = async () => {
-    if (!documents.bankAccountHolderName?.trim()) {
-      Alert.alert("Missing details", "Account holder name is required.");
-      return;
-    }
-    if (!documents.bankIfsc?.trim()) {
-      Alert.alert("Missing details", "IFSC code is required.");
-      return;
-    }
-    if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) {
-      Alert.alert("Invalid details", "Bank account number must be numeric.");
-      return;
-    }
-
+    if (!documents.bankAccountHolderName?.trim()) { Alert.alert("Missing details", "Account holder name is required."); return; }
+    if (!documents.bankIfsc?.trim()) { Alert.alert("Missing details", "IFSC code is required."); return; }
+    if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) { Alert.alert("Invalid details", "Bank account number must be numeric."); return; }
     setBankSaving(true);
     try {
       const response = await updateDeliveryProfile({
-        documents: {
-          ...documents,
-          bankAccountHolderName: documents.bankAccountHolderName?.trim(),
-          bankAccountNumber: documents.bankAccountNumber?.trim() || "",
-          bankIfsc: documents.bankIfsc?.trim().toUpperCase()
-        }
+        documents: { ...documents, bankAccountHolderName: documents.bankAccountHolderName?.trim(), bankAccountNumber: documents.bankAccountNumber?.trim() || "", bankIfsc: documents.bankIfsc?.trim().toUpperCase() }
       });
-
-      if (!response.success || !response.data) {
-        throw new Error(response.message || "Failed to update payout details");
-      }
-
+      if (!response.success || !response.data) throw new Error(response.message || "Failed to update payout details");
       syncProfile(response.data);
       setEditingBank(false);
       Alert.alert("Saved", "Payout details updated successfully.");
@@ -593,201 +458,15 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
-  const renderInfoRow = (label: string, value: string) => (
-    <View style={styles.infoRow} key={label}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
-
-  const renderShortcut = (icon: keyof typeof Ionicons.glyphMap, title: string, subtitle: string, onPress: () => void) => (
-    <TouchableOpacity style={styles.shortcutCard} onPress={onPress} key={title}>
-      <View style={styles.shortcutIcon}>
-        <Ionicons name={icon} size={18} color="#C2410C" />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.shortcutTitle}>{title}</Text>
-        <Text style={styles.shortcutSubtitle}>{subtitle}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
-    </TouchableOpacity>
-  );
-
-  const renderActiveProfile = () => (
-    <View style={[styles.safeAreaScreen, { paddingTop: insets.top }]}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 36 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.dashboardHero}>
-        <View style={styles.dashboardHeaderRow}>
-          <View style={styles.dashboardAvatarWrap}>
-            {profilePhotoUrl ? (
-              <Image source={{ uri: profilePhotoUrl }} style={styles.dashboardAvatar} />
-            ) : (
-              <View style={styles.dashboardAvatarFallback}>
-                <Ionicons name="person" size={28} color="#C2410C" />
-              </View>
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.dashboardName}>{name || profile?.name || "Delivery Partner"}</Text>
-            <Text style={styles.dashboardMeta}>{employeeId}</Text>
-            <View style={[styles.liveBadge, isAvailable && styles.liveBadgeActive]}>
-              <Text style={[styles.liveBadgeText, isAvailable && styles.liveBadgeTextActive]}>{isAvailable ? "Online for jobs" : "Offline right now"}</Text>
-            </View>
-          </View>
-        </View>
-        <Text style={styles.dashboardSubtitle}>Your rider profile is active. Manage payout details, work status, verification documents, and support from one place.</Text>
-      </View>
-
-      <View style={[styles.statusCard, { backgroundColor: currentStatus.bg }]}>
-        <Text style={[styles.statusLabel, { color: currentStatus.fg }]}>{currentStatus.label}</Text>
-        <Text style={styles.statusText}>You can now access jobs while keeping profile, payout, and support details updated.</Text>
-        {documents.reuploadNotes ? <Text style={styles.statusText}>Admin re-upload note: {documents.reuploadNotes}</Text> : null}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Basic Profile Details</Text>
-        {renderInfoRow("Full name", safeValue(name || profile?.name))}
-        {renderInfoRow("Phone number", safeValue(profile?.phone))}
-        {renderInfoRow("Date of birth", safeValue(dateOfBirth))}
-        {renderInfoRow("Partner / Employee ID", employeeId)}
-        {renderInfoRow("Vehicle type", safeValue(vehicleType))}
-        {renderInfoRow("Email", safeValue(email))}
-
-        {renderInfoRow("Emergency contact", safeValue(emergencyContactName && emergencyContactPhone ? `${emergencyContactName} (${emergencyContactPhone})` : ""))}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Documents and Verification</Text>
-        {documentStatusItems.map((item) => (
-          <View style={styles.docRow} key={item.label}>
-            <Text style={styles.infoLabel}>{item.label}</Text>
-            <View style={[styles.docBadge, item.ready ? styles.docBadgeReady : styles.docBadgePending]}>
-              <Text style={[styles.docBadgeText, item.ready ? styles.docBadgeTextReady : styles.docBadgeTextPending]}>{item.ready ? "Uploaded" : "Missing"}</Text>
-            </View>
-          </View>
-        ))}
-        {renderInfoRow("Verification status", verificationStatusLabel)}
-      </View>
-
-      <View style={styles.statsGrid}>
-        <View style={styles.statTile}>
-          <Text style={styles.statTileLabel}>Daily earnings</Text>
-          <Text style={styles.statTileValue}>{formatCurrency(todayEarnings)}</Text>
-        </View>
-        <View style={styles.statTile}>
-          <Text style={styles.statTileLabel}>Weekly earnings</Text>
-          <Text style={styles.statTileValue}>{formatCurrency((stats?.todaysEarnings || todayEarnings) * 7)}</Text>
-        </View>
-        <View style={styles.statTile}>
-          <Text style={styles.statTileLabel}>Wallet balance</Text>
-          <Text style={styles.statTileValue}>{formatCurrency(stats?.totalEarnings || profile?.totalEarnings)}</Text>
-        </View>
-        <View style={styles.statTile}>
-          <Text style={styles.statTileLabel}>Incentives and bonuses</Text>
-          <Text style={styles.statTileValue}>{formatCurrency(Math.max(0, (stats?.todaysEarnings || 0) - todayEarnings))}</Text>
-        </View>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Bank Account Details</Text>
-        {editingBank ? (
-          <>
-            <Text style={styles.label}>Account Holder Name</Text>
-            <TextInput style={styles.input} value={documents.bankAccountHolderName || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountHolderName: value }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-            <Text style={styles.label}>Bank Account Number (Optional for now)</Text>
-        <TextInput style={styles.input} value={documents.bankAccountNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountNumber: value.replace(/\D/g, "") }))} placeholder="Enter bank account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
-            <Text style={styles.label}>IFSC Code</Text>
-            <TextInput style={styles.input} value={documents.bankIfsc || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankIfsc: value.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
-            <Text style={styles.label}>UPI ID</Text>
-            <View style={styles.readOnly}><Text style={styles.readOnlyText}>UPI update support will be added soon.</Text></View>
-            <View style={styles.inlineActions}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setEditingBank(false)}>
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.primaryButton, bankSaving && styles.disabled]} onPress={handleSaveBankDetails} disabled={bankSaving}>
-                {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.primaryButtonText}>Save Payout</Text>}
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <>
-            {renderInfoRow("Account holder name", safeValue(documents.bankAccountHolderName))}
-            {renderInfoRow("Bank account number", safeValue(documents.bankAccountNumber ? `••••${documents.bankAccountNumber.slice(-4)}` : ""))}
-            {renderInfoRow("IFSC code", safeValue(documents.bankIfsc))}
-            {renderInfoRow("UPI ID", "Add in next update")}
-            <TouchableOpacity style={styles.primaryButton} onPress={() => setEditingBank(true)}>
-              <Text style={styles.primaryButtonText}>Edit Payout Details</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Work Stats and Performance</Text>
-        {renderInfoRow("Total deliveries completed", String(stats?.totalDeliveries || profile?.totalDeliveries || 0))}
-        {renderInfoRow("Customer ratings", `${(profile?.rating || 0).toFixed(1)} / 5 (${profile?.ratingCount || 0} ratings)`)}
-        {renderInfoRow("Acceptance rate", "Available soon")}
-        {renderInfoRow("On-time delivery percentage", "Available soon")}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Availability and Duty Status</Text>
-        <TouchableOpacity style={styles.availability} onPress={handleAvailabilityToggle} disabled={availabilitySaving}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.availabilityTitle}>Online / Offline toggle</Text>
-            <Text style={styles.availabilityText}>Control whether you want to receive delivery opportunities right now.</Text>
-          </View>
-          <View style={[styles.badge, isAvailable && styles.badgeActive]}>
-            {availabilitySaving ? <ActivityIndicator size="small" color={isAvailable ? "#fff" : "#475467"} /> : <Text style={[styles.badgeText, isAvailable && styles.badgeTextActive]}>{isAvailable ? "Online" : "Offline"}</Text>}
-          </View>
-        </TouchableOpacity>
-        {renderInfoRow("Shift selection", "Open shift")}
-        {renderInfoRow("Break mode", isAvailable ? "Off" : "Enabled while offline")}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Support and Help</Text>
-        {renderShortcut("help-circle-outline", "Help center", "Get answers for payouts, jobs, and verification.", () => Alert.alert("Help center", "Help center will be connected in the next update."))}
-        {renderShortcut("flag-outline", "Report an issue", "Tell us if something is broken or confusing.", () => Alert.alert("Report issue", "Issue reporting will be connected in the next update."))}
-        {renderShortcut("call-outline", "Emergency support", "Fast support access for rider safety situations.", () => Alert.alert("Emergency support", "Emergency support contact will be added here."))}
-        {renderShortcut("chatbubble-ellipses-outline", "Chat / call support", "Reach operations if you need quick help.", () => Alert.alert("Support", "Chat and call support will be connected soon."))}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Settings</Text>
-        {renderShortcut("notifications-outline", "Notification preferences", "Choose job and payout alerts.", handleNotificationPreferences)}
-        {renderShortcut("language-outline", "Language settings", "Change your preferred app language.", () => Alert.alert("Language", "Language settings will be available soon."))}
-        {renderShortcut("options-outline", "App preferences", "Control app behavior and display options.", () => Alert.alert("Preferences", "App preferences will be available soon."))}
-        {renderShortcut("gift-outline", "Referral program", "Invite other riders and earn rewards.", () => Alert.alert("Referral program", "Referral tracking will be added soon."))}
-        {renderShortcut("trending-up-outline", "Incentive tracking", "See streaks, quests, and bonus targets.", () => Alert.alert("Incentive tracking", "Incentive tracking will be available soon."))}
-        {renderShortcut("school-outline", "Training and onboarding", "Refresh rider onboarding and app usage guidance.", () => Alert.alert("Training", "Training modules will be added soon."))}
-        {renderShortcut("shield-outline", "Safety guidelines", "Check rider safety practices and emergency tips.", () => Alert.alert("Safety guidelines", "Safety guidance will be available here soon."))}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
-        </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </View>
-  );
-
   const mandatoryDocsComplete = useMemo(() => {
     const normalized = normalizeDocuments(documents);
     return Boolean(
-      profilePhotoUrl &&
-        normalized.aadhaarFrontUrl &&
-        normalized.aadhaarBackUrl &&
-        normalized.panFrontUrl &&
-        normalized.selfiePhotoUrl &&
-        (!requiresMotorDocuments ||
-          (normalized.drivingLicenseFrontUrl &&
-            normalized.drivingLicenseBackUrl &&
-            normalized.vehicleRcFrontUrl &&
-            normalized.vehicleRcBackUrl &&
-            normalized.insuranceUrl))
+      profilePhotoUrl && normalized.aadhaarFrontUrl && normalized.aadhaarBackUrl &&
+      normalized.panFrontUrl && normalized.selfiePhotoUrl &&
+      (!requiresMotorDocuments || (
+        normalized.drivingLicenseFrontUrl && normalized.drivingLicenseBackUrl &&
+        normalized.vehicleRcFrontUrl && normalized.vehicleRcBackUrl && normalized.insuranceUrl
+      ))
     );
   }, [documents, profilePhotoUrl, requiresMotorDocuments]);
 
@@ -820,38 +499,19 @@ export default function ProfileScreen({ navigation, route }: any) {
       if (!/^[0-9]{12}$/.test(aadhaarNumber)) return "Aadhaar number must be 12 digits.";
       if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) return "PAN number must match AAAAA9999A format.";
       const normalized = normalizeDocuments(documents);
-      if (!normalized.aadhaarFrontUrl || !normalized.aadhaarBackUrl || !normalized.panFrontUrl) {
-        return "Aadhaar front/back and PAN front are mandatory.";
-      }
+      if (!normalized.aadhaarFrontUrl || !normalized.aadhaarBackUrl || !normalized.panFrontUrl) return "Aadhaar front/back and PAN front are mandatory.";
       if (!normalized.selfiePhotoUrl) return "Selfie/photo verification is required.";
-      if (requiresMotorDocuments && (!normalized.drivingLicenseFrontUrl || !normalized.drivingLicenseBackUrl || !normalized.vehicleRcFrontUrl || !normalized.vehicleRcBackUrl || !normalized.insuranceUrl)) {
-        return "Driving license front/back, vehicle RC front/back, and insurance document are mandatory.";
-      }
+      if (requiresMotorDocuments && (!normalized.drivingLicenseFrontUrl || !normalized.drivingLicenseBackUrl || !normalized.vehicleRcFrontUrl || !normalized.vehicleRcBackUrl || !normalized.insuranceUrl)) return "Driving license front/back, vehicle RC front/back, and insurance document are mandatory.";
     }
     if (index === 3) {
-      const hasAnyBankInput = Boolean(
-        documents.bankAccountHolderName?.trim() ||
-        documents.bankAccountNumber?.trim() ||
-        documents.bankIfsc?.trim() ||
-        documents.cancelledChequeUrl ||
-        documents.bankPassbookUrl ||
-        documents.bankStatementUrl
-      );
-
+      const hasAnyBankInput = Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim() || documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl);
       if (hasAnyBankInput) {
-        const selectedBankProofUrl =
-          documents.bankDocumentType === "passbook"
-            ? documents.bankPassbookUrl
-            : documents.bankDocumentType === "statement"
-              ? documents.bankStatementUrl
-              : documents.cancelledChequeUrl;
+        const selectedBankProofUrl = documents.bankDocumentType === "passbook" ? documents.bankPassbookUrl : documents.bankDocumentType === "statement" ? documents.bankStatementUrl : documents.cancelledChequeUrl;
         if (!documents.bankAccountHolderName?.trim()) return "Account holder name is required if you add bank details.";
         if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric.";
         if (!documents.bankIfsc?.trim()) return "IFSC code is required if you add bank details.";
         if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC code format is invalid.";
-        if (!selectedBankProofUrl) {
-          return "Upload the selected bank proof if you add bank details.";
-        }
+        if (!selectedBankProofUrl) return "Upload the selected bank proof if you add bank details.";
       }
       if (!termsAccepted) return "Please accept the delivery partner terms and conditions.";
     }
@@ -859,160 +519,89 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const pickDocument = async (field: UploadField): Promise<UploadAsset | null> => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ["image/*", "application/pdf"],
-      copyToCacheDirectory: true,
-      multiple: false
-    });
-
-    if (result.canceled || !result.assets?.[0]?.uri) {
-      return null;
-    }
-
+    const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "application/pdf"], copyToCacheDirectory: true, multiple: false });
+    if (result.canceled || !result.assets?.[0]?.uri) return null;
     const asset = result.assets[0];
-    return {
-      uri: asset.uri,
-      name: asset.name || `document-${Date.now()}`,
-      mimeType: asset.mimeType
-    };
+    return { uri: asset.uri, name: asset.name || `document-${Date.now()}`, mimeType: asset.mimeType };
   };
 
   const pickImage = async (field?: UploadField): Promise<UploadAsset | null> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permission.status !== "granted") {
-      Alert.alert("Permission needed", "Please allow gallery access to upload images.");
-      return null;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: field === "profilePhotoUrl",
-      aspect: field === "profilePhotoUrl" ? [1, 1] : undefined,
-      quality: 0.6
-    });
-
-    if (result.canceled || !result.assets[0]?.uri) {
-      return null;
-    }
-
+    if (permission.status !== "granted") { Alert.alert("Permission needed", "Please allow gallery access to upload images."); return null; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: field === "profilePhotoUrl", aspect: field === "profilePhotoUrl" ? [1, 1] : undefined, quality: 0.6 });
+    if (result.canceled || !result.assets[0]?.uri) return null;
     const asset = result.assets[0];
-    return {
-      uri: asset.uri,
-      name: asset.fileName || asset.uri.split("/").pop() || `image-${Date.now()}.jpg`,
-      mimeType: asset.mimeType
-    };
+    return { uri: asset.uri, name: asset.fileName || asset.uri.split("/").pop() || `image-${Date.now()}.jpg`, mimeType: asset.mimeType };
   };
 
   const pickLiveSelfie = async (): Promise<UploadAsset | null> => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (permission.status !== "granted") {
-      Alert.alert("Camera permission needed", GENERIC_UPLOAD_ERROR);
-      return null;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      cameraType: ImagePicker.CameraType.front,
-      allowsEditing: false,
-      quality: 0.8
-    });
-
-    if (result.canceled || !result.assets[0]?.uri) {
-      return null;
-    }
-
+    if (permission.status !== "granted") { Alert.alert("Camera permission needed", GENERIC_UPLOAD_ERROR); return null; }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, cameraType: ImagePicker.CameraType.front, allowsEditing: false, quality: 0.8 });
+    if (result.canceled || !result.assets[0]?.uri) return null;
     const asset = result.assets[0];
-    return {
-      uri: asset.uri,
-      name: asset.fileName || asset.uri.split("/").pop() || `selfie-${Date.now()}.jpg`,
-      mimeType: asset.mimeType
-    };
+    return { uri: asset.uri, name: asset.fileName || asset.uri.split("/").pop() || `selfie-${Date.now()}.jpg`, mimeType: asset.mimeType };
   };
 
-  const uploadFile = async (field: UploadField) => {
-    if (uploadingFields.includes(field)) {
-      return;
-    }
-
+  const uploadFile = async (field: UploadField, options?: { persist?: boolean }) => {
+    if (uploadingFields.includes(field)) return;
     try {
       const shouldUseDocumentPicker = DOCUMENT_UPLOAD_FIELDS.has(field);
-      const asset = field === "selfiePhotoUrl"
-        ? await pickLiveSelfie()
-        : shouldUseDocumentPicker
-          ? await pickDocument(field)
-          : await pickImage(field);
+      const asset = field === "selfiePhotoUrl" ? await pickLiveSelfie() : shouldUseDocumentPicker ? await pickDocument(field) : await pickImage(field);
       if (!asset?.uri) return;
-
       setUploadingFields((current) => (current.includes(field) ? current : [...current, field]));
       const url = await uploadAssetToServer(asset, field);
       const reuploadKey = REUPLOAD_FIELD_KEYS[field];
-
+      const nextDocuments = normalizeDocuments(documents);
+      let nextProfilePhotoUrl = profilePhotoUrl;
       if (field === "profilePhotoUrl") {
-        setProfilePhotoUrl(url);
-        if (reuploadKey) {
-          setDocuments((current) => normalizeDocuments({
-            ...current,
-            reuploadFlags: { ...(current.reuploadFlags || {}), [reuploadKey]: false }
-          }));
-        }
+        nextProfilePhotoUrl = url;
+        if (reuploadKey) nextDocuments.reuploadFlags = { ...(nextDocuments.reuploadFlags || {}), [reuploadKey]: false };
       } else {
-        setDocuments((current) => {
-          const next = { ...current, [field]: url } as Docs;
-          const aliasField = FRONT_FIELD_ALIASES[field];
-          if (aliasField) {
-            next[aliasField] = url as never;
-          }
-          if (reuploadKey) {
-            next.reuploadFlags = { ...(current.reuploadFlags || {}), [reuploadKey]: false };
-          }
-          return normalizeDocuments(next);
-        });
+        nextDocuments[field as keyof Docs] = url as never;
+        const aliasField = FRONT_FIELD_ALIASES[field];
+        if (aliasField) nextDocuments[aliasField] = url as never;
+        if (reuploadKey) nextDocuments.reuploadFlags = { ...(nextDocuments.reuploadFlags || {}), [reuploadKey]: false };
+      }
+      const normalizedNextDocuments = normalizeDocuments(nextDocuments);
+      if (options?.persist) {
+        const response = await updateDeliveryProfile(field === "profilePhotoUrl" ? { profilePhotoUrl: nextProfilePhotoUrl, documents: normalizedNextDocuments } : { documents: normalizedNextDocuments });
+        if (!response.success || !response.data) throw new Error(response.message || "Failed to save document");
+        syncProfile(response.data);
+        Alert.alert("Uploaded", "Document updated successfully.");
+      } else {
+        setProfilePhotoUrl(nextProfilePhotoUrl);
+        setDocuments(normalizedNextDocuments);
       }
     } catch (error: any) {
-      Alert.alert("Something went wrong", GENERIC_UPLOAD_ERROR);
+      Alert.alert("Something went wrong", error.message || GENERIC_UPLOAD_ERROR);
     } finally {
       setUploadingFields((current) => current.filter((item) => item !== field));
     }
   };
 
   const handleSaveDraft = async () => {
-    await AsyncStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({ name, email, dateOfBirth, address: formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step })
-    );
+    await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email, dateOfBirth, address: formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step }));
     Alert.alert("Saved", "Your draft is saved on this device.");
   };
 
   const handleSubmit = async () => {
     for (let i = 0; i < STEPS.length; i += 1) {
       const error = validateStep(i);
-      if (error) {
-        setStep(i);
-        Alert.alert("Missing details", error);
-        return;
-      }
+      if (error) { setStep(i); Alert.alert("Missing details", error); return; }
     }
-
     try {
       setSaving(true);
       const normalizedDocuments = normalizeDocuments(documents);
       const response = await updateDeliveryProfile({
-        name: name.trim(),
-        email: email.trim() || undefined,
-        dateOfBirth: dateOfBirth.trim(),
-        address: formattedAddress,
-        emergencyContactName: emergencyContactName.trim(),
-        emergencyContactPhone: emergencyContactPhone.trim(),
-        vehicleType,
+        name: name.trim(), email: email.trim() || undefined, dateOfBirth: dateOfBirth.trim(),
+        address: formattedAddress, emergencyContactName: emergencyContactName.trim(),
+        emergencyContactPhone: emergencyContactPhone.trim(), vehicleType,
         vehicleNumber: requiresMotorDocuments ? vehicleNumber.trim().toUpperCase() : undefined,
         licenseNumber: requiresMotorDocuments ? licenseNumber.trim().toUpperCase() : undefined,
-        profilePhotoUrl,
-        isAvailable,
-        termsAccepted,
-        status: "PENDING",
+        profilePhotoUrl, isAvailable, termsAccepted, status: "PENDING",
         documents: {
-          ...normalizedDocuments,
-          aadhaarNumber: normalizedDocuments.aadhaarNumber?.trim(),
+          ...normalizedDocuments, aadhaarNumber: normalizedDocuments.aadhaarNumber?.trim(),
           aadhaarFrontUrl: normalizedDocuments.aadhaarFrontUrl,
           panNumber: normalizedDocuments.panNumber?.trim().toUpperCase(),
           panFrontUrl: normalizedDocuments.panFrontUrl,
@@ -1025,33 +614,9 @@ export default function ProfileScreen({ navigation, route }: any) {
           bankIfsc: documents.bankIfsc?.trim().toUpperCase()
         }
       });
-
-      if (!response.success || !response.data) {
-        Alert.alert("Error", response.message || "Failed to save profile");
-        return;
-      }
-
+      if (!response.success || !response.data) { Alert.alert("Error", response.message || "Failed to save profile"); return; }
       syncProfile(response.data);
-      await AsyncStorage.setItem(
-        DRAFT_KEY,
-        JSON.stringify({
-          name,
-          email,
-          dateOfBirth,
-          address: formattedAddress,
-          addressForm,
-          emergencyContactName,
-          emergencyContactPhone,
-          vehicleType,
-          vehicleNumber,
-          licenseNumber,
-          profilePhotoUrl,
-          isAvailable,
-          termsAccepted,
-          documents,
-          step
-        })
-      );
+      await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email, dateOfBirth, address: formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step }));
       Alert.alert("Submitted", "Your delivery profile is now pending admin verification.");
       navigation.reset({ index: 0, routes: [{ name: resolveDeliveryRoute(response.data) }] });
     } catch (error: any) {
@@ -1061,363 +626,580 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
+  // ─── RENDER HELPERS ─────────────────────────────────────────
+
+  const renderInfoRow = (label: string, value: string) => (
+    <View style={s.infoRow} key={label}>
+      <Text style={s.infoLabel}>{label}</Text>
+      <Text style={s.infoValue}>{value}</Text>
+    </View>
+  );
+
+  const renderShortcut = (icon: keyof typeof Ionicons.glyphMap, title: string, subtitle: string, onPress: () => void) => (
+    <TouchableOpacity style={s.shortcutCard} onPress={onPress} key={title} activeOpacity={0.7}>
+      <View style={s.shortcutIcon}><Ionicons name={icon} size={20} color="#C2410C" /></View>
+      <View style={{ flex: 1 }}>
+        <Text style={s.shortcutTitle}>{title}</Text>
+        <Text style={s.shortcutSubtitle}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#D0D5DD" />
+    </TouchableOpacity>
+  );
+
+  // ─── ACTIVE DASHBOARD ────────────────────────────────────────
+
+  const renderActiveProfile = () => {
+    const tone = statusTone[profile?.status || "ACTIVE"];
+    return (
+      <View style={[s.screen, { paddingTop: insets.top }]}>
+        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 36 }} showsVerticalScrollIndicator={false}>
+          {/* Profile Header */}
+          <View style={s.profileHeader}>
+            <View style={s.avatarWrap}>
+              {profilePhotoUrl ? (
+                <Image source={{ uri: profilePhotoUrl }} style={s.avatar} />
+              ) : (
+                <View style={s.avatarFallback}><Ionicons name="person" size={32} color="#C2410C" /></View>
+              )}
+              <View style={s.avatarBadge}><Ionicons name={isAvailable ? "flash" : "flash-off"} size={10} color="#fff" /></View>
+            </View>
+            <Text style={s.profileName}>{name || profile?.name || "Delivery Partner"}</Text>
+            <Text style={s.profileMeta}>{employeeId}</Text>
+            <View style={[s.statusChip, { backgroundColor: tone.bg }]}>
+              <Ionicons name={tone.icon} size={14} color={tone.fg} />
+              <Text style={[s.statusChipText, { color: tone.fg }]}>{tone.label}</Text>
+            </View>
+          </View>
+
+          {/* Stats Grid */}
+          <View style={s.statsGrid}>
+            <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(todayEarnings)}</Text><Text style={s.statLbl}>Today</Text></View>
+            <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.totalEarnings || profile?.totalEarnings)}</Text><Text style={s.statLbl}>Total earnings</Text></View>
+            <View style={s.statCard}><Text style={s.statVal}>{stats?.totalDeliveries || profile?.totalDeliveries || 0}</Text><Text style={s.statLbl}>Deliveries</Text></View>
+            <View style={s.statCard}><Text style={s.statVal}>{(profile?.rating || 0).toFixed(1)}</Text><Text style={s.statLbl}>Rating</Text></View>
+            <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.cashBalance || profile?.cashBalance || 0)}</Text><Text style={s.statLbl}>COD cash held</Text></View>
+            <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.pendingDepositAmount || profile?.pendingDepositAmount || 0)}</Text><Text style={s.statLbl}>Pending deposit</Text></View>
+          </View>
+
+          {/* Availability */}
+          <View style={s.section}>
+            <TouchableOpacity style={s.availCard} onPress={handleAvailabilityToggle} disabled={availabilitySaving} activeOpacity={0.8}>
+              <View style={[s.availDot, isAvailable && s.availDotOn]} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.availTitle}>{isAvailable ? "Online" : "Offline"}</Text>
+                <Text style={s.availSub}>Tap to toggle availability for new jobs</Text>
+              </View>
+              {availabilitySaving ? <ActivityIndicator size="small" color="#FF6B35" /> : <View style={[s.availSwitch, isAvailable && s.availSwitchOn]}><View style={[s.availSwitchKnob, isAvailable && s.availSwitchKnobOn]} /></View>}
+            </TouchableOpacity>
+          </View>
+
+          {/* Documents */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Documents & Verification</Text>
+            <Text style={s.sectionSub}>Tap any document to view or re-upload.</Text>
+            {activeDocumentItems.map((item) => renderActiveDocumentRow(item))}
+            <View style={s.divider} />
+            {renderInfoRow("Verification status", verificationStatusLabel)}
+            {documents.reuploadNotes ? <View style={s.alertBox}><Ionicons name="alert-circle" size={16} color="#B42318" /><Text style={s.alertBoxText}>{documents.reuploadNotes}</Text></View> : null}
+          </View>
+
+          {/* Bank Details */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Bank Account Details</Text>
+            {editingBank ? (
+              <>
+                <Text style={s.inputLabel}>Account Holder Name</Text>
+                <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountHolderName: v }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+                <Text style={s.inputLabel}>Account Number</Text>
+                <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountNumber: v.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+                <Text style={s.inputLabel}>IFSC Code</Text>
+                <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankIfsc: v.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+                <View style={s.btnRow}>
+                  <TouchableOpacity style={s.btnOutline} onPress={() => setEditingBank(false)}><Text style={s.btnOutlineText}>Cancel</Text></TouchableOpacity>
+                  <TouchableOpacity style={[s.btnPrimary, bankSaving && s.btnDisabled]} onPress={handleSaveBankDetails} disabled={bankSaving}>
+                    {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnPrimaryText}>Save</Text>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                {renderInfoRow("Account holder", safeValue(documents.bankAccountHolderName))}
+                {renderInfoRow("Account number", safeValue(documents.bankAccountNumber ? `••••${documents.bankAccountNumber.slice(-4)}` : ""))}
+                {renderInfoRow("IFSC", safeValue(documents.bankIfsc))}
+                <TouchableOpacity style={[s.btnPrimary, { marginTop: 14 }]} onPress={() => setEditingBank(true)}><Text style={s.btnPrimaryText}>Edit Payout Details</Text></TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          {/* Work Stats */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Performance</Text>
+            {renderInfoRow("Total deliveries", String(stats?.totalDeliveries || profile?.totalDeliveries || 0))}
+            {renderInfoRow("Rating", `${(profile?.rating || 0).toFixed(1)} / 5 (${profile?.ratingCount || 0} ratings)`)}
+            {renderInfoRow("Acceptance rate", "Coming soon")}
+          </View>
+
+          {/* Support */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Support & Help</Text>
+            {renderShortcut("help-circle-outline", "Help center", "FAQs, chat, and support tickets", () => setSupportModalVisible(true))}
+            {renderShortcut("flag-outline", "Report an issue", "Tell us if something is broken", () => setSupportModalVisible(true))}
+            {renderShortcut("chatbubble-ellipses-outline", "Chat with admin", "Send a message to the Vyaha team", () => setSupportModalVisible(true))}
+          </View>
+
+          {/* Settings */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Settings</Text>
+            {renderShortcut("notifications-outline", "Notifications", "Manage job and payout alerts", handleNotificationPreferences)}
+            {renderShortcut("document-text-outline", "Account deletion policy", "Read how account deletion works", () => Linking.openURL(DELETE_ACCOUNT_URL))}
+          </View>
+
+          {/* Logout / Delete */}
+          <View style={[s.section, { borderBottomWidth: 0 }]}>
+            <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}><Text style={s.logoutBtnText}>Logout</Text></TouchableOpacity>
+            <TouchableOpacity style={s.deleteBtn} onPress={handleDeleteAccount}><Text style={s.deleteBtnText}>Delete Account</Text></TouchableOpacity>
+          </View>
+        </ScrollView>
+        <SupportModal visible={supportModalVisible} onClose={() => setSupportModalVisible(false)} />
+      </View>
+    );
+  };
+
+  // ─── REGISTRATION WIZARD ─────────────────────────────────────
+
   const renderUpload = (field: UploadField, title: string, subtitle: string, required?: boolean) => {
     const url = field === "profilePhotoUrl" ? profilePhotoUrl : documents[field as keyof Docs];
     const reuploadKey = REUPLOAD_FIELD_KEYS[field];
     const reuploadRequested = reuploadKey ? Boolean(documents.reuploadFlags?.[reuploadKey]) : false;
     const showImagePreview = typeof url === "string" && url && !isPdfFile(url);
-    const uploadModeText = field === "profilePhotoUrl" ? "Image only" : field === "selfiePhotoUrl" ? "Live camera" : "Image or PDF";
+    const hasFile = Boolean(url);
+    const isBusy = uploadingFields.includes(field);
     return (
-      <View style={styles.uploadCard} key={field}>
-        <View style={styles.uploadHeader}>
+      <TouchableOpacity style={[s.uploadCard, reuploadRequested && s.uploadCardAlert]} onPress={() => uploadFile(field)} disabled={isBusy} activeOpacity={0.8}>
+        <View style={s.uploadTop}>
+          <View style={s.uploadIconWrap}>
+            <Ionicons name={hasFile ? "checkmark-circle" : "cloud-upload-outline"} size={24} color={hasFile ? "#039855" : "#98A2B3"} />
+          </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.uploadTitle}>{title}{required ? " *" : ""}</Text>
-            <Text style={styles.uploadSubtitle}>{subtitle}</Text>
+            <Text style={s.uploadTitle}>{title}{required ? " *" : ""}</Text>
+            <Text style={s.uploadSub}>{subtitle}</Text>
           </View>
-          <View style={styles.uploadBadge}>
-            <Text style={styles.uploadBadgeText}>{uploadModeText}</Text>
-          </View>
+          {isBusy ? <ActivityIndicator size="small" color="#FF6B35" /> : (
+            <View style={[s.uploadStatus, hasFile && s.uploadStatusDone]}>
+              <Text style={[s.uploadStatusText, hasFile && s.uploadStatusTextDone]}>{hasFile ? "Uploaded" : "Upload"}</Text>
+            </View>
+          )}
         </View>
         {reuploadRequested ? (
-          <View style={styles.reuploadNotice}>
-            <Ionicons name="alert-circle-outline" size={18} color="#B42318" />
-            <Text style={styles.reuploadNoticeText}>
-              {documents.reuploadNotes || "Admin requested a replacement for this document."}
-            </Text>
-          </View>
+          <View style={s.reuploadNote}><Ionicons name="alert-circle" size={14} color="#B42318" /><Text style={s.reuploadNoteText}>{documents.reuploadNotes || "Admin requested a replacement"}</Text></View>
         ) : null}
-        {showImagePreview ? (
-          <Image source={{ uri: url }} style={styles.preview} />
-        ) : typeof url === "string" && url ? (
-          <View style={styles.fileBadge}>
-            <Ionicons name={isPdfFile(url) ? "document-outline" : "checkmark-circle"} size={20} color="#027A48" />
-            <Text style={styles.fileBadgeText}>{isPdfFile(url) ? "PDF uploaded successfully" : "File uploaded successfully"}</Text>
+        {showImagePreview ? <Image source={{ uri: url }} style={s.uploadPreview} /> : null}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderActiveDocumentRow = (item: ActiveDocumentItem) => {
+    const reuploadKey = REUPLOAD_FIELD_KEYS[item.field];
+    const reuploadRequested = reuploadKey ? Boolean(documents.reuploadFlags?.[reuploadKey]) : false;
+    const hasFile = Boolean(item.url);
+    const isBusy = uploadingFields.includes(item.field);
+    return (
+      <View key={item.field} style={[s.docRow, reuploadRequested && s.docRowAlert]}>
+        <View style={s.docRowLeft}>
+          <View style={[s.docDot, hasFile ? s.docDotReady : reuploadRequested ? s.docDotAlert : s.docDotMissing]} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.docRowTitle}>{item.title}</Text>
+            <Text style={s.docRowSub}>{reuploadRequested ? "Re-upload required" : hasFile ? "Uploaded" : item.required ? "Missing — upload now" : "Optional"}</Text>
           </View>
-        ) : (
-          <View style={styles.placeholder}>
-            <Ionicons name="document-text-outline" size={20} color="#98A2B3" />
-            <Text style={styles.placeholderText}>No file uploaded yet</Text>
-          </View>
-        )}
-        <TouchableOpacity style={styles.uploadButton} onPress={() => uploadFile(field)} disabled={uploadingFields.includes(field)}>
-          {uploadingFields.includes(field) ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.uploadButtonText}>
-              {field === "profilePhotoUrl"
-                ? (url ? "Change Photo" : "Choose & Crop Photo")
-                : field === "selfiePhotoUrl"
-                  ? (url ? "Retake Selfie" : "Take Live Selfie")
-                  : url ? "Replace File" : "Browse File"}
-            </Text>
-          )}
-        </TouchableOpacity>
+        </View>
+        <View style={s.docRowActions}>
+          {hasFile ? <TouchableOpacity style={s.docViewBtn} onPress={() => Linking.openURL(item.url as string)}><Text style={s.docViewBtnText}>View</Text></TouchableOpacity> : null}
+          <TouchableOpacity style={s.docUploadBtn} onPress={() => uploadFile(item.field, { persist: true })} disabled={isBusy}>
+            {isBusy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.docUploadBtnText}>{hasFile ? "Replace" : "Upload"}</Text>}
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
 
-  const renderStep = () => {
-    if (step === 0) {
-      return (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Basic Details</Text>
-          <Text style={styles.cardText}>Add the identity and address details the admin will verify.</Text>
-          {renderUpload("profilePhotoUrl", "Profile Photo", "Required for easy identification", true)}
-          <Text style={styles.label}>Full Name</Text>
-          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Enter full name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-          <Text style={styles.label}>Phone Number</Text>
-          <View style={styles.readOnly}><Text style={styles.readOnlyText}>{profile?.phone || "Verified with OTP"}</Text></View>
-          <Text style={styles.label}>Email</Text>
-          <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Enter email address" placeholderTextColor="#98A2B3" autoCapitalize="none" keyboardType="email-address" selectionColor="#FF6B35" />
-          <Text style={styles.label}>Date of Birth</Text>
-          <TextInput style={styles.input} value={dateOfBirth} onChangeText={(value) => setDateOfBirth(value.replace(/[^0-9-]/g, "").slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor="#98A2B3" keyboardType="numbers-and-punctuation" selectionColor="#FF6B35" />
-          <Text style={styles.label}>Current Address</Text>
-          <TextInput style={styles.input} value={addressForm.flatNo} onChangeText={(value) => updateAddressField("flatNo", value)} placeholder="Flat / house no." placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-          <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.apartment} onChangeText={(value) => updateAddressField("apartment", value)} placeholder="Apartment / building name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-          <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.colony} onChangeText={(value) => updateAddressField("colony", value)} placeholder="Colony / society" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-          <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.area} onChangeText={(value) => updateAddressField("area", value)} placeholder="Area / locality" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-          <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.city} onChangeText={(value) => updateAddressField("city", value)} placeholder="City" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-          <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.state} onChangeText={(value) => updateAddressField("state", value)} placeholder="State" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-          <TextInput style={[styles.input, styles.stackedInput]} value={addressForm.pincode} onChangeText={(value) => updateAddressField("pincode", value)} placeholder="Pincode" placeholderTextColor="#98A2B3" keyboardType="number-pad" maxLength={6} selectionColor="#FF6B35" />
-          <Text style={styles.label}>Emergency Contact Name</Text>
-          <TextInput style={styles.input} value={emergencyContactName} onChangeText={setEmergencyContactName} placeholder="Name (Father)" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-          <Text style={styles.label}>Emergency Contact Phone</Text>
-          <TextInput style={styles.input} value={emergencyContactPhone} onChangeText={(value) => setEmergencyContactPhone(value.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile number" placeholderTextColor="#98A2B3" keyboardType="number-pad" maxLength={10} selectionColor="#FF6B35" />
-        </View>
-      );
-    }
-
-    if (step === 1) {
-      return (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Vehicle Details</Text>
-          <Text style={styles.cardText}>We use this for operational checks and legal verification.</Text>
-          <Text style={styles.label}>Vehicle Type</Text>
-          <View style={styles.chips}>
-            {VEHICLE_TYPES.map((item) => (
-              <TouchableOpacity key={item} style={[styles.chip, vehicleType === item && styles.chipActive]} onPress={() => setVehicleType(item)}>
-                <Text style={[styles.chipText, vehicleType === item && styles.chipTextActive]}>{item}</Text>
+  const renderStepContent = () => {
+    switch (step) {
+      case 0:
+        return (
+          <View>
+            <View style={s.avatarUploadWrap}>
+              <TouchableOpacity onPress={() => uploadFile("profilePhotoUrl")} style={s.avatarUpload}>
+                {profilePhotoUrl ? (
+                  <Image source={{ uri: profilePhotoUrl }} style={s.avatarUploadImg} />
+                ) : (
+                  <View style={s.avatarUploadPlaceholder}><Ionicons name="camera-outline" size={28} color="#98A2B3" /><Text style={s.avatarUploadHint}>Photo</Text></View>
+                )}
               </TouchableOpacity>
+              <View style={{ flex: 1, justifyContent: "center" }}>
+                <Text style={s.avatarLabel}>Profile Photo</Text>
+                <Text style={s.avatarHint}>Used for identity verification during pickup</Text>
+              </View>
+            </View>
+
+            <Text style={s.inputLabel}>Full Name</Text>
+            <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Enter your full name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+
+            <Text style={s.inputLabel}>Email (optional)</Text>
+            <TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="email@example.com" placeholderTextColor="#98A2B3" autoCapitalize="none" keyboardType="email-address" selectionColor="#FF6B35" />
+
+            <Text style={s.inputLabel}>Phone</Text>
+            <View style={s.readField}><Text style={s.readFieldText}>{profile?.phone || "Verified with OTP"}</Text></View>
+
+            <Text style={s.inputLabel}>Date of Birth</Text>
+            <TextInput style={s.input} value={dateOfBirth} onChangeText={(v) => setDateOfBirth(v.replace(/[^0-9-]/g, "").slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor="#98A2B3" keyboardType="numbers-and-punctuation" selectionColor="#FF6B35" />
+
+            <Text style={s.sectionTitleSm}>Residential Address</Text>
+            {ADDRESS_LABELS.map(({ key, label }) => (
+              <TextInput key={key} style={[s.input, key === "area" && s.textArea]} value={addressForm[key]} onChangeText={(v) => updateAddressField(key, v)} placeholder={label} placeholderTextColor="#98A2B3" keyboardType={key === "pincode" ? "number-pad" : "default"} maxLength={key === "pincode" ? 6 : undefined} selectionColor="#FF6B35" />
             ))}
+
+            <Text style={s.sectionTitleSm}>Emergency Contact</Text>
+            <TextInput style={s.input} value={emergencyContactName} onChangeText={setEmergencyContactName} placeholder="Emergency contact name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+            <TextInput style={[s.input, { marginTop: 10 }]} value={emergencyContactPhone} onChangeText={(v) => setEmergencyContactPhone(v.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile number" placeholderTextColor="#98A2B3" keyboardType="number-pad" maxLength={10} selectionColor="#FF6B35" />
           </View>
-          <Text style={styles.label}>Vehicle Number{requiresMotorDocuments ? "" : " (Optional)"}</Text>
-          <TextInput style={styles.input} value={vehicleNumber} onChangeText={setVehicleNumber} placeholder={requiresMotorDocuments ? "TS09AB1234" : "Optional for bicycle"} placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
-          <Text style={styles.label}>Driving License Number{requiresMotorDocuments ? "" : " (Not required for bicycle)"}</Text>
-          <TextInput style={styles.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder={requiresMotorDocuments ? "TS0120230012345" : "Not required"} placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" editable={requiresMotorDocuments} />
-        </View>
-      );
-    }
+        );
 
-    if (step === 2) {
-      return (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Documents</Text>
-          <Text style={styles.cardText}>Mandatory documents are required for legal compliance and rider safety.</Text>
-          <Text style={styles.label}>Aadhaar Number</Text>
-          <TextInput style={styles.input} value={documents.aadhaarNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, aadhaarNumber: value.replace(/\D/g, "").slice(0, 12) }))} placeholder="12-digit Aadhaar number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
-          <Text style={styles.label}>PAN Number</Text>
-          <TextInput style={styles.input} value={documents.panNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, panNumber: value.toUpperCase().slice(0, 10) }))} placeholder="AAAAA9999A" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
-          {renderUpload("aadhaarUrl", "Aadhaar - Upload Front Side", "Mandatory for KYC and identity verification", true)}
-          {renderUpload("aadhaarBackUrl", "Aadhaar - Upload Back Side", "Mandatory for address/KYC verification", true)}
-          {renderUpload("panFrontUrl", "PAN Card - Upload Front Side", "Mandatory identity proof", true)}
-          {renderUpload("selfiePhotoUrl", "Live Selfie Verification", "Use the front camera to capture a live selfie for verification", true)}
-          {renderUpload("drivingLicenseUrl", "Driving License - Upload Front Side", requiresMotorDocuments ? "Mandatory for motor vehicle delivery" : "Optional for bicycle riders", requiresMotorDocuments)}
-          {renderUpload("drivingLicenseBackUrl", "Driving License - Upload Back Side", requiresMotorDocuments ? "Mandatory license back side" : "Optional for bicycle riders", requiresMotorDocuments)}
-          {renderUpload("vehicleRcUrl", "Vehicle RC - Upload Front Side", requiresMotorDocuments ? "Mandatory vehicle ownership proof" : "Optional for bicycle riders", requiresMotorDocuments)}
-          {renderUpload("vehicleRcBackUrl", "Vehicle RC - Upload Back Side", requiresMotorDocuments ? "Mandatory vehicle ownership proof" : "Optional for bicycle riders", requiresMotorDocuments)}
-          {renderUpload("insuranceUrl", "Vehicle Insurance", requiresMotorDocuments ? "Mandatory single document" : "Optional for bicycle riders", requiresMotorDocuments)}
-        </View>
-      );
-    }
+      case 1:
+        return (
+          <View>
+            <Text style={s.inputLabel}>Vehicle Type</Text>
+            <View style={s.vehicleGrid}>
+              {VEHICLE_TYPES.map((vt) => (
+                <TouchableOpacity key={vt} style={[s.vehicleCard, vehicleType === vt && s.vehicleCardActive]} onPress={() => setVehicleType(vt)}>
+                  <Ionicons name={VEHICLE_ICONS[vt]} size={24} color={vehicleType === vt ? "#C2410C" : "#667085"} />
+                  <Text style={[s.vehicleCardText, vehicleType === vt && s.vehicleCardTextActive]}>{vt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {requiresMotorDocuments ? (
+              <>
+                <Text style={s.inputLabel}>Vehicle Number</Text>
+                <TextInput style={s.input} value={vehicleNumber} onChangeText={setVehicleNumber} placeholder="e.g. TS09AB1234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+                <Text style={s.inputLabel}>Driving License Number</Text>
+                <TextInput style={s.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder="e.g. TS0120230012345" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+              </>
+            ) : (
+              <View style={s.infoCard}>
+                <Ionicons name="information-circle-outline" size={20} color="#667085" />
+                <Text style={s.infoCardText}>Vehicle number and driving license are not required for bicycle / cycle riders.</Text>
+              </View>
+            )}
+          </View>
+        );
 
-    return (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Bank Details</Text>
-        <Text style={styles.cardText}>Add payout identity details. You can add or update them later from Profile.</Text>
-        <Text style={styles.label}>Account Holder Name</Text>
-        <TextInput style={styles.input} value={documents.bankAccountHolderName || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountHolderName: value }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-        <Text style={styles.label}>Bank Account Number</Text>
-        <TextInput style={styles.input} value={documents.bankAccountNumber || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankAccountNumber: value.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
-        <Text style={styles.label}>IFSC Code</Text>
-        <TextInput style={styles.input} value={documents.bankIfsc || ""} onChangeText={(value) => setDocuments((current) => ({ ...current, bankIfsc: value.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
-        <Text style={styles.cardText}>Cheque is selected by default. You can switch to Passbook or Statement if that proof is easier.</Text>
-        <View style={styles.chips}>
-          {(["cheque", "passbook", "statement"] as const).map((type) => (
-            <TouchableOpacity key={type} style={[styles.chip, documents.bankDocumentType === type && styles.chipActive]} onPress={() => setDocuments((current) => ({ ...current, bankDocumentType: type }))}>
-              <Text style={[styles.chipText, documents.bankDocumentType === type && styles.chipTextActive]}>{type === "cheque" ? "Cheque" : type === "passbook" ? "Passbook" : "Statement"}</Text>
+      case 2:
+        return (
+          <View>
+            <Text style={s.inputLabel}>Aadhaar Number</Text>
+            <TextInput style={s.input} value={documents.aadhaarNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, aadhaarNumber: v.replace(/\D/g, "").slice(0, 12) }))} placeholder="12-digit Aadhaar number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+            <Text style={s.inputLabel}>PAN Number</Text>
+            <TextInput style={s.input} value={documents.panNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, panNumber: v.toUpperCase().slice(0, 10) }))} placeholder="AAAAA9999A" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+            {renderUpload("aadhaarUrl", "Aadhaar Front", "Government ID proof", true)}
+            {renderUpload("aadhaarBackUrl", "Aadhaar Back", "Address side of Aadhaar", true)}
+            {renderUpload("panFrontUrl", "PAN Card Front", "Tax identity proof", true)}
+            {renderUpload("selfiePhotoUrl", "Live Selfie", "Front camera selfie for verification", true)}
+            {requiresMotorDocuments ? (
+              <>
+                {renderUpload("drivingLicenseUrl", "Driving License Front", "Required for motor vehicles", true)}
+                {renderUpload("drivingLicenseBackUrl", "Driving License Back", "Required for motor vehicles", true)}
+                {renderUpload("vehicleRcUrl", "Vehicle RC Front", "Registration proof", true)}
+                {renderUpload("vehicleRcBackUrl", "Vehicle RC Back", "Registration proof", true)}
+                {renderUpload("insuranceUrl", "Vehicle Insurance", "Active insurance document", true)}
+              </>
+            ) : (
+              <View style={s.infoCard}>
+                <Ionicons name="information-circle-outline" size={20} color="#667085" />
+                <Text style={s.infoCardText}>Motor vehicle documents are not required for bicycle / cycle riders.</Text>
+              </View>
+            )}
+          </View>
+        );
+
+      case 3:
+        return (
+          <View>
+            <Text style={s.inputLabel}>Account Holder Name</Text>
+            <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountHolderName: v }))} placeholder="As on bank account" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+            <Text style={s.inputLabel}>Account Number (optional for now)</Text>
+            <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountNumber: v.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+            <Text style={s.inputLabel}>IFSC Code</Text>
+            <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankIfsc: v.toUpperCase() }))} placeholder="e.g. HDFC0001234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+
+            <Text style={s.inputLabel}>Bank Proof Type</Text>
+            <View style={s.chipRow}>
+              {(["cheque", "passbook", "statement"] as const).map((type) => (
+                <TouchableOpacity key={type} style={[s.chip, documents.bankDocumentType === type && s.chipActive]} onPress={() => setDocuments((c) => ({ ...c, bankDocumentType: type }))}>
+                  <Text style={[s.chipText, documents.bankDocumentType === type && s.chipTextActive]}>
+                    {type === "cheque" ? "Cheque" : type === "passbook" ? "Passbook" : "Statement"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={s.chipHint}>Cheque is recommended. You can also upload passbook or statement.</Text>
+
+            {documents.bankDocumentType === "passbook"
+              ? renderUpload("bankPassbookUrl", "Passbook First Page", "Upload passbook page showing your name and account number", true)
+              : documents.bankDocumentType === "statement"
+                ? renderUpload("bankStatementUrl", "Recent Statement", "Upload recent bank statement", true)
+                : renderUpload("cancelledChequeUrl", "Cancelled Cheque", "Upload a cancelled cheque with your name and account number", true)}
+
+            <TouchableOpacity style={s.termsRow} onPress={() => setTermsAccepted((c) => !c)}>
+              <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={22} color={termsAccepted ? "#FF6B35" : "#98A2B3"} />
+              <Text style={s.termsText}>I agree to the delivery partner{" "}<Text style={s.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>terms and conditions</Text>.</Text>
             </TouchableOpacity>
-          ))}
-        </View>
-        {documents.bankDocumentType === "passbook"
-          ? renderUpload("bankPassbookUrl", "Bank Passbook First Page", "Accepted payout proof", true)
-          : documents.bankDocumentType === "statement"
-            ? renderUpload("bankStatementUrl", "Recent Bank Statement", "Accepted payout proof", true)
-            : renderUpload("cancelledChequeUrl", "Cancelled Cheque", "Recommended payout proof", true)}
-        <View style={styles.termsRow}>
-          <TouchableOpacity onPress={() => setTermsAccepted((current) => !current)} hitSlop={10}>
-          <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={22} color={termsAccepted ? "#FF6B35" : "#667085"} />
-          </TouchableOpacity>
-          <Text style={styles.termsText}>
-            I agree to the delivery partner{" "}
-            <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>
-              terms and conditions
-            </Text>
-            .
-          </Text>
-        </View>
-        <View style={styles.summary}>
-          <Text style={styles.summaryTitle}>Review checklist</Text>
-          <Text style={styles.summaryItem}>{mandatoryDocsComplete ? "Mandatory documents look complete." : "Mandatory documents are still missing."}</Text>
-          <Text style={styles.summaryItem}>{"Status flow: Pending -> Verified -> Active"}</Text>
-        </View>
-      </View>
-    );
+
+            <View style={s.checklist}>
+              <Text style={s.checklistTitle}>Review checklist</Text>
+              <Text style={[s.checklistItem, mandatoryDocsComplete && s.checklistDone]}>{mandatoryDocsComplete ? "All mandatory documents uploaded" : "Some mandatory documents are still missing"}</Text>
+              <Text style={s.checklistItem}>Status: Pending → Verified → Active</Text>
+            </View>
+          </View>
+        );
+    }
   };
 
   if (loading) {
-    return <View style={[styles.loading, { paddingTop: insets.top }]}><ActivityIndicator size="large" color="#FF6B35" /><Text style={styles.loadingText}>Loading profile...</Text></View>;
+    return <View style={[s.center, { paddingTop: insets.top }]}><ActivityIndicator size="large" color="#FF6B35" /><Text style={{ marginTop: 12, color: "#667085", fontSize: 15 }}>Loading profile...</Text></View>;
   }
 
   const currentStatus = statusTone[profile?.status || "INACTIVE"];
 
-  if (isActiveDashboard) {
-    return renderActiveProfile();
-  }
+  if (isActiveDashboard) return renderActiveProfile();
 
+  // ─── REGISTRATION LAYOUT ────────────────────────────────────
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 8}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: 2, paddingBottom: insets.bottom + 136 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <View style={styles.heroTag}><Ionicons name="bicycle-outline" size={16} color="#C2410C" /><Text style={styles.heroTagText}>Delivery Partner Registration</Text></View>
-          <Text style={styles.heroTitle}>Complete your rider profile</Text>
-          <Text style={styles.heroSubtitle}>Upload the mandatory KYC, vehicle, and payout documents so the admin team can verify your account.</Text>
+    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 8}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 140 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        {/* Hero */}
+        <View style={s.regHero}>
+          <View style={s.regHeroIcon}><Ionicons name="bicycle" size={20} color="#C2410C" /></View>
+          <Text style={s.regHeroTitle}>Become a Delivery Partner</Text>
+          <Text style={s.regHeroSub}>Complete your profile to start earning. We'll verify and activate your account within 24-48 hours.</Text>
         </View>
 
-        <View style={[styles.statusCard, { backgroundColor: currentStatus.bg }]}>
-          <Text style={[styles.statusLabel, { color: currentStatus.fg }]}>{currentStatus.label}</Text>
-          <Text style={styles.statusText}>{mandatoryDocsComplete ? "Required documents look complete." : "Finish all mandatory sections before submitting."}</Text>
-          {profile?.reviewComment ? <Text style={styles.statusText}>Admin note: {profile.reviewComment}</Text> : null}
-          {documents.reuploadNotes ? <Text style={styles.statusText}>Re-upload request: {documents.reuploadNotes}</Text> : null}
+        {/* Status card */}
+        <View style={[s.statusCard, { backgroundColor: currentStatus.bg }]}>
+          <Text style={[s.statusLabel, { color: currentStatus.fg }]}>{currentStatus.label}</Text>
+          <Text style={s.statusDesc}>{mandatoryDocsComplete ? "All required documents submitted." : "Finish all mandatory sections before submitting."}</Text>
+          {profile?.reviewComment ? <Text style={s.statusDesc}>Admin note: {profile.reviewComment}</Text> : null}
+          {documents.reuploadNotes ? <Text style={s.statusDesc}>Re-upload requested: {documents.reuploadNotes}</Text> : null}
         </View>
 
-        <View style={styles.progressCard}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressText}>Step {step + 1} of {STEPS.length}</Text>
-            <Text style={styles.progressTextActive}>{STEPS[step]}</Text>
+        {/* Step Progress */}
+        <View style={s.progressWrap}>
+          <View style={s.progressBar}>
+            {STEPS.map((label, i) => (
+              <React.Fragment key={label}>
+                {i > 0 ? <View style={[s.progressConnector, i <= step && s.progressConnectorActive]} /> : null}
+                <TouchableOpacity style={[s.progressDot, i < step && s.progressDotDone, i === step && s.progressDotActive]} onPress={() => setStep(i)}>
+                  {i < step ? <Ionicons name="checkmark" size={16} color="#fff" /> : <Text style={[s.progressDotText, i === step && s.progressDotTextActive]}>{i + 1}</Text>}
+                </TouchableOpacity>
+              </React.Fragment>
+            ))}
           </View>
-          <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${((step + 1) / STEPS.length) * 100}%` }]} /></View>
-          <View style={styles.dots}>{STEPS.map((label, index) => <TouchableOpacity key={label} style={[styles.dot, index === step && styles.dotActive]} onPress={() => setStep(index)}><Text style={[styles.dotText, index === step && styles.dotTextActive]}>{index + 1}</Text></TouchableOpacity>)}</View>
+          <Text style={s.progressLabel}>Step {step + 1} — {STEPS[step]}</Text>
         </View>
 
-        {renderStep()}
+        {/* Step Content */}
+        <Animated.View style={{ opacity: stepAnim, transform: [{ translateY: stepAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+          <View style={s.stepCard}>
+            {renderStepContent()}
+          </View>
+        </Animated.View>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
-        <View style={styles.footerRow}>
+      {/* Footer */}
+      <View style={[s.footer, { paddingBottom: insets.bottom + 14 }]}>
+        <View style={s.footerRow}>
           {step > 0 ? (
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => setStep((current) => current - 1)}>
-              <Text style={styles.secondaryButtonText}>Back</Text>
+            <TouchableOpacity style={s.footerBtnOutline} onPress={() => setStep((c) => c - 1)}>
+              <Ionicons name="arrow-back" size={18} color="#344054" />
+              <Text style={s.footerBtnOutlineText}>Back</Text>
+            </TouchableOpacity>
+          ) : <View style={{ width: 80 }} />}
+          <TouchableOpacity style={s.footerDraft} onPress={handleSaveDraft}><Text style={s.footerDraftText}>Save Draft</Text></TouchableOpacity>
+          {step < STEPS.length - 1 ? (
+            <TouchableOpacity style={s.footerBtnPrimary} onPress={() => {
+              const error = validateStep(step);
+              if (error) { Alert.alert("Missing details", error); return; }
+              setStep((c) => c + 1);
+            }}>
+              <Text style={s.footerBtnPrimaryText}>Next</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
             </TouchableOpacity>
           ) : (
-            <View style={styles.spacer} />
-          )}
-          <View style={styles.sideBySide}>
-            <TouchableOpacity style={styles.saveDraft} onPress={handleSaveDraft}>
-              <Text style={styles.saveDraftText}>Save Draft</Text>
+            <TouchableOpacity style={[s.footerBtnPrimary, saving && s.btnDisabled]} onPress={handleSubmit} disabled={saving}>
+              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.footerBtnPrimaryText}>Submit</Text>}
             </TouchableOpacity>
-            {step < STEPS.length - 1 ? (
-              <TouchableOpacity style={styles.primaryButton} onPress={() => {
-                const error = validateStep(step);
-                if (error) {
-                  Alert.alert("Missing details", error);
-                  return;
-                }
-                setStep((current) => current + 1);
-              }}>
-                <Text style={styles.primaryButtonText}>Next Step</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={[styles.primaryButton, saving && styles.disabled]} onPress={handleSubmit} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.primaryButtonText}>Submit for Review</Text>}
-              </TouchableOpacity>
-            )}
-          </View>
+          )}
         </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  safeAreaScreen: { flex: 1, backgroundColor: "#F8F5F0" },
-  container: { flex: 1, backgroundColor: "#F8F5F0" },
-  loading: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F8F5F0" },
-  loadingText: { marginTop: 12, color: "#667085", fontSize: 15 },
-  dashboardHero: { margin: 16, padding: 20, borderRadius: 28, backgroundColor: "#FFF1E8", borderWidth: 1, borderColor: "#FFD7C2" },
-  dashboardHeaderRow: { flexDirection: "row", alignItems: "center", gap: 14 },
-  dashboardAvatarWrap: { width: 76, height: 76, borderRadius: 24, overflow: "hidden" },
-  dashboardAvatar: { width: "100%", height: "100%" },
-  dashboardAvatarFallback: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FFE5D9" },
-  dashboardName: { fontSize: 23, fontWeight: "800", color: "#1D2939" },
-  dashboardMeta: { marginTop: 4, fontSize: 13, fontWeight: "700", color: "#667085" },
-  liveBadge: { alignSelf: "flex-start", marginTop: 10, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: "#fff" },
-  liveBadgeActive: { backgroundColor: "#E8FFF3" },
-  liveBadgeText: { fontSize: 12, fontWeight: "800", color: "#667085" },
-  liveBadgeTextActive: { color: "#087443" },
-  dashboardSubtitle: { marginTop: 16, fontSize: 14, lineHeight: 22, color: "#475467" },
-  hero: { marginHorizontal: 16, marginTop: 8, marginBottom: 12, padding: 20, borderRadius: 26, backgroundColor: "#FFF4EE", borderWidth: 1, borderColor: "#FFD9C9" },
-  heroTag: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: "#fff" },
-  heroTagText: { fontSize: 12, fontWeight: "700", color: "#C2410C" },
-  heroTitle: { marginTop: 14, fontSize: 25, fontWeight: "800", color: "#1D2939" },
-  heroSubtitle: { marginTop: 8, fontSize: 14, lineHeight: 21, color: "#475467" },
-  statusCard: { marginHorizontal: 16, marginTop: 0, padding: 16, borderRadius: 20 },
-  statusLabel: { fontSize: 15, fontWeight: "800" },
-  statusText: { marginTop: 6, fontSize: 13, lineHeight: 19, color: "#475467" },
-  progressCard: { marginHorizontal: 16, marginTop: 12, padding: 16, borderRadius: 22, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
-  progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  progressText: { fontSize: 12, fontWeight: "700", color: "#667085" },
-  progressTextActive: { fontSize: 13, fontWeight: "800", color: "#FF6B35" },
-  progressTrack: { marginTop: 12, height: 8, borderRadius: 999, backgroundColor: "#F2F4F7", overflow: "hidden" },
-  progressFill: { height: "100%", backgroundColor: "#FF6B35" },
-  dots: { marginTop: 14, flexDirection: "row", justifyContent: "space-between" },
-  dot: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: "#F2F4F7" },
-  dotActive: { backgroundColor: "#FF6B35" },
-  dotText: { fontSize: 13, fontWeight: "800", color: "#667085" },
-  dotTextActive: { color: "#fff" },
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#F5F7FA" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F7FA" },
 
-  card: { marginHorizontal: 16, marginTop: 12, padding: 18, borderRadius: 22, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
-  cardTitle: { fontSize: 21, fontWeight: "800", color: "#1D2939" },
-  cardText: { marginTop: 6, fontSize: 13, lineHeight: 20, color: "#667085" },
-  infoRow: { marginTop: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "#F2F4F7" },
-  infoLabel: { fontSize: 12, fontWeight: "700", color: "#667085", textTransform: "uppercase" },
-  infoValue: { marginTop: 6, fontSize: 15, fontWeight: "700", color: "#101828" },
-  docRow: { marginTop: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  docBadge: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-  docBadgeReady: { backgroundColor: "#ECFDF3" },
-  docBadgePending: { backgroundColor: "#FEF3F2" },
-  docBadgeText: { fontSize: 12, fontWeight: "800" },
-  docBadgeTextReady: { color: "#027A48" },
-  docBadgeTextPending: { color: "#B42318" },
-  statsGrid: { marginHorizontal: 16, marginTop: 14, flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  statTile: { width: "47%", padding: 18, borderRadius: 22, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#ECECEC" },
-  statTileLabel: { fontSize: 12, fontWeight: "700", color: "#667085" },
-  statTileValue: { marginTop: 12, fontSize: 20, fontWeight: "800", color: "#1D2939" },
-  label: { marginTop: 16, marginBottom: 8, fontSize: 13, fontWeight: "700", color: "#344054" },
-  input: { borderWidth: 1, borderColor: "#E4E7EC", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 14, fontSize: 15, color: "#101828", backgroundColor: "#fff" },
-  area: { minHeight: 110 },
-  stackedInput: { marginTop: 10 },
-  readOnly: { borderWidth: 1, borderColor: "#E4E7EC", borderRadius: 16, padding: 14, backgroundColor: "#F8FAFC" },
-  readOnlyText: { fontSize: 15, fontWeight: "700", color: "#101828" },
-  inlineActions: { marginTop: 18, flexDirection: "row", alignItems: "center", gap: 12 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, backgroundColor: "#F2F4F7" },
-  chipActive: { backgroundColor: "#FFE8DE" },
-  chipText: { fontSize: 13, fontWeight: "700", color: "#475467" },
+  // ── Active Dashboard ──
+  profileHeader: { backgroundColor: "#FF6B35", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28, alignItems: "center" },
+  avatarWrap: { width: 80, height: 80, borderRadius: 24, backgroundColor: "#fff", padding: 3, alignItems: "center", justifyContent: "center" },
+  avatar: { width: "100%", height: "100%", borderRadius: 21 },
+  avatarFallback: { flex: 1, borderRadius: 21, backgroundColor: "#FFF4EE", alignItems: "center", justifyContent: "center" },
+  avatarBadge: { position: "absolute", bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: "#039855", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FF6B35" },
+  profileName: { fontSize: 22, fontWeight: "800", color: "#fff", marginTop: 12 },
+  profileMeta: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.8)", marginTop: 4 },
+  statusChip: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999 },
+  statusChipText: { fontSize: 13, fontWeight: "700" },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginHorizontal: 16, marginTop: -14 },
+  statCard: { width: "48%", backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#ECECEC" },
+  statVal: { fontSize: 20, fontWeight: "800", color: "#1D2939" },
+  statLbl: { fontSize: 12, fontWeight: "600", color: "#667085", marginTop: 4 },
+  section: { marginHorizontal: 16, marginTop: 14, padding: 18, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
+  sectionTitle: { fontSize: 18, fontWeight: "800", color: "#1D2939" },
+  sectionTitleSm: { fontSize: 15, fontWeight: "700", color: "#344054", marginTop: 16, marginBottom: 10 },
+  sectionSub: { fontSize: 13, color: "#667085", marginTop: 4, marginBottom: 4 },
+  divider: { height: 1, backgroundColor: "#F2F4F7", marginVertical: 12 },
+
+  availCard: { flexDirection: "row", alignItems: "center", gap: 14, padding: 6 },
+  availDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#D0D5DD" },
+  availDotOn: { backgroundColor: "#039855" },
+  availTitle: { fontSize: 15, fontWeight: "800", color: "#1D2939" },
+  availSub: { fontSize: 12, color: "#667085", marginTop: 2 },
+  availSwitch: { width: 44, height: 24, borderRadius: 12, backgroundColor: "#E4E7EC", justifyContent: "center", paddingHorizontal: 3 },
+  availSwitchOn: { backgroundColor: "#039855" },
+  availSwitchKnob: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff" },
+  availSwitchKnobOn: { alignSelf: "flex-end" },
+
+  docRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F2F4F7" },
+  docRowAlert: { backgroundColor: "#FFFBFA", marginHorizontal: -12, paddingHorizontal: 12, borderRadius: 12 },
+  docRowLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  docDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#D0D5DD" },
+  docDotReady: { backgroundColor: "#039855" },
+  docDotMissing: { backgroundColor: "#B42318" },
+  docDotAlert: { backgroundColor: "#F79009" },
+  docRowTitle: { fontSize: 14, fontWeight: "700", color: "#1D2939" },
+  docRowSub: { fontSize: 12, color: "#98A2B3", marginTop: 2 },
+  docRowActions: { flexDirection: "row", gap: 8 },
+  docViewBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "#E4E7EC" },
+  docViewBtnText: { fontSize: 12, fontWeight: "700", color: "#475467" },
+  docUploadBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: "#FF6B35" },
+  docUploadBtnText: { fontSize: 12, fontWeight: "700", color: "#fff" },
+
+  alertBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12, backgroundColor: "#FEF3F2", marginTop: 12 },
+  alertBoxText: { flex: 1, fontSize: 13, fontWeight: "600", color: "#B42318" },
+
+  // ── Info Rows ──
+  infoRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F2F4F7" },
+  infoLabel: { fontSize: 11, fontWeight: "700", color: "#98A2B3", textTransform: "uppercase" },
+  infoValue: { marginTop: 4, fontSize: 15, fontWeight: "700", color: "#1D2939" },
+
+  shortcutCard: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
+  shortcutIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#FFF4EE", alignItems: "center", justifyContent: "center" },
+  shortcutTitle: { fontSize: 14, fontWeight: "700", color: "#1D2939" },
+  shortcutSubtitle: { fontSize: 12, color: "#667085", marginTop: 2 },
+
+  logoutBtn: { paddingVertical: 15, borderRadius: 14, alignItems: "center", backgroundColor: "#1D2939" },
+  logoutBtnText: { fontSize: 15, fontWeight: "800", color: "#fff" },
+  deleteBtn: { marginTop: 10, paddingVertical: 15, borderRadius: 14, alignItems: "center", backgroundColor: "#FEF3F2", borderWidth: 1, borderColor: "#FECDCA" },
+  deleteBtnText: { fontSize: 15, fontWeight: "800", color: "#B42318" },
+
+  // ── Registration ──
+  regHero: { margin: 16, padding: 20, borderRadius: 24, backgroundColor: "#FFF4EE", borderWidth: 1, borderColor: "#FFD7C2", alignItems: "center" },
+  regHeroIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  regHeroTitle: { fontSize: 22, fontWeight: "800", color: "#1D2939", textAlign: "center" },
+  regHeroSub: { marginTop: 8, fontSize: 13, lineHeight: 19, color: "#667085", textAlign: "center" },
+
+  statusCard: { marginHorizontal: 16, padding: 14, borderRadius: 16 },
+  statusLabel: { fontSize: 14, fontWeight: "800" },
+  statusDesc: { marginTop: 6, fontSize: 13, lineHeight: 18, color: "#475467" },
+
+  progressWrap: { marginHorizontal: 16, marginTop: 14, padding: 18, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
+  progressBar: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  progressConnector: { width: 40, height: 3, backgroundColor: "#F2F4F7", marginHorizontal: -2 },
+  progressConnectorActive: { backgroundColor: "#FF6B35" },
+  progressDot: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#F2F4F7", alignItems: "center", justifyContent: "center" },
+  progressDotActive: { backgroundColor: "#FF6B35" },
+  progressDotDone: { backgroundColor: "#039855" },
+  progressDotText: { fontSize: 14, fontWeight: "800", color: "#98A2B3" },
+  progressDotTextActive: { color: "#fff" },
+  progressLabel: { textAlign: "center", marginTop: 12, fontSize: 13, fontWeight: "700", color: "#667085" },
+
+  stepCard: { marginHorizontal: 16, marginTop: 14, padding: 18, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
+
+  avatarUploadWrap: { flexDirection: "row", gap: 16, marginBottom: 16, padding: 14, borderRadius: 16, backgroundColor: "#F8FAFC" },
+  avatarUpload: { width: 72, height: 72, borderRadius: 20, overflow: "hidden" },
+  avatarUploadImg: { width: "100%", height: "100%" },
+  avatarUploadPlaceholder: { flex: 1, borderRadius: 20, backgroundColor: "#fff", borderWidth: 2, borderColor: "#D0D5DD", alignItems: "center", justifyContent: "center" },
+  avatarUploadHint: { fontSize: 10, color: "#98A2B3", marginTop: 4 },
+  avatarLabel: { fontSize: 15, fontWeight: "800", color: "#1D2939" },
+  avatarHint: { fontSize: 12, color: "#667085", marginTop: 2 },
+
+  inputLabel: { fontSize: 13, fontWeight: "700", color: "#344054", marginTop: 14, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: "#E4E7EC", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, color: "#1D2939", backgroundColor: "#fff" },
+  textArea: { minHeight: 40 },
+  readField: { borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#E4E7EC" },
+  readFieldText: { fontSize: 15, fontWeight: "700", color: "#1D2939" },
+
+  vehicleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  vehicleCard: { width: "30%", paddingVertical: 14, borderRadius: 14, backgroundColor: "#F8FAFC", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#ECECEC" },
+  vehicleCardActive: { backgroundColor: "#FFF4EE", borderColor: "#FFD7C2" },
+  vehicleCardText: { fontSize: 12, fontWeight: "700", color: "#667085" },
+  vehicleCardTextActive: { color: "#C2410C" },
+
+  infoCard: { flexDirection: "row", gap: 10, padding: 14, borderRadius: 14, backgroundColor: "#F8FAFC", marginTop: 14 },
+  infoCardText: { flex: 1, fontSize: 13, color: "#667085", lineHeight: 18 },
+
+  chipRow: { flexDirection: "row", gap: 8 },
+  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: "#F2F4F7" },
+  chipActive: { backgroundColor: "#FFF4EE" },
+  chipText: { fontSize: 13, fontWeight: "700", color: "#667085" },
   chipTextActive: { color: "#C2410C" },
-  availability: { marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: "#FFF7ED", flexDirection: "row", alignItems: "center", gap: 14 },
-  availabilityTitle: { fontSize: 14, fontWeight: "700", color: "#1D2939" },
-  availabilityText: { marginTop: 4, fontSize: 12, color: "#667085" },
-  badge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: "#fff" },
-  badgeActive: { backgroundColor: "#FF6B35" },
-  badgeText: { fontSize: 12, fontWeight: "800", color: "#475467" },
-  badgeTextActive: { color: "#fff" },
-  uploadCard: { marginTop: 14, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: "#ECECEC", backgroundColor: "#FCFCFD" },
-  uploadHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  uploadTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
-  uploadSubtitle: { marginTop: 4, fontSize: 12, lineHeight: 18, color: "#667085" },
-  uploadBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "#FFF1E8" },
-  uploadBadgeText: { fontSize: 10, lineHeight: 12, fontWeight: "800", color: "#C2410C", textTransform: "uppercase" },
-  reuploadNotice: { marginTop: 12, padding: 12, borderRadius: 14, backgroundColor: "#FEF3F2", borderWidth: 1, borderColor: "#FECDCA", flexDirection: "row", gap: 8 },
-  reuploadNoticeText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: "700", color: "#B42318" },
-  placeholder: { marginTop: 12, height: 72, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "#D0D5DD", alignItems: "center", justifyContent: "center", backgroundColor: "#fff" },
-  placeholderText: { marginTop: 6, fontSize: 12, color: "#98A2B3" },
-  fileBadge: { marginTop: 12, padding: 14, borderRadius: 14, backgroundColor: "#ECFDF3", borderWidth: 1, borderColor: "#ABEFC6", flexDirection: "row", alignItems: "center", gap: 8 },
-  fileBadgeText: { fontSize: 13, fontWeight: "700", color: "#027A48" },
-  preview: { width: "100%", height: 120, borderRadius: 14, marginTop: 12, backgroundColor: "#F2F4F7" },
-  uploadButton: { marginTop: 12, alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: "#FF6B35", minWidth: 110, alignItems: "center" },
-  uploadButtonText: { fontSize: 13, fontWeight: "800", color: "#fff" },
-  termsRow: { marginTop: 16, padding: 14, borderRadius: 16, backgroundColor: "#FFF7ED", flexDirection: "row", alignItems: "center", gap: 10 },
-  termsText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "700", color: "#344054" },
-  termsLink: { color: "#C2410C", textDecorationLine: "underline" },
-  addressHelperText: { marginTop: 12, fontSize: 12, lineHeight: 18, color: "#667085" },
-  summary: { marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: "#F8FAFC" },
-  summaryTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
-  summaryItem: { marginTop: 6, fontSize: 13, color: "#667085" },
-  shortcutCard: { marginTop: 12, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 12 },
-  shortcutIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF4EE" },
-  shortcutTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
-  shortcutSubtitle: { marginTop: 4, fontSize: 12, lineHeight: 18, color: "#667085" },
-  logoutButton: { marginTop: 18, borderRadius: 18, paddingVertical: 15, alignItems: "center", backgroundColor: "#101828" },
-  logoutButtonText: { fontSize: 15, fontWeight: "800", color: "#FFFFFF" },
-  footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 12, backgroundColor: "rgba(248,245,240,0.97)", borderTopWidth: 1, borderTopColor: "#EAECF0" },
-  saveDraft: { alignSelf: "center", paddingHorizontal: 14, paddingVertical: 8 },
-  saveDraftText: { fontSize: 13, fontWeight: "700", color: "#667085" },
-  footerRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 12 },
-  secondaryButton: { paddingHorizontal: 20, paddingVertical: 15, borderRadius: 16, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E4E7EC" },
-  secondaryButtonText: { fontSize: 14, fontWeight: "800", color: "#344054" },
-  spacer: { width: 90 },
-  sideBySide: { flexDirection: 'row', flex: 1, justifyContent: 'space-between' },
-  primaryButton: { flex: 1, minHeight: 54, borderRadius: 18, backgroundColor: "#FF6B35", alignItems: "center", justifyContent: "center" },
-  primaryButtonText: { fontSize: 15, fontWeight: "800", color: "#fff" },
-  disabled: { opacity: 0.75 }
+  chipHint: { marginTop: 6, fontSize: 12, color: "#98A2B3" },
+
+  termsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: "#FFF8F5" },
+  termsText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "600", color: "#475467" },
+  termsLink: { color: "#C2410C", fontWeight: "800", textDecorationLine: "underline" },
+
+  checklist: { marginTop: 14, padding: 14, borderRadius: 14, backgroundColor: "#F8FAFC" },
+  checklistTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
+  checklistItem: { marginTop: 6, fontSize: 13, color: "#667085" },
+  checklistDone: { color: "#039855" },
+
+  uploadCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, padding: 14, borderRadius: 16, backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#ECECEC", flexWrap: "wrap" as const },
+  uploadCardAlert: { backgroundColor: "#FFFBFA", borderColor: "#FECDCA" },
+  uploadTop: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 200 },
+  uploadIconWrap: { width: 40, height: 40, borderRadius: 10, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#ECECEC" },
+  uploadTitle: { fontSize: 14, fontWeight: "700", color: "#1D2939" },
+  uploadSub: { fontSize: 11, color: "#98A2B3", marginTop: 2 },
+  uploadStatus: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#F2F4F7" },
+  uploadStatusDone: { backgroundColor: "#ECFDF3" },
+  uploadStatusText: { fontSize: 11, fontWeight: "700", color: "#667085" },
+  uploadStatusTextDone: { color: "#039855" },
+  uploadPreview: { width: "100%", height: 100, borderRadius: 12, marginTop: 10, backgroundColor: "#F2F4F7" },
+  reuploadNote: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, padding: 8, borderRadius: 8, backgroundColor: "#FEF3F2", width: "100%" },
+  reuploadNoteText: { fontSize: 12, fontWeight: "600", color: "#B42318", flex: 1 },
+
+  btnRow: { flexDirection: "row", gap: 10, marginTop: 16 },
+  btnPrimary: { flex: 1, height: 48, borderRadius: 14, backgroundColor: "#FF6B35", alignItems: "center", justifyContent: "center" },
+  btnPrimaryText: { fontSize: 15, fontWeight: "800", color: "#fff" },
+  btnOutline: { flex: 1, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#E4E7EC", backgroundColor: "#fff" },
+  btnOutlineText: { fontSize: 15, fontWeight: "800", color: "#475467" },
+  btnDisabled: { opacity: 0.7 },
+
+  // ── Footer ──
+  footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 12, backgroundColor: "rgba(255,255,255,0.97)", borderTopWidth: 1, borderTopColor: "#ECECEC" },
+  footerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  footerBtnOutline: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, height: 48, borderRadius: 14, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E4E7EC" },
+  footerBtnOutlineText: { fontSize: 14, fontWeight: "800", color: "#475467" },
+  footerDraft: { paddingHorizontal: 8, height: 48, justifyContent: "center" },
+  footerDraftText: { fontSize: 13, fontWeight: "700", color: "#98A2B3" },
+  footerBtnPrimary: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 48, borderRadius: 14, backgroundColor: "#FF6B35" },
+  footerBtnPrimaryText: { fontSize: 15, fontWeight: "800", color: "#fff" }
 });

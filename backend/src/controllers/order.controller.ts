@@ -5,6 +5,7 @@ import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
 import MenuItem from "../models/MenuItem.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
+import CashLedgerEntry from "../models/CashLedgerEntry.model";
 import User from "../models/User.model";
 import { CONSUMER_APP_ROLES, ROLES } from "../config/roles";
 import { successResponse, errorResponse } from "../utils/response";
@@ -1088,29 +1089,77 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Order must be PICKED_UP before being delivered", 400);
     }
 
+    const codCollectedAmount = status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY"
+      ? Number(collectedAmount)
+      : 0;
     if (status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY") {
-      const amount = Number(collectedAmount);
-      if (!Number.isFinite(amount) || amount < order.grandTotal) {
+      if (!Number.isFinite(codCollectedAmount) || codCollectedAmount < order.grandTotal) {
         return errorResponse(res, `Collect Rs ${order.grandTotal} before marking this order as delivered`, 400);
       }
     }
 
     order.status = status;
+    if (status === "DELIVERED") {
+      order.deliveredAt = new Date();
+    }
     
     // If delivered, update payment status for COD orders
     if (status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "PAYMENT_PENDING_DELIVERY") {
       order.paymentStatus = "PAID";
     }
 
+    let deliveryPartner: any = null;
+    let createdCashLedgerEntry = false;
+    if (status === "DELIVERED") {
+      deliveryPartner = await DeliveryPartner.findOne({ userId: user.id });
+      if (!deliveryPartner) {
+        return errorResponse(res, "Delivery profile not found", 404);
+      }
+
+      if (
+        order.paymentMethod === "CASH_ON_DELIVERY" &&
+        codCollectedAmount > 0 &&
+        !order.codCollection?.cashLedgerEntryId
+      ) {
+        const cashLedgerEntry = await CashLedgerEntry.create({
+          deliveryPartnerId: deliveryPartner._id,
+          userId: user.id,
+          type: "COD_COLLECTED",
+          amount: codCollectedAmount,
+          balanceDelta: codCollectedAmount,
+          status: "POSTED",
+          orderId: order._id,
+          note: `COD collected for order #${String(order._id).slice(-6)}`
+        });
+
+        order.codCollection = {
+          collectedAmount: codCollectedAmount,
+          collectedAt: new Date(),
+          collectedBy: userId,
+          cashLedgerEntryId: cashLedgerEntry._id
+        };
+        createdCashLedgerEntry = true;
+      }
+    }
+
     await order.save();
 
-    if (status === "DELIVERED") {
-      await DeliveryPartner.findOneAndUpdate(
-        { userId: user.id },
+    if (status === "DELIVERED" && deliveryPartner) {
+      const deliveryIncrement: Record<string, number> = {
+        totalDeliveries: 1,
+        totalEarnings: order.deliveryFee || 0
+      };
+      if (createdCashLedgerEntry) {
+        deliveryIncrement.cashBalance = codCollectedAmount;
+      }
+
+      await DeliveryPartner.updateOne(
+        { _id: deliveryPartner._id },
         {
-          $inc: {
-            totalDeliveries: 1,
-            totalEarnings: order.deliveryFee || 0
+          $inc: deliveryIncrement,
+          $set: {
+            lastCashActivityAt: createdCashLedgerEntry ? new Date() : deliveryPartner.lastCashActivityAt,
+            lastCashActivityType: createdCashLedgerEntry ? "COD_COLLECTED" : deliveryPartner.lastCashActivityType
           }
         }
       );

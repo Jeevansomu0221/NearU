@@ -79,6 +79,63 @@ const idString = (value: any) => {
 const compactIds = (values: any[]) =>
   Array.from(new Set(values.map((value) => idString(value)).filter(Boolean)));
 
+const compactStrings = (values: any[]) =>
+  values
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+
+const truncate = (value: string, maxLength: number) =>
+  value.length > maxLength ? `${value.slice(0, Math.max(0, maxLength - 3)).trim()}...` : value;
+
+const formatAddressForNotification = (address: any) => {
+  if (!address) return "";
+  if (typeof address === "string") return truncate(address.trim(), 120);
+
+  return truncate(
+    compactStrings([
+      address.flatNo,
+      address.apartment,
+      address.roadStreet,
+      address.colony,
+      address.area || address.areaLocality,
+      address.city || address.cityTownVillage,
+      address.pincode
+    ]).join(", "),
+    120
+  );
+};
+
+const getDeliveryJobNotificationDetails = async (order: any) => {
+  const orderId = idString(order._id);
+  const populatedOrder = orderId
+    ? await Order.findById(orderId)
+        .populate("customerId", "name phone")
+        .populate("partnerId", "restaurantName shopName address")
+        .select("customerId partnerId deliveryAddress deliveryFee grandTotal paymentMethod")
+        .lean()
+    : null;
+  const source = populatedOrder || order;
+  const partner = source.partnerId || {};
+  const customer = source.customerId || {};
+  const restaurantName = partner.restaurantName || partner.shopName || "Restaurant";
+  const pickupAddress = formatAddressForNotification(partner.address);
+  const dropAddress = formatAddressForNotification(source.deliveryAddress);
+  const earnings = Number(source.deliveryFee || 0) || 49;
+  const orderTotal = Number(source.grandTotal || 0);
+  const paymentLabel = source.paymentMethod === "CASH_ON_DELIVERY" ? "COD" : "Pre-paid";
+
+  return {
+    orderId,
+    restaurantName,
+    pickupAddress,
+    dropAddress,
+    customerName: customer.name || "Customer",
+    earnings,
+    orderTotal,
+    paymentLabel
+  };
+};
+
 const toStringData = (data: NotificationData = {}) =>
   Object.entries(data).reduce<Record<string, string>>((acc, [key, value]) => {
     if (value !== undefined && value !== null) {
@@ -242,16 +299,30 @@ export const notifyDeliveryJobReady = async (order: any) => {
           .select("userId")
           .lean()).map((partner: any) => partner.userId)
       );
+  const details = await getDeliveryJobNotificationDetails(order);
+  const bodyParts = [
+    `Pickup: ${details.restaurantName}${details.pickupAddress ? ` - ${details.pickupAddress}` : ""}`,
+    `Drop: ${details.customerName}${details.dropAddress ? ` - ${details.dropAddress}` : ""}`,
+    `Earn Rs ${details.earnings} | Order Rs ${details.orderTotal} | ${details.paymentLabel}`
+  ];
 
   await sendNotificationToUsers(targetUserIds, {
     app: "delivery",
-    title: "New delivery job available",
-    body: `Order #${idString(order._id).slice(-6)} is ready for pickup.`,
+    title: `New delivery job - Rs ${details.earnings}`,
+    body: bodyParts.join("\n"),
     data: {
       type: "DELIVERY_JOB_READY",
-      orderId: idString(order._id),
-      jobId: idString(order._id),
-      status: "READY"
+      orderId: details.orderId,
+      jobId: details.orderId,
+      status: "READY",
+      notificationStyle: "DELIVERY_JOB_ACTIONS",
+      restaurantName: details.restaurantName,
+      pickupAddress: details.pickupAddress,
+      dropAddress: details.dropAddress,
+      customerName: details.customerName,
+      earnings: details.earnings,
+      orderTotal: details.orderTotal,
+      paymentLabel: details.paymentLabel
     }
   });
 };

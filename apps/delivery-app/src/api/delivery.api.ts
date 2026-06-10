@@ -73,6 +73,27 @@ export interface DeliveryStats {
   todaysDeliveries: number;
   todaysEarnings: number;
   averageDeliveryTime: number;
+  cashBalance?: number;
+  pendingDepositAmount?: number;
+  cashDueToPlatform?: number;
+}
+
+export interface CashLedgerEntry {
+  _id: string;
+  type: "COD_COLLECTED" | "EARNINGS_OFFSET" | "CASH_DEPOSIT_SUBMITTED" | "CASH_DEPOSIT_VERIFIED";
+  amount: number;
+  balanceDelta: number;
+  status: "POSTED" | "PENDING" | "VERIFIED" | "REJECTED";
+  reference?: string;
+  proofUrl?: string;
+  note?: string;
+  createdAt: string;
+}
+
+export interface CashLedgerSummary {
+  cashBalance: number;
+  pendingDepositAmount: number;
+  entries: CashLedgerEntry[];
 }
 
 export interface LocationUpdate {
@@ -185,8 +206,21 @@ export const getDeliveryStats = (): Promise<ApiResponse<DeliveryStats>> => {
 /**
  * Get today's earnings
  */
-export const getTodaysEarnings = (): Promise<ApiResponse<{ earnings: number }>> => {
-  return apiGet<{ earnings: number }>("/delivery/earnings/today");
+export const getTodaysEarnings = (): Promise<ApiResponse<{ earnings: number; cashBalance?: number; pendingDepositAmount?: number }>> => {
+  return apiGet<{ earnings: number; cashBalance?: number; pendingDepositAmount?: number }>("/delivery/earnings/today");
+};
+
+export const getCashLedger = (): Promise<ApiResponse<CashLedgerSummary>> => {
+  return apiGet<CashLedgerSummary>("/delivery/cash-ledger");
+};
+
+export const submitCashDeposit = (payload: {
+  amount: number;
+  reference?: string;
+  proofUrl?: string;
+  note?: string;
+}): Promise<ApiResponse<CashLedgerEntry>> => {
+  return apiPost<CashLedgerEntry>("/delivery/cash-deposits", payload);
 };
 
 // =================== LOCATION UPDATES ===================

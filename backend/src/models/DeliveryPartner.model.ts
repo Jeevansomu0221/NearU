@@ -47,6 +47,10 @@ export interface IDeliveryPartner extends Document {
   status: "PENDING" | "VERIFIED" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "INACTIVE";
   totalDeliveries: number;
   totalEarnings: number;
+  cashBalance: number;
+  pendingDepositAmount: number;
+  lastCashActivityAt?: Date;
+  lastCashActivityType?: string;
   currentLocation?: {
     type: string;
     coordinates: [number, number]; // [longitude, latitude]
@@ -172,6 +176,24 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     totalEarnings: {
       type: Number,
       default: 0
+    },
+    cashBalance: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    pendingDepositAmount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    lastCashActivityAt: {
+      type: Date,
+      default: null
+    },
+    lastCashActivityType: {
+      type: String,
+      default: ""
     },
     currentLocation: {
       type: {

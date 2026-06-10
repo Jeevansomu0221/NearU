@@ -117,7 +117,11 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
         await loadPendingOrders();
 
         if (status === "ACCEPTED") {
-          navigationRef?.navigate?.("OrderDetails", { orderId });
+          navigationRef?.navigate?.("OrderDetails", {
+            orderId,
+            orderStatus: status,
+            orderStatusUpdatedAt: Date.now()
+          });
         }
       } catch (error: any) {
         const message = error.response?.data?.message || "Please try again.";

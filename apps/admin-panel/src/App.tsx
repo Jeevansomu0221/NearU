@@ -5,6 +5,7 @@ import Partners from "./pages/Partners";
 import DeliveryPartners from "./pages/DeliveryPartners";
 import Orders from "./pages/Orders";
 import OrderDetails from "./pages/OrderDetails";
+import Payouts from "./pages/Payouts";
 import Support from "./pages/Support";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminShell from "./components/AdminShell";
@@ -60,6 +61,14 @@ export default function App() {
           element={
             <ProtectedPage>
               <OrderDetails />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/payouts"
+          element={
+            <ProtectedPage>
+              <Payouts />
             </ProtectedPage>
           }
         />

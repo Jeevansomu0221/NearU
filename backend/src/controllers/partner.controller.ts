@@ -4,6 +4,7 @@ import Partner from "../models/Partner.model";
 import User from "../models/User.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import Order from "../models/Order.model";
+import Payout from "../models/Payout.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
 import { notifyPartnerApplicationStatus } from "../services/notification.service";
 
@@ -162,6 +163,39 @@ const resolvePartnerForAuth = async (authReq: AuthRequest) => {
   }
 
   return partner;
+};
+
+const getOrderEarningDate = (order: any) => new Date(order.deliveredAt || order.updatedAt || order.createdAt);
+
+const getNextWeeklyPayoutDate = (referenceDate = new Date()) => {
+  const next = new Date(referenceDate);
+  next.setHours(10, 0, 0, 0);
+  const day = next.getDay();
+  const daysUntilMonday = day === 1 && referenceDate < next ? 0 : (8 - day) % 7 || 7;
+  next.setDate(next.getDate() + daysUntilMonday);
+  return next;
+};
+
+const maskAccountNumber = (value?: string) => {
+  const accountNumber = String(value || "").trim();
+  if (!accountNumber) return "";
+  return `${"*".repeat(Math.max(accountNumber.length - 4, 4))}${accountNumber.slice(-4)}`;
+};
+
+const buildPartnerBankSummary = (partner: any) => {
+  const documents = partner?.documents || {};
+  const accountHolderName = firstString(documents.bankAccountHolderName);
+  const accountNumber = firstString(documents.bankAccountNumber);
+  const ifsc = firstString(documents.bankIfsc);
+  const upiId = firstString(partner?.settings?.upiId);
+
+  return {
+    accountHolderName,
+    maskedAccountNumber: maskAccountNumber(accountNumber),
+    ifsc,
+    upiId,
+    hasBankDetails: Boolean(accountHolderName && accountNumber && ifsc)
+  };
 };
 
 const sanitizeOnboardingDraft = (draft: any) => {
@@ -968,7 +1002,14 @@ export const getPartnerStats = async (req: Request, res: Response) => {
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
     const partnerOrderFilter = { partnerId: partner._id };
-    const deliveredOrderFilter = { ...partnerOrderFilter, status: "DELIVERED" };
+    const deliveredOrderFilter = { ...partnerOrderFilter, status: "DELIVERED", paymentStatus: "PAID" };
+    const todayEarningDateFilter = {
+      $or: [
+        { deliveredAt: { $gte: todayStart, $lt: tomorrowStart } },
+        { deliveredAt: { $exists: false }, updatedAt: { $gte: todayStart, $lt: tomorrowStart } },
+        { deliveredAt: null, updatedAt: { $gte: todayStart, $lt: tomorrowStart } }
+      ]
+    };
     const [todayOrders, totalOrders, pendingOrders, totalEarningsResult, todayEarningsResult] =
       await Promise.all([
         Order.countDocuments({
@@ -982,16 +1023,16 @@ export const getPartnerStats = async (req: Request, res: Response) => {
         }),
         Order.aggregate([
           { $match: deliveredOrderFilter },
-          { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+          { $group: { _id: null, total: { $sum: "$itemTotal" } } }
         ]),
         Order.aggregate([
           {
             $match: {
               ...deliveredOrderFilter,
-              createdAt: { $gte: todayStart, $lt: tomorrowStart }
+              ...todayEarningDateFilter
             }
           },
-          { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+          { $group: { _id: null, total: { $sum: "$itemTotal" } } }
         ])
       ]);
 
@@ -1022,6 +1063,134 @@ export const getPartnerStats = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to get stats",
+      error: error.message
+    });
+  }
+};
+
+export const getPartnerWallet = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    const partner = await resolvePartnerForAuth(authReq);
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found"
+      });
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+    const unpaidOrderFilter = {
+      partnerId: partner._id,
+      status: "DELIVERED",
+      paymentStatus: "PAID",
+      "partnerPayout.status": { $ne: "PAID" }
+    };
+    const deliveredPaidOrderFilter = {
+      partnerId: partner._id,
+      status: "DELIVERED",
+      paymentStatus: "PAID"
+    };
+    const todayEarningDateFilter = {
+      $or: [
+        { deliveredAt: { $gte: todayStart, $lt: tomorrowStart } },
+        { deliveredAt: { $exists: false }, updatedAt: { $gte: todayStart, $lt: tomorrowStart } },
+        { deliveredAt: null, updatedAt: { $gte: todayStart, $lt: tomorrowStart } }
+      ]
+    };
+
+    const [
+      unpaidSummary,
+      todaySummary,
+      lifetimeSummary,
+      payouts,
+      recentUnpaidOrders
+    ] = await Promise.all([
+      Order.aggregate([
+        { $match: unpaidOrderFilter },
+        { $group: { _id: null, amount: { $sum: "$itemTotal" }, orderCount: { $sum: 1 } } }
+      ]),
+      Order.aggregate([
+        { $match: { ...deliveredPaidOrderFilter, ...todayEarningDateFilter } },
+        { $group: { _id: null, amount: { $sum: "$itemTotal" }, orderCount: { $sum: 1 } } }
+      ]),
+      Order.aggregate([
+        { $match: deliveredPaidOrderFilter },
+        { $group: { _id: null, amount: { $sum: "$itemTotal" }, orderCount: { $sum: 1 } } }
+      ]),
+      Payout.find({ recipientType: "PARTNER", recipientId: partner._id })
+        .sort({ paidAt: -1 })
+        .limit(50)
+        .lean(),
+      Order.find(unpaidOrderFilter)
+        .sort({ deliveredAt: -1, updatedAt: -1 })
+        .limit(10)
+        .select("_id itemTotal grandTotal createdAt updatedAt deliveredAt partnerPayout")
+        .lean()
+    ]);
+
+    const paidTotal = payouts.reduce((sum: number, payout: any) => sum + Number(payout.amount || 0), 0);
+
+    return res.json({
+      success: true,
+      data: {
+        todayEarnings: Number(todaySummary[0]?.amount || 0),
+        todayOrderCount: Number(todaySummary[0]?.orderCount || 0),
+        walletBalance: Number(unpaidSummary[0]?.amount || 0),
+        unpaidOrderCount: Number(unpaidSummary[0]?.orderCount || 0),
+        lifetimeEarnings: Number(lifetimeSummary[0]?.amount || 0),
+        lifetimeOrderCount: Number(lifetimeSummary[0]?.orderCount || 0),
+        paidTotal,
+        payoutCycle: "WEEKLY",
+        nextPayoutDate: getNextWeeklyPayoutDate().toISOString(),
+        payoutNote: "Vyaha sends partner payouts weekly to the saved bank account.",
+        bankDetails: buildPartnerBankSummary(partner),
+        recentUnpaidOrders: recentUnpaidOrders.map((order: any) => ({
+          _id: String(order._id),
+          amount: Number(order.itemTotal || 0),
+          grandTotal: Number(order.grandTotal || 0),
+          createdAt: order.createdAt,
+          deliveredAt: getOrderEarningDate(order).toISOString(),
+          payoutStatus: order.partnerPayout?.status || "PENDING"
+        })),
+        payouts: payouts.map((payout: any) => ({
+          _id: String(payout._id),
+          amount: Number(payout.amount || 0),
+          orderCount: Number(payout.orderCount || 0),
+          periodType: payout.periodType,
+          periodStart: payout.periodStart,
+          periodEnd: payout.periodEnd,
+          status: payout.status,
+          paidAt: payout.paidAt,
+          paidReference: payout.paidReference || "",
+          paidNotes: payout.paidNotes || "",
+          bankSnapshot: {
+            accountHolderName: payout.bankSnapshot?.accountHolderName || "",
+            maskedAccountNumber: maskAccountNumber(payout.bankSnapshot?.accountNumber),
+            ifsc: payout.bankSnapshot?.ifsc || "",
+            upiId: payout.bankSnapshot?.upiId || ""
+          }
+        }))
+      }
+    });
+  } catch (error: any) {
+    console.error("Error getting partner wallet:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get wallet details",
       error: error.message
     });
   }

@@ -18,6 +18,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 import WelcomeApprovedScreen from "../screens/WelcomeApprovedScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import PaymentHistoryScreen from "../screens/PaymentHistoryScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -240,6 +241,11 @@ export default function AppNavigator() {
         name="Settings" 
         component={SettingsScreen} 
         options={{ title: "Settings" }}
+      />
+      <Stack.Screen 
+        name="PaymentHistory" 
+        component={PaymentHistoryScreen} 
+        options={{ title: "Payment History" }}
       />
     </Stack.Navigator>
   );

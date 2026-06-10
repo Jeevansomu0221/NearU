@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
+import { getPartnerWallet, type PartnerWallet } from "../api/partner.api";
 import NotificationButton from "../components/NotificationButton";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -23,6 +24,7 @@ export default function DashboardScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [shopOpen, setShopOpen] = useState(true);
   const [partner, setPartner] = useState<any>(null);
+  const [wallet, setWallet] = useState<PartnerWallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     todayOrders: 0,
@@ -38,6 +40,11 @@ export default function DashboardScreen({ navigation }: any) {
     const interval = setInterval(loadPendingOrders, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener?.("focus", loadDashboardData);
+    return unsubscribe;
+  }, [navigation]);
 
   const loadPendingOrders = async () => {
     try {
@@ -62,8 +69,15 @@ export default function DashboardScreen({ navigation }: any) {
       setShopOpen(partnerData.data?.isOpen !== false);
 
       try {
-        const statsRes = await api.get("/partners/stats");
+        const [statsRes, walletRes] = await Promise.all([
+          api.get("/partners/stats"),
+          getPartnerWallet()
+        ]);
         const statsData = statsRes.data as { success: boolean; data: any };
+        const walletData = walletRes.data;
+        if (walletData.success && walletData.data) {
+          setWallet(walletData.data);
+        }
         setStats(
           statsData.data || {
             todayOrders: 0,
@@ -91,6 +105,12 @@ export default function DashboardScreen({ navigation }: any) {
     } catch (error) {
       Alert.alert("Error", "Failed to update shop status");
     }
+  };
+
+  const formatMoney = (amount: number) => `Rs ${Math.round(Number(amount || 0)).toLocaleString("en-IN")}`;
+
+  const openWallet = () => {
+    navigation.navigate("PaymentHistory", wallet ? { wallet } : undefined);
   };
 
   if (loading && !partner) {
@@ -149,22 +169,29 @@ export default function DashboardScreen({ navigation }: any) {
 
         <View style={styles.metricsCard}>
           <View style={styles.metricsHeader}>
-            <View>
+            <View style={styles.metricAmountBlock}>
               <Text style={styles.metricsLabel}>Today's Earnings</Text>
-              <Text style={styles.metricsValue}>Rs {stats.todayEarnings}</Text>
+              <Text style={styles.metricsValue}>{formatMoney(wallet?.todayEarnings ?? stats.todayEarnings)}</Text>
             </View>
-            <View style={styles.earningsIconContainer}>
-              <Ionicons name="wallet-outline" size={24} color="#60A5FA" />
-            </View>
+            <TouchableOpacity style={styles.walletSummaryButton} onPress={openWallet} activeOpacity={0.75}>
+              <View style={styles.earningsIconContainer}>
+                <Ionicons name="wallet-outline" size={22} color="#60A5FA" />
+              </View>
+              <View style={styles.walletSummaryCopy}>
+                <Text style={styles.walletSummaryLabel}>Wallet</Text>
+                <Text style={styles.walletSummaryValue}>{formatMoney(wallet?.walletBalance || 0)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#8AA4C2" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.metricsSubGrid}>
             <View style={styles.subStatItem}>
-              <Text style={styles.subStatLabel}>Pending</Text>
-              <Text style={[styles.subStatValue, stats.pendingOrders > 0 ? styles.subStatPendingHighlight : null]}>
-                {stats.pendingOrders}
+              <Text style={styles.subStatLabel}>To Payout</Text>
+              <Text style={styles.subStatValue}>
+                {wallet?.unpaidOrderCount ?? 0}
               </Text>
             </View>
             <View style={styles.verticalDivider} />
@@ -174,8 +201,10 @@ export default function DashboardScreen({ navigation }: any) {
             </View>
             <View style={styles.verticalDivider} />
             <View style={styles.subStatItem}>
-              <Text style={styles.subStatLabel}>Active Menu</Text>
-              <Text style={styles.subStatValue}>{partner.menuItemsCount || 0}</Text>
+              <Text style={styles.subStatLabel}>Pending Orders</Text>
+              <Text style={[styles.subStatValue, stats.pendingOrders > 0 ? styles.subStatPendingHighlight : null]}>
+                {stats.pendingOrders}
+              </Text>
             </View>
           </View>
         </View>
@@ -209,12 +238,12 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={styles.gridCardDesc}>Business & details</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Settings")} activeOpacity={0.7}>
-              <View style={[styles.gridIconCircle, { backgroundColor: "#F1F5F9" }]}>
-                <Ionicons name="settings-sharp" size={20} color="#475569" />
+            <TouchableOpacity style={styles.gridCard} onPress={openWallet} activeOpacity={0.7}>
+              <View style={[styles.gridIconCircle, { backgroundColor: "#F0F6FE" }]}>
+                <Ionicons name="wallet" size={20} color="#60A5FA" />
               </View>
-              <Text style={styles.gridCardTitle}>Settings</Text>
-              <Text style={styles.gridCardDesc}>System & alerts</Text>
+              <Text style={styles.gridCardTitle}>Wallet</Text>
+              <Text style={styles.gridCardDesc}>Payout date & history</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -387,7 +416,12 @@ const styles = StyleSheet.create({
   metricsHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    gap: 12
+  },
+  metricAmountBlock: {
+    flex: 1,
+    minWidth: 0
   },
   metricsLabel: {
     fontSize: 13,
@@ -403,14 +437,44 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   earningsIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     backgroundColor: "#F0F6FE",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#E1EEFE"
+  },
+  walletSummaryButton: {
+    maxWidth: "48%",
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: "#F9FCFF"
+  },
+  walletSummaryCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 8,
+    marginRight: 4
+  },
+  walletSummaryLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#5E7897",
+    textTransform: "uppercase",
+    letterSpacing: 0.4
+  },
+  walletSummaryValue: {
+    marginTop: 2,
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#143A66"
   },
   divider: {
     height: 1,

@@ -61,6 +61,10 @@ export interface DeliveryProfile {
   status: "PENDING" | "VERIFIED" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "INACTIVE";
   totalDeliveries: number;
   totalEarnings: number;
+  cashBalance?: number;
+  pendingDepositAmount?: number;
+  lastCashActivityAt?: string;
+  lastCashActivityType?: string;
   rating: number;
   ratingCount: number;
   isProfileComplete: boolean;

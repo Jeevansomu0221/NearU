@@ -344,9 +344,27 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     }
 
     const previousStatus = order.status;
+    if (
+      status === "DELIVERED" &&
+      previousStatus !== "DELIVERED" &&
+      order.paymentMethod === "CASH_ON_DELIVERY" &&
+      !order.codCollection?.cashLedgerEntryId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "COD orders must be marked delivered from the rider app so collected cash is recorded."
+      });
+    }
+
     order.status = status;
     if (status === "READY" && previousStatus !== "READY") {
       order.deliveryReadyAt = new Date();
+    }
+    if (status === "DELIVERED" && previousStatus !== "DELIVERED") {
+      order.deliveredAt = new Date();
+    }
+    if (status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "PAYMENT_PENDING_DELIVERY") {
+      order.paymentStatus = "PAID";
     }
     await order.save();
 

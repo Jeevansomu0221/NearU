@@ -4,6 +4,7 @@ import {
   ShopOutlined,
   CarOutlined,
   ShoppingCartOutlined,
+  DollarOutlined,
   CustomerServiceOutlined,
   LogoutOutlined
 } from "@ant-design/icons";
@@ -34,6 +35,11 @@ const menuItems = [
     label: <Link to="/orders">Orders</Link>
   },
   {
+    key: "/payouts",
+    icon: <DollarOutlined />,
+    label: <Link to="/payouts">Payouts</Link>
+  },
+  {
     key: "/support",
     icon: <CustomerServiceOutlined />,
     label: <Link to="/support">Support</Link>
@@ -52,6 +58,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         ? "Partner Management"
         : activeKey === "/delivery-partners"
           ? "Delivery Verification"
+          : activeKey === "/payouts"
+            ? "Payouts"
           : activeKey === "/support"
             ? "Customer Support"
             : "Order Management";
@@ -62,6 +70,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         ? "Review registrations and partner quality"
         : activeKey === "/delivery-partners"
           ? "Verify rider documents and activation status"
+          : activeKey === "/payouts"
+            ? "Track restaurant and delivery rider settlements"
           : activeKey === "/support"
             ? "Reply to customer chats and reported issues"
             : "Monitor live orders and fulfillment";

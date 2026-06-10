@@ -12,6 +12,7 @@ import {
   Platform
 } from "react-native";
 import { 
+  acceptJob,
   getJobDetails, 
   markAsPickedUp, 
   markAsDelivered,
@@ -20,6 +21,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from 'expo-location';
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
+
+const LOCATION_LOOKUP_TIMEOUT_MS = 5000;
 
 interface Props {
   route: any;
@@ -80,13 +83,36 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     getCurrentLocation().then(setUserLocation).catch(() => {});
   }, []);
 
+  const getCurrentPositionWithTimeout = async (timeoutMs = LOCATION_LOOKUP_TIMEOUT_MS) => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      return await Promise.race<Location.LocationObject | null>([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null),
+        new Promise<null>((resolve) => {
+          timeoutId = setTimeout(() => resolve(null), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  };
+
   const getCurrentLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
       return null;
     }
 
-    return Location.getCurrentPositionAsync({});
+    const lastKnownLocation = await Location.getLastKnownPositionAsync({
+      maxAge: 60000,
+      requiredAccuracy: 200
+    }).catch(() => null);
+    const currentLocation = await getCurrentPositionWithTimeout();
+
+    return currentLocation || lastKnownLocation;
   };
 
   const returnToJobs = () => {
@@ -319,14 +345,44 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleAcceptDelivery = async () => {
+    try {
+      setUpdating(true);
+      const response = await acceptJob(orderId);
+
+      if (response.success) {
+        setJob((current) => response.data || (current ? { ...current, status: "ASSIGNED" } : null));
+        setStatusModal({
+          title: "Delivery accepted",
+          message: "You can now head to the restaurant and mark the order picked up once collected.",
+          actionLabel: "Start Pickup",
+          onAction: () => {
+            setStatusModal(null);
+          }
+        });
+      } else {
+        Alert.alert("Could not accept delivery", response.message || "Please try again.");
+      }
+    } catch (error) {
+      console.error("Error accepting delivery:", error);
+      Alert.alert("Could not accept delivery", "Please try again.");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handlePickUp = async () => {
     try {
       setUpdating(true);
       
-      // Get current location
-      let location: Location.LocationObject | null = null;
+      let location: Location.LocationObject | null = userLocation;
       try {
-        location = await getCurrentLocation();
+        if (!location) {
+          location = await getCurrentLocation();
+        }
+        if (location) {
+          setUserLocation(location);
+        }
       } catch (error) {
         console.error("Error getting location:", error);
       }
@@ -373,10 +429,14 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     try {
       setUpdating(true);
       
-      // Get current location
-      let location: Location.LocationObject | null = null;
+      let location: Location.LocationObject | null = userLocation;
       try {
-        location = await getCurrentLocation();
+        if (!location) {
+          location = await getCurrentLocation();
+        }
+        if (location) {
+          setUserLocation(location);
+        }
       } catch (error) {
         console.error("Error getting location:", error);
       }
@@ -643,6 +703,28 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       </View>
 
       {/* Action Buttons */}
+      {job.status === "READY" && (
+        <View style={styles.actionSection}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleAcceptDelivery}
+            disabled={updating}
+          >
+            {updating ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>Accept Delivery</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.actionHint}>
+            Accept this job from here and continue straight to pickup
+          </Text>
+        </View>
+      )}
+
       {job.status === "ASSIGNED" && (
         <View style={styles.actionSection}>
           <TouchableOpacity
