@@ -46,9 +46,12 @@ const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const aadhaarRegex = /^[0-9]{12}$/;
 const fssaiRegex = /^[0-9]{14}$/;
 const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+
+const isGstRegisteredValue = (value: any) => value === true || value === "true" || value === "yes";
 
 const hasCompleteProfileDocuments = (documents: Record<string, any>) =>
   Boolean(
@@ -58,12 +61,7 @@ const hasCompleteProfileDocuments = (documents: Record<string, any>) =>
       firstString(documents?.panFrontUrl, documents?.ownerPanUrl) &&
       firstString(documents?.aadhaarNumber) &&
       firstString(documents?.aadhaarFrontUrl, documents?.ownerIdProofUrl) &&
-      firstString(documents?.aadhaarBackUrl) &&
-      firstString(documents?.addressProofUrl) &&
-      firstString(documents?.bankAccountHolderName) &&
-      firstString(documents?.bankAccountNumber) &&
-      firstString(documents?.bankIfsc) &&
-      firstString(documents?.bankProofUrl, documents?.cancelledChequeUrl, documents?.bankPassbookUrl, documents?.bankStatementUrl)
+      (!isGstRegisteredValue(documents?.gstRegistered) || (firstString(documents?.gstNumber) && firstString(documents?.gstUrl)))
   );
 
 const selfDeliveryEligibleStatuses = ["VERIFIED", "ACTIVE"];
@@ -207,11 +205,12 @@ const sanitizeOnboardingDraft = (draft: any) => {
   const safeLocation = typeof draft.shopLocation === "object" && draft.shopLocation ? draft.shopLocation : null;
 
   return {
-    activeStep: Number.isFinite(Number(draft.activeStep)) ? Math.max(0, Math.min(5, Number(draft.activeStep))) : 0,
+    activeStep: Number.isFinite(Number(draft.activeStep)) ? Math.max(0, Math.min(4, Number(draft.activeStep))) : 0,
     form: {
       ownerName: String(safeForm.ownerName || ""),
       restaurantName: String(safeForm.restaurantName || ""),
-      phone: String(safeForm.phone || "")
+      phone: String(safeForm.phone || safeForm.ownerPhone || ""),
+      restaurantPhone: String(safeForm.restaurantPhone || "")
     },
     address: {
       state: String(safeAddress.state || ""),
@@ -231,6 +230,8 @@ const sanitizeOnboardingDraft = (draft: any) => {
       aadhaarNumber: String(safeDocuments.aadhaarNumber || ""),
       aadhaarFrontUrl: String(safeDocuments.aadhaarFrontUrl || ""),
       aadhaarBackUrl: String(safeDocuments.aadhaarBackUrl || ""),
+      gstRegistered: isGstRegisteredValue(safeDocuments.gstRegistered),
+      gstNumber: String(safeDocuments.gstNumber || ""),
       bankDocumentType: String(safeDocuments.bankDocumentType || ""),
       bankAccountHolderName: String(safeDocuments.bankAccountHolderName || ""),
       cancelledChequeUrl: String(safeDocuments.cancelledChequeUrl || ""),
@@ -348,6 +349,8 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       ownerName,
       restaurantName,
       phone,
+      ownerPhone,
+      restaurantPhone,
     } = req.body;
 
     const {
@@ -426,13 +429,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       }
     }
 
-    if (!resolvedCoordinates) {
-      return res.status(400).json({
-        success: false,
-        message: "Shop location is required. Tap 'Use my shop location' or paste a Google Maps share link that includes coordinates."
-      });
-    }
-
     const normalizedDocs = {
       fssaiNumber: firstString(documents?.fssaiNumber, documents?.fssai_number),
       fssaiUrl: firstString(documents?.fssaiUrl, documents?.fssai_url),
@@ -447,6 +443,8 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       bankDocumentType: firstString(documents?.bankDocumentType, documents?.bank_document_type, documents?.bankProofType),
       bankProofUrl: firstString(documents?.bankProofUrl, documents?.cancelledChequeUrl, documents?.bankPassbookUrl, documents?.bankStatementUrl),
       addressProofUrl: firstString(documents?.addressProofUrl, documents?.address_proof_url),
+      gstRegistered: isGstRegisteredValue(documents?.gstRegistered),
+      gstNumber: firstString(documents?.gstNumber, documents?.gstin, documents?.gst_number).toUpperCase(),
       gstUrl: firstString(documents?.gstUrl),
       shopLicenseUrl: firstString(documents?.shopLicenseUrl),
       menuProofUrl: firstString(documents?.menuProofUrl),
@@ -456,10 +454,9 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     const hasAnyBankInput = Boolean(
       normalizedDocs.bankAccountHolderName ||
       normalizedDocs.bankAccountNumber ||
-      normalizedDocs.bankIfsc ||
-      normalizedDocs.bankProofUrl
+      normalizedDocs.bankIfsc
     );
-    const normalizedBankDocumentType = hasAnyBankInput ? normalizedDocs.bankDocumentType || "cheque" : "";
+    const normalizedBankDocumentType = "";
 
     if (!fssaiRegex.test(normalizedDocs.fssaiNumber)) {
       return res.status(400).json({ success: false, message: "FSSAI number must be 14 digits" });
@@ -469,6 +466,14 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     }
     if (!aadhaarRegex.test(normalizedDocs.aadhaarNumber)) {
       return res.status(400).json({ success: false, message: "Aadhaar number must be 12 digits" });
+    }
+    if (normalizedDocs.gstRegistered) {
+      if (!gstRegex.test(normalizedDocs.gstNumber)) {
+        return res.status(400).json({ success: false, message: "GSTIN must be a valid 15-character GST number" });
+      }
+      if (!normalizedDocs.gstUrl) {
+        return res.status(400).json({ success: false, message: "GST certificate is required when GST registered is yes" });
+      }
     }
 
     if (hasAnyBankInput) {
@@ -481,27 +486,23 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       if (!ifscRegex.test(normalizedDocs.bankIfsc)) {
         return res.status(400).json({ success: false, message: "IFSC code format is invalid" });
       }
-      if (!normalizedDocs.bankProofUrl) {
-        return res.status(400).json({ success: false, message: "Add one bank proof if you enter bank details" });
-      }
     }
 
     const hasMandatoryDocuments = Boolean(
       normalizedDocs.fssaiUrl &&
       normalizedDocs.panFrontUrl &&
       normalizedDocs.aadhaarFrontUrl &&
-      normalizedDocs.aadhaarBackUrl &&
-      normalizedDocs.addressProofUrl
+      (!normalizedDocs.gstRegistered || (normalizedDocs.gstNumber && normalizedDocs.gstUrl))
     );
 
     if (!hasMandatoryDocuments) {
       return res.status(400).json({
         success: false,
-        message: "FSSAI, PAN front, Aadhaar front/back, and restaurant address proof are mandatory"
+        message: "FSSAI, PAN, Aadhaar front, and GST details when registered are mandatory"
       });
     }
 
-    const normalizedBankProofUrl = hasAnyBankInput ? normalizedDocs.bankProofUrl : "";
+    const normalizedBankProofUrl = "";
     const normalizedBankAccountHolderName = hasAnyBankInput ? normalizedDocs.bankAccountHolderName : "";
     const normalizedBankAccountNumber = hasAnyBankInput ? normalizedDocs.bankAccountNumber : "";
     const normalizedBankIfsc = hasAnyBankInput ? normalizedDocs.bankIfsc : "";
@@ -524,6 +525,8 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       restaurantName,
       shopName: restaurantName,
       phone,
+      ownerPhone: firstString(ownerPhone, phone),
+      restaurantPhone: firstString(restaurantPhone),
       address: {
         state: state.trim(),
         city: city.trim(),
@@ -536,7 +539,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       },
       location: {
         type: "Point",
-        coordinates: resolvedCoordinates
+        coordinates: resolvedCoordinates || [0, 0]
       },
       category: category || "other",
       documents: {
@@ -546,8 +549,10 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         panFrontUrl: normalizedDocs.panFrontUrl,
         aadhaarNumber: normalizedDocs.aadhaarNumber,
         aadhaarFrontUrl: normalizedDocs.aadhaarFrontUrl,
-        aadhaarBackUrl: normalizedDocs.aadhaarBackUrl,
-        gstUrl: documents?.gstUrl || "",
+        aadhaarBackUrl: "",
+        gstRegistered: normalizedDocs.gstRegistered,
+        gstNumber: normalizedDocs.gstRegistered ? normalizedDocs.gstNumber : "",
+        gstUrl: normalizedDocs.gstRegistered ? normalizedDocs.gstUrl : "",
         shopLicenseUrl: documents?.shopLicenseUrl || "",
         ownerIdProofUrl: normalizedDocs.aadhaarFrontUrl,
         ownerPanUrl: normalizedDocs.panFrontUrl,
@@ -556,7 +561,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         bankAccountHolderName: normalizedBankAccountHolderName,
         bankAccountNumber: normalizedBankAccountNumber,
         bankIfsc: normalizedBankIfsc,
-        addressProofUrl: normalizedDocs.addressProofUrl,
+        addressProofUrl: "",
         menuProofUrl: normalizedDocs.menuProofUrl,
         restaurantPhotosUrls: Array.isArray(documents?.restaurantPhotosUrls) ? documents.restaurantPhotosUrls : [],
         operatingHoursNote: normalizedDocs.operatingHoursNote,

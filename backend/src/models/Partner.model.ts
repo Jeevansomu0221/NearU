@@ -30,6 +30,16 @@ const PartnerSchema = new Schema(
       required: true,
       unique: true
     },
+    ownerPhone: {
+      type: String,
+      default: "",
+      trim: true
+    },
+    restaurantPhone: {
+      type: String,
+      default: "",
+      trim: true
+    },
     
     // ADD THIS: Shop profile image
     shopImageUrl: {
@@ -158,6 +168,8 @@ const PartnerSchema = new Schema(
       aadhaarNumber: String,
       aadhaarFrontUrl: String,
       aadhaarBackUrl: String,
+      gstRegistered: { type: Boolean, default: false },
+      gstNumber: String,
       gstUrl: String,
       shopLicenseUrl: String,
       ownerIdProofUrl: String,

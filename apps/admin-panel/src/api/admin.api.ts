@@ -16,6 +16,8 @@ export interface PartnerRecord {
   ownerName: string;
   restaurantName: string;
   phone: string;
+  ownerPhone?: string;
+  restaurantPhone?: string;
   address?: {
     area?: string;
     city?: string;
@@ -37,6 +39,8 @@ export interface PartnerRecord {
     aadhaarNumber?: string;
     aadhaarFrontUrl?: string;
     aadhaarBackUrl?: string;
+    gstRegistered?: boolean;
+    gstNumber?: string;
     gstUrl?: string;
     shopLicenseUrl?: string;
     ownerIdProofUrl?: string;
@@ -60,13 +64,7 @@ export type DocumentReuploadKey =
   | "fssaiUrl"
   | "panFrontUrl"
   | "aadhaarFrontUrl"
-  | "aadhaarBackUrl"
-  | "bankProofUrl"
-  | "addressProofUrl"
-  | "gstUrl"
-  | "shopLicenseUrl"
-  | "ownerPanUrl"
-  | "menuProofUrl";
+  | "gstUrl";
 
 export type DeliveryDocumentReuploadKey =
   | "aadhaarFrontUrl"

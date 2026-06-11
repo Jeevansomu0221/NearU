@@ -153,13 +153,7 @@ const VALID_REUPLOAD_KEYS = new Set([
   "fssaiUrl",
   "panFrontUrl",
   "aadhaarFrontUrl",
-  "aadhaarBackUrl",
-  "bankProofUrl",
-  "addressProofUrl",
-  "gstUrl",
-  "shopLicenseUrl",
-  "ownerPanUrl",
-  "menuProofUrl"
+  "gstUrl"
 ]);
 
 /**

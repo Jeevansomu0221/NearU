@@ -51,6 +51,8 @@ type DocumentState = {
   aadhaarNumber: string;
   aadhaarFrontUrl: string;
   aadhaarBackUrl: string;
+  gstRegistered: "yes" | "no" | "";
+  gstNumber: string;
   bankDocumentType: "cheque" | "passbook" | "statement" | "";
   bankAccountHolderName: string;
   cancelledChequeUrl: string;
@@ -77,10 +79,7 @@ const hasBankInput = (documents: DocumentState) =>
   Boolean(
     documents.bankAccountHolderName.trim() ||
       documents.bankAccountNumber.trim() ||
-      documents.bankIfsc.trim() ||
-      documents.cancelledChequeUrl ||
-      documents.bankPassbookUrl ||
-      documents.bankStatementUrl
+      documents.bankIfsc.trim()
   );
 
 const clearBankDetails = (documents: DocumentState): DocumentState => ({
@@ -135,6 +134,7 @@ type OnboardingDraft = {
     ownerName: string;
     restaurantName: string;
     phone: string;
+    restaurantPhone: string;
   };
   address: {
     state: string;
@@ -152,27 +152,21 @@ type OnboardingDraft = {
 };
 
 const mandatoryDocs: Array<{ key: keyof DocumentState; title: string; subtitle: string }> = [
-  { key: "fssaiUrl", title: "FSSAI License", subtitle: "Single PDF/image document" },
-  { key: "panFrontUrl", title: "PAN Card - Front", subtitle: "Owner PAN proof" },
-  { key: "aadhaarFrontUrl", title: "Aadhaar - Front", subtitle: "Owner Aadhaar proof" },
-  { key: "aadhaarBackUrl", title: "Aadhaar - Back", subtitle: "Owner Aadhaar proof" },
-  { key: "addressProofUrl", title: "Address Proof", subtitle: "Utility bill, rental proof, or property document" }
+  { key: "fssaiUrl", title: "FSSAI License", subtitle: "Certificate name should match the restaurant name or PAN name" },
+  { key: "panFrontUrl", title: "PAN Card", subtitle: "PAN of the person who owns the restaurant" },
+  { key: "aadhaarFrontUrl", title: "Aadhaar - Front", subtitle: "Owner Aadhaar front side only" }
 ];
 
 const optionalDocs: Array<{ key: keyof DocumentState; title: string; subtitle: string }> = [
-  { key: "gstUrl", title: "GST Certificate", subtitle: "Optional - if registered" },
-  { key: "shopLicenseUrl", title: "Shop License", subtitle: "Optional - if applicable" },
-  { key: "ownerPanUrl", title: "Owner PAN Copy", subtitle: "Optional secondary copy" },
-  { key: "menuProofUrl", title: "Menu List / Proof", subtitle: "Optional support for faster review" }
+  { key: "gstUrl", title: "GST Certificate", subtitle: "Required only if GST registered" }
 ];
 
 const STEPS = [
   { key: "basic", title: "Basic details", subtitle: "Tell us who owns the shop." },
   { key: "address", title: "Shop address", subtitle: "Help customers and delivery partners find you." },
   { key: "category", title: "Business category", subtitle: "Pick the right business type." },
-  { key: "documents", title: "Documents", subtitle: "Upload the mandatory proofs." },
-  { key: "bank", title: "Bank details", subtitle: "Optional for now. You can add later in Profile." },
-  { key: "optional", title: "If applicable", subtitle: "Optional proofs and extra documents." }
+  { key: "documents", title: "Documents", subtitle: "Upload the required proofs." },
+  { key: "bank", title: "Bank details", subtitle: "Optional for now. No bank proof upload is needed." }
 ] as const;
 
 const DRAFT_STORAGE_KEY = "partnerOnboardingDraft";
@@ -226,11 +220,12 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
   const safeLocation = typeof draft.shopLocation === "object" && draft.shopLocation ? draft.shopLocation : null;
 
   return {
-    activeStep: Number.isFinite(Number(draft.activeStep)) ? Math.max(0, Math.min(5, Number(draft.activeStep))) : 0,
+    activeStep: Number.isFinite(Number(draft.activeStep)) ? Math.max(0, Math.min(STEPS.length - 1, Number(draft.activeStep))) : 0,
     form: {
       ownerName: String(safeForm.ownerName || ""),
       restaurantName: String(safeForm.restaurantName || ""),
-      phone: String(safeForm.phone || "")
+      phone: String(safeForm.phone || safeForm.ownerPhone || ""),
+      restaurantPhone: String(safeForm.restaurantPhone || "")
     },
     address: {
       state: String(safeAddress.state || ""),
@@ -250,6 +245,8 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
       aadhaarNumber: String(safeDocuments.aadhaarNumber || ""),
       aadhaarFrontUrl: String(safeDocuments.aadhaarFrontUrl || ""),
       aadhaarBackUrl: String(safeDocuments.aadhaarBackUrl || ""),
+      gstRegistered: safeDocuments.gstRegistered === true || safeDocuments.gstRegistered === "yes" ? "yes" : safeDocuments.gstRegistered === false || safeDocuments.gstRegistered === "no" ? "no" : "",
+      gstNumber: String(safeDocuments.gstNumber || ""),
       bankDocumentType: normalizeBankDocumentType(safeDocuments.bankDocumentType),
       bankAccountHolderName: String(safeDocuments.bankAccountHolderName || ""),
       cancelledChequeUrl: String(safeDocuments.cancelledChequeUrl || ""),
@@ -284,7 +281,8 @@ export default function OnboardingScreen({ navigation }: any) {
   const [form, setForm] = useState({
     ownerName: "",
     restaurantName: "",
-    phone: ""
+    phone: "",
+    restaurantPhone: ""
   });
   const [address, setAddress] = useState({
     state: "",
@@ -304,6 +302,8 @@ export default function OnboardingScreen({ navigation }: any) {
     aadhaarNumber: "",
     aadhaarFrontUrl: "",
     aadhaarBackUrl: "",
+    gstRegistered: "",
+    gstNumber: "",
     bankDocumentType: DEFAULT_BANK_DOCUMENT_TYPE,
     bankAccountHolderName: "",
     cancelledChequeUrl: "",
@@ -564,18 +564,16 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
-  const validateStep = (step: number) => {
+  const validateStep = (step: number, nextDocuments = documents) => {
     if (step === 0) {
-      if (!form.ownerName || !form.restaurantName || !form.phone) return "Please fill all basic details";
+      if (!form.ownerName || !form.restaurantName || !form.phone || !form.restaurantPhone) return "Please fill all basic details";
       if (form.phone.length !== 10) return "Enter a valid 10-digit phone number";
+      if (form.restaurantPhone.length !== 10) return "Enter a valid 10-digit restaurant phone number";
     }
 
     if (step === 1) {
       if (!address.state || !address.city || !address.pincode || !address.area || !address.colony || !address.roadStreet) {
         return "Please fill all address fields";
-      }
-      if (!shopLocation && !address.googleMapsLink.trim()) {
-        return "Capture your shop location or paste a Google Maps link";
       }
       if (!/^\d{6}$/.test(address.pincode)) return "Pincode must be exactly 6 digits";
     }
@@ -585,24 +583,28 @@ export default function OnboardingScreen({ navigation }: any) {
     }
 
     if (step === 3) {
-      if (!/^\d{14}$/.test(documents.fssaiNumber.trim())) return "FSSAI number must be 14 digits";
-      if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(documents.panNumber.trim().toUpperCase())) return "PAN number must match AAAAA9999A format";
-      if (!/^\d{12}$/.test(documents.aadhaarNumber.trim())) return "Aadhaar number must be 12 digits";
-      if (!documents.fssaiUrl || !documents.panFrontUrl || !documents.aadhaarFrontUrl || !documents.aadhaarBackUrl || !documents.addressProofUrl) {
+      if (!/^\d{14}$/.test(nextDocuments.fssaiNumber.trim())) return "FSSAI number must be 14 digits";
+      if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(nextDocuments.panNumber.trim().toUpperCase())) return "PAN number must match AAAAA9999A format";
+      if (!/^\d{12}$/.test(nextDocuments.aadhaarNumber.trim())) return "Aadhaar number must be 12 digits";
+      if (!nextDocuments.gstRegistered) return "Please select whether you are GST registered";
+      if (nextDocuments.gstRegistered === "yes") {
+        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(nextDocuments.gstNumber.trim().toUpperCase())) {
+          return "GSTIN must be a valid 15-character GST number";
+        }
+        if (!nextDocuments.gstUrl) return "Please upload the GST certificate";
+      }
+      if (!nextDocuments.fssaiUrl || !nextDocuments.panFrontUrl || !nextDocuments.aadhaarFrontUrl) {
         return "Please upload the mandatory documents";
       }
     }
 
     if (step === 4) {
-      const hasAnyBankInput = hasBankInput(documents);
+      const hasAnyBankInput = hasBankInput(nextDocuments);
 
       if (hasAnyBankInput) {
-        if (!documents.bankAccountHolderName.trim()) return "Account holder name is required if you add bank details";
-        if (!/^\d+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric";
-        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC format is invalid";
-        if (!documents.bankDocumentType || (!documents.cancelledChequeUrl && !documents.bankPassbookUrl && !documents.bankStatementUrl)) {
-          return "Upload one bank proof if you add bank details";
-        }
+        if (!nextDocuments.bankAccountHolderName.trim()) return "Account holder name is required if you add bank details";
+        if (!/^\d+$/.test(nextDocuments.bankAccountNumber.trim())) return "Bank account number must be numeric";
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(nextDocuments.bankIfsc.trim().toUpperCase())) return "IFSC format is invalid";
       }
     }
 
@@ -622,14 +624,17 @@ export default function OnboardingScreen({ navigation }: any) {
   const goBack = () => setActiveStep((current) => Math.max(current - 1, 0));
 
   const skipToNext = () => {
-    if (activeStep === 4) {
-      setDocuments(clearBankDetails);
+    if (activeStep === STEPS.length - 1) {
+      const clearedDocuments = clearBankDetails(documents);
+      setDocuments(clearedDocuments);
+      void submit(clearedDocuments);
+      return;
     }
     setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
   };
 
-  const submit = async () => {
-    const validationError = validateStep(0) || validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4);
+  const submit = async (documentsOverride = documents) => {
+    const validationError = validateStep(0, documentsOverride) || validateStep(1, documentsOverride) || validateStep(2, documentsOverride) || validateStep(3, documentsOverride) || validateStep(4, documentsOverride);
     if (validationError) {
       Alert.alert("Missing Details", validationError);
       return;
@@ -640,13 +645,15 @@ export default function OnboardingScreen({ navigation }: any) {
       const userId = (await AsyncStorage.getItem("userId")) || "";
       const userStr = await AsyncStorage.getItem("user");
       const fallbackUserId = userStr ? JSON.parse(userStr).id : "";
-      const shouldSubmitBankDetails = hasBankInput(documents);
-      const bankProofUrl = shouldSubmitBankDetails ? documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl || "" : "";
+      const docsToSubmit = documentsOverride;
+      const shouldSubmitBankDetails = hasBankInput(docsToSubmit);
 
       const requestData: any = {
         ownerName: form.ownerName.trim(),
         restaurantName: form.restaurantName.trim(),
         phone: form.phone.trim(),
+        ownerPhone: form.phone.trim(),
+        restaurantPhone: form.restaurantPhone.trim(),
         address: {
           state: address.state.trim(),
           city: address.city.trim(),
@@ -663,20 +670,23 @@ export default function OnboardingScreen({ navigation }: any) {
         category: selectedCategory,
         userId: userId || fallbackUserId,
         documents: {
-          ...documents,
-          fssaiNumber: documents.fssaiNumber.trim(),
-          panNumber: documents.panNumber.trim().toUpperCase(),
-          aadhaarNumber: documents.aadhaarNumber.trim(),
-          ownerIdProofUrl: documents.aadhaarFrontUrl,
-          ownerPanUrl: documents.panFrontUrl,
-          bankDocumentType: shouldSubmitBankDetails ? normalizeBankDocumentType(documents.bankDocumentType) : "",
-          bankProofUrl,
-          cancelledChequeUrl: shouldSubmitBankDetails ? documents.cancelledChequeUrl : "",
-          bankPassbookUrl: shouldSubmitBankDetails ? documents.bankPassbookUrl : "",
-          bankStatementUrl: shouldSubmitBankDetails ? documents.bankStatementUrl : "",
-          bankAccountHolderName: shouldSubmitBankDetails ? documents.bankAccountHolderName.trim() : "",
-          bankAccountNumber: shouldSubmitBankDetails ? documents.bankAccountNumber.trim() : "",
-          bankIfsc: shouldSubmitBankDetails ? documents.bankIfsc.trim().toUpperCase() : ""
+          ...docsToSubmit,
+          fssaiNumber: docsToSubmit.fssaiNumber.trim(),
+          panNumber: docsToSubmit.panNumber.trim().toUpperCase(),
+          aadhaarNumber: docsToSubmit.aadhaarNumber.trim(),
+          gstRegistered: docsToSubmit.gstRegistered === "yes",
+          gstNumber: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstNumber.trim().toUpperCase() : "",
+          gstUrl: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstUrl : "",
+          ownerIdProofUrl: docsToSubmit.aadhaarFrontUrl,
+          ownerPanUrl: docsToSubmit.panFrontUrl,
+          bankDocumentType: "",
+          bankProofUrl: "",
+          cancelledChequeUrl: "",
+          bankPassbookUrl: "",
+          bankStatementUrl: "",
+          bankAccountHolderName: shouldSubmitBankDetails ? docsToSubmit.bankAccountHolderName.trim() : "",
+          bankAccountNumber: shouldSubmitBankDetails ? docsToSubmit.bankAccountNumber.trim() : "",
+          bankIfsc: shouldSubmitBankDetails ? docsToSubmit.bankIfsc.trim().toUpperCase() : ""
         }
       };
 
@@ -755,18 +765,29 @@ export default function OnboardingScreen({ navigation }: any) {
             <Text style={styles.label}>Restaurant or shop name</Text>
             <TextInput placeholder="Enter restaurant or shop name" placeholderTextColor="#98A2B3" value={form.restaurantName} onChangeText={(v) => setForm({ ...form, restaurantName: v })} style={styles.input} />
 
-            <Text style={styles.label}>Phone number</Text>
+            <Text style={styles.label}>Owner phone number</Text>
             <TextInput
-              placeholder="10-digit mobile number"
+              placeholder="10-digit owner mobile number"
               placeholderTextColor="#98A2B3"
               value={form.phone}
-              onChangeText={(v) => setForm({ ...form, phone: v })}
+              onChangeText={(v) => setForm({ ...form, phone: v.replace(/\D/g, "").slice(0, 10) })}
               keyboardType="number-pad"
               maxLength={10}
               style={[styles.input, autoFilledPhone ? styles.disabledInput : null]}
               editable={!autoFilledPhone}
             />
             {autoFilledPhone ? <Text style={styles.helperText}>Auto-filled from your login</Text> : null}
+
+            <Text style={styles.label}>Restaurant phone number</Text>
+            <TextInput
+              placeholder="10-digit restaurant phone number"
+              placeholderTextColor="#98A2B3"
+              value={form.restaurantPhone}
+              onChangeText={(v) => setForm({ ...form, restaurantPhone: v.replace(/\D/g, "").slice(0, 10) })}
+              keyboardType="number-pad"
+              maxLength={10}
+              style={styles.input}
+            />
           </View>
         );
 
@@ -811,8 +832,8 @@ export default function OnboardingScreen({ navigation }: any) {
             <Text style={styles.label}>Nearby places</Text>
             <TextInput placeholder="Metro station, mall, landmark" placeholderTextColor="#98A2B3" value={address.nearbyPlaces} onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })} style={styles.input} />
 
-            <Text style={styles.label}>Pin your shop</Text>
-            <Text style={styles.helperText}>Tap once while standing inside the shop. We will use the pin to help customers and delivery partners find you.</Text>
+            <Text style={styles.label}>Pin your shop (optional)</Text>
+            <Text style={styles.helperText}>Tap once while standing inside the shop if you want to add an exact GPS pin.</Text>
             <TouchableOpacity style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]} onPress={captureShopLocation} disabled={capturingLocation}>
               {capturingLocation ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryActionButtonText}>{shopLocation ? "Re-capture shop location" : "Use my shop location"}</Text>}
             </TouchableOpacity>
@@ -858,8 +879,10 @@ export default function OnboardingScreen({ navigation }: any) {
         return (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Documents</Text>
-            <Text style={styles.sectionHint}>Upload the legal documents we need for approval. You can finish optional items later in Profile.</Text>
+            <Text style={styles.sectionHint}>Upload only the required documents for approval.</Text>
 
+            <Text style={styles.subSectionTitle}>FSSAI requirements</Text>
+            <Text style={styles.subSectionHint}>The name on the FSSAI certificate should match either the restaurant name or the name on the PAN card. The address should also match the restaurant address.</Text>
             <Text style={styles.label}>FSSAI number *</Text>
             <TextInput
               placeholder="14-digit FSSAI number"
@@ -869,7 +892,10 @@ export default function OnboardingScreen({ navigation }: any) {
               keyboardType="number-pad"
               style={styles.input}
             />
+            {renderDocCard("FSSAI License", "Certificate name should match restaurant name or PAN name", "fssaiUrl", true)}
 
+            <Text style={styles.subSectionTitle}>PAN details</Text>
+            <Text style={styles.subSectionHint}>PAN details should be of the person who owns the restaurant.</Text>
             <Text style={styles.label}>PAN number *</Text>
             <TextInput
               placeholder="AAAAA9999A"
@@ -879,6 +905,7 @@ export default function OnboardingScreen({ navigation }: any) {
               onChangeText={(value) => setDocuments((prev) => ({ ...prev, panNumber: value.toUpperCase().slice(0, 10) }))}
               style={styles.input}
             />
+            {renderDocCard("PAN Card", "PAN of the person who owns the restaurant", "panFrontUrl", true)}
 
             <Text style={styles.label}>Aadhaar number *</Text>
             <TextInput
@@ -889,8 +916,47 @@ export default function OnboardingScreen({ navigation }: any) {
               keyboardType="number-pad"
               style={styles.input}
             />
+            {renderDocCard("Aadhaar - Front", "Owner Aadhaar front side only", "aadhaarFrontUrl", true)}
 
-            {mandatoryDocs.map((doc) => renderDocCard(doc.title, doc.subtitle, doc.key, true))}
+            <Text style={styles.subSectionTitle}>GST registration</Text>
+            <Text style={styles.subSectionHint}>Tell us whether this restaurant is GST registered. If yes, add the GSTIN and certificate.</Text>
+            <View style={styles.categoryGrid}>
+              {(["yes", "no"] as const).map((value) => {
+                const selected = documents.gstRegistered === value;
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    style={[styles.categoryChip, selected && styles.categoryChipSelected]}
+                    onPress={() =>
+                      setDocuments((prev) => ({
+                        ...prev,
+                        gstRegistered: value,
+                        gstNumber: value === "yes" ? prev.gstNumber : "",
+                        gstUrl: value === "yes" ? prev.gstUrl : ""
+                      }))
+                    }
+                  >
+                    <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>
+                      {value === "yes" ? "Yes, GST registered" : "No GST registration"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {documents.gstRegistered === "yes" ? (
+              <>
+                <Text style={styles.label}>GSTIN *</Text>
+                <TextInput
+                  placeholder="15-character GSTIN"
+                  placeholderTextColor="#98A2B3"
+                  autoCapitalize="characters"
+                  value={documents.gstNumber}
+                  onChangeText={(value) => setDocuments((prev) => ({ ...prev, gstNumber: value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15) }))}
+                  style={styles.input}
+                />
+                {renderDocCard("GST Certificate", "Required because you selected GST registered", "gstUrl", true)}
+              </>
+            ) : null}
           </View>
         );
 
@@ -898,7 +964,7 @@ export default function OnboardingScreen({ navigation }: any) {
         return (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Bank details</Text>
-            <Text style={styles.sectionHint}>This step is optional. You can skip it now and add it later from Profile when you're ready.</Text>
+            <Text style={styles.sectionHint}>This step is optional. You can skip it now and add it later from Profile when you're ready. No cancelled cheque, passbook, or bank statement upload is required.</Text>
 
             <Text style={styles.label}>Account holder name</Text>
             <TextInput
@@ -929,35 +995,7 @@ export default function OnboardingScreen({ navigation }: any) {
               style={styles.input}
             />
 
-            <Text style={styles.helperText}>Upload any one: Cancelled Cheque (recommended), Passbook, or Bank Statement.</Text>
-            <View style={styles.categoryGrid}>
-              {(["cheque", "passbook", "statement"] as const).map((type) => {
-                const selected = documents.bankDocumentType === type;
-                return (
-                  <TouchableOpacity key={type} style={[styles.categoryChip, selected && styles.categoryChipSelected]} onPress={() => setDocuments((prev) => ({ ...prev, bankDocumentType: type }))}>
-                    <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>
-                      {type === "cheque" ? "Cancelled Cheque" : type === "passbook" ? "Passbook" : "Bank Statement"}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {documents.bankDocumentType === "passbook"
-              ? renderDocCard("Bank Passbook", "First page image for payout verification", "bankPassbookUrl", false)
-              : documents.bankDocumentType === "statement"
-                ? renderDocCard("Bank Statement", "Recent statement as PDF/image", "bankStatementUrl", false)
-                : renderDocCard("Cancelled Cheque", "Recommended payout verification proof", "cancelledChequeUrl", false)}
-          </View>
-        );
-
-      case 5:
-        return (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>If applicable</Text>
-            <Text style={styles.sectionHint}>Optional documents can be added now or later from Profile. Upload only if you already have them ready.</Text>
-
-            {optionalDocs.map((doc) => renderDocCard(doc.title, doc.subtitle, doc.key))}
+            <Text style={styles.helperText}>Bank proof upload is not required.</Text>
           </View>
         );
 
@@ -1053,7 +1091,7 @@ export default function OnboardingScreen({ navigation }: any) {
         <View style={styles.hero}>
           <Text style={styles.heroEyebrow}>Vyaha Partner</Text>
           <Text style={styles.heroTitle}>Set up your shop in a few guided steps</Text>
-          <Text style={styles.heroSubtitle}>We'll walk through the essentials first. Bank details and extra documents can be skipped for now and finished later.</Text>
+          <Text style={styles.heroSubtitle}>We'll walk through the essentials first. Bank details can be skipped for now and finished later.</Text>
         </View>
 
         <View style={styles.stepperCard}>
@@ -1091,14 +1129,14 @@ export default function OnboardingScreen({ navigation }: any) {
             <Text style={styles.secondaryButtonText}>Back</Text>
           </TouchableOpacity>
 
-          {activeStep === 4 ? (
+          {activeStep === STEPS.length - 1 ? (
             <TouchableOpacity style={styles.skipButton} onPress={skipToNext} disabled={submitting}>
-              <Text style={styles.skipButtonText}>Skip for now</Text>
+              <Text style={styles.skipButtonText}>Skip & Submit</Text>
             </TouchableOpacity>
           ) : null}
 
-          {activeStep === 5 ? (
-            <TouchableOpacity style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]} onPress={submit} disabled={submitting || uploadingKey !== null}>
+          {activeStep === STEPS.length - 1 ? (
+            <TouchableOpacity style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]} onPress={() => submit()} disabled={submitting || uploadingKey !== null}>
               {submitting ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryButtonText}>Submit for Approval</Text>}
             </TouchableOpacity>
           ) : (
@@ -1263,6 +1301,19 @@ const styles = StyleSheet.create({
   sectionHint: {
     marginBottom: 14,
     fontSize: 13,
+    lineHeight: 18,
+    color: partnerTheme.colors.muted
+  },
+  subSectionTitle: {
+    marginTop: 8,
+    marginBottom: 6,
+    fontSize: 15,
+    fontWeight: "900",
+    color: partnerTheme.colors.primaryDark
+  },
+  subSectionHint: {
+    marginBottom: 12,
+    fontSize: 12,
     lineHeight: 18,
     color: partnerTheme.colors.muted
   },

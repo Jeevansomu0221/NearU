@@ -33,6 +33,8 @@ type ReuploadFlags = {
 type Documents = {
   fssaiNumber?: string;
   fssaiUrl?: string;
+  gstRegistered?: boolean | string;
+  gstNumber?: string;
   gstUrl?: string;
   shopLicenseUrl?: string;
   panNumber?: string;
@@ -147,22 +149,13 @@ const DOCUMENT_UPLOADS: Array<{ key: DocumentKey; title: string; subtitle: strin
   { key: "fssaiUrl", title: "FSSAI license", subtitle: "Submitted during registration", mandatory: true },
   { key: "panFrontUrl", title: "PAN card", subtitle: "Submitted during registration", mandatory: true },
   { key: "aadhaarFrontUrl", title: "Aadhaar front", subtitle: "Submitted during registration", mandatory: true },
-  { key: "aadhaarBackUrl", title: "Aadhaar back", subtitle: "Submitted during registration", mandatory: true },
-  { key: "bankProofUrl", title: "Bank proof", subtitle: "Cancelled cheque / passbook / statement", mandatory: true },
-  { key: "addressProofUrl", title: "Address proof", subtitle: "Utility bill or rental agreement", mandatory: true },
-  { key: "gstUrl", title: "GST certificate", subtitle: "Optional - if registered" },
-  { key: "shopLicenseUrl", title: "Shop & establishment license", subtitle: "Optional - if applicable" },
-  { key: "ownerPanUrl", title: "Owner PAN copy", subtitle: "Optional secondary copy" },
-  { key: "menuProofUrl", title: "Menu list / proof", subtitle: "Optional - speeds approval" }
+  { key: "gstUrl", title: "GST certificate", subtitle: "Required only when GST registered" }
 ];
 
 const REQUIRED_KYC_DETAILS: Array<{ key: keyof Documents; label: string }> = [
   { key: "fssaiNumber", label: "FSSAI number" },
   { key: "panNumber", label: "PAN number" },
-  { key: "aadhaarNumber", label: "Aadhaar number" },
-  { key: "bankAccountHolderName", label: "Bank account holder" },
-  { key: "bankAccountNumber", label: "Bank account number" },
-  { key: "bankIfsc", label: "IFSC code" }
+  { key: "aadhaarNumber", label: "Aadhaar number" }
 ];
 
 const getUploadMimeType = (filename: string) => {
@@ -439,16 +432,6 @@ export default function ProfileScreen({ navigation }: any) {
       Alert.alert("Pincode", "Pincode must be exactly 6 digits.");
       return;
     }
-    const [storedLng, storedLat] = profile?.location?.coordinates || [];
-    const hasStoredLocation =
-      typeof storedLat === "number" &&
-      typeof storedLng === "number" &&
-      !(storedLat === 0 && storedLng === 0);
-    if (!capturedLocation && !hasStoredLocation && !address.googleMapsLink.trim()) {
-      Alert.alert("Shop location", "Capture your shop GPS pin or add a Google Maps link so customers can locate you.");
-      return;
-    }
-
     const landmarks = address.landmark
       .split(",")
       .map((item) => item.trim())
@@ -510,6 +493,7 @@ export default function ProfileScreen({ navigation }: any) {
     if (field === "fssaiNumber") return raw.replace(/\D/g, "").slice(0, 14);
     if (field === "panNumber") return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
     if (field === "aadhaarNumber") return raw.replace(/\D/g, "").slice(0, 12);
+    if (field === "gstNumber") return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15);
     if (field === "bankAccountNumber") return raw.replace(/\D/g, "").slice(0, 20);
     if (field === "bankIfsc") return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11);
     if (field === "bankAccountHolderName") return raw;
@@ -550,12 +534,19 @@ export default function ProfileScreen({ navigation }: any) {
   }, [capturedLocation, profile?.location?.coordinates]);
 
   const profileCompletion = useMemo(() => {
+    const isGstRegistered = kyc.gstRegistered === true || kyc.gstRegistered === "true" || kyc.gstRegistered === "yes";
     const missingDetails = REQUIRED_KYC_DETAILS
       .filter(({ key }) => !String(kyc[key] || "").trim())
       .map(({ label }) => label);
+    if (isGstRegistered && !String(kyc.gstNumber || "").trim()) {
+      missingDetails.push("GSTIN");
+    }
     const missingDocuments = DOCUMENT_UPLOADS
       .filter((doc) => doc.mandatory && !String(kyc[doc.key] || "").trim())
       .map((doc) => doc.title);
+    if (isGstRegistered && !String(kyc.gstUrl || "").trim()) {
+      missingDocuments.push("GST certificate");
+    }
     const missing = [...missingDetails, ...missingDocuments];
 
     return {
@@ -783,6 +774,8 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
     );
   };
+
+  const isGstRegistered = kyc.gstRegistered === true || kyc.gstRegistered === "true" || kyc.gstRegistered === "yes";
 
   return (
     <View style={styles.safeAreaScreen}>
@@ -1140,7 +1133,7 @@ export default function ProfileScreen({ navigation }: any) {
           "KYC / Verification",
           profileCompletion.isComplete
             ? "All required registration details are on file. Tap Change to update anything."
-            : "Some required details are incomplete. Add the missing bank details or documents here."
+            : "Some required details are incomplete. Add the missing document details here."
         )}
 
         {kyc.reuploadNotes ? (
@@ -1169,21 +1162,23 @@ export default function ProfileScreen({ navigation }: any) {
           placeholder: "12-digit Aadhaar",
           maxLength: 12
         })}
-        {renderKycField("bankAccountHolderName", "Bank account holder", {
-          placeholder: "Name as per bank records"
-        })}
-        {renderKycField("bankAccountNumber", "Bank account number", {
-          mask: true,
-          keyboardType: "number-pad",
-          placeholder: "Account number"
-        })}
-        {renderKycField("bankIfsc", "IFSC code", {
-          placeholder: "IFSC code",
-          maxLength: 11
-        })}
+        <View style={styles.detailBlock}>
+          <Text style={styles.detailLabel}>GST registered</Text>
+          <Text style={styles.detailValue}>
+            {isGstRegistered ? "Yes" : "No"}
+          </Text>
+        </View>
+        {isGstRegistered
+          ? renderKycField("gstNumber", "GSTIN", {
+              placeholder: "15-character GSTIN",
+              maxLength: 15
+            })
+          : null}
 
         <Text style={styles.subsectionTitle}>Documents</Text>
-        {DOCUMENT_UPLOADS.map(renderDocumentRow)}
+        {DOCUMENT_UPLOADS
+          .filter((doc) => doc.key !== "gstUrl" || isGstRegistered)
+          .map((doc) => renderDocumentRow(doc.key === "gstUrl" ? { ...doc, mandatory: true } : doc))}
       </View>
 
       {/* Menu Management */}

@@ -13,13 +13,7 @@ const REUPLOAD_OPTIONS: Array<{ key: DocumentReuploadKey; label: string }> = [
   { key: "fssaiUrl", label: "FSSAI license" },
   { key: "panFrontUrl", label: "PAN card" },
   { key: "aadhaarFrontUrl", label: "Aadhaar front" },
-  { key: "aadhaarBackUrl", label: "Aadhaar back" },
-  { key: "bankProofUrl", label: "Bank proof" },
-  { key: "addressProofUrl", label: "Address proof" },
-  { key: "gstUrl", label: "GST certificate" },
-  { key: "shopLicenseUrl", label: "Shop & establishment license" },
-  { key: "ownerPanUrl", label: "Owner PAN copy" },
-  { key: "menuProofUrl", label: "Menu list / proof" }
+  { key: "gstUrl", label: "GST certificate" }
 ];
 
 export default function Partners() {
@@ -54,7 +48,7 @@ export default function Partners() {
     return partners
       .filter((partner) => {
       const matchesStatus = statusFilter === "ALL" || partner.status === statusFilter;
-      const haystack = `${partner.ownerName} ${partner.restaurantName} ${partner.phone} ${partner.category}`.toLowerCase();
+      const haystack = `${partner.ownerName} ${partner.restaurantName} ${partner.phone} ${partner.ownerPhone || ""} ${partner.restaurantPhone || ""} ${partner.category}`.toLowerCase();
       const matchesQuery = haystack.includes(query.toLowerCase());
       return matchesStatus && matchesQuery;
       })
@@ -165,13 +159,9 @@ export default function Partners() {
         { label: `FSSAI License${selectedPartner.documents?.fssaiNumber ? ` (${selectedPartner.documents.fssaiNumber})` : ""}`, url: selectedPartner.documents?.fssaiUrl, required: true, reuploadKey: "fssaiUrl" },
         { label: `PAN Front${selectedPartner.documents?.panNumber ? ` (${selectedPartner.documents.panNumber})` : ""}`, url: selectedPartner.documents?.panFrontUrl || selectedPartner.documents?.ownerPanUrl, required: true, reuploadKey: "panFrontUrl" },
         { label: `Aadhaar Front${selectedPartner.documents?.aadhaarNumber ? ` (${selectedPartner.documents.aadhaarNumber})` : ""}`, url: selectedPartner.documents?.aadhaarFrontUrl || selectedPartner.documents?.ownerIdProofUrl, required: true, reuploadKey: "aadhaarFrontUrl" },
-        { label: "Aadhaar Back", url: selectedPartner.documents?.aadhaarBackUrl, required: true, reuploadKey: "aadhaarBackUrl" },
-        { label: `Bank Proof${selectedPartner.documents?.bankDocumentType ? ` (${selectedPartner.documents.bankDocumentType})` : ""}`, url: selectedPartner.documents?.bankProofUrl, required: true, reuploadKey: "bankProofUrl" },
-        { label: "Address Proof", url: selectedPartner.documents?.addressProofUrl, required: true, reuploadKey: "addressProofUrl" },
-        { label: "GST Certificate", url: selectedPartner.documents?.gstUrl, required: false, reuploadKey: "gstUrl" },
-        { label: "Shop License", url: selectedPartner.documents?.shopLicenseUrl, required: false, reuploadKey: "shopLicenseUrl" },
-        { label: "Owner PAN", url: selectedPartner.documents?.ownerPanUrl, required: false, reuploadKey: "ownerPanUrl" },
-        { label: "Menu Proof", url: selectedPartner.documents?.menuProofUrl, required: false, reuploadKey: "menuProofUrl" }
+        ...(selectedPartner.documents?.gstRegistered
+          ? [{ label: `GST Certificate${selectedPartner.documents?.gstNumber ? ` (${selectedPartner.documents.gstNumber})` : ""}`, url: selectedPartner.documents?.gstUrl, required: true, reuploadKey: "gstUrl" as DocumentReuploadKey }]
+          : [])
       ]
     : [];
 
@@ -249,7 +239,8 @@ export default function Partners() {
                   title: "Contact",
                   render: (_, partner) => (
                     <div>
-                      <div>{partner.phone}</div>
+                      <div>Owner: {partner.ownerPhone || partner.phone}</div>
+                      {partner.restaurantPhone ? <div>Restaurant: {partner.restaurantPhone}</div> : null}
                       <Typography.Text type="secondary">{partner.category}</Typography.Text>
                     </div>
                   )
@@ -323,8 +314,12 @@ export default function Partners() {
               <div>{selectedPartner.ownerName}</div>
             </div>
             <div>
-              <Typography.Text type="secondary">Phone</Typography.Text>
-              <div>{selectedPartner.phone}</div>
+              <Typography.Text type="secondary">Owner phone</Typography.Text>
+              <div>{selectedPartner.ownerPhone || selectedPartner.phone}</div>
+            </div>
+            <div>
+              <Typography.Text type="secondary">Restaurant phone</Typography.Text>
+              <div>{selectedPartner.restaurantPhone || "Not provided"}</div>
             </div>
             <div>
               <Typography.Text type="secondary">Category</Typography.Text>
@@ -375,7 +370,7 @@ export default function Partners() {
                       <Space direction="vertical" size={4} style={{ width: "100%" }}>
                         <Space size={8} wrap>
                           <Typography.Text strong>
-                            {doc.label} {doc.required ? "(Mandatory)" : "(If applicable)"}
+                            {doc.label} {doc.required ? "(Mandatory)" : ""}
                           </Typography.Text>
                           {doc.url ? <Tag color="green">Verified</Tag> : <Tag color="default">Not uploaded</Tag>}
                           {reupload ? <Tag color="red">Re-upload requested</Tag> : null}
