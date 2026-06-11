@@ -59,10 +59,11 @@ const statusContent: Record<DeliveryProfile["status"], { title: string; body: st
   }
 };
 
-export default function ReviewStatusScreen({ navigation }: any) {
+export default function ReviewStatusScreen({ navigation, route }: any) {
   const [profile, setProfile] = useState<DeliveryProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const cameFromSubmission = Boolean(route?.params?.submitted);
 
   const syncProfile = async (showLoader = false) => {
     try {
@@ -82,7 +83,7 @@ export default function ReviewStatusScreen({ navigation }: any) {
         return;
       }
 
-      if (nextRoute === "CompleteProfile") {
+      if (nextRoute === "CompleteProfile" && !(cameFromSubmission && nextProfile.status === "PENDING")) {
         navigation.reset({ index: 0, routes: [{ name: "CompleteProfile" }] });
       }
     } catch (error: any) {

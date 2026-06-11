@@ -37,6 +37,8 @@ const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
 
 const safeTrimmedString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+const vehicleTypeRequiresMotorDocuments = (value: unknown) =>
+  !["cycle", "bicycle", "ev"].includes(safeTrimmedString(value).toLowerCase());
 const DELIVERY_REUPLOAD_KEYS = new Set([
   "aadhaarFrontUrl",
   "selfiePhotoUrl",
@@ -129,7 +131,7 @@ const isDeliveryProfileComplete = (profile: {
     bankStatementUrl?: string;
   };
 }) => {
-  const requiresMotorDocuments = !["Cycle", "Bicycle", "EV"].includes(safeTrimmedString(profile.vehicleType));
+  const requiresMotorDocuments = vehicleTypeRequiresMotorDocuments(profile.vehicleType);
   const hasRealName =
     !!safeTrimmedString(profile.name) &&
     !/^Delivery\s\d{4}$/.test(safeTrimmedString(profile.name)) &&
@@ -399,7 +401,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       }
 
       const nextVehicleType = typeof vehicleType === "string" ? vehicleType : currentPartner?.vehicleType;
-      const requiresMotorDocuments = !["Cycle", "Bicycle", "EV"].includes(safeTrimmedString(nextVehicleType));
+      const requiresMotorDocuments = vehicleTypeRequiresMotorDocuments(nextVehicleType);
       const hasMandatoryDocuments = Boolean(
         normalizedDocuments.aadhaarNumber &&
           normalizedDocuments.aadhaarFrontUrl &&

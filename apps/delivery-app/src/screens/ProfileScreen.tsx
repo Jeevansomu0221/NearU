@@ -24,7 +24,6 @@ import { buildLegalUrl } from "../constants/legal";
 import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { deleteAccount } from "../api/auth.api";
 import { getDeliveryStats, getTodaysEarnings, type DeliveryStats } from "../api/delivery.api";
-import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import SupportModal from "../components/SupportModal";
 import {
   getNotificationPermissionLabel,
@@ -204,6 +203,9 @@ const normalizeVehicleType = (value?: DeliveryProfile["vehicleType"] | string | 
   return (value || "Bike") as DeliveryProfile["vehicleType"];
 };
 
+const vehicleTypeRequiresMotorDocuments = (value?: DeliveryProfile["vehicleType"] | string | null) =>
+  !["cycle", "bicycle", "ev"].includes((value || "").trim().toLowerCase());
+
 const uploadAssetToServer = async (asset: UploadAsset, field: UploadField) => {
   const token = await AsyncStorage.getItem("token");
   if (!token) throw new Error(GENERIC_UPLOAD_ERROR);
@@ -272,9 +274,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
   const [isAvailable, setIsAvailable] = useState(true);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [bankDetailsSkipped, setBankDetailsSkipped] = useState(false);
   const [documents, setDocuments] = useState<Docs>(emptyDocs());
   const formattedAddress = useMemo(() => buildAddressString(addressForm), [addressForm]);
-  const requiresMotorDocuments = !["Cycle", "Bicycle", "EV"].includes(vehicleType);
+  const requiresMotorDocuments = vehicleTypeRequiresMotorDocuments(vehicleType);
 
   const updateAddressField = (key: keyof AddressForm, value: string) => {
     setAddressForm((current) => ({
@@ -301,6 +304,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     setProfilePhotoUrl(data.profilePhotoUrl || "");
     setIsAvailable(typeof data.isAvailable === "boolean" ? data.isAvailable : true);
     setTermsAccepted(Boolean(data.termsAcceptedAt));
+    setBankDetailsSkipped(false);
     setDocuments(normalizeDocuments(data.documents));
   };
 
@@ -338,6 +342,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             setProfilePhotoUrl(parsed.profilePhotoUrl || response.data.profilePhotoUrl || "");
             setIsAvailable(typeof parsed.isAvailable === "boolean" ? parsed.isAvailable : response.data.isAvailable);
             setTermsAccepted(typeof parsed.termsAccepted === "boolean" ? parsed.termsAccepted : Boolean(response.data.termsAcceptedAt));
+            setBankDetailsSkipped(Boolean(parsed.bankDetailsSkipped));
             setDocuments(normalizeDocuments({ ...(response.data.documents || {}), ...(parsed.documents || {}) }));
             setStep(typeof parsed.step === "number" ? Math.min(Math.max(parsed.step, 0), 3) : 0);
           }
@@ -357,9 +362,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
       name, email, dateOfBirth, address: formattedAddress, addressForm,
       emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber,
-      licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step
+      licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, bankDetailsSkipped, documents, step
     })).catch(() => {});
-  }, [name, email, dateOfBirth, formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step]);
+  }, [name, email, dateOfBirth, formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, bankDetailsSkipped, documents, step]);
 
   const isActiveDashboard = !forceComplete && profile?.status === "ACTIVE";
   const formatCurrency = (amount?: number | null) => `Rs ${(amount || 0).toLocaleString("en-IN")}`;
@@ -494,7 +499,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       if (requiresMotorDocuments && (!normalized.drivingLicenseFrontUrl || !normalized.drivingLicenseBackUrl)) return "Driving license front and back are mandatory for this vehicle type.";
     }
     if (index === 3) {
-      const hasAnyBankInput = Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim());
+      const hasAnyBankInput = !bankDetailsSkipped && Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim());
       if (hasAnyBankInput) {
         if (!documents.bankAccountHolderName?.trim()) return "Account holder name is required if you add bank details.";
         if (!documents.bankAccountNumber?.trim()) return "Bank account number is required if you add bank details.";
@@ -570,7 +575,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const handleSaveDraft = async () => {
-    await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email, dateOfBirth, address: formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step }));
+    await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email, dateOfBirth, address: formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, bankDetailsSkipped, documents, step }));
     Alert.alert("Saved", "Your draft is saved on this device.");
   };
 
@@ -582,6 +587,10 @@ export default function ProfileScreen({ navigation, route }: any) {
     try {
       setSaving(true);
       const normalizedDocuments = normalizeDocuments(documents);
+      const submittedAt = new Date().toISOString();
+      const bankAccountHolderName = bankDetailsSkipped ? "" : documents.bankAccountHolderName?.trim();
+      const bankAccountNumber = bankDetailsSkipped ? "" : documents.bankAccountNumber?.trim() || "";
+      const bankIfsc = bankDetailsSkipped ? "" : documents.bankIfsc?.trim().toUpperCase();
       const response = await updateDeliveryProfile({
         name: name.trim(), email: email.trim() || undefined, dateOfBirth: dateOfBirth.trim(),
         emergencyContactName: emergencyContactName.trim(),
@@ -607,16 +616,17 @@ export default function ProfileScreen({ navigation, route }: any) {
           cancelledChequeUrl: "",
           bankPassbookUrl: "",
           bankStatementUrl: "",
-          bankAccountHolderName: documents.bankAccountHolderName?.trim(),
-          bankAccountNumber: documents.bankAccountNumber?.trim() || "",
-          bankIfsc: documents.bankIfsc?.trim().toUpperCase()
+          bankAccountHolderName,
+          bankAccountNumber,
+          bankIfsc,
+          submittedAt,
+          isComplete: true
         }
       });
       if (!response.success || !response.data) { Alert.alert("Error", response.message || "Failed to save profile"); return; }
-      syncProfile(response.data);
-      await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email, dateOfBirth, address: formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, documents, step }));
+      await AsyncStorage.removeItem(DRAFT_KEY);
+      navigation.reset({ index: 0, routes: [{ name: "ReviewStatus", params: { submitted: true } }] });
       Alert.alert("Submitted", "Your delivery profile is now pending admin verification.");
-      navigation.reset({ index: 0, routes: [{ name: resolveDeliveryRoute(response.data) }] });
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to save profile");
     } finally {
@@ -820,7 +830,15 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
   };
 
-  const handleSkipBankDetailsForNow = () => {
+  const handleVehicleTypeSelect = (nextType: DeliveryProfile["vehicleType"]) => {
+    setVehicleType(nextType);
+    if (!vehicleTypeRequiresMotorDocuments(nextType)) {
+      setVehicleNumber("");
+      setLicenseNumber("");
+    }
+  };
+
+  const clearBankDetails = () => {
     setDocuments((current) => ({
       ...current,
       bankAccountHolderName: "",
@@ -831,7 +849,19 @@ export default function ProfileScreen({ navigation, route }: any) {
       bankStatementUrl: "",
       bankDocumentType: ""
     }));
-    Alert.alert("Bank details skipped", "You can add payout bank details later from your profile before receiving delivery job payments.");
+  };
+
+  const handleBankFieldChange = (patch: Partial<Docs>) => {
+    setBankDetailsSkipped(false);
+    setDocuments((current) => ({ ...current, ...patch }));
+  };
+
+  const handleToggleSkipBankDetails = () => {
+    setBankDetailsSkipped((current) => {
+      const nextSkipped = !current;
+      if (nextSkipped) clearBankDetails();
+      return nextSkipped;
+    });
   };
 
   const renderStepContent = () => {
@@ -863,7 +893,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={s.inputLabel}>Vehicle Type</Text>
             <View style={s.vehicleGrid}>
               {VEHICLE_TYPES.map((vt) => (
-                <TouchableOpacity key={vt} style={[s.vehicleCard, vehicleType === vt && s.vehicleCardActive]} onPress={() => setVehicleType(vt)}>
+                <TouchableOpacity key={vt} style={[s.vehicleCard, vehicleType === vt && s.vehicleCardActive]} onPress={() => handleVehicleTypeSelect(vt)}>
                   <Ionicons name={VEHICLE_ICONS[vt]} size={24} color={vehicleType === vt ? "#C2410C" : "#667085"} />
                   <Text style={[s.vehicleCardText, vehicleType === vt && s.vehicleCardTextActive]}>{vt}</Text>
                 </TouchableOpacity>
@@ -907,16 +937,32 @@ export default function ProfileScreen({ navigation, route }: any) {
               <Ionicons name="cash-outline" size={20} color="#667085" />
               <Text style={s.infoCardText}>We use these bank details to transfer your delivery job payments. You can skip this now and add payout details later from your profile.</Text>
             </View>
-            <Text style={s.inputLabel}>Account Holder Name</Text>
-            <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountHolderName: v }))} placeholder="As on bank account" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-            <Text style={s.inputLabel}>Account Number</Text>
-            <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountNumber: v.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
-            <Text style={s.inputLabel}>IFSC Code</Text>
-            <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankIfsc: v.toUpperCase() }))} placeholder="e.g. HDFC0001234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
 
-            <TouchableOpacity style={s.skipBankButton} onPress={handleSkipBankDetailsForNow}>
-              <Text style={s.skipBankButtonText}>Skip Bank Details For Now</Text>
+            <TouchableOpacity style={[s.skipBankToggle, bankDetailsSkipped && s.skipBankToggleActive]} onPress={handleToggleSkipBankDetails} activeOpacity={0.8}>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.skipBankTitle, bankDetailsSkipped && s.skipBankTitleActive]}>{bankDetailsSkipped ? "Bank details skipped" : "Skip bank details for now"}</Text>
+                <Text style={s.skipBankSub}>You can add payout details later from your profile.</Text>
+              </View>
+              <View style={[s.skipBankSwitch, bankDetailsSkipped && s.skipBankSwitchOn]}>
+                <View style={[s.skipBankKnob, bankDetailsSkipped && s.skipBankKnobOn]} />
+              </View>
             </TouchableOpacity>
+
+            {bankDetailsSkipped ? (
+              <View style={s.skippedBankNotice}>
+                <Ionicons name="checkmark-circle-outline" size={18} color="#039855" />
+                <Text style={s.skippedBankNoticeText}>Skipped. Bank details will not be required for submission.</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={s.inputLabel}>Account Holder Name</Text>
+                <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => handleBankFieldChange({ bankAccountHolderName: v })} placeholder="As on bank account" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+                <Text style={s.inputLabel}>Account Number</Text>
+                <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => handleBankFieldChange({ bankAccountNumber: v.replace(/\D/g, "") })} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+                <Text style={s.inputLabel}>IFSC Code</Text>
+                <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => handleBankFieldChange({ bankIfsc: v.toUpperCase() })} placeholder="e.g. HDFC0001234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+              </>
+            )}
 
             <TouchableOpacity style={s.termsRow} onPress={() => setTermsAccepted((c) => !c)}>
               <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={22} color={termsAccepted ? "#FF6B35" : "#98A2B3"} />
@@ -1132,8 +1178,17 @@ const s = StyleSheet.create({
   chipText: { fontSize: 13, fontWeight: "700", color: "#667085" },
   chipTextActive: { color: "#C2410C" },
   chipHint: { marginTop: 6, fontSize: 12, color: "#98A2B3" },
-  skipBankButton: { marginTop: 14, paddingVertical: 13, borderRadius: 14, alignItems: "center", borderWidth: 1, borderColor: "#E4E7EC", backgroundColor: "#F8FAFC" },
-  skipBankButtonText: { fontSize: 14, fontWeight: "800", color: "#475467" },
+  skipBankToggle: { marginTop: 14, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#E4E7EC", backgroundColor: "#F8FAFC", flexDirection: "row", alignItems: "center", gap: 12 },
+  skipBankToggleActive: { backgroundColor: "#ECFDF3", borderColor: "#ABEFC6" },
+  skipBankTitle: { fontSize: 14, fontWeight: "800", color: "#475467" },
+  skipBankTitleActive: { color: "#027A48" },
+  skipBankSub: { marginTop: 3, fontSize: 12, color: "#667085" },
+  skipBankSwitch: { width: 46, height: 26, borderRadius: 13, backgroundColor: "#E4E7EC", justifyContent: "center", paddingHorizontal: 3 },
+  skipBankSwitchOn: { backgroundColor: "#039855" },
+  skipBankKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff" },
+  skipBankKnobOn: { alignSelf: "flex-end" },
+  skippedBankNotice: { marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: "#F6FEF9", borderWidth: 1, borderColor: "#D1FADF", flexDirection: "row", alignItems: "center", gap: 8 },
+  skippedBankNoticeText: { flex: 1, fontSize: 13, fontWeight: "600", color: "#027A48" },
 
   termsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: "#FFF8F5" },
   termsText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "600", color: "#475467" },

@@ -6,6 +6,11 @@ export const resolveDeliveryRoute = (profile?: DeliveryProfile | null) => {
   // ACTIVE the first time they share a valid location.
   if (profile.status === "ACTIVE" || profile.status === "VERIFIED") return "Main";
   if (profile.status === "SUSPENDED") return "ReviewStatus";
+  if (profile.status === "PENDING") {
+    return profile.isProfileComplete || profile.documents?.isComplete || profile.documents?.submittedAt
+      ? "ReviewStatus"
+      : "CompleteProfile";
+  }
   if (!profile.isProfileComplete) return "CompleteProfile";
   if (["PENDING", "REJECTED", "SUSPENDED", "INACTIVE"].includes(profile.status)) {
     return "ReviewStatus";
