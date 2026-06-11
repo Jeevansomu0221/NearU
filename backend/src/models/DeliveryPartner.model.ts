@@ -103,7 +103,7 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     },
     vehicleType: {
       type: String,
-      enum: ["Bike", "Cycle", "Bicycle", "Scooter", "Motorcycle", "Car"],
+      enum: ["Bike", "Cycle", "Bicycle", "Scooter", "Motorcycle", "EV", "Car"],
       default: "Bike"
     },
     vehicleNumber: {

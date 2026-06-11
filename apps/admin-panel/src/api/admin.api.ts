@@ -69,17 +69,10 @@ export type DocumentReuploadKey =
   | "menuProofUrl";
 
 export type DeliveryDocumentReuploadKey =
-  | "profilePhotoUrl"
   | "aadhaarFrontUrl"
-  | "aadhaarBackUrl"
-  | "panFrontUrl"
   | "selfiePhotoUrl"
   | "drivingLicenseFrontUrl"
-  | "drivingLicenseBackUrl"
-  | "vehicleRcFrontUrl"
-  | "vehicleRcBackUrl"
-  | "insuranceUrl"
-  | "bankProofUrl";
+  | "drivingLicenseBackUrl";
 
 export interface OrderRecord {
   _id: string;
@@ -134,7 +127,7 @@ export interface DeliveryPartnerRecord {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   termsAcceptedAt?: string;
-  vehicleType?: "Bike" | "Cycle" | "Bicycle" | "Scooter" | "Motorcycle" | "Car";
+  vehicleType?: "Bike" | "Cycle" | "Bicycle" | "Scooter" | "Motorcycle" | "EV" | "Car";
   vehicleNumber?: string;
   licenseNumber?: string;
   profilePhotoUrl?: string;

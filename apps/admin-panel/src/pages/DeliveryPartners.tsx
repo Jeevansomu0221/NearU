@@ -19,17 +19,10 @@ const statusColor: Record<DeliveryPartnerRecord["status"], string> = {
 };
 
 const REUPLOAD_OPTIONS: Array<{ key: DeliveryDocumentReuploadKey; label: string }> = [
-  { key: "profilePhotoUrl", label: "Profile photo" },
   { key: "aadhaarFrontUrl", label: "Aadhaar front" },
-  { key: "aadhaarBackUrl", label: "Aadhaar back" },
-  { key: "panFrontUrl", label: "PAN card" },
   { key: "selfiePhotoUrl", label: "Selfie / verification photo" },
   { key: "drivingLicenseFrontUrl", label: "Driving license front" },
-  { key: "drivingLicenseBackUrl", label: "Driving license back" },
-  { key: "vehicleRcFrontUrl", label: "Vehicle RC front" },
-  { key: "vehicleRcBackUrl", label: "Vehicle RC back" },
-  { key: "insuranceUrl", label: "Vehicle insurance" },
-  { key: "bankProofUrl", label: "Bank proof" }
+  { key: "drivingLicenseBackUrl", label: "Driving license back" }
 ];
 
 export default function DeliveryPartners() {
@@ -85,7 +78,8 @@ export default function DeliveryPartners() {
     [partners]
   );
 
-  const selectedRequiresMotorDocs = selected ? !["Cycle", "Bicycle"].includes(selected.vehicleType || "") : true;
+  const requiresVehicleDetails = (vehicleType?: string) => !["Cycle", "Bicycle", "EV"].includes(vehicleType || "");
+  const selectedRequiresMotorDocs = selected ? requiresVehicleDetails(selected.vehicleType) : true;
   const isPdfUrl = (url?: string | null) => Boolean(url && /\.pdf($|\?)/i.test(url));
   const getCloudinaryPdfPreviewUrl = (url?: string | null) => {
     if (!url || !url.includes("res.cloudinary.com") || !url.includes("/image/upload/") || !isPdfUrl(url)) {
@@ -170,17 +164,10 @@ export default function DeliveryPartners() {
 
   const documentRows: Array<{ label: string; url?: string; required: boolean; reuploadKey: DeliveryDocumentReuploadKey }> = selected
     ? [
-        { label: "Profile Photo", url: selected.profilePhotoUrl, required: true, reuploadKey: "profilePhotoUrl" },
         { label: `Aadhaar Front${selected.documents?.aadhaarNumber ? ` (${selected.documents.aadhaarNumber})` : ""}`, url: selected.documents?.aadhaarFrontUrl || selected.documents?.aadhaarUrl, required: true, reuploadKey: "aadhaarFrontUrl" },
-        { label: "Aadhaar Back", url: selected.documents?.aadhaarBackUrl, required: true, reuploadKey: "aadhaarBackUrl" },
-        { label: `PAN Front${selected.documents?.panNumber ? ` (${selected.documents.panNumber})` : ""}`, url: selected.documents?.panFrontUrl || selected.documents?.panUrl, required: true, reuploadKey: "panFrontUrl" },
         { label: "Selfie / Verification Photo", url: selected.documents?.selfiePhotoUrl, required: true, reuploadKey: "selfiePhotoUrl" },
         { label: "Driving License Front", url: selected.documents?.drivingLicenseFrontUrl || selected.documents?.drivingLicenseUrl, required: selectedRequiresMotorDocs, reuploadKey: "drivingLicenseFrontUrl" },
-        { label: "Driving License Back", url: selected.documents?.drivingLicenseBackUrl, required: selectedRequiresMotorDocs, reuploadKey: "drivingLicenseBackUrl" },
-        { label: "Vehicle RC Front", url: selected.documents?.vehicleRcFrontUrl || selected.documents?.vehicleRcUrl, required: selectedRequiresMotorDocs, reuploadKey: "vehicleRcFrontUrl" },
-        { label: "Vehicle RC Back", url: selected.documents?.vehicleRcBackUrl, required: selectedRequiresMotorDocs, reuploadKey: "vehicleRcBackUrl" },
-        { label: "Vehicle Insurance", url: selected.documents?.insuranceUrl, required: selectedRequiresMotorDocs, reuploadKey: "insuranceUrl" },
-        { label: `Bank Proof${selected.documents?.bankDocumentType ? ` (${selected.documents.bankDocumentType})` : ""}`, url: selected.documents?.cancelledChequeUrl || selected.documents?.bankPassbookUrl || selected.documents?.bankStatementUrl, required: true, reuploadKey: "bankProofUrl" }
+        { label: "Driving License Back", url: selected.documents?.drivingLicenseBackUrl, required: selectedRequiresMotorDocs, reuploadKey: "drivingLicenseBackUrl" }
       ]
     : [];
 
@@ -252,7 +239,7 @@ export default function DeliveryPartners() {
                   render: (_, partner) => (
                     <div>
                       <div>{partner.vehicleType || "Not set"}</div>
-                      <Typography.Text type="secondary">{partner.vehicleNumber || "Vehicle number missing"}</Typography.Text>
+                      <Typography.Text type="secondary">{requiresVehicleDetails(partner.vehicleType) ? partner.vehicleNumber || "Vehicle number missing" : "Vehicle number not required"}</Typography.Text>
                     </div>
                   )
                 },
@@ -329,10 +316,6 @@ export default function DeliveryPartners() {
               <div>{selected.dateOfBirth ? new Date(selected.dateOfBirth).toLocaleDateString() : "Not provided"}</div>
             </div>
             <div>
-              <Typography.Text type="secondary">Address</Typography.Text>
-              <div>{selected.address || "Not provided"}</div>
-            </div>
-            <div>
               <Typography.Text type="secondary">Emergency Contact</Typography.Text>
               <div>{selected.emergencyContactName || "Name not provided"}</div>
               <div>{selected.emergencyContactPhone || "Phone not provided"}</div>
@@ -343,11 +326,11 @@ export default function DeliveryPartners() {
             </div>
             <div>
               <Typography.Text type="secondary">Vehicle Number</Typography.Text>
-              <div>{selected.vehicleNumber || "Not provided"}</div>
+              <div>{selectedRequiresMotorDocs ? selected.vehicleNumber || "Not provided" : "Not required for this vehicle type"}</div>
             </div>
             <div>
               <Typography.Text type="secondary">Driving License Number</Typography.Text>
-              <div>{selected.licenseNumber || "Not provided"}</div>
+              <div>{selectedRequiresMotorDocs ? selected.licenseNumber || "Not provided" : "Not required for this vehicle type"}</div>
             </div>
             <div>
               <Typography.Text type="secondary">Bank Details</Typography.Text>

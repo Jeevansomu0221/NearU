@@ -38,17 +38,10 @@ const firstString = (...values: any[]) =>
 
 const safeTrimmedString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 const DELIVERY_REUPLOAD_KEYS = new Set([
-  "profilePhotoUrl",
   "aadhaarFrontUrl",
-  "aadhaarBackUrl",
-  "panFrontUrl",
   "selfiePhotoUrl",
   "drivingLicenseFrontUrl",
-  "drivingLicenseBackUrl",
-  "vehicleRcFrontUrl",
-  "vehicleRcBackUrl",
-  "insuranceUrl",
-  "bankProofUrl"
+  "drivingLicenseBackUrl"
 ]);
 
 const clearReuploadFlagIfChanged = (
@@ -136,7 +129,7 @@ const isDeliveryProfileComplete = (profile: {
     bankStatementUrl?: string;
   };
 }) => {
-  const requiresMotorDocuments = !["Cycle", "Bicycle"].includes(safeTrimmedString(profile.vehicleType));
+  const requiresMotorDocuments = !["Cycle", "Bicycle", "EV"].includes(safeTrimmedString(profile.vehicleType));
   const hasRealName =
     !!safeTrimmedString(profile.name) &&
     !/^Delivery\s\d{4}$/.test(safeTrimmedString(profile.name)) &&
@@ -144,24 +137,16 @@ const isDeliveryProfileComplete = (profile: {
 
   const hasMandatoryDocuments = Boolean(
     (safeTrimmedString(profile.documents?.aadhaarFrontUrl) || safeTrimmedString(profile.documents?.aadhaarUrl)) &&
-      safeTrimmedString(profile.documents?.aadhaarBackUrl) &&
       safeTrimmedString(profile.documents?.aadhaarNumber) &&
-      safeTrimmedString(profile.documents?.panNumber) &&
-      safeTrimmedString(profile.documents?.panFrontUrl) &&
       safeTrimmedString(profile.documents?.selfiePhotoUrl) &&
       (!requiresMotorDocuments ||
         ((safeTrimmedString(profile.documents?.drivingLicenseFrontUrl) || safeTrimmedString(profile.documents?.drivingLicenseUrl)) &&
-          safeTrimmedString(profile.documents?.drivingLicenseBackUrl) &&
-          (safeTrimmedString(profile.documents?.vehicleRcFrontUrl) || safeTrimmedString(profile.documents?.vehicleRcUrl)) &&
-          safeTrimmedString(profile.documents?.vehicleRcBackUrl) &&
-          safeTrimmedString(profile.documents?.insuranceUrl)))
+          safeTrimmedString(profile.documents?.drivingLicenseBackUrl)))
   );
 
   return Boolean(
     hasRealName &&
       hasValidDateOfBirth(profile.dateOfBirth) &&
-      safeTrimmedString(profile.address) &&
-      safeTrimmedString(profile.profilePhotoUrl) &&
       safeTrimmedString(profile.emergencyContactName) &&
       emergencyPhoneRegex.test(safeTrimmedString(profile.emergencyContactPhone)) &&
       Boolean(profile.termsAcceptedAt) &&
@@ -311,25 +296,31 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
     }
 
     if (vehicleType !== undefined) {
-      const validVehicleTypes = ["Bike", "Cycle", "Bicycle", "Scooter", "Motorcycle", "Car"];
+      const validVehicleTypes = ["Bike", "Cycle", "Bicycle", "Scooter", "Motorcycle", "EV", "Car"];
       if (!validVehicleTypes.includes(vehicleType)) {
         return errorResponse(res, `Vehicle type must be one of: ${validVehicleTypes.join(", ")}`, 400);
       }
-      updateDelivery.vehicleType = vehicleType;
+      updateDelivery.vehicleType = vehicleType === "Motorcycle" ? "EV" : vehicleType;
     }
 
     if (vehicleNumber !== undefined) {
-      if (typeof vehicleNumber !== "string" || vehicleNumber.trim().length < 5) {
+      if (vehicleNumber === "" || vehicleNumber === null) {
+        updateDelivery.vehicleNumber = "";
+      } else if (typeof vehicleNumber !== "string" || vehicleNumber.trim().length < 5) {
         return errorResponse(res, "Vehicle number is required", 400);
+      } else {
+        updateDelivery.vehicleNumber = vehicleNumber.trim().toUpperCase();
       }
-      updateDelivery.vehicleNumber = vehicleNumber.trim().toUpperCase();
     }
 
     if (licenseNumber !== undefined) {
-      if (typeof licenseNumber !== "string" || !dlRegex.test(licenseNumber.trim().toUpperCase())) {
+      if (licenseNumber === "" || licenseNumber === null) {
+        updateDelivery.licenseNumber = "";
+      } else if (typeof licenseNumber !== "string" || !dlRegex.test(licenseNumber.trim().toUpperCase())) {
         return errorResponse(res, "Driving license format looks invalid", 400);
+      } else {
+        updateDelivery.licenseNumber = licenseNumber.trim().toUpperCase();
       }
-      updateDelivery.licenseNumber = licenseNumber.trim().toUpperCase();
     }
 
     if (isAvailable !== undefined) {
@@ -390,28 +381,32 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       if (normalizedDocuments.panNumber && !panRegex.test(normalizedDocuments.panNumber)) {
         return errorResponse(res, "PAN number must match AAAAA9999A format", 400);
       }
+      const hasAnyBankInput = Boolean(normalizedDocuments.bankAccountHolderName || normalizedDocuments.bankAccountNumber || normalizedDocuments.bankIfsc);
+      if (hasAnyBankInput && !normalizedDocuments.bankAccountHolderName) {
+        return errorResponse(res, "Account holder name is required if you add bank details", 400);
+      }
+      if (hasAnyBankInput && !normalizedDocuments.bankAccountNumber) {
+        return errorResponse(res, "Bank account number is required if you add bank details", 400);
+      }
       if (normalizedDocuments.bankAccountNumber && !/^[0-9]+$/.test(normalizedDocuments.bankAccountNumber)) {
         return errorResponse(res, "Bank account number must be numeric", 400);
+      }
+      if (hasAnyBankInput && !normalizedDocuments.bankIfsc) {
+        return errorResponse(res, "IFSC code is required if you add bank details", 400);
       }
       if (normalizedDocuments.bankIfsc && !ifscRegex.test(normalizedDocuments.bankIfsc)) {
         return errorResponse(res, "IFSC code format is invalid", 400);
       }
 
       const nextVehicleType = typeof vehicleType === "string" ? vehicleType : currentPartner?.vehicleType;
-      const requiresMotorDocuments = !["Cycle", "Bicycle"].includes(safeTrimmedString(nextVehicleType));
+      const requiresMotorDocuments = !["Cycle", "Bicycle", "EV"].includes(safeTrimmedString(nextVehicleType));
       const hasMandatoryDocuments = Boolean(
         normalizedDocuments.aadhaarNumber &&
           normalizedDocuments.aadhaarFrontUrl &&
-          normalizedDocuments.aadhaarBackUrl &&
-          normalizedDocuments.panNumber &&
-          normalizedDocuments.panFrontUrl &&
           normalizedDocuments.selfiePhotoUrl &&
           (!requiresMotorDocuments ||
             (normalizedDocuments.drivingLicenseFrontUrl &&
-              normalizedDocuments.drivingLicenseBackUrl &&
-              normalizedDocuments.vehicleRcFrontUrl &&
-              normalizedDocuments.vehicleRcBackUrl &&
-              normalizedDocuments.insuranceUrl?.trim()))
+              normalizedDocuments.drivingLicenseBackUrl))
       );
 
       const replacementChecks = [

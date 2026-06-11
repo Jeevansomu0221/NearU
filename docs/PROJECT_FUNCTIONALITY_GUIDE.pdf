@@ -1,0 +1,1264 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R 24 0 R 26 0 R 28 0 R 30 0 R 32 0 R 34 0 R 36 0 R 38 0 R 40 0 R 42 0 R 44 0 R 46 0 R 48 0 R 50 0 R 52 0 R 54 0 R] /Count 25 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Length 4123 >>
+stream
+BT /F2 22.00 Tf 1 0 0 1 54.00 783.89 Tm (Vyaha / NearU Project Functionality) Tj ET
+BT /F2 22.00 Tf 1 0 0 1 54.00 757.89 Tm (Guide) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 713.89 Tm (Generated: 11 June 2026) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 689.39 Tm (This document explains the current project in depth based on the code in this repository.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 674.89 Tm (The workspace is named NearU, while the product branding inside the apps and website is) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 660.39 Tm (Vyaha.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 624.89 Tm (1. Project Overview) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 593.89 Tm (Vyaha is a hyperlocal ordering and delivery platform. It is not a single app; it is a) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 579.39 Tm (complete ecosystem with separate tools for each side of the business:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 554.89 Tm (- Customer mobile app: lets customers sign in, discover nearby shops/restaurants, browse) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 540.39 Tm (menus, manage cart and addresses, pay or choose cash on delivery, track orders, view) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 525.89 Tm (history, and contact support.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 509.39 Tm (- Partner mobile app: lets restaurant/shop owners sign in, complete business onboarding,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 494.89 Tm (upload verification documents, manage shop profile, manage menus, receive and update) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 480.39 Tm (orders, and view payout/payment history.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 463.89 Tm (- Delivery mobile app: lets riders sign in, complete delivery partner profile and) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 449.39 Tm (document verification, go available, view nearby ready jobs, accept or reject jobs,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 434.89 Tm (update pickup and delivery status, track earnings, and manage cash collected from COD) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 420.39 Tm (orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 403.89 Tm (- Admin web panel: internal operations portal for admins to review partners and delivery) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 389.39 Tm (partners, manage orders, assign delivery, handle support, create payouts, and verify) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 374.89 Tm (cash deposits.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 358.39 Tm (- Public website: marketing, policy, support, legal, fraud reporting, partner, delivery,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 343.89 Tm (and app release information.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 327.39 Tm (- Backend API: Express/MongoDB service that connects all apps, owns authentication,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 312.89 Tm (users, partners, menus, orders, payment verification, delivery jobs, uploads,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 298.39 Tm (notifications, support, payouts, and admin operations.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 276.89 Tm (The main business idea is local-first ordering: customers see approved nearby shops,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 262.39 Tm (order at transparent totals, restaurants manage their own menu and order status, and) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 247.89 Tm (delivery partners handle the final delivery workflow.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 212.39 Tm (2. Repository Layout) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 181.39 Tm (The important top-level project areas are:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 156.89 Tm (- apps/customer-app: Expo React Native customer app.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 140.39 Tm (- apps/partner-app: Expo React Native restaurant/shop partner app.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 123.89 Tm (- apps/delivery-app: Expo React Native delivery partner app.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 107.39 Tm (- apps/admin-panel: Vite React TypeScript admin web panel.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 90.89 Tm (- backend: Node.js Express TypeScript API.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 1 of 25) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 3381 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- vyaha-official: Vite React public website.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- docs: project documentation, QA checklist, Play Store readiness notes, and this guide.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- plugins: custom Expo config plugins used by the mobile apps.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 729.39 Tm (Each app is independently runnable and has its own package.json. The backend is also) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 714.89 Tm (independently runnable. There is no root-level package file currently visible in the) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 700.39 Tm (workspace.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 664.89 Tm (3. Technology Stack) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 626.89 Tm (Mobile Apps) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 600.39 Tm (The customer, partner, and delivery apps are built with:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 575.89 Tm (- Expo SDK 54.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 559.39 Tm (- React Native 0.81.x.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 542.89 Tm (- React 19.1.x.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 526.39 Tm (- TypeScript.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 509.89 Tm (- React Navigation for stack and tab navigation.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 493.39 Tm (- Axios/fetch based API clients.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 476.89 Tm (- AsyncStorage for local session storage.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 460.39 Tm (- Firebase native modules for app initialization, phone auth, and FCM messaging.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 443.89 Tm (- Expo Location for customer address pinning, nearby shop lookup, shop location pinning,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 429.39 Tm (and rider location/distance support.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 412.89 Tm (- Expo Image Picker and Document Picker in partner/delivery apps for document and image) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 398.39 Tm (uploads.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 381.89 Tm (- Razorpay React Native SDK in the customer app for online payments.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 365.39 Tm (- Custom Expo plugins for Android Gradle configuration and Android notification) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 350.89 Tm (channel/icon setup.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 334.39 Tm (- EAS build/update configuration through app.json and eas.json where present.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 305.89 Tm (Web Apps) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 279.39 Tm (The admin panel is built with:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 254.89 Tm (- Vite.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 238.39 Tm (- React 19.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 221.89 Tm (- TypeScript.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 205.39 Tm (- React Router.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 188.89 Tm (- Ant Design.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 172.39 Tm (- Axios.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 150.89 Tm (The public website is built with:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 126.39 Tm (- Vite.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 109.89 Tm (- React.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 93.39 Tm (- React Router.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 76.89 Tm (- Lucide React icons.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 2 of 25) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 3713 >>
+stream
+BT /F2 12.50 Tf 1 0 0 1 54.00 776.89 Tm (Backend) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.39 Tm (The backend is built with:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 725.89 Tm (- Node.js 20.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 709.39 Tm (- Express 5.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 692.89 Tm (- TypeScript.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 676.39 Tm (- MongoDB with Mongoose.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 659.89 Tm (- JWT access and refresh tokens.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 643.39 Tm (- Firebase Admin SDK for Firebase phone token verification and FCM push notifications.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 626.89 Tm (- Razorpay server SDK and HMAC signature verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 610.39 Tm (- Cloudinary for uploads.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 593.89 Tm (- Express file upload for multipart image/document upload.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 577.39 Tm (- Helmet, CORS, and rate limiting.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 560.89 Tm (- Jest, Supertest, and MongoDB memory server for tests.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 528.39 Tm (4. Runtime Applications) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 490.39 Tm (Customer App: apps/customer-app) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 463.89 Tm (The customer app is the buyer-facing app named Vyaha. Its Android package is) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 449.39 Tm (com.vyaha.customer. It supports location and notifications, and uses Firebase and) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 434.89 Tm (Razorpay.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 410.39 Tm (Main screens:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 385.89 Tm (- Login: phone number login entry.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 369.39 Tm (- Otp: OTP or Firebase phone verification completion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 352.89 Tm (- Home: nearby shop discovery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 336.39 Tm (- ShopDetail: shop menu and add-to-cart.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 319.89 Tm (- Cart: cart review, address selection, location pin capture, and pricing quote.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 303.39 Tm (- Payment: COD or Razorpay checkout.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 286.89 Tm (- OrderStatus: detailed order progress tracking.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 270.39 Tm (- Orders: order history.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 253.89 Tm (- Profile: profile, saved addresses, recent orders, support, logout, delete account.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 237.39 Tm (- OrderSummary: older/intermediate checkout summary screen still present in code.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 215.89 Tm (The app starts by checking AsyncStorage for a token. If no token exists, the user sees) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 201.39 Tm (login. If a token exists, it fetches the backend profile and checks whether the customer) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 186.89 Tm (has a real name and a complete pinned address. Customers without required profile data) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 172.39 Tm (are forced to complete profile before reaching home.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 147.89 Tm (Profile completeness is based on:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 123.39 Tm (- Name must not be a generated default like Customer.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 106.89 Tm (- Name length must be at least 3.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 90.39 Tm (- Address must include house/door or street, road/street, city, state, pincode,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 75.89 Tm (area/locality.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 3 of 25) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Length 4001 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- Address must include a real latitude/longitude pin.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 762.39 Tm (Important customer functionality:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 737.89 Tm (- Phone OTP login with role customer.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 721.39 Tm (- Firebase phone token verification support.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 704.89 Tm (- API fallback to production and local development URLs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 688.39 Tm (- Automatic access token refresh using refresh tokens.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 671.89 Tm (- Nearby shop lookup using foreground location.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 655.39 Tm (- Fallback to approved shops if location permission is denied or geo lookup fails.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 638.89 Tm (- Public menu browsing for selected shops.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 622.39 Tm (- Cart management through React Context.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 605.89 Tm (- Server-side pricing quote before checkout.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 589.39 Tm (- Exact delivery pin required before placing orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 572.89 Tm (- COD and Razorpay payment options.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 556.39 Tm (- Order tracking with status and payment status descriptions.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 539.89 Tm (- Saved addresses and default address management.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 523.39 Tm (- Recent order display in profile.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 506.89 Tm (- Support FAQs and ticket flow.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 490.39 Tm (- Logout and account deletion.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 461.89 Tm (Partner App: apps/partner-app) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 435.39 Tm (The partner app is for restaurants and shops. Its Android package is com.vyaha.partner.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 420.89 Tm (It has a blue partner-branded UI, Firebase messaging, location permission for shop) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 406.39 Tm (pinning, and image/document upload permissions.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 381.89 Tm (Main screens:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 357.39 Tm (- Login: partner phone number login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 340.89 Tm (- Otp: OTP/Firebase verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 324.39 Tm (- Onboarding: restaurant/shop registration and document upload.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 307.89 Tm (- ApplicationSubmitted: success screen after onboarding submission.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 291.39 Tm (- PendingApproval: waiting for admin verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 274.89 Tm (- Rejected: rejection/reupload state.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 258.39 Tm (- WelcomeApproved: approved partner onboarding bridge.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 241.89 Tm (- Dashboard: main operational home.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 225.39 Tm (- Orders: partner order list.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 208.89 Tm (- OrderDetails: accept/reject and preparation flow.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 192.39 Tm (- Menu: menu item management.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 175.89 Tm (- Profile: shop profile, images, documents, reupload handling.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 159.39 Tm (- Settings: shop settings and account actions.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 142.89 Tm (- PaymentHistory: wallet/payout/payment history area.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 121.39 Tm (The app checks stored token and phone, refreshes the session, then calls) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 106.89 Tm (/partners/my-status. Routing depends on partner status:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 82.39 Tm (- No partner profile: send to onboarding.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 4 of 25) Tj ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 11 0 R >>
+endobj
+13 0 obj
+<< /Length 3999 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- PENDING: show pending approval.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- APPROVED: show dashboard.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- REJECTED: show rejected screen.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (- SUSPENDED: return to login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 712.89 Tm (Important partner functionality:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 688.39 Tm (- Phone OTP login with role partner.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 671.89 Tm (- Partner onboarding with owner, restaurant, category, address, shop GPS pin,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 657.39 Tm (bank/document details.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 640.89 Tm (- Draft saving for onboarding locally and remotely.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 624.39 Tm (- Cloudinary upload through the backend upload endpoint.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 607.89 Tm (- Admin document reupload flags and notes shown in profile.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 591.39 Tm (- Shop profile editing: restaurant name/details, images, photos, hours, status, address,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 576.89 Tm (location, and documents.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 560.39 Tm (- Shop open/closed toggle.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 543.89 Tm (- Menu CRUD: create, edit, delete, search, category filtering, item image upload,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 529.39 Tm (vegetarian flag, prep time, availability toggle.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 512.89 Tm (- First menu item can mark setup as complete.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 496.39 Tm (- Order workflow: view confirmed orders, accept, reject, mark preparing, mark ready.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 479.89 Tm (- Partner receives push notifications for new orders and delivery updates.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 463.39 Tm (- Wallet/payment history for payout visibility.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 446.89 Tm (- Logout and delete account.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 418.39 Tm (Delivery App: apps/delivery-app) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 391.89 Tm (The delivery app is for riders. Its Android package is com.vyaha.delivery. It supports) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 377.39 Tm (location, notifications, and document uploads.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 352.89 Tm (Main screens:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 328.39 Tm (- Login: delivery phone number login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 311.89 Tm (- Otp: OTP/Firebase verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 295.39 Tm (- Main: bottom tab navigator.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 278.89 Tm (- Jobs: available delivery jobs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 262.39 Tm (- MyJobs: assigned/current jobs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 245.89 Tm (- JobDetails: accept job, navigate pickup/drop, mark pickup/delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 229.39 Tm (- Earnings: daily earnings, stats, COD ledger, deposit submission.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 212.89 Tm (- Profile: delivery profile and account management.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 196.39 Tm (- CompleteProfile: forced delivery profile completion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 179.89 Tm (- ReviewStatus: verification/rejection/suspended/inactive states.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 163.39 Tm (- AccountProfileScreen: extra account profile UI exists in code.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 141.89 Tm (Routing depends on the delivery partner profile:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 117.39 Tm (- ACTIVE or VERIFIED: main app.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 100.89 Tm (- Missing/incomplete profile: complete profile.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 84.39 Tm (- PENDING, REJECTED, SUSPENDED, or INACTIVE: review status.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 5 of 25) Tj ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 13 0 R >>
+endobj
+15 0 obj
+<< /Length 4154 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (Important delivery functionality:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 759.39 Tm (- Phone OTP login with role delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 742.89 Tm (- Backend can auto-create an inactive delivery profile on delivery login if one does not) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 728.39 Tm (exist.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 711.89 Tm (- Profile completion with identity, vehicle, emergency, bank, and document fields.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 695.39 Tm (- Admin verification status controls access to jobs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 678.89 Tm (- Available jobs list only shows eligible ready orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 662.39 Tm (- Rider availability toggle.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 645.89 Tm (- Foreground location capture and upload.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 629.39 Tm (- Nearby job ranking by distance to restaurant when rider location exists.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 612.89 Tm (- Accept and reject jobs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 596.39 Tm (- One active delivery guard: rider cannot accept another job while assigned/picked up) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 581.89 Tm (order exists.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 565.39 Tm (- Job details include pickup, drop, COD/prepaid information, earnings, and delivery) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 550.89 Tm (status actions.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 534.39 Tm (- Pickup status requires order to be assigned.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 517.89 Tm (- Delivered status requires pickup first.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 501.39 Tm (- COD orders require collected amount before delivery completion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 484.89 Tm (- Earnings are updated when deliveries complete.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 468.39 Tm (- COD collected cash is tracked in a ledger.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 451.89 Tm (- Cash deposit submission lets rider report money deposited back to platform for admin) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 437.39 Tm (verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 420.89 Tm (- Logout and account deletion.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 392.39 Tm (Admin Panel: apps/admin-panel) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 365.89 Tm (The admin panel is an internal operations website. It uses admin password login, stores) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 351.39 Tm (adminToken in local storage, and redirects to login on unauthorized responses.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 326.89 Tm (Main pages:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 302.39 Tm (- /login: admin password login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 285.89 Tm (- /: dashboard.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 269.39 Tm (- /partners: partner verification and management.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 252.89 Tm (- /delivery-partners: delivery partner verification and management.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 236.39 Tm (- /orders: all order listing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 219.89 Tm (- /orders/:orderId: order detail and operational actions.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 203.39 Tm (- /payouts: partner and delivery payout creation/history and cash deposit management.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 186.89 Tm (- /support: support ticket queue and replies.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 165.39 Tm (Important admin functionality:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 140.89 Tm (- Login through /auth/admin-password-login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 124.39 Tm (- Dashboard stats for orders, partners, active partners, pending partners, earnings, and) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 109.89 Tm (today's activity.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 93.39 Tm (- Partner review: approve, reject, suspend, request document reupload.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 76.89 Tm (- Delivery partner review: verify, activate, reject, suspend, request reupload.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 6 of 25) Tj ET
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 15 0 R >>
+endobj
+17 0 obj
+<< /Length 3828 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- Order management: view all orders, view order details, update admin-supported status,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 769.39 Tm (assign delivery partner.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 752.89 Tm (- Support management: list tickets, reply, change ticket status.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 736.39 Tm (- Payout management: generate payout summaries by weekly/monthly periods, create paid) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 721.89 Tm (payout records, view payout history.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 705.39 Tm (- COD cash deposit management: list deposits, verify deposits, reject deposits.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 676.89 Tm (Public Website: vyaha-official) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 650.39 Tm (The public website is the marketing and legal front door for Vyaha.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 625.89 Tm (Main routes:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 601.39 Tm (- /: marketing homepage.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 584.89 Tm (- /policies: policy hub.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 568.39 Tm (- /about: product and company overview.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 551.89 Tm (- /blog: placeholder content/update section.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 535.39 Tm (- /partner: partner onboarding information.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 518.89 Tm (- /fraud: fraud reporting information.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 502.39 Tm (- /support: support contact page.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 485.89 Tm (- /privacy: privacy policy.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 469.39 Tm (- /security: security policy.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 452.89 Tm (- /terms: terms of service.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 436.39 Tm (- /refunds: cancellation and refund policy.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 419.89 Tm (- /community-guidelines: community and content guidelines.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 403.39 Tm (- /partner-policy: restaurant partner policy.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 386.89 Tm (- /delivery-policy: delivery partner policy.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 370.39 Tm (- /cookie-policy: cookie policy.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 353.89 Tm (- /delete-account: account deletion information.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 337.39 Tm (- /restaurants, /apps, /consulting, /delivery: product-specific landing pages.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 315.89 Tm (The website describes Vyaha as a hyperlocal food delivery platform focused on genuine) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 301.39 Tm (prices, transparent totals, local restaurants, and separate tools for customers,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 286.89 Tm (restaurants, and riders.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 251.39 Tm (5. Backend Architecture) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 220.39 Tm (The backend Express app is created in backend/src/app.ts and started in) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 205.89 Tm (backend/src/server.ts.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 181.39 Tm (Core middleware:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 156.89 Tm (- CORS with configured production origins and local development allowance.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 140.39 Tm (- Helmet for baseline HTTP hardening.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 123.89 Tm (- Raw body parsing only for Razorpay webhook route so webhook signatures can be verified) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 109.39 Tm (correctly.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 92.89 Tm (- JSON body parsing for normal API routes.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 76.39 Tm (- Rate limiting for general API traffic.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 7 of 25) Tj ET
+endstream
+endobj
+18 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 17 0 R >>
+endobj
+19 0 obj
+<< /Length 3802 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- Separate stricter rate limiting for OTP and admin login routes.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- Central error middleware.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 745.89 Tm (Mounted route groups:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 721.39 Tm (- /api/auth: OTP, Firebase token verification, admin login, refresh token, logout.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 704.89 Tm (- /api/users: customer profile, addresses, customer orders, account deletion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 688.39 Tm (- /api/partners: partner onboarding, partner status, partner profile, shop status, menu) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 673.89 Tm (subroutes, partner admin routes, public shop list.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 657.39 Tm (- /api/menu: public partner menu and protected partner menu management.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 640.89 Tm (- /api/orders: customer order creation/pricing/history, partner status updates, delivery) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 626.39 Tm (job flow, admin delivery assignment.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 609.89 Tm (- /api/admin: admin dashboard, orders, partners, support, payouts, cash deposits.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 593.39 Tm (- /api/delivery: delivery profile, stats, earnings, jobs, location, cash ledger.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 576.89 Tm (- /api/upload: Cloudinary-backed upload and deletion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 560.39 Tm (- /api/payment: Razorpay checkout order creation, payment verification, webhook.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 543.89 Tm (- /api/support: customer support FAQs and tickets.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 527.39 Tm (- /api/notifications: FCM token registration and removal.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 510.89 Tm (- /legal: backend-served legal URLs for Play Store and public compliance.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 494.39 Tm (- /health: simple health endpoint.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 472.89 Tm (On server startup:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 448.39 Tm (- Environment is validated.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 431.89 Tm (- MongoDB connects.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 415.39 Tm (- Stale unaccepted orders are auto-cancelled immediately.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 398.89 Tm (- A timer runs stale-order cancellation every minute.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 382.39 Tm (- Express listens on configured port.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 349.89 Tm (6. Authentication and Sessions) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 318.89 Tm (The project uses phone-based authentication for mobile roles and password-based login for) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 304.39 Tm (the admin panel.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 279.89 Tm (Roles:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 255.39 Tm (- customer) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 238.89 Tm (- partner) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 222.39 Tm (- delivery) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 205.89 Tm (- admin) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 184.39 Tm (The backend also defines CONSUMER_APP_ROLES as customer, partner, and delivery, meaning) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 169.89 Tm (partner and delivery accounts may use customer-ordering routes too.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 145.39 Tm (OTP flow:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 120.89 Tm (1. App calls /api/auth/send-otp with phone and role.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 104.39 Tm (2. Backend validates phone and role.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 87.89 Tm (3. OTP is sent through configured provider.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 8 of 25) Tj ET
+endstream
+endobj
+20 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 19 0 R >>
+endobj
+21 0 obj
+<< /Length 3459 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (4. App calls /api/auth/verify-otp with phone, role, and either OTP or Firebase ID token.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (5. Backend verifies OTP/provider token.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (6. Backend creates user if needed, except admin must already be valid/restricted.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (7. Backend returns access token, refresh token, user profile, role, partner ID if) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 72.00 719.89 Tm (linked, and delivery partner ID if linked.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 698.39 Tm (Supported OTP providers:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 673.89 Tm (- Twilio Verify.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 657.39 Tm (- MSG91.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 640.89 Tm (- In-memory OTP for development only.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 624.39 Tm (- Firebase phone ID token verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 602.89 Tm (Token behavior:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 578.39 Tm (- Access tokens are short-lived JWTs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 561.89 Tm (- Refresh tokens are longer-lived JWTs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 545.39 Tm (- Token payload includes user ID, phone, role, name, partner ID, delivery partner ID,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 530.89 Tm (and sessionVersion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 514.39 Tm (- sessionVersion lets logout/account deletion invalidate existing tokens.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 497.89 Tm (- Mobile/web clients retry expired-token requests by calling /api/auth/refresh.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 476.39 Tm (Admin login:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 451.89 Tm (- Admin panel calls /api/auth/admin-password-login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 435.39 Tm (- Backend requires ADMIN_PANEL_PHONE and ADMIN_PANEL_PASSWORD.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 418.89 Tm (- If the admin user does not exist, backend creates it.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 402.39 Tm (- Admin receives the same token style but with role admin.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 380.89 Tm (Logout:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 356.39 Tm (- /api/auth/logout increments sessionVersion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 339.89 Tm (- Optional notification token is removed from the user's token list.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 323.39 Tm (- Apps clear local storage.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 301.89 Tm (Account deletion:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 277.39 Tm (- /api/users/me deactivates/anonymizes account data.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 260.89 Tm (- Active sessions are invalidated by session version changes.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 244.39 Tm (- Some order/payout/legal records remain where required.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 211.89 Tm (7. Data Model) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 173.89 Tm (User) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 147.39 Tm (User is the shared account model for customers, partners, delivery partners, and admins.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 122.89 Tm (Important fields:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 98.39 Tm (- phone: unique account identifier.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 81.89 Tm (- name, email, role.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 9 of 25) Tj ET
+endstream
+endobj
+22 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 21 0 R >>
+endobj
+23 0 obj
+<< /Length 3589 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- address: current/default customer address.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- addresses: saved customer addresses with labels and GPS pins.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- notificationTokens: FCM tokens by app and platform.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (- partnerOnboardingDraft: saved partner onboarding draft.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.89 Tm (- isActive: account active/deactivated flag.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 701.39 Tm (- sessionVersion: invalidates tokens when changed.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 684.89 Tm (- lastLogin.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 656.39 Tm (Partner) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 629.89 Tm (Partner represents a restaurant/shop.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 605.39 Tm (Important fields:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 580.89 Tm (- Owner and restaurant/shop details.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 564.39 Tm (- Phone and email.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 547.89 Tm (- Shop images and banner images.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 531.39 Tm (- Structured address and Google Maps link.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 514.89 Tm (- GeoJSON shop location for nearby search and routing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 498.39 Tm (- Category such as restaurant, bakery, grocery, fast-food, sweets, ice-creams, juice,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 483.89 Tm (etc.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 467.39 Tm (- User linkage through userId.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 450.89 Tm (- Shop open status, opening time, closing time, weekly holidays.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 434.39 Tm (- Rating.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 417.89 Tm (- Verification documents: FSSAI, PAN, Aadhaar, GST, shop license, bank proof, menu) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 403.39 Tm (proof, address proof, restaurant photos.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 386.89 Tm (- Document reupload flags and admin notes.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 370.39 Tm (- Status: PENDING, APPROVED, REJECTED, SUSPENDED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 353.89 Tm (- Approval metadata and rejection reason.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 337.39 Tm (- Setup completion and menu item count.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 320.89 Tm (- Settings: auto accept orders, estimated prep time, delivery mode, self delivery) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 306.39 Tm (partners, delivery radius, minimum order, UPI ID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 289.89 Tm (- Notification preferences.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 273.39 Tm (- Language preference.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 244.89 Tm (DeliveryPartner) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 218.39 Tm (DeliveryPartner represents rider profile and operations data.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 193.89 Tm (Important fields:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 169.39 Tm (- userId and phone.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 152.89 Tm (- Name, email, DOB, address.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 136.39 Tm (- Emergency contact.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 119.89 Tm (- Vehicle type, vehicle number, license number.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 103.39 Tm (- Profile photo and identity/vehicle/bank documents.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 86.89 Tm (- Document reupload flags and admin notes.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 10 of 25) Tj ET
+endstream
+endobj
+24 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 23 0 R >>
+endobj
+25 0 obj
+<< /Length 3453 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- Availability.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- Status: PENDING, VERIFIED, ACTIVE, REJECTED, SUSPENDED, INACTIVE.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- Total deliveries and total earnings.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (- COD cash balance and pending deposit amount.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.89 Tm (- Current GeoJSON location.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 701.39 Tm (- Rating and rating count.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 672.89 Tm (MenuItem) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 646.39 Tm (MenuItem belongs to a partner.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 621.89 Tm (Important fields:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 597.39 Tm (- Name, description, price.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 580.89 Tm (- Category.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 564.39 Tm (- Image URL.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 547.89 Tm (- Vegetarian flag.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 531.39 Tm (- Preparation time.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 514.89 Tm (- Availability.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 498.39 Tm (- Partner ID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 481.89 Tm (- Rating.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 460.39 Tm (Menu categories are constrained by shop type. For example, restaurants get categories) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 445.89 Tm (such as meals, biryani, curries, rice, combos, hots, and other; bakeries get breads,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 431.39 Tm (cakes, pastries, cookies, puffs, buns; grocery gets staples, snacks, dairy, beverages,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 416.89 Tm (personal care, household; and so on.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 385.39 Tm (Order) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 358.89 Tm (Order is the central operational model.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 334.39 Tm (Important fields:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 309.89 Tm (- orderType: currently always SHOP.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 293.39 Tm (- Customer ID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 276.89 Tm (- Partner ID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 260.39 Tm (- Delivery partner user ID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 243.89 Tm (- Delivery rejected rider IDs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 227.39 Tm (- Self-delivery reservation state.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 210.89 Tm (- Delivery address and exact delivery location.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 194.39 Tm (- Items with menu item ID, name, quantity, price.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 177.89 Tm (- Item total, delivery fee, GST fields, platform fee, tax discount, distance fields,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 163.39 Tm (grand total.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 146.89 Tm (- Payment ID and Razorpay metadata.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 130.39 Tm (- Payment method: RAZORPAY, CASH_ON_DELIVERY, CARD, UPI, WALLET.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 113.89 Tm (- Payment status: PENDING, PAYMENT_PENDING_DELIVERY, PAID, FAILED, REFUNDED, CANCELLED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 97.39 Tm (- Order status: PENDING, CONFIRMED, ACCEPTED, PREPARING, READY, ASSIGNED, PICKED_UP,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 82.89 Tm (DELIVERED, CANCELLED, REJECTED.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 11 of 25) Tj ET
+endstream
+endobj
+26 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 25 0 R >>
+endobj
+27 0 obj
+<< /Length 2999 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- Cancellation reason and customer cancellation message.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- Delivery ready, auto-cancelled, and delivered timestamps.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- COD collection record.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (- Partner payout and delivery payout settlement tracking.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 705.89 Tm (Payout) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 679.39 Tm (Payout records admin-created payouts.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 654.89 Tm (Important fields:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 630.39 Tm (- Recipient type: partner or delivery partner.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 613.89 Tm (- Recipient ID and snapshot.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 597.39 Tm (- Weekly/monthly period.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 580.89 Tm (- Amount, order count, order IDs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 564.39 Tm (- Bank snapshot.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 547.89 Tm (- Payout breakdown for gross earnings, cash offset, net payable, cash due after offset.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 531.39 Tm (- Paid reference, notes, paid date, paid admin.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 502.89 Tm (CashLedgerEntry) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 476.39 Tm (CashLedgerEntry tracks COD and cash deposit accounting for delivery partners.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 451.89 Tm (Entry types:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 427.39 Tm (- COD_COLLECTED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 410.89 Tm (- EARNINGS_OFFSET.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 394.39 Tm (- CASH_DEPOSIT_SUBMITTED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 377.89 Tm (- CASH_DEPOSIT_VERIFIED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 356.39 Tm (Statuses:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 331.89 Tm (- POSTED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 315.39 Tm (- PENDING.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 298.89 Tm (- VERIFIED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 282.39 Tm (- REJECTED.) Tj ET
+BT /F2 12.50 Tf 1 0 0 1 54.00 253.89 Tm (SupportTicket) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 227.39 Tm (SupportTicket supports customer/admin support conversations.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 202.89 Tm (Important fields:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 178.39 Tm (- User ID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 161.89 Tm (- Optional order ID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 145.39 Tm (- Category: customer support, order, payment, delivery, account, report issue, other.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 128.89 Tm (- Subject.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 112.39 Tm (- Status: open, in progress, resolved, closed.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 95.89 Tm (- Priority.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 79.39 Tm (- Messages with sender role and timestamps.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 12 of 25) Tj ET
+endstream
+endobj
+28 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 27 0 R >>
+endobj
+29 0 obj
+<< /Length 3740 >>
+stream
+BT /F2 15.00 Tf 1 0 0 1 54.00 772.89 Tm (8. Customer Ordering Flow) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 741.89 Tm (Customer order lifecycle:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.39 Tm (1. Customer signs in with phone OTP.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 700.89 Tm (2. App checks profile completeness.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 684.39 Tm (3. Customer grants location permission or continues with fallback.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 667.89 Tm (4. Home screen requests approved shops near the customer.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 651.39 Tm (5. Customer opens a shop and fetches its public menu.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 634.89 Tm (6. Customer adds menu items to cart.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 618.39 Tm (7. Cart groups items by shop.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 601.89 Tm (8. Cart requires delivery address and exact GPS pin.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 585.39 Tm (9. Cart requests /orders/pricing to calculate delivery fee and totals.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 568.89 Tm (10. Customer chooses COD or Razorpay.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 552.39 Tm (11. Customer creates order through /orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 535.89 Tm (12. If COD, order starts as CONFIRMED and partner is notified.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 519.39 Tm (13. If Razorpay, order starts as PENDING.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 502.89 Tm (14. Customer pays through Razorpay.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 486.39 Tm (15. App verifies payment through /payment/verify.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 469.89 Tm (16. Backend marks payment PAID, order CONFIRMED, and notifies partner.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 453.39 Tm (17. Partner accepts/rejects/prepares/marks ready.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 436.89 Tm (18. Delivery partner accepts job.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 420.39 Tm (19. Delivery partner picks up and delivers.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 403.89 Tm (20. Customer tracks status in OrderStatus.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 382.39 Tm (Pricing logic:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 357.89 Tm (- Shop GPS pin and customer delivery pin are required for accurate pricing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 341.39 Tm (- Distance is calculated with Haversine distance between shop and customer.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 324.89 Tm (- First kilometer fee is Rs 15.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 308.39 Tm (- Additional kilometer fee is Rs 10.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 291.89 Tm (- Food GST, delivery GST, and platform fee fields are recorded, but current payable) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 277.39 Tm (total is item total plus delivery fee because tax/fee offers are applied as discounts.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 260.89 Tm (- Delivery fee is visible before order confirmation.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 239.39 Tm (Order validation:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 214.89 Tm (- Partner must exist.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 198.39 Tm (- Partner must be approved.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 181.89 Tm (- Partner must be open.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 165.39 Tm (- Items must exist.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 148.89 Tm (- Items must be available.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 132.39 Tm (- Submitted item price must match server menu price.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 115.89 Tm (- Delivery pin must exist.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 99.39 Tm (- Payment method must be valid.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 13 of 25) Tj ET
+endstream
+endobj
+30 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 29 0 R >>
+endobj
+31 0 obj
+<< /Length 3590 >>
+stream
+BT /F2 15.00 Tf 1 0 0 1 54.00 772.89 Tm (9. Partner Order Flow) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 741.89 Tm (Partner lifecycle:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.39 Tm (1. Partner signs in with OTP.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 700.89 Tm (2. If no partner profile exists, app opens onboarding.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 684.39 Tm (3. Partner enters owner, restaurant, address, category, GPS, bank, and document details.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 667.89 Tm (4. Files are uploaded through backend Cloudinary endpoint.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 651.39 Tm (5. Onboarding is submitted to backend.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 634.89 Tm (6. Admin reviews and approves/rejects.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 618.39 Tm (7. Approved partner reaches dashboard.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 601.89 Tm (8. Partner creates first menu item; setup can be marked complete.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 585.39 Tm (9. Customer orders arrive as CONFIRMED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 568.89 Tm (10. Partner can accept or reject.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 552.39 Tm (11. Accepted order moves to ACCEPTED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 535.89 Tm (12. Partner marks preparing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 519.39 Tm (13. Partner marks ready.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 502.89 Tm (14. Ready order becomes available for delivery partners or reserved self-delivery riders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 481.39 Tm (Partner order statuses:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 456.89 Tm (- CONFIRMED: order is paid/COD confirmed and waiting for restaurant.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 440.39 Tm (- ACCEPTED: restaurant accepted.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 423.89 Tm (- PREPARING: restaurant is preparing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 407.39 Tm (- READY: order is ready for pickup.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 390.89 Tm (- REJECTED: restaurant rejected, order is cancelled/refund marked where applicable.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 369.39 Tm (Important safeguards:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 344.89 Tm (- Partner cannot accept unpaid online orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 328.39 Tm (- Rejected orders are treated as cancelled with a customer-facing refund message.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 311.89 Tm (- Terminal orders cannot be updated again.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 295.39 Tm (- Only the partner that owns the order, or admin, can update partner-side status.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 278.89 Tm (- Ready orders trigger delivery job notifications.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 246.39 Tm (10. Delivery Flow) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 215.39 Tm (Delivery partner lifecycle:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 190.89 Tm (1. Rider signs in with phone OTP.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 174.39 Tm (2. Backend links or creates delivery partner profile.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 157.89 Tm (3. Rider completes profile and document upload.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 141.39 Tm (4. Admin reviews and verifies/activates.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 124.89 Tm (5. Rider can enter main app when VERIFIED or ACTIVE.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 108.39 Tm (6. Rider toggles availability.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 91.89 Tm (7. App captures foreground location.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 14 of 25) Tj ET
+endstream
+endobj
+32 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 31 0 R >>
+endobj
+33 0 obj
+<< /Length 3668 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (8. Backend stores rider location and may promote verified riders to active after valid) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 72.00 769.39 Tm (location sharing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 752.89 Tm (9. Rider sees ready jobs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 736.39 Tm (10. Jobs are ranked by distance to restaurant when rider location is available.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 719.89 Tm (11. Rider accepts one job.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 703.39 Tm (12. Order becomes ASSIGNED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 686.89 Tm (13. Rider marks pickup.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 670.39 Tm (14. Order becomes PICKED_UP.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 653.89 Tm (15. Rider completes delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 637.39 Tm (16. Order becomes DELIVERED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 620.89 Tm (17. Earnings and COD ledger update.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 599.39 Tm (Delivery job safeguards:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 574.89 Tm (- Only VERIFIED or ACTIVE riders can see/accept jobs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 558.39 Tm (- Rider must be available.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 541.89 Tm (- Rider cannot accept a second active delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 525.39 Tm (- Ready jobs expire if not accepted within the configured delivery window.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 508.89 Tm (- Rider can reject jobs so the same job is not shown again to that rider.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 492.39 Tm (- For COD, delivery cannot be completed until collected amount is at least the order) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 477.89 Tm (grand total.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 456.39 Tm (COD accounting:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 431.89 Tm (- COD collected on delivery is recorded as COD_COLLECTED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 415.39 Tm (- Rider cashBalance increases.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 398.89 Tm (- Rider can submit a cash deposit with amount, reference, proof, and note.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 382.39 Tm (- Admin can verify or reject deposit.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 365.89 Tm (- Verified deposits reduce rider cash balance.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 349.39 Tm (- Payout calculations offset delivery earnings against cash held where needed.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 316.89 Tm (11. Payment Flow) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 285.89 Tm (Payment methods supported by backend model:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 261.39 Tm (- Razorpay.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 244.89 Tm (- Cash on delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 228.39 Tm (- Card, UPI, Wallet are present as enum values, but the main customer UI uses Razorpay) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 213.89 Tm (and COD.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 192.39 Tm (Razorpay flow:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 167.89 Tm (1. Customer creates an order.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 151.39 Tm (2. Customer app calls /payment/create-order.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 134.89 Tm (3. Backend creates Razorpay order for grandTotal * 100 paise.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 118.39 Tm (4. Backend stores Razorpay order ID and returns Razorpay key ID to the app.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 101.89 Tm (5. App opens Razorpay checkout.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 85.39 Tm (6. App receives Razorpay payment result.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 15 of 25) Tj ET
+endstream
+endobj
+34 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 33 0 R >>
+endobj
+35 0 obj
+<< /Length 3589 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (7. App calls /payment/verify.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (8. Backend verifies HMAC checkout signature.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (9. If valid, backend marks order PAID and CONFIRMED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (10. Backend notifies partner of new order.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 712.89 Tm (Webhook flow:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 688.39 Tm (- /payment/webhook uses raw JSON body.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 671.89 Tm (- Backend verifies x-razorpay-signature.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 655.39 Tm (- payment.captured marks order paid and confirmed.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 638.89 Tm (- payment.failed marks order payment failed.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 622.39 Tm (- Webhook can also notify partner when payment confirms.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 600.89 Tm (COD flow:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 576.39 Tm (- Customer creates order with CASH_ON_DELIVERY.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 559.89 Tm (- Backend sets payment status PAYMENT_PENDING_DELIVERY.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 543.39 Tm (- Backend sets order status CONFIRMED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 526.89 Tm (- Partner can accept COD orders immediately.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 510.39 Tm (- Delivery partner must collect cash before marking delivered.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 493.89 Tm (- Backend marks payment PAID after delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 477.39 Tm (- COD amount is added to rider cash ledger.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 444.89 Tm (12. Notifications) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 413.89 Tm (The backend sends FCM push notifications through Firebase Admin.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 389.39 Tm (Token registration:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 364.89 Tm (- Apps register notification token to /notifications/register-token.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 348.39 Tm (- Tokens include app type: customer, partner, or delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 331.89 Tm (- Tokens include platform and optional device ID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 315.39 Tm (- Logout or explicit unregister can disable/remove tokens.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 298.89 Tm (- Invalid FCM tokens are disabled after failed sends.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 277.39 Tm (Notification examples:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 252.89 Tm (- Partner new order.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 236.39 Tm (- Customer order status updates.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 219.89 Tm (- Delivery job ready.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 203.39 Tm (- Delivery assigned.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 186.89 Tm (- Delivery partner assigned by admin.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 170.39 Tm (- Partner delivery status updates.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 153.89 Tm (- Partner application approved/rejected/reupload requested.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 137.39 Tm (- Delivery application approved/rejected/reupload requested.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 120.89 Tm (- Payment confirmed.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 99.39 Tm (Android notifications use app-specific colors and a shared notification channel concept) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 84.89 Tm (configured by custom Expo plugin.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 16 of 25) Tj ET
+endstream
+endobj
+36 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 35 0 R >>
+endobj
+37 0 obj
+<< /Length 3178 >>
+stream
+BT /F2 15.00 Tf 1 0 0 1 54.00 772.89 Tm (13. Uploads and Documents) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 741.89 Tm (Uploads flow through the backend rather than directly from apps to Cloudinary.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.39 Tm (Upload endpoint:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 692.89 Tm (- /api/upload/image) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 676.39 Tm (- Auth required before parsing multipart data.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 659.89 Tm (- Accepts image or file.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 643.39 Tm (- Allows JPG, JPEG, PNG, WEBP, HEIC, HEIF, PDF, and some image MIME variants.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 626.89 Tm (- Max route upload size is 15 MB.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 610.39 Tm (- Cloudinary upload timeout is 180 seconds.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 593.89 Tm (- Retry is attempted for retryable Cloudinary/network errors.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 577.39 Tm (- Images are transformed to max 800x800.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 560.89 Tm (- Files are stored under a user-specific Cloudinary folder.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 539.39 Tm (Deletion endpoint:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 514.89 Tm (- /api/upload/image) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 498.39 Tm (- Non-admin users can only delete files uploaded under their own user folder.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 481.89 Tm (- Admin can delete more broadly.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 460.39 Tm (Upload users:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 435.89 Tm (- Partner onboarding documents.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 419.39 Tm (- Partner profile, shop logo, banner, restaurant photos, menu images.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 402.89 Tm (- Delivery profile/document uploads.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 386.39 Tm (- Cash deposit proof may reference uploaded proof URL.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 353.89 Tm (14. Admin and Operations) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 322.89 Tm (The admin panel is the operations control center.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 298.39 Tm (Dashboard:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 273.89 Tm (- Shows total orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 257.39 Tm (- Shows pending/today orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 240.89 Tm (- Shows partner counts.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 224.39 Tm (- Shows active/pending partners.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 207.89 Tm (- Shows earnings metrics.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 186.39 Tm (Partner review:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 161.89 Tm (- Admin can list partner applications.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 145.39 Tm (- Admin can view partner details.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 128.89 Tm (- Admin can approve, reject, or suspend.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 112.39 Tm (- Admin can request specific document reuploads with notes.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 95.89 Tm (- Partner app surfaces reupload flags and notes.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 17 of 25) Tj ET
+endstream
+endobj
+38 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 37 0 R >>
+endobj
+39 0 obj
+<< /Length 3557 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (Delivery review:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 759.39 Tm (- Admin can list delivery partners.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 742.89 Tm (- Admin can verify, activate, reject, suspend, or mark inactive depending UI/backend) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 728.39 Tm (use.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 711.89 Tm (- Admin can request delivery document reuploads with notes.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 695.39 Tm (- Delivery app routes users based on status.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 673.89 Tm (Order operations:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 649.39 Tm (- Admin can view all orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 632.89 Tm (- Admin can view details.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 616.39 Tm (- Admin can update supported statuses.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 599.89 Tm (- Admin can manually assign delivery partner when order is ready.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 578.39 Tm (Support:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 553.89 Tm (- Customers create tickets and add messages.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 537.39 Tm (- Admin lists tickets by status.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 520.89 Tm (- Admin replies and can update ticket status.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 499.39 Tm (Payouts:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 474.89 Tm (- Admin generates weekly or monthly summaries.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 458.39 Tm (- Partner payout amount is currently based on delivered order item totals.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 441.89 Tm (- Delivery payout amount is based on delivery fees.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 425.39 Tm (- Delivery payout can be offset by cash held from COD.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 408.89 Tm (- Admin creates paid payout records.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 392.39 Tm (- Orders are marked with partner/delivery payout status.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 370.89 Tm (Cash deposits:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 346.39 Tm (- Rider submits deposit request.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 329.89 Tm (- Admin verifies or rejects.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 313.39 Tm (- Verification creates a posted ledger entry and reduces rider cash balance.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 296.89 Tm (- Rejection removes pending deposit amount but does not reduce cash balance.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 264.39 Tm (15. Security and Reliability Features) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 233.39 Tm (Security and reliability already present:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 208.89 Tm (- JWT auth middleware on protected routes.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 192.39 Tm (- Role middleware on admin/customer-specific routes.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 175.89 Tm (- Session invalidation through sessionVersion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 159.39 Tm (- Production environment validation.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 142.89 Tm (- Admin password login requires explicit env configuration.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 126.39 Tm (- OTP rate limits for sending and verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 109.89 Tm (- Admin login rate limit.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 93.39 Tm (- General API rate limiting.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 76.89 Tm (- CORS origin restrictions in production.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 18 of 25) Tj ET
+endstream
+endobj
+40 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 39 0 R >>
+endobj
+41 0 obj
+<< /Length 3241 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- Helmet enabled.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- Razorpay checkout signature verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- Razorpay webhook signature verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (- Cloudinary delete ownership checks.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.89 Tm (- Upload type restrictions.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 701.39 Tm (- Auth before multipart parsing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 684.89 Tm (- Account deletion and logout invalidate sessions.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 668.39 Tm (- Firebase token verification checks expected phone number.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 651.89 Tm (- FCM invalid tokens are disabled.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 635.39 Tm (- Order status transitions are guarded by role and state.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 618.89 Tm (- Delivery one-active-job guard.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 602.39 Tm (- COD delivery requires collected amount.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 585.89 Tm (- Stale order auto-cancellation sweep.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 564.39 Tm (Operational reliability:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 539.89 Tm (- Mobile API clients support production and local fallback URLs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 523.39 Tm (- Customer app uses longer API timeout because hosted backend may wake slowly.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 506.89 Tm (- Mobile clients refresh expired access tokens.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 490.39 Tm (- Partner app proactively refreshes tokens before expiry.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 473.89 Tm (- Startup route checks avoid forcing logout on transient network failures in several) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 459.39 Tm (apps.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 426.89 Tm (16. Build and Run Commands) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 395.89 Tm (Customer app:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 371.39 Tm (- npm start) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 354.89 Tm (- npm run android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 338.39 Tm (- npm run ios) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 321.89 Tm (- npm run web) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 305.39 Tm (- npm run typecheck) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 288.89 Tm (- npm run build:android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 272.39 Tm (- npm run submit:android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 250.89 Tm (Partner app:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 226.39 Tm (- npm start) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 209.89 Tm (- npm run android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 193.39 Tm (- npm run ios) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 176.89 Tm (- npm run web) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 160.39 Tm (- npm run typecheck) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 143.89 Tm (- npm run build:android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 127.39 Tm (- npm run submit:android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 105.89 Tm (Delivery app:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 81.39 Tm (- npm start) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 19 of 25) Tj ET
+endstream
+endobj
+42 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 41 0 R >>
+endobj
+43 0 obj
+<< /Length 2728 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- npm run android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- npm run ios) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- npm run web) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (- npm run typecheck) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.89 Tm (- npm run build:android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 701.39 Tm (- npm run submit:android) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 679.89 Tm (Admin panel:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 655.39 Tm (- npm run dev) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 638.89 Tm (- npm run build) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 622.39 Tm (- npm run lint) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 605.89 Tm (- npm run preview) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 584.39 Tm (Public website:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 559.89 Tm (- npm run dev) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 543.39 Tm (- npm run build) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 526.89 Tm (- npm run lint) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 510.39 Tm (- npm run preview) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 488.89 Tm (Backend:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 464.39 Tm (- npm run dev) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 447.89 Tm (- npm run build) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 431.39 Tm (- npm start) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 414.89 Tm (- npm test) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 398.39 Tm (- npm run mongo:dev) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 381.89 Tm (- npm run seed:partner-mock-menus) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 349.39 Tm (17. Important Environment Variables) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 318.39 Tm (Backend environment variables include:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 293.89 Tm (- PORT) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 277.39 Tm (- NODE_ENV) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 260.89 Tm (- MONGODB_URI or MONGO_URI) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 244.39 Tm (- JWT_SECRET) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 227.89 Tm (- JWT_EXPIRY) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 211.39 Tm (- REFRESH_JWT_EXPIRY) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 194.89 Tm (- API_BASE_URL) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 178.39 Tm (- CORS_ORIGINS) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 161.89 Tm (- REQUEST_BODY_LIMIT) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 145.39 Tm (- RATE_LIMIT_WINDOW_MS) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 128.89 Tm (- RATE_LIMIT_MAX) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 112.39 Tm (- OTP_PROVIDER) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 95.89 Tm (- OTP_EXPIRY_MINUTES) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 79.39 Tm (- OTP_RESEND_COOLDOWN_SECONDS) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 20 of 25) Tj ET
+endstream
+endobj
+44 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 43 0 R >>
+endobj
+45 0 obj
+<< /Length 3338 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- OTP_MAX_ATTEMPTS) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- TWILIO_ACCOUNT_SID) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- TWILIO_AUTH_TOKEN) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (- TWILIO_VERIFY_SERVICE_SID) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.89 Tm (- MSG91_AUTH_KEY) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 701.39 Tm (- MSG91_TEMPLATE_ID) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 684.89 Tm (- MSG91_SENDER_ID) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 668.39 Tm (- FIREBASE_PROJECT_ID) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 651.89 Tm (- FIREBASE_SERVICE_ACCOUNT_PATH) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 635.39 Tm (- FIREBASE_SERVICE_ACCOUNT_JSON) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 618.89 Tm (- ADMIN_PANEL_PHONE) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 602.39 Tm (- ADMIN_PANEL_PASSWORD) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 585.89 Tm (- RAZORPAY_KEY_ID) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 569.39 Tm (- RAZORPAY_KEY_SECRET) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 552.89 Tm (- RAZORPAY_WEBHOOK_SECRET) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 536.39 Tm (- CLOUDINARY_CLOUD_NAME) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 519.89 Tm (- CLOUDINARY_API_KEY) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 503.39 Tm (- CLOUDINARY_API_SECRET) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 486.89 Tm (- CLOUDINARY_UPLOAD_FOLDER) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 470.39 Tm (- GOOGLE_MAPS_API_KEY) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 453.89 Tm (- DELIVERY_RADIUS_KM) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 437.39 Tm (- DELIVERY_LOCATION_FRESHNESS_MINUTES) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 415.89 Tm (Mobile apps use:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 391.39 Tm (- EXPO_PUBLIC_API_URL when a specific API base URL is needed.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 374.89 Tm (- Firebase config through google-services.json.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 358.39 Tm (- Expo update/EAS project IDs in app.json.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 336.89 Tm (Admin panel uses:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 312.39 Tm (- VITE_API_URL for backend API override.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 279.89 Tm (18. Order Status Reference) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 248.89 Tm (Customer-facing order path:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 224.39 Tm (- PENDING: online payment not completed yet.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 207.89 Tm (- CONFIRMED: order is placed and waiting for partner.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 191.39 Tm (- ACCEPTED: partner accepted.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 174.89 Tm (- PREPARING: partner is preparing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 158.39 Tm (- READY: order is ready for pickup.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 141.89 Tm (- ASSIGNED: delivery partner assigned/accepted.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 125.39 Tm (- PICKED_UP: delivery partner picked up.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 108.89 Tm (- DELIVERED: order completed.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 92.39 Tm (- CANCELLED: cancelled by timeout, customer, admin, or system condition.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 75.89 Tm (- REJECTED: partner rejected; treated as cancellation from customer perspective.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 21 of 25) Tj ET
+endstream
+endobj
+46 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 45 0 R >>
+endobj
+47 0 obj
+<< /Length 3217 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (Payment statuses:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 759.39 Tm (- PENDING: online payment pending.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 742.89 Tm (- PAYMENT_PENDING_DELIVERY: COD pending until delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 726.39 Tm (- PAID: paid online or COD collected.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 709.89 Tm (- FAILED: online payment failed.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 693.39 Tm (- REFUNDED: refund expected/recorded after cancellation.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 676.89 Tm (- CANCELLED: payment/order cancelled before payment completion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 655.39 Tm (Partner statuses:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 630.89 Tm (- PENDING) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 614.39 Tm (- APPROVED) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 597.89 Tm (- REJECTED) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 581.39 Tm (- SUSPENDED) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 559.89 Tm (Delivery partner statuses:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 535.39 Tm (- PENDING) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 518.89 Tm (- VERIFIED) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 502.39 Tm (- ACTIVE) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 485.89 Tm (- REJECTED) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 469.39 Tm (- SUSPENDED) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 452.89 Tm (- INACTIVE) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 420.39 Tm (19. End-to-End Example) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 389.39 Tm (A normal prepaid order works like this:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 364.89 Tm (1. Customer logs in.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 348.39 Tm (2. Customer completes profile and address pin.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 331.89 Tm (3. Customer sees nearby approved shops.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 315.39 Tm (4. Customer selects a shop and adds available menu items.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 298.89 Tm (5. Cart asks backend for pricing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 282.39 Tm (6. Customer chooses Razorpay.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 265.89 Tm (7. Backend creates PENDING order.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 249.39 Tm (8. Backend creates Razorpay checkout order.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 232.89 Tm (9. Customer pays in Razorpay.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 216.39 Tm (10. Backend verifies payment signature.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 199.89 Tm (11. Backend marks payment PAID and order CONFIRMED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 183.39 Tm (12. Partner gets push notification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 166.89 Tm (13. Partner accepts order.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 150.39 Tm (14. Partner marks preparing.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 133.89 Tm (15. Partner marks ready.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 117.39 Tm (16. Delivery partners get ready job notification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 100.89 Tm (17. Rider accepts job.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 84.39 Tm (18. Customer and partner get delivery assigned notification.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 22 of 25) Tj ET
+endstream
+endobj
+48 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 47 0 R >>
+endobj
+49 0 obj
+<< /Length 3293 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (19. Rider marks picked up.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (20. Customer and partner are notified.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (21. Rider marks delivered.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 734.39 Tm (22. Backend marks order delivered.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 717.89 Tm (23. Rider earnings increase by delivery fee.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 701.39 Tm (24. Order becomes eligible for partner and delivery payout summary.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 679.89 Tm (A COD order differs only in payment timing:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 655.39 Tm (- Order starts as CONFIRMED.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 638.89 Tm (- Payment status is PAYMENT_PENDING_DELIVERY.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 622.39 Tm (- Rider collects cash at delivery.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 605.89 Tm (- Backend marks payment PAID.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 589.39 Tm (- Cash is added to rider cash balance.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 572.89 Tm (- Admin later reconciles cash deposits and payout offsets.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 540.39 Tm (20. QA and Store Readiness) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 509.39 Tm (The repository includes QA and Play Store readiness documents.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 484.89 Tm (Important customer QA areas:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 460.39 Tm (- Fresh install login and OTP.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 443.89 Tm (- Mandatory profile/address completion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 427.39 Tm (- Shop list and menu loading.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 410.89 Tm (- Cart quantity and checkout totals.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 394.39 Tm (- COD order creation.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 377.89 Tm (- Razorpay payment success/failure/cancel flows.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 361.39 Tm (- Order status updates.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 344.89 Tm (- Logout and account deletion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 323.39 Tm (Important partner QA areas:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 298.89 Tm (- OTP login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 282.39 Tm (- Onboarding validation.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 265.89 Tm (- Pending/rejected/approved screens.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 249.39 Tm (- Shop status/profile/hours/image updates.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 232.89 Tm (- Menu CRUD and availability toggle.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 216.39 Tm (- Order accept/reject/preparing/ready flow.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 199.89 Tm (- Logout and account deletion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 178.39 Tm (Important delivery QA areas:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 153.89 Tm (- OTP login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 137.39 Tm (- Profile/document onboarding.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 120.89 Tm (- Location permission denial and approval.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 104.39 Tm (- Nearby jobs.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 87.89 Tm (- Accept, pickup, deliver.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 23 of 25) Tj ET
+endstream
+endobj
+50 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 49 0 R >>
+endobj
+51 0 obj
+<< /Length 3615 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- COD amount prompt.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 767.39 Tm (- Earnings and cash ledger.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 750.89 Tm (- Logout and account deletion.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 729.39 Tm (Important admin/backend QA areas:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 704.89 Tm (- Health endpoint.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 688.39 Tm (- Public legal endpoints.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 671.89 Tm (- Production CORS.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 655.39 Tm (- Admin login.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 638.89 Tm (- Dashboard stats.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 622.39 Tm (- Partner approval/rejection/reupload.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 605.89 Tm (- Delivery verification/rejection/reupload.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 589.39 Tm (- Order list/details/status/assignment.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 572.89 Tm (- Razorpay signature and webhook verification.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 556.39 Tm (- Upload ownership protection.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 539.89 Tm (- Account deletion/session invalidation.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 507.39 Tm (21. Current System Strengths) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 476.39 Tm (- Clear separation between customer, partner, delivery, admin, backend, and website.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 459.89 Tm (- Role-aware backend with shared authentication.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 443.39 Tm (- Real business workflows are represented end-to-end.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 426.89 Tm (- Mobile apps include production API fallback.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 410.39 Tm (- Payments are signature verified.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 393.89 Tm (- COD cash handling is modeled with ledger entries.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 377.39 Tm (- Payouts are modeled separately from orders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 360.89 Tm (- Partner and delivery document reupload is supported.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 344.39 Tm (- Public legal and Play Store readiness content exists.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 327.89 Tm (- Stale order cancellation is automated.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 311.39 Tm (- Push notifications cover the important operational moments.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 278.89 Tm (22. Areas to Watch) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 247.89 Tm (These are not necessarily bugs, but they are important product/engineering areas to keep) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 233.39 Tm (in mind:) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 208.89 Tm (- SubOrder model exists, but current visible routes mainly use direct Order flows.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 194.39 Tm (Confirm whether suborders are legacy or planned.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 177.89 Tm (- Socket.IO is installed in backend dependencies but the visible server currently uses) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 163.39 Tm (normal Express listen without a Socket.IO server setup. Current real-time behavior is) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 148.89 Tm (primarily polling/push notifications unless implemented elsewhere later.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 132.39 Tm (- Some enum values such as card, UPI, and wallet exist in the order model, while the) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 117.89 Tm (customer UI mainly supports Razorpay and COD.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 24 of 25) Tj ET
+endstream
+endobj
+52 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 51 0 R >>
+endobj
+53 0 obj
+<< /Length 2435 >>
+stream
+BT /F1 10.50 Tf 1 0 0 1 54.00 783.89 Tm (- Several apps include fallback behavior on transient network errors. This improves user) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 769.39 Tm (experience but should be tested so stale sessions do not hide real authorization) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 754.89 Tm (failures.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 738.39 Tm (- Production OTP must not use memory provider; backend already throws in production if) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 723.89 Tm (memory provider is attempted, but environment setup must be correct.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 707.39 Tm (- Payout math is currently based on item total for partners and delivery fee for riders.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 692.89 Tm (If commission, tax, service fee, refund, or penalty logic changes, payout calculations) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 678.39 Tm (need to be updated.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 661.89 Tm (- Delivery location freshness and radius configuration should be reviewed before launch) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 647.39 Tm (for actual city density.) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 630.89 Tm (- Public website policies are strong, but should be reviewed by a qualified legal) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 68.00 616.39 Tm (advisor before production launch.) Tj ET
+BT /F2 15.00 Tf 1 0 0 1 54.00 583.89 Tm (23. Short Summary) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 552.89 Tm (Vyaha/NearU is a full hyperlocal delivery platform. Customers order from nearby approved) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 538.39 Tm (shops, partners manage their restaurant/shop operations, riders fulfill ready delivery) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 523.89 Tm (jobs, admins control verification/support/payouts, and the backend coordinates) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 509.39 Tm (authentication, orders, payments, notifications, uploads, and data persistence. The) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 494.89 Tm (project is already structured like a production ecosystem rather than a prototype, with) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 480.39 Tm (separate apps for each role and explicit operational workflows for onboarding, ordering,) Tj ET
+BT /F1 10.50 Tf 1 0 0 1 54.00 465.89 Tm (delivery, support, and payouts.) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 54.00 28.00 Tm (Vyaha / NearU Project Functionality Guide) Tj ET
+BT /F1 8.50 Tf 1 0 0 1 483.28 28.00 Tm (Page 25 of 25) Tj ET
+endstream
+endobj
+54 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 53 0 R >>
+endobj
+xref
+0 55
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000283 00000 n 
+0000000353 00000 n 
+0000000428 00000 n 
+0000004603 00000 n 
+0000004745 00000 n 
+0000008178 00000 n 
+0000008320 00000 n 
+0000012085 00000 n 
+0000012228 00000 n 
+0000016282 00000 n 
+0000016426 00000 n 
+0000020478 00000 n 
+0000020622 00000 n 
+0000024829 00000 n 
+0000024973 00000 n 
+0000028854 00000 n 
+0000028998 00000 n 
+0000032853 00000 n 
+0000032997 00000 n 
+0000036509 00000 n 
+0000036653 00000 n 
+0000040295 00000 n 
+0000040439 00000 n 
+0000043945 00000 n 
+0000044089 00000 n 
+0000047141 00000 n 
+0000047285 00000 n 
+0000051078 00000 n 
+0000051222 00000 n 
+0000054865 00000 n 
+0000055009 00000 n 
+0000058730 00000 n 
+0000058874 00000 n 
+0000062516 00000 n 
+0000062660 00000 n 
+0000065891 00000 n 
+0000066035 00000 n 
+0000069645 00000 n 
+0000069789 00000 n 
+0000073083 00000 n 
+0000073227 00000 n 
+0000076008 00000 n 
+0000076152 00000 n 
+0000079543 00000 n 
+0000079687 00000 n 
+0000082957 00000 n 
+0000083101 00000 n 
+0000086447 00000 n 
+0000086591 00000 n 
+0000090259 00000 n 
+0000090403 00000 n 
+0000092891 00000 n 
+trailer
+<< /Size 55 /Root 1 0 R >>
+startxref
+93035
+%%EOF

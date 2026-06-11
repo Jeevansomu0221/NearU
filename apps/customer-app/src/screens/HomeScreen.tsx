@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   RefreshControl,
   StyleSheet,
   Text,
@@ -123,6 +124,39 @@ export default function HomeScreen({ navigation }: Props) {
     loadNearbyShops();
   }, []);
 
+  const showLocationPermissionAlert = (canOpenSettings: boolean) => {
+    Alert.alert(
+      "Location Access Needed",
+      "Please allow location access so Vyaha can show shops near you.",
+      canOpenSettings
+        ? [
+            { text: "Not Now", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() }
+          ]
+        : [{ text: "OK" }]
+    );
+  };
+
+  const requestHomeLocationPermission = async () => {
+    const existingPermission = await Location.getForegroundPermissionsAsync();
+    if (existingPermission.status === "granted") {
+      return true;
+    }
+
+    if (existingPermission.canAskAgain === false) {
+      showLocationPermissionAlert(true);
+      return false;
+    }
+
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status === "granted") {
+      return true;
+    }
+
+    showLocationPermissionAlert(permission.canAskAgain === false);
+    return false;
+  };
+
   const loadApprovedShops = async (messageForCount: (count: number) => string) => {
     const fallbackResponse = await getPartners();
     const approvedShops = extractShops(fallbackResponse);
@@ -139,8 +173,8 @@ export default function HomeScreen({ navigation }: Props) {
         setLoading(true);
       }
 
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status !== "granted") {
+      const hasLocationPermission = await requestHomeLocationPermission();
+      if (!hasLocationPermission) {
         await loadApprovedShops((count) =>
           count > 0
             ? "Showing approved shops. Enable location to sort by nearby shops within 3 km."

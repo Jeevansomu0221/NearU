@@ -11,7 +11,7 @@ export interface DeliveryProfile {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   termsAcceptedAt?: string;
-  vehicleType: "Bike" | "Cycle" | "Bicycle" | "Scooter" | "Motorcycle" | "Car";
+  vehicleType: "Bike" | "Cycle" | "Bicycle" | "Scooter" | "Motorcycle" | "EV" | "Car";
   vehicleNumber?: string;
   licenseNumber?: string;
   profilePhotoUrl?: string;

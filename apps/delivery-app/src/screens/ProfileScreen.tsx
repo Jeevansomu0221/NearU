@@ -37,7 +37,7 @@ const DRAFT_KEY = "delivery_registration_draft_v2";
 const TERMS_URL = buildLegalUrl("delivery-policy");
 const DELETE_ACCOUNT_URL = buildLegalUrl("delete-account");
 const STEPS = ["Basic", "Vehicle", "Documents", "Bank"] as const;
-const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "Motorcycle", "Bicycle", "Cycle", "Car"];
+const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "EV", "Bicycle", "Car"];
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   "image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"
 ]);
@@ -46,6 +46,7 @@ const VEHICLE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Bike: "bicycle-outline",
   Scooter: "bicycle-outline",
   Motorcycle: "bicycle-outline",
+  EV: "flash-outline",
   Bicycle: "bicycle-outline",
   Cycle: "bicycle-outline",
   Car: "car-outline"
@@ -136,7 +137,8 @@ const normalizeDocuments = (input?: Partial<Docs> | null): Docs => {
   next.drivingLicenseUrl = next.drivingLicenseUrl || next.drivingLicenseFrontUrl || "";
   next.vehicleRcFrontUrl = next.vehicleRcFrontUrl || next.vehicleRcUrl || "";
   next.vehicleRcUrl = next.vehicleRcUrl || next.vehicleRcFrontUrl || "";
-  next.bankDocumentType = next.bankDocumentType || "cheque";
+  // Kept for future bank proof uploads; current registration does not ask for bank proof type.
+  next.bankDocumentType = next.bankDocumentType || "";
   next.reuploadFlags = next.reuploadFlags || {};
   next.reuploadNotes = next.reuploadNotes || "";
   return next;
@@ -147,7 +149,8 @@ const emptyDocs = (): Docs => ({
   panNumber: "", panFrontUrl: "", panUrl: "", selfiePhotoUrl: "",
   drivingLicenseFrontUrl: "", drivingLicenseBackUrl: "", drivingLicenseUrl: "",
   vehicleRcFrontUrl: "", vehicleRcBackUrl: "", vehicleRcUrl: "", insuranceUrl: "",
-  bankDocumentType: "cheque", bankAccountHolderName: "", cancelledChequeUrl: "",
+  // Kept for future bank proof uploads; current registration does not ask for bank proof type.
+  bankDocumentType: "", bankAccountHolderName: "", cancelledChequeUrl: "",
   bankPassbookUrl: "", bankStatementUrl: "", bankAccountNumber: "", bankIfsc: "",
   submittedAt: "", isComplete: false, reuploadFlags: {}, reuploadNotes: ""
 });
@@ -195,6 +198,11 @@ const parseAddressString = (address?: string | null): AddressForm => {
 
 const isPdfFile = (value?: string | null) => Boolean(value && /\.pdf($|\?)/i.test(value));
 const GENERIC_UPLOAD_ERROR = "Something went wrong. Please try again.";
+const normalizeVehicleType = (value?: DeliveryProfile["vehicleType"] | string | null): DeliveryProfile["vehicleType"] => {
+  if (value === "Motorcycle") return "EV";
+  if (value === "Cycle") return "Bicycle";
+  return (value || "Bike") as DeliveryProfile["vehicleType"];
+};
 
 const uploadAssetToServer = async (asset: UploadAsset, field: UploadField) => {
   const token = await AsyncStorage.getItem("token");
@@ -266,7 +274,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [documents, setDocuments] = useState<Docs>(emptyDocs());
   const formattedAddress = useMemo(() => buildAddressString(addressForm), [addressForm]);
-  const requiresMotorDocuments = !["Cycle", "Bicycle"].includes(vehicleType);
+  const requiresMotorDocuments = !["Cycle", "Bicycle", "EV"].includes(vehicleType);
 
   const updateAddressField = (key: keyof AddressForm, value: string) => {
     setAddressForm((current) => ({
@@ -287,7 +295,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     setAddressForm(parseAddressString(data.address || ""));
     setEmergencyContactName(data.emergencyContactName || "");
     setEmergencyContactPhone(data.emergencyContactPhone || "");
-    setVehicleType(data.vehicleType || "Bike");
+    setVehicleType(normalizeVehicleType(data.vehicleType));
     setVehicleNumber(data.vehicleNumber || "");
     setLicenseNumber(data.licenseNumber || "");
     setProfilePhotoUrl(data.profilePhotoUrl || "");
@@ -324,7 +332,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             setAddressForm(parsed.addressForm || parseAddressString(parsed.address || response.data.address || ""));
             setEmergencyContactName(parsed.emergencyContactName || response.data.emergencyContactName || "");
             setEmergencyContactPhone(parsed.emergencyContactPhone || response.data.emergencyContactPhone || "");
-            setVehicleType(parsed.vehicleType || response.data.vehicleType || "Bike");
+            setVehicleType(normalizeVehicleType(parsed.vehicleType || response.data.vehicleType));
             setVehicleNumber(parsed.vehicleNumber || response.data.vehicleNumber || "");
             setLicenseNumber(parsed.licenseNumber || response.data.licenseNumber || "");
             setProfilePhotoUrl(parsed.profilePhotoUrl || response.data.profilePhotoUrl || "");
@@ -374,23 +382,15 @@ export default function ProfileScreen({ navigation, route }: any) {
   const employeeId = profile?._id ? `DLV-${profile._id.slice(-6).toUpperCase()}` : "Assigned after verification";
   const verificationStatusLabel = profile?.status === "ACTIVE" ? "Approved" : statusTone[profile?.status || "INACTIVE"].label;
 
-  const bankProofField: UploadField =
-    documents.bankDocumentType === "passbook" ? "bankPassbookUrl"
-      : documents.bankDocumentType === "statement" ? "bankStatementUrl"
-        : "cancelledChequeUrl";
-
   const activeDocumentItems: ActiveDocumentItem[] = [
-    { field: "profilePhotoUrl", title: "Profile photo", subtitle: "Used to identify you during pickup and delivery", required: true, url: profilePhotoUrl },
     { field: "aadhaarUrl", title: "Aadhaar front", subtitle: "Government ID proof", required: true, url: documents.aadhaarFrontUrl || documents.aadhaarUrl },
-    { field: "aadhaarBackUrl", title: "Aadhaar back", subtitle: "Address side of Aadhaar", required: true, url: documents.aadhaarBackUrl },
-    { field: "panFrontUrl", title: "PAN card", subtitle: "Tax identity proof", required: true, url: documents.panFrontUrl || documents.panUrl },
     { field: "selfiePhotoUrl", title: "Selfie verification", subtitle: "Live selfie for verification", required: true, url: documents.selfiePhotoUrl },
-    { field: "drivingLicenseUrl", title: "Driving license front", subtitle: requiresMotorDocuments ? "Required for motor vehicle delivery" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.drivingLicenseFrontUrl || documents.drivingLicenseUrl },
-    { field: "drivingLicenseBackUrl", title: "Driving license back", subtitle: requiresMotorDocuments ? "Required for motor vehicle delivery" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.drivingLicenseBackUrl },
-    { field: "vehicleRcUrl", title: "Vehicle RC front", subtitle: requiresMotorDocuments ? "Vehicle registration proof" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.vehicleRcFrontUrl || documents.vehicleRcUrl },
-    { field: "vehicleRcBackUrl", title: "Vehicle RC back", subtitle: requiresMotorDocuments ? "Vehicle registration proof" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.vehicleRcBackUrl },
-    { field: "insuranceUrl", title: "Vehicle insurance", subtitle: requiresMotorDocuments ? "Active insurance document" : "Optional for cycle riders", required: requiresMotorDocuments, url: documents.insuranceUrl },
-    { field: bankProofField, title: "Bank proof", subtitle: "Cancelled cheque, passbook, or bank statement", required: true, url: documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl }
+    ...(requiresMotorDocuments
+      ? [
+          { field: "drivingLicenseUrl" as UploadField, title: "Driving license front", subtitle: "Required for Bike, Scooter, and Car", required: true, url: documents.drivingLicenseFrontUrl || documents.drivingLicenseUrl },
+          { field: "drivingLicenseBackUrl" as UploadField, title: "Driving license back", subtitle: "Required for Bike, Scooter, and Car", required: true, url: documents.drivingLicenseBackUrl }
+        ]
+      : [])
   ];
 
   const handleLogout = async () => {
@@ -440,6 +440,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const handleSaveBankDetails = async () => {
     if (!documents.bankAccountHolderName?.trim()) { Alert.alert("Missing details", "Account holder name is required."); return; }
+    if (!documents.bankAccountNumber?.trim()) { Alert.alert("Missing details", "Bank account number is required."); return; }
     if (!documents.bankIfsc?.trim()) { Alert.alert("Missing details", "IFSC code is required."); return; }
     if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) { Alert.alert("Invalid details", "Bank account number must be numeric."); return; }
     setBankSaving(true);
@@ -461,27 +462,18 @@ export default function ProfileScreen({ navigation, route }: any) {
   const mandatoryDocsComplete = useMemo(() => {
     const normalized = normalizeDocuments(documents);
     return Boolean(
-      profilePhotoUrl && normalized.aadhaarFrontUrl && normalized.aadhaarBackUrl &&
-      normalized.panFrontUrl && normalized.selfiePhotoUrl &&
+      normalized.aadhaarFrontUrl && normalized.aadhaarNumber &&
+      normalized.selfiePhotoUrl &&
       (!requiresMotorDocuments || (
-        normalized.drivingLicenseFrontUrl && normalized.drivingLicenseBackUrl &&
-        normalized.vehicleRcFrontUrl && normalized.vehicleRcBackUrl && normalized.insuranceUrl
+        normalized.drivingLicenseFrontUrl && normalized.drivingLicenseBackUrl
       ))
     );
-  }, [documents, profilePhotoUrl, requiresMotorDocuments]);
+  }, [documents, requiresMotorDocuments]);
 
   const validateStep = (index: number) => {
     if (index === 0) {
       if (name.trim().length < 3) return "Please enter your full name.";
-      if (!profilePhotoUrl) return "Profile photo is required.";
       if (!isAdultDateOfBirth(dateOfBirth)) return "Enter date of birth as YYYY-MM-DD. Delivery partners must be at least 18.";
-      if (!addressForm.flatNo.trim()) return "Flat / house number is required.";
-      if (!addressForm.apartment.trim()) return "Apartment / building name is required.";
-      if (!addressForm.colony.trim()) return "Colony / society is required.";
-      if (!addressForm.area.trim()) return "Area / locality is required.";
-      if (!addressForm.city.trim()) return "City is required.";
-      if (!addressForm.state.trim()) return "State is required.";
-      if (!/^[0-9]{6}$/.test(addressForm.pincode.trim())) return "Pincode must be 6 digits.";
       if (emergencyContactName.trim().length < 3) return "Emergency contact name is required.";
       if (!/^[0-9]{10}$/.test(emergencyContactPhone.trim())) return "Emergency contact phone must be 10 digits.";
     }
@@ -489,29 +481,26 @@ export default function ProfileScreen({ navigation, route }: any) {
       if (requiresMotorDocuments) {
         if (!vehicleNumber.trim()) return "Vehicle number is required.";
         if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,12}$/i.test(vehicleNumber.trim())) return "Vehicle number format looks invalid.";
-        if (!licenseNumber.trim()) return "Driving license is required.";
-        if (!/^[A-Z]{2}[0-9]{2}[0-9A-Z]{8,14}$/i.test(licenseNumber.trim())) return "Driving license format looks invalid.";
+        if (!licenseNumber.trim()) return "Driving license number is required.";
+        if (!/^[A-Z]{2}[0-9]{2}[0-9A-Z]{8,14}$/i.test(licenseNumber.trim())) return "Driving license number format looks invalid.";
       }
     }
     if (index === 2) {
       const aadhaarNumber = documents.aadhaarNumber?.trim() || "";
-      const panNumber = documents.panNumber?.trim().toUpperCase() || "";
       if (!/^[0-9]{12}$/.test(aadhaarNumber)) return "Aadhaar number must be 12 digits.";
-      if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) return "PAN number must match AAAAA9999A format.";
       const normalized = normalizeDocuments(documents);
-      if (!normalized.aadhaarFrontUrl || !normalized.aadhaarBackUrl || !normalized.panFrontUrl) return "Aadhaar front/back and PAN front are mandatory.";
+      if (!normalized.aadhaarFrontUrl) return "Aadhaar front is mandatory.";
       if (!normalized.selfiePhotoUrl) return "Selfie/photo verification is required.";
-      if (requiresMotorDocuments && (!normalized.drivingLicenseFrontUrl || !normalized.drivingLicenseBackUrl || !normalized.vehicleRcFrontUrl || !normalized.vehicleRcBackUrl || !normalized.insuranceUrl)) return "Driving license front/back, vehicle RC front/back, and insurance document are mandatory.";
+      if (requiresMotorDocuments && (!normalized.drivingLicenseFrontUrl || !normalized.drivingLicenseBackUrl)) return "Driving license front and back are mandatory for this vehicle type.";
     }
     if (index === 3) {
-      const hasAnyBankInput = Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim() || documents.cancelledChequeUrl || documents.bankPassbookUrl || documents.bankStatementUrl);
+      const hasAnyBankInput = Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim());
       if (hasAnyBankInput) {
-        const selectedBankProofUrl = documents.bankDocumentType === "passbook" ? documents.bankPassbookUrl : documents.bankDocumentType === "statement" ? documents.bankStatementUrl : documents.cancelledChequeUrl;
         if (!documents.bankAccountHolderName?.trim()) return "Account holder name is required if you add bank details.";
-        if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric.";
+        if (!documents.bankAccountNumber?.trim()) return "Bank account number is required if you add bank details.";
+        if (!/^[0-9]+$/.test(documents.bankAccountNumber.trim())) return "Bank account number must be numeric.";
         if (!documents.bankIfsc?.trim()) return "IFSC code is required if you add bank details.";
         if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC code format is invalid.";
-        if (!selectedBankProofUrl) return "Upload the selected bank proof if you add bank details.";
       }
       if (!termsAccepted) return "Please accept the delivery partner terms and conditions.";
     }
@@ -595,20 +584,29 @@ export default function ProfileScreen({ navigation, route }: any) {
       const normalizedDocuments = normalizeDocuments(documents);
       const response = await updateDeliveryProfile({
         name: name.trim(), email: email.trim() || undefined, dateOfBirth: dateOfBirth.trim(),
-        address: formattedAddress, emergencyContactName: emergencyContactName.trim(),
+        emergencyContactName: emergencyContactName.trim(),
         emergencyContactPhone: emergencyContactPhone.trim(), vehicleType,
-        vehicleNumber: requiresMotorDocuments ? vehicleNumber.trim().toUpperCase() : undefined,
-        licenseNumber: requiresMotorDocuments ? licenseNumber.trim().toUpperCase() : undefined,
+        vehicleNumber: requiresMotorDocuments ? vehicleNumber.trim().toUpperCase() : "",
+        licenseNumber: requiresMotorDocuments ? licenseNumber.trim().toUpperCase() : "",
         profilePhotoUrl, isAvailable, termsAccepted, status: "PENDING",
         documents: {
           ...normalizedDocuments, aadhaarNumber: normalizedDocuments.aadhaarNumber?.trim(),
           aadhaarFrontUrl: normalizedDocuments.aadhaarFrontUrl,
-          panNumber: normalizedDocuments.panNumber?.trim().toUpperCase(),
-          panFrontUrl: normalizedDocuments.panFrontUrl,
+          aadhaarBackUrl: "",
+          panNumber: "",
+          panFrontUrl: "",
+          panUrl: "",
           selfiePhotoUrl: normalizedDocuments.selfiePhotoUrl,
           drivingLicenseFrontUrl: normalizedDocuments.drivingLicenseFrontUrl,
-          vehicleRcFrontUrl: normalizedDocuments.vehicleRcFrontUrl,
-          bankDocumentType: normalizedDocuments.bankDocumentType || "cheque",
+          drivingLicenseBackUrl: normalizedDocuments.drivingLicenseBackUrl,
+          vehicleRcFrontUrl: "",
+          vehicleRcBackUrl: "",
+          vehicleRcUrl: "",
+          insuranceUrl: "",
+          bankDocumentType: "",
+          cancelledChequeUrl: "",
+          bankPassbookUrl: "",
+          bankStatementUrl: "",
           bankAccountHolderName: documents.bankAccountHolderName?.trim(),
           bankAccountNumber: documents.bankAccountNumber?.trim() || "",
           bankIfsc: documents.bankIfsc?.trim().toUpperCase()
@@ -822,25 +820,25 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
   };
 
+  const handleSkipBankDetailsForNow = () => {
+    setDocuments((current) => ({
+      ...current,
+      bankAccountHolderName: "",
+      bankAccountNumber: "",
+      bankIfsc: "",
+      cancelledChequeUrl: "",
+      bankPassbookUrl: "",
+      bankStatementUrl: "",
+      bankDocumentType: ""
+    }));
+    Alert.alert("Bank details skipped", "You can add payout bank details later from your profile before receiving delivery job payments.");
+  };
+
   const renderStepContent = () => {
     switch (step) {
       case 0:
         return (
           <View>
-            <View style={s.avatarUploadWrap}>
-              <TouchableOpacity onPress={() => uploadFile("profilePhotoUrl")} style={s.avatarUpload}>
-                {profilePhotoUrl ? (
-                  <Image source={{ uri: profilePhotoUrl }} style={s.avatarUploadImg} />
-                ) : (
-                  <View style={s.avatarUploadPlaceholder}><Ionicons name="camera-outline" size={28} color="#98A2B3" /><Text style={s.avatarUploadHint}>Photo</Text></View>
-                )}
-              </TouchableOpacity>
-              <View style={{ flex: 1, justifyContent: "center" }}>
-                <Text style={s.avatarLabel}>Profile Photo</Text>
-                <Text style={s.avatarHint}>Used for identity verification during pickup</Text>
-              </View>
-            </View>
-
             <Text style={s.inputLabel}>Full Name</Text>
             <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Enter your full name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
 
@@ -852,11 +850,6 @@ export default function ProfileScreen({ navigation, route }: any) {
 
             <Text style={s.inputLabel}>Date of Birth</Text>
             <TextInput style={s.input} value={dateOfBirth} onChangeText={(v) => setDateOfBirth(v.replace(/[^0-9-]/g, "").slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor="#98A2B3" keyboardType="numbers-and-punctuation" selectionColor="#FF6B35" />
-
-            <Text style={s.sectionTitleSm}>Residential Address</Text>
-            {ADDRESS_LABELS.map(({ key, label }) => (
-              <TextInput key={key} style={[s.input, key === "area" && s.textArea]} value={addressForm[key]} onChangeText={(v) => updateAddressField(key, v)} placeholder={label} placeholderTextColor="#98A2B3" keyboardType={key === "pincode" ? "number-pad" : "default"} maxLength={key === "pincode" ? 6 : undefined} selectionColor="#FF6B35" />
-            ))}
 
             <Text style={s.sectionTitleSm}>Emergency Contact</Text>
             <TextInput style={s.input} value={emergencyContactName} onChangeText={setEmergencyContactName} placeholder="Emergency contact name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
@@ -876,6 +869,10 @@ export default function ProfileScreen({ navigation, route }: any) {
                 </TouchableOpacity>
               ))}
             </View>
+            <View style={s.infoCard}>
+              <Ionicons name="information-circle-outline" size={20} color="#667085" />
+              <Text style={s.infoCardText}>EV and Bicycle/Cycle riders do not need to submit driving license or vehicle number.</Text>
+            </View>
             {requiresMotorDocuments ? (
               <>
                 <Text style={s.inputLabel}>Vehicle Number</Text>
@@ -883,12 +880,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <Text style={s.inputLabel}>Driving License Number</Text>
                 <TextInput style={s.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder="e.g. TS0120230012345" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
               </>
-            ) : (
-              <View style={s.infoCard}>
-                <Ionicons name="information-circle-outline" size={20} color="#667085" />
-                <Text style={s.infoCardText}>Vehicle number and driving license are not required for bicycle / cycle riders.</Text>
-              </View>
-            )}
+            ) : null}
           </View>
         );
 
@@ -897,56 +889,34 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View>
             <Text style={s.inputLabel}>Aadhaar Number</Text>
             <TextInput style={s.input} value={documents.aadhaarNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, aadhaarNumber: v.replace(/\D/g, "").slice(0, 12) }))} placeholder="12-digit Aadhaar number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
-            <Text style={s.inputLabel}>PAN Number</Text>
-            <TextInput style={s.input} value={documents.panNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, panNumber: v.toUpperCase().slice(0, 10) }))} placeholder="AAAAA9999A" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
             {renderUpload("aadhaarUrl", "Aadhaar Front", "Government ID proof", true)}
-            {renderUpload("aadhaarBackUrl", "Aadhaar Back", "Address side of Aadhaar", true)}
-            {renderUpload("panFrontUrl", "PAN Card Front", "Tax identity proof", true)}
             {renderUpload("selfiePhotoUrl", "Live Selfie", "Front camera selfie for verification", true)}
             {requiresMotorDocuments ? (
               <>
                 {renderUpload("drivingLicenseUrl", "Driving License Front", "Required for motor vehicles", true)}
                 {renderUpload("drivingLicenseBackUrl", "Driving License Back", "Required for motor vehicles", true)}
-                {renderUpload("vehicleRcUrl", "Vehicle RC Front", "Registration proof", true)}
-                {renderUpload("vehicleRcBackUrl", "Vehicle RC Back", "Registration proof", true)}
-                {renderUpload("insuranceUrl", "Vehicle Insurance", "Active insurance document", true)}
               </>
-            ) : (
-              <View style={s.infoCard}>
-                <Ionicons name="information-circle-outline" size={20} color="#667085" />
-                <Text style={s.infoCardText}>Motor vehicle documents are not required for bicycle / cycle riders.</Text>
-              </View>
-            )}
+            ) : null}
           </View>
         );
 
       case 3:
         return (
           <View>
+            <View style={s.infoCard}>
+              <Ionicons name="cash-outline" size={20} color="#667085" />
+              <Text style={s.infoCardText}>We use these bank details to transfer your delivery job payments. You can skip this now and add payout details later from your profile.</Text>
+            </View>
             <Text style={s.inputLabel}>Account Holder Name</Text>
             <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountHolderName: v }))} placeholder="As on bank account" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-            <Text style={s.inputLabel}>Account Number (optional for now)</Text>
+            <Text style={s.inputLabel}>Account Number</Text>
             <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountNumber: v.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
             <Text style={s.inputLabel}>IFSC Code</Text>
             <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankIfsc: v.toUpperCase() }))} placeholder="e.g. HDFC0001234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
 
-            <Text style={s.inputLabel}>Bank Proof Type</Text>
-            <View style={s.chipRow}>
-              {(["cheque", "passbook", "statement"] as const).map((type) => (
-                <TouchableOpacity key={type} style={[s.chip, documents.bankDocumentType === type && s.chipActive]} onPress={() => setDocuments((c) => ({ ...c, bankDocumentType: type }))}>
-                  <Text style={[s.chipText, documents.bankDocumentType === type && s.chipTextActive]}>
-                    {type === "cheque" ? "Cheque" : type === "passbook" ? "Passbook" : "Statement"}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={s.chipHint}>Cheque is recommended. You can also upload passbook or statement.</Text>
-
-            {documents.bankDocumentType === "passbook"
-              ? renderUpload("bankPassbookUrl", "Passbook First Page", "Upload passbook page showing your name and account number", true)
-              : documents.bankDocumentType === "statement"
-                ? renderUpload("bankStatementUrl", "Recent Statement", "Upload recent bank statement", true)
-                : renderUpload("cancelledChequeUrl", "Cancelled Cheque", "Upload a cancelled cheque with your name and account number", true)}
+            <TouchableOpacity style={s.skipBankButton} onPress={handleSkipBankDetailsForNow}>
+              <Text style={s.skipBankButtonText}>Skip Bank Details For Now</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity style={s.termsRow} onPress={() => setTermsAccepted((c) => !c)}>
               <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={22} color={termsAccepted ? "#FF6B35" : "#98A2B3"} />
@@ -1162,6 +1132,8 @@ const s = StyleSheet.create({
   chipText: { fontSize: 13, fontWeight: "700", color: "#667085" },
   chipTextActive: { color: "#C2410C" },
   chipHint: { marginTop: 6, fontSize: 12, color: "#98A2B3" },
+  skipBankButton: { marginTop: 14, paddingVertical: 13, borderRadius: 14, alignItems: "center", borderWidth: 1, borderColor: "#E4E7EC", backgroundColor: "#F8FAFC" },
+  skipBankButtonText: { fontSize: 14, fontWeight: "800", color: "#475467" },
 
   termsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: "#FFF8F5" },
   termsText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "600", color: "#475467" },
