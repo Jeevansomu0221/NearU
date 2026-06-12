@@ -1490,14 +1490,53 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
     );
 
     const isAdmin = user.role === ROLES.ADMIN;
+    const isDeliveryDetailsRoute = req.path.startsWith("/delivery/");
+    let availableDeliveryJobForUser: any = null;
 
-    if (!isCustomer && !isDelivery && !isPartner && !isAdmin) {
+    if (isDeliveryDetailsRoute && !isDelivery) {
+      const deliveryPartner = await resolveDeliveryPartnerForUser(user, "userId status isAvailable");
+      const deliveryUserId = idString(deliveryPartner?.userId) || user.id;
+      const isEligibleDeliveryViewer = Boolean(
+        deliveryPartner &&
+          ["ACTIVE", "VERIFIED"].includes(deliveryPartner.status) &&
+          deliveryPartner.isAvailable !== false
+      );
+      const isUnassignedReadyOrder =
+        orderObj.status === "READY" &&
+        (!orderObj.deliveryPartnerId || idString(orderObj.deliveryPartnerId) === "");
+
+      if (isEligibleDeliveryViewer && isUnassignedReadyOrder && isDeliveryJobVisibleToUser(orderObj, deliveryUserId)) {
+        if (isBundledDeliveryOrder(orderObj)) {
+          const bundledOrders = await getPopulatedBundleOrders(String(orderObj.deliveryBundleId));
+          const expectedBundleSize = Number(orderObj.deliveryBundleSize || bundledOrders.length);
+          const canViewBundle =
+            bundledOrders.length >= expectedBundleSize &&
+            bundledOrders.every((bundleOrder: any) => {
+              const isReady = bundleOrder.status === "READY";
+              const isUnassigned = !bundleOrder.deliveryPartnerId || idString(bundleOrder.deliveryPartnerId) === "";
+              return isReady && isUnassigned && isDeliveryJobVisibleToUser(bundleOrder, deliveryUserId);
+            });
+
+          if (canViewBundle) {
+            return successResponse(res, buildBundledDeliveryJob(bundledOrders), "Bundled delivery details retrieved");
+          }
+        } else {
+          availableDeliveryJobForUser = await ensureDeliveryLocationForResponse(orderObj);
+        }
+      }
+    }
+
+    if (!isCustomer && !isDelivery && !isPartner && !isAdmin && !availableDeliveryJobForUser) {
       return errorResponse(res, "Unauthorized to view this order", 401);
     }
 
     if (isDelivery && req.path.startsWith("/delivery/") && isBundledDeliveryOrder(orderObj)) {
       const bundledOrders = await getPopulatedBundleOrders(String(orderObj.deliveryBundleId));
       return successResponse(res, buildBundledDeliveryJob(bundledOrders), "Bundled delivery details retrieved");
+    }
+
+    if (availableDeliveryJobForUser) {
+      return successResponse(res, availableDeliveryJobForUser, "Delivery details retrieved");
     }
 
     // Only partner-only viewers should see masked customer details. A delivery
