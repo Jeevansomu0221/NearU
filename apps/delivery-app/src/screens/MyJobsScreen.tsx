@@ -99,15 +99,22 @@ export default function MyJobsScreen({ navigation, route }: any) {
     });
   };
 
-  const renderJobItem = ({ item }: { item: DeliveryOrder }) => (
-    <TouchableOpacity
-      style={[styles.jobCard, highlightOrderId === item._id && styles.jobCardHighlighted]}
-      onPress={() => handleJobPress(item)}
-      activeOpacity={0.9}
-    >
+  const renderJobItem = ({ item }: { item: DeliveryOrder }) => {
+    const pickupStops = item.pickupStops?.length
+      ? item.pickupStops
+      : [{ partnerId: item.partnerId, orderId: item._id, sequence: 1, status: item.status, items: item.items, itemTotal: item.itemTotal, deliveryFee: item.deliveryFee, grandTotal: item.grandTotal }];
+
+    return (
+      <TouchableOpacity
+        style={[styles.jobCard, highlightOrderId === item._id && styles.jobCardHighlighted]}
+        onPress={() => handleJobPress(item)}
+        activeOpacity={0.9}
+      >
       <View style={styles.jobHeader}>
         <View>
-          <Text style={styles.orderId}>Order #{item._id?.slice(-6).toUpperCase() || "N/A"}</Text>
+          <Text style={styles.orderId}>
+            {item.isBundledDelivery ? "Bundled Delivery" : `Order #${item._id?.slice(-6).toUpperCase() || "N/A"}`}
+          </Text>
           <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
@@ -117,12 +124,16 @@ export default function MyJobsScreen({ navigation, route }: any) {
       </View>
 
       <View style={styles.restaurantInfo}>
-        <Text style={styles.restaurantName}>
-          🏪 {item.partnerId?.restaurantName || item.partnerId?.shopName || "Restaurant"}
-        </Text>
-        <Text style={styles.restaurantAddress}>
-          📍 {formatAddress(item.partnerId?.address, { short: true })}
-        </Text>
+        {pickupStops.map((stop, index) => (
+          <View key={stop.orderId || `${item._id}-${index}`}>
+            <Text style={styles.restaurantName}>
+              🏪 Pickup {pickupStops.length > 1 ? index + 1 : ""} {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
+            </Text>
+            <Text style={styles.restaurantAddress}>
+              📍 {formatAddress(stop.partnerId?.address, { short: true })}
+            </Text>
+          </View>
+        ))}
       </View>
 
       <View style={styles.deliveryInfo}>
@@ -151,8 +162,9 @@ export default function MyJobsScreen({ navigation, route }: any) {
           </Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (

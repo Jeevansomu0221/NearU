@@ -383,6 +383,117 @@ const haversineKm = (from: [number, number], to: [number, number]) => {
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+const isBundledDeliveryOrder = (order: any) =>
+  Boolean(order?.deliveryBundleId && Number(order?.deliveryBundleSize || 1) > 1);
+
+const getBundleStatus = (orders: any[]) => {
+  const statuses = new Set(orders.map((order) => order.status));
+  if (statuses.size === 1) return orders[0]?.status || "READY";
+  if (statuses.has("PICKED_UP")) return "PICKED_UP";
+  if (statuses.has("ASSIGNED")) return "ASSIGNED";
+  if (orders.every((order) => order.status === "READY")) return "READY";
+  return "PREPARING";
+};
+
+const sortBundleOrders = (orders: any[]) =>
+  [...orders].sort((left, right) => {
+    const leftSeq = Number(left.deliveryBundleSequence || 1);
+    const rightSeq = Number(right.deliveryBundleSequence || 1);
+    if (leftSeq !== rightSeq) return leftSeq - rightSeq;
+    return idString(left._id).localeCompare(idString(right._id));
+  });
+
+const buildBundledDeliveryJob = (orders: any[]) => {
+  const sortedOrders = sortBundleOrders(orders);
+  const primary = sortedOrders[0];
+  if (!primary || !isBundledDeliveryOrder(primary)) return primary;
+
+  const itemTotal = sortedOrders.reduce((sum, order) => sum + Number(order.itemTotal || 0), 0);
+  const deliveryFee = sortedOrders.reduce((sum, order) => sum + Number(order.deliveryFee || 0), 0);
+  const grandTotal = sortedOrders.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0);
+  const deliveryDistanceKm = sortedOrders.reduce((sum, order) => sum + Number(order.deliveryDistanceKm || 0), 0);
+  const paymentMethod = sortedOrders.some((order) => order.paymentMethod === "CASH_ON_DELIVERY")
+    ? "CASH_ON_DELIVERY"
+    : primary.paymentMethod;
+  const paymentStatus = sortedOrders.every((order) => order.paymentStatus === "PAID")
+    ? "PAID"
+    : primary.paymentStatus;
+
+  return {
+    ...primary,
+    status: getBundleStatus(sortedOrders),
+    isBundledDelivery: true,
+    deliveryBundleSize: sortedOrders.length,
+    itemTotal: roundMoney(itemTotal),
+    deliveryFee: roundMoney(deliveryFee),
+    grandTotal: roundMoney(grandTotal),
+    deliveryDistanceKm: roundDistance(deliveryDistanceKm),
+    paymentMethod,
+    paymentStatus,
+    items: sortedOrders.flatMap((order) => {
+      const partnerName = order.partnerId?.restaurantName || order.partnerId?.shopName || "Restaurant";
+      return (order.items || []).map((item: any) => ({
+        ...item,
+        shopName: partnerName,
+        orderId: idString(order._id)
+      }));
+    }),
+    bundleOrders: sortedOrders,
+    pickupStops: sortedOrders.map((order) => ({
+      orderId: idString(order._id),
+      sequence: Number(order.deliveryBundleSequence || 1),
+      status: order.status,
+      partnerId: order.partnerId,
+      items: order.items || [],
+      itemTotal: order.itemTotal || 0,
+      deliveryFee: order.deliveryFee || 0,
+      grandTotal: order.grandTotal || 0
+    }))
+  };
+};
+
+const groupBundledDeliveryJobs = (orders: any[]) => {
+  const grouped = new Map<string, any[]>();
+  const jobs: any[] = [];
+
+  for (const order of orders) {
+    if (!isBundledDeliveryOrder(order)) {
+      jobs.push(order);
+      continue;
+    }
+
+    const bundleId = String(order.deliveryBundleId);
+    grouped.set(bundleId, [...(grouped.get(bundleId) || []), order]);
+  }
+
+  for (const bundleOrders of grouped.values()) {
+    const expectedSize = Number(bundleOrders[0]?.deliveryBundleSize || bundleOrders.length);
+    if (bundleOrders.length >= expectedSize) {
+      jobs.push(buildBundledDeliveryJob(bundleOrders));
+    }
+  }
+
+  return jobs.sort((left, right) => {
+    const leftDate = new Date(left.createdAt || 0).getTime();
+    const rightDate = new Date(right.createdAt || 0).getTime();
+    return rightDate - leftDate;
+  });
+};
+
+const getPopulatedBundleOrders = async (bundleId: string) => {
+  const orders = await Order.find({ deliveryBundleId: bundleId })
+    .populate("customerId", "name phone")
+    .populate({
+      path: "partnerId",
+      select: "restaurantName shopName phone address category location",
+      transform: formatPartnerForDelivery
+    })
+    .populate("deliveryPartnerId", "name phone")
+    .sort({ deliveryBundleSequence: 1, createdAt: 1 });
+
+  return Promise.all(orders.map((order: any) => ensureDeliveryLocationForResponse(order.toObject())));
+};
+
 const roundMoney = (value: number) => Number(value.toFixed(2));
 const roundDistance = (value: number) => Number(value.toFixed(2));
 
@@ -661,7 +772,17 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const { partnerId, deliveryAddress, deliveryLocation, items, note, paymentMethod = "RAZORPAY" } = req.body;
+    const {
+      partnerId,
+      deliveryAddress,
+      deliveryLocation,
+      items,
+      note,
+      paymentMethod = "RAZORPAY",
+      deliveryBundleId,
+      deliveryBundleSize,
+      deliveryBundleSequence
+    } = req.body;
 
     // Validate required fields
     if (!partnerId || !deliveryAddress) {
@@ -670,6 +791,21 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     if (!items || items.length === 0) {
       return errorResponse(res, "Items are required for orders", 400);
+    }
+
+    const normalizedBundleId = typeof deliveryBundleId === "string" ? deliveryBundleId.trim() : "";
+    const normalizedBundleSize = Number(deliveryBundleSize || 1);
+    const normalizedBundleSequence = Number(deliveryBundleSequence || 1);
+    if (
+      normalizedBundleId &&
+      (!Number.isInteger(normalizedBundleSize) ||
+        normalizedBundleSize < 2 ||
+        normalizedBundleSize > 4 ||
+        !Number.isInteger(normalizedBundleSequence) ||
+        normalizedBundleSequence < 1 ||
+        normalizedBundleSequence > normalizedBundleSize)
+    ) {
+      return errorResponse(res, "Invalid bundled delivery metadata", 400);
     }
 
     // Validate payment method
@@ -753,6 +889,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       partnerId,
       deliveryAddress,
       deliveryLocation: normalizedDeliveryLocation,
+      deliveryBundleId: normalizedBundleId,
+      deliveryBundleSize: normalizedBundleId ? normalizedBundleSize : 1,
+      deliveryBundleSequence: normalizedBundleId ? normalizedBundleSequence : 1,
       note: note || "",
       items: validatedItems,
       itemTotal,
@@ -959,7 +1098,18 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     });
 
     if (status === "READY" && previousStatus !== "READY") {
-      void notifyDeliveryJobReady(order).catch((error) => {
+      let shouldNotifyDeliveryReady = true;
+      if (isBundledDeliveryOrder(order)) {
+        const bundleOrders = await Order.find({ deliveryBundleId: order.deliveryBundleId })
+          .select("status deliveryBundleSize")
+          .lean();
+        const expectedBundleSize = Number(order.deliveryBundleSize || bundleOrders.length);
+        shouldNotifyDeliveryReady =
+          bundleOrders.length >= expectedBundleSize &&
+          bundleOrders.every((bundleOrder: any) => bundleOrder.status === "READY");
+      }
+
+      if (shouldNotifyDeliveryReady) void notifyDeliveryJobReady(order).catch((error) => {
         console.error("Failed to notify delivery partners about ready order:", error);
       });
     }
@@ -1074,83 +1224,101 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     }
 
     const userId = new mongoose.Types.ObjectId(user.id);
+    const deliveryOrders = isBundledDeliveryOrder(order)
+      ? await Order.find({ deliveryBundleId: order.deliveryBundleId }).sort({ deliveryBundleSequence: 1, createdAt: 1 })
+      : [order];
 
-    // Check if deliveryPartnerId exists and matches
-    if (!order.deliveryPartnerId || !order.deliveryPartnerId.equals(userId)) {
-      return errorResponse(res, "Unauthorized - Not assigned to this order", 401);
+    if (deliveryOrders.length === 0) {
+      return errorResponse(res, "Order not found", 404);
     }
 
-    // Validate status flow
-    if (status === "PICKED_UP" && order.status !== "ASSIGNED") {
-      return errorResponse(res, "Order must be ASSIGNED before being picked up", 400);
+    const unauthorizedOrder = deliveryOrders.find((deliveryOrder: any) => {
+      return !deliveryOrder.deliveryPartnerId || !deliveryOrder.deliveryPartnerId.equals(userId);
+    });
+    if (unauthorizedOrder) {
+      return errorResponse(res, "Unauthorized - Not assigned to this delivery job", 401);
     }
 
-    if (status === "DELIVERED" && order.status !== "PICKED_UP") {
-      return errorResponse(res, "Order must be PICKED_UP before being delivered", 400);
+    if (status === "PICKED_UP" && deliveryOrders.some((deliveryOrder: any) => deliveryOrder.status !== "ASSIGNED")) {
+      return errorResponse(res, "All bundled orders must be ASSIGNED before pickup", 400);
     }
 
-    const codCollectedAmount = status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY"
-      ? Number(collectedAmount)
-      : 0;
-    if (status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY") {
-      if (!Number.isFinite(codCollectedAmount) || codCollectedAmount < order.grandTotal) {
-        return errorResponse(res, `Collect Rs ${order.grandTotal} before marking this order as delivered`, 400);
+    if (status === "DELIVERED" && deliveryOrders.some((deliveryOrder: any) => deliveryOrder.status !== "PICKED_UP")) {
+      return errorResponse(res, "All bundled orders must be PICKED_UP before delivery", 400);
+    }
+
+    const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
+    const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
+    const codCollectedAmount = status === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
+    if (status === "DELIVERED" && totalCodAmount > 0) {
+      if (!Number.isFinite(codCollectedAmount) || codCollectedAmount < totalCodAmount) {
+        return errorResponse(res, `Collect Rs ${totalCodAmount} before marking this delivery as delivered`, 400);
       }
     }
 
-    order.status = status;
-    if (status === "DELIVERED") {
-      order.deliveredAt = new Date();
-    }
-    
-    // If delivered, update payment status for COD orders
-    if (status === "DELIVERED" && order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "PAYMENT_PENDING_DELIVERY") {
-      order.paymentStatus = "PAID";
-    }
-
     let deliveryPartner: any = null;
-    let createdCashLedgerEntry = false;
+    let createdCashLedgerAmount = 0;
     if (status === "DELIVERED") {
       deliveryPartner = await DeliveryPartner.findOne({ userId: user.id });
       if (!deliveryPartner) {
         return errorResponse(res, "Delivery profile not found", 404);
       }
-
-      if (
-        order.paymentMethod === "CASH_ON_DELIVERY" &&
-        codCollectedAmount > 0 &&
-        !order.codCollection?.cashLedgerEntryId
-      ) {
-        const cashLedgerEntry = await CashLedgerEntry.create({
-          deliveryPartnerId: deliveryPartner._id,
-          userId: user.id,
-          type: "COD_COLLECTED",
-          amount: codCollectedAmount,
-          balanceDelta: codCollectedAmount,
-          status: "POSTED",
-          orderId: order._id,
-          note: `COD collected for order #${String(order._id).slice(-6)}`
-        });
-
-        order.codCollection = {
-          collectedAmount: codCollectedAmount,
-          collectedAt: new Date(),
-          collectedBy: userId,
-          cashLedgerEntryId: cashLedgerEntry._id
-        };
-        createdCashLedgerEntry = true;
-      }
     }
 
-    await order.save();
+    for (const deliveryOrder of deliveryOrders) {
+      deliveryOrder.status = status;
+      if (status === "DELIVERED") {
+        deliveryOrder.deliveredAt = new Date();
+
+        if (
+          deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
+          deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY"
+        ) {
+          deliveryOrder.paymentStatus = "PAID";
+        }
+
+        const orderCodAmount = Number(deliveryOrder.grandTotal || 0);
+        if (
+          deliveryPartner &&
+          deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
+          orderCodAmount > 0 &&
+          !deliveryOrder.codCollection?.cashLedgerEntryId
+        ) {
+          const cashLedgerEntry = await CashLedgerEntry.create({
+            deliveryPartnerId: deliveryPartner._id,
+            userId: user.id,
+            type: "COD_COLLECTED",
+            amount: orderCodAmount,
+            balanceDelta: orderCodAmount,
+            status: "POSTED",
+            orderId: deliveryOrder._id,
+            note: `COD collected for order #${String(deliveryOrder._id).slice(-6)}`
+          });
+
+          deliveryOrder.codCollection = {
+            collectedAmount: orderCodAmount,
+            collectedAt: new Date(),
+            collectedBy: userId,
+            cashLedgerEntryId: cashLedgerEntry._id
+          };
+          createdCashLedgerAmount += orderCodAmount;
+        }
+      }
+
+      await deliveryOrder.save();
+    }
 
     if (status === "DELIVERED" && deliveryPartner) {
+      const totalDeliveryEarnings = deliveryOrders.reduce(
+        (sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.deliveryFee || 0),
+        0
+      );
       const deliveryIncrement: Record<string, number> = {
-        totalDeliveries: 1,
-        totalEarnings: order.deliveryFee || 0
+        totalDeliveries: deliveryOrders.length,
+        totalEarnings: totalDeliveryEarnings
       };
-      if (createdCashLedgerEntry) {
-        deliveryIncrement.cashBalance = codCollectedAmount;
+      if (createdCashLedgerAmount > 0) {
+        deliveryIncrement.cashBalance = createdCashLedgerAmount;
       }
 
       await DeliveryPartner.updateOne(
@@ -1158,27 +1326,35 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
         {
           $inc: deliveryIncrement,
           $set: {
-            lastCashActivityAt: createdCashLedgerEntry ? new Date() : deliveryPartner.lastCashActivityAt,
-            lastCashActivityType: createdCashLedgerEntry ? "COD_COLLECTED" : deliveryPartner.lastCashActivityType
+            lastCashActivityAt: createdCashLedgerAmount > 0 ? new Date() : deliveryPartner.lastCashActivityAt,
+            lastCashActivityType: createdCashLedgerAmount > 0 ? "COD_COLLECTED" : deliveryPartner.lastCashActivityType
           }
         }
       );
     }
 
-    const responseOrder = order.toObject() as any;
-    if (status === "DELIVERED") {
-      responseOrder.deliveryEarnings = order.deliveryFee || 0;
-      responseOrder.collectedAmount = collectedAmount ? Number(collectedAmount) : undefined;
-    }
-
-    void Promise.all([
-      notifyCustomerOrderStatus(order, status),
-      notifyPartnerDeliveryStatus(order, status)
-    ]).catch((error) => {
+    void Promise.all(
+      deliveryOrders.flatMap((deliveryOrder: any) => [
+        notifyCustomerOrderStatus(deliveryOrder, status),
+        notifyPartnerDeliveryStatus(deliveryOrder, status)
+      ])
+    ).catch((error) => {
       console.error("Failed to notify delivery status:", error);
     });
 
-    return successResponse(res, responseOrder, `Order ${status.toLowerCase()} successfully`);
+    const responseOrders = await Promise.all(
+      deliveryOrders.map((deliveryOrder: any) => ensureDeliveryLocationForResponse(deliveryOrder.toObject()))
+    );
+    const responseOrder = isBundledDeliveryOrder(order) ? buildBundledDeliveryJob(responseOrders) : responseOrders[0];
+    if (status === "DELIVERED") {
+      responseOrder.deliveryEarnings = responseOrders.reduce(
+        (sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.deliveryFee || 0),
+        0
+      );
+      responseOrder.collectedAmount = collectedAmount ? Number(collectedAmount) : undefined;
+    }
+
+    return successResponse(res, responseOrder, `Delivery ${status.toLowerCase()} successfully`);
   } catch (err: any) {
     console.error("updateDeliveryStatus error:", err);
     return errorResponse(res, "Failed to update delivery status");
@@ -1257,7 +1433,7 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
       const deliveryOrders = await Promise.all(
         orders.map((order: any) => ensureDeliveryLocationForResponse(order.toObject ? order.toObject() : order))
       );
-      return successResponse(res, deliveryOrders);
+      return successResponse(res, groupBundledDeliveryJobs(deliveryOrders));
     }
 
     return successResponse(res, orders);
@@ -1317,6 +1493,11 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
 
     if (!isCustomer && !isDelivery && !isPartner && !isAdmin) {
       return errorResponse(res, "Unauthorized to view this order", 401);
+    }
+
+    if (isDelivery && req.path.startsWith("/delivery/") && isBundledDeliveryOrder(orderObj)) {
+      const bundledOrders = await getPopulatedBundleOrders(String(orderObj.deliveryBundleId));
+      return successResponse(res, buildBundledDeliveryJob(bundledOrders), "Bundled delivery details retrieved");
     }
 
     // Only partner-only viewers should see masked customer details. A delivery
@@ -1409,14 +1590,15 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
     const availableJobObjects = (await Promise.all(
       availableJobs.map((job: any) => ensureDeliveryLocationForResponse(job.toObject()))
     )).filter((job: any) => isDeliveryJobVisibleToUser(job, deliveryUserId));
+    const deliveryJobs = groupBundledDeliveryJobs(availableJobObjects);
 
     // If the rider hasn't shared their location yet, still show every READY
     // job so they at least know what's pending and can refresh after enabling GPS.
     if (!hasRiderLocation) {
-      return successResponse(res, availableJobObjects, "Available delivery jobs retrieved (rider location pending)");
+      return successResponse(res, deliveryJobs, "Available delivery jobs retrieved (rider location pending)");
     }
 
-    const rankedJobs = availableJobObjects
+    const rankedJobs = deliveryJobs
       .map((job: any) => {
         const partnerCoordinates = job.partnerId?.location?.coordinates;
         const partnerHasLocation = Boolean(
@@ -1510,6 +1692,58 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       ]
     };
 
+    const requestedOrder = await Order.findOne(acceptFilter);
+    if (!requestedOrder) {
+      return errorResponse(res, "Order is no longer available", 409);
+    }
+
+    if (isBundledDeliveryOrder(requestedOrder)) {
+      const expectedBundleSize = Number(requestedOrder.deliveryBundleSize || 1);
+      const bundleAcceptFilter: any = {
+        $and: [
+          { deliveryBundleId: requestedOrder.deliveryBundleId, status: "READY" },
+          buildUnassignedDeliveryFilter(),
+          { deliveryRejectedBy: { $ne: new mongoose.Types.ObjectId(deliveryUserId) } },
+          buildFreshDeliveryReadyFilter(new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS)),
+          buildDeliveryAcceptVisibilityFilter(deliveryUserId)
+        ]
+      };
+      const bundleOrders = await Order.find(bundleAcceptFilter).select("_id").lean();
+
+      if (bundleOrders.length < expectedBundleSize) {
+        return errorResponse(res, "Bundled delivery is waiting for all restaurants to be ready", 409);
+      }
+
+      const bundleOrderIds = bundleOrders.map((bundleOrder: any) => bundleOrder._id);
+      const updateResult = await Order.updateMany(
+        {
+          _id: { $in: bundleOrderIds },
+          status: "READY",
+          $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+        },
+        {
+          $set: {
+            deliveryPartnerId: new mongoose.Types.ObjectId(deliveryUserId),
+            status: "ASSIGNED"
+          }
+        }
+      );
+
+      if (updateResult.modifiedCount !== bundleOrders.length) {
+        return errorResponse(res, "Bundled delivery is no longer available", 409);
+      }
+
+      const bundledOrders = await getPopulatedBundleOrders(String(requestedOrder.deliveryBundleId));
+      void Promise.all(
+        bundledOrders.map((bundleOrder: any) => notifyDeliveryAssigned(bundleOrder))
+      ).catch((error) => {
+        console.error("Failed to notify accepted bundled delivery job:", error);
+      });
+
+      console.log(`🚚 Delivery partner ${user.id} accepted bundled job ${requestedOrder.deliveryBundleId}`);
+      return successResponse(res, buildBundledDeliveryJob(bundledOrders), "Bundled delivery job accepted successfully");
+    }
+
     const order = await Order.findOneAndUpdate(
       acceptFilter,
       {
@@ -1570,7 +1804,9 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
 
     const deliveryUserId = idString(deliveryPartner.userId) || user.id;
     const deliveryUserObjectId = new mongoose.Types.ObjectId(deliveryUserId);
-    const order = await Order.findById(orderId).select("_id status deliveryPartnerId selfDelivery deliveryReadyAt updatedAt");
+    const order = await Order.findById(orderId).select(
+      "_id status deliveryPartnerId selfDelivery deliveryReadyAt updatedAt deliveryBundleId deliveryBundleSize"
+    );
     if (!order) {
       return errorResponse(res, "Order not found", 404);
     }
@@ -1583,6 +1819,21 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
     const readyAt = order.deliveryReadyAt || order.updatedAt;
     if (readyAt && readyAt.getTime() <= deliveryDeadline.getTime()) {
       return errorResponse(res, "Job is no longer available", 409);
+    }
+
+    if (isBundledDeliveryOrder(order)) {
+      await Order.updateMany(
+        {
+          deliveryBundleId: order.deliveryBundleId,
+          status: "READY",
+          $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
+        },
+        {
+          $addToSet: { deliveryRejectedBy: deliveryUserObjectId }
+        }
+      );
+
+      return successResponse(res, { orderId, deliveryBundleId: order.deliveryBundleId }, "Bundled delivery job rejected");
     }
 
     const selfDelivery = getSelfDeliveryState(order);

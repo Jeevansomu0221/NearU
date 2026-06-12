@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,8 +18,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import { getPartners } from "../api/menu.api";
+import { getMyOrders } from "../api/order.api";
 import { useCart } from "../context/CartContext";
 import { getPublicAddressText, getPublicShopName } from "../utils/display";
+import { getOrderBadgeCount } from "../utils/orderBadges";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
@@ -74,6 +76,13 @@ const filterOptions = [
 
 const NEARBY_RADIUS_KM = 3;
 const LOCATION_TIMEOUT_MS = 8000;
+const PERMISSION_TIMEOUT_MS = 10000;
+const LOCATION_PERMISSION_MESSAGE = `Allow location to view shops within ${NEARBY_RADIUS_KM} km of you.`;
+
+type LocationPermissionPrompt = {
+  canOpenSettings: boolean;
+  message: string;
+};
 
 const shopPlaceholders: Record<string, string> = {
   bakery:
@@ -92,23 +101,25 @@ const shopPlaceholders: Record<string, string> = {
 
 const extractShops = (response: any): Shop[] => Array.isArray(response?.data) ? response.data : [];
 
-const getCurrentPositionWithTimeout = async () => {
+async function resolveWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
-    timeoutId = setTimeout(() => resolve(null), LOCATION_TIMEOUT_MS);
+    timeoutId = setTimeout(() => resolve(null), timeoutMs);
   });
 
   try {
-    return await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      timeout
-    ]);
+    return await Promise.race([promise, timeout]);
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
   }
-};
+}
+
+const getCurrentPositionWithTimeout = () =>
+  resolveWithTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_TIMEOUT_MS);
+
+const formatBadgeCount = (count: number) => (count > 99 ? "99+" : String(count));
 
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -119,41 +130,98 @@ export default function HomeScreen({ navigation }: Props) {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [locationMessage, setLocationMessage] = useState(`Showing shops within ${NEARBY_RADIUS_KM} km`);
+  const [locationPermissionPrompt, setLocationPermissionPrompt] = useState<LocationPermissionPrompt | null>(null);
+  const [activeOrderCount, setActiveOrderCount] = useState(0);
+
+  const loadOrderBadgeCount = useCallback(async () => {
+    try {
+      const response = await getMyOrders();
+      const orders = Array.isArray(response.data) ? response.data : [];
+      setActiveOrderCount(getOrderBadgeCount(orders));
+    } catch {
+      setActiveOrderCount(0);
+    }
+  }, []);
 
   useEffect(() => {
     loadNearbyShops();
+    loadOrderBadgeCount();
   }, []);
 
-  const showLocationPermissionAlert = (canOpenSettings: boolean) => {
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", loadOrderBadgeCount);
+    return unsubscribe;
+  }, [loadOrderBadgeCount, navigation]);
+
+  const openLocationSettings = () => {
+    Linking.openSettings().catch(() => {
+      Alert.alert("Settings unavailable", "Open your phone settings and allow location for Vyaha.");
+    });
+  };
+
+  const showLocationPermissionAlert = (prompt: LocationPermissionPrompt) => {
     Alert.alert(
       "Location Access Needed",
-      "Please allow location access so Vyaha can show shops near you.",
-      canOpenSettings
+      prompt.message,
+      prompt.canOpenSettings
         ? [
             { text: "Not Now", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() }
+            { text: "Open Settings", onPress: openLocationSettings }
           ]
-        : [{ text: "OK" }]
+        : [
+            { text: "Not Now", style: "cancel" },
+            { text: "Allow Location", onPress: () => loadNearbyShops() }
+          ]
     );
   };
 
+  const requireLocationPermission = (
+    canOpenSettings: boolean,
+    message = LOCATION_PERMISSION_MESSAGE,
+    showAlert = true
+  ) => {
+    const prompt = { canOpenSettings, message };
+    setShops([]);
+    setLocationMessage(message);
+    setLocationPermissionPrompt(prompt);
+    if (showAlert) {
+      showLocationPermissionAlert(prompt);
+    }
+  };
+
   const requestHomeLocationPermission = async () => {
-    const existingPermission = await Location.getForegroundPermissionsAsync();
+    const existingPermission = await resolveWithTimeout(
+      Location.getForegroundPermissionsAsync(),
+      PERMISSION_TIMEOUT_MS
+    );
+    if (!existingPermission) {
+      requireLocationPermission(false, "Location permission did not open. Tap Allow Location to try again.");
+      return false;
+    }
+
     if (existingPermission.status === "granted") {
       return true;
     }
 
     if (existingPermission.canAskAgain === false) {
-      showLocationPermissionAlert(true);
+      requireLocationPermission(true);
       return false;
     }
 
-    const permission = await Location.requestForegroundPermissionsAsync();
+    const permission = await resolveWithTimeout(
+      Location.requestForegroundPermissionsAsync(),
+      PERMISSION_TIMEOUT_MS
+    );
+    if (!permission) {
+      requireLocationPermission(false, "Location permission did not open. Tap Allow Location to try again.");
+      return false;
+    }
+
     if (permission.status === "granted") {
       return true;
     }
 
-    showLocationPermissionAlert(permission.canAskAgain === false);
+    requireLocationPermission(permission.canAskAgain === false);
     return false;
   };
 
@@ -172,23 +240,43 @@ export default function HomeScreen({ navigation }: Props) {
       } else {
         setLoading(true);
       }
+      setLocationPermissionPrompt(null);
 
       const hasLocationPermission = await requestHomeLocationPermission();
       if (!hasLocationPermission) {
-        await loadApprovedShops((count) =>
-          count > 0
-            ? "Showing approved shops. Enable location to sort by nearby shops within 3 km."
-            : "No approved shops found. Check partner approval and setup status."
+        return;
+      }
+
+      const locationServicesEnabled = await resolveWithTimeout(
+        Location.hasServicesEnabledAsync(),
+        LOCATION_TIMEOUT_MS
+      );
+      if (locationServicesEnabled === false) {
+        requireLocationPermission(
+          true,
+          "Turn on device location to view shops near you.",
+          false
         );
         return;
       }
 
-      const location = await getCurrentPositionWithTimeout();
+      let location: Awaited<ReturnType<typeof getCurrentPositionWithTimeout>>;
+      try {
+        location = await getCurrentPositionWithTimeout();
+      } catch {
+        requireLocationPermission(
+          true,
+          "We could not get your location. Turn on device location or pull to refresh to try again.",
+          false
+        );
+        return;
+      }
+
       if (!location) {
-        await loadApprovedShops((count) =>
-          count > 0
-            ? "Showing approved shops while we wait for your location. Pull to refresh to try nearby shops."
-            : "No approved shops found. Check partner approval and setup status."
+        requireLocationPermission(
+          true,
+          "We could not get your location yet. Turn on device location or pull to refresh to try again.",
+          false
         );
         return;
       }
@@ -203,6 +291,7 @@ export default function HomeScreen({ navigation }: Props) {
 
       if (nearbyShops.length > 0) {
         setShops(nearbyShops);
+        setLocationPermissionPrompt(null);
         setLocationMessage(
           (response as any)?.locationApplied === false && (response as any)?.message
             ? (response as any).message
@@ -262,6 +351,7 @@ export default function HomeScreen({ navigation }: Props) {
   }, [searchQuery, selectedFilter, shops]);
 
   const openNowCount = shops.filter((shop) => shop.isOpen).length;
+  const cartItemCount = getItemCount();
 
   const renderHeroArt = () => (
     <View style={styles.heroArt}>
@@ -311,16 +401,19 @@ export default function HomeScreen({ navigation }: Props) {
             <TouchableOpacity style={styles.quickActionCard} onPress={() => navigation.navigate("Cart")}>
               <View style={styles.quickBadgeWrap}>
                 <Feather name="shopping-bag" size={16} color="#FF6B35" />
-                {getItemCount() > 0 ? (
+                {cartItemCount > 0 ? (
                   <View style={styles.quickBadge}>
-                    <Text style={styles.quickBadgeText}>{getItemCount()}</Text>
+                    <Text style={styles.quickBadgeText}>{formatBadgeCount(cartItemCount)}</Text>
                   </View>
                 ) : null}
               </View>
               <Text style={styles.quickActionText}>Cart</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.quickActionCard} onPress={() => navigation.navigate("Orders")}>
-              <Feather name="clipboard" size={16} color="#FF6B35" />
+              <View style={styles.quickBadgeWrap}>
+                <Feather name="clipboard" size={16} color="#FF6B35" />
+                {activeOrderCount > 0 ? <View style={styles.quickActiveDot} /> : null}
+              </View>
               <Text style={styles.quickActionText}>Orders</Text>
             </TouchableOpacity>
           </View>
@@ -457,6 +550,29 @@ export default function HomeScreen({ navigation }: Props) {
     </View>
   );
 
+  const renderLocationRequired = () => (
+    <View style={styles.emptyState}>
+      <Feather name="map-pin" size={26} color="#FF6B35" />
+      <Text style={[styles.emptyTitle, styles.permissionTitle]}>Allow location to view shops</Text>
+      <Text style={[styles.emptyText, styles.permissionText]}>
+        {locationPermissionPrompt?.message || LOCATION_PERMISSION_MESSAGE}
+      </Text>
+      <TouchableOpacity
+        style={styles.permissionButton}
+        onPress={locationPermissionPrompt?.canOpenSettings ? openLocationSettings : () => loadNearbyShops()}
+      >
+        <Text style={styles.permissionButtonText}>
+          {locationPermissionPrompt?.canOpenSettings ? "Open Settings" : "Allow Location"}
+        </Text>
+      </TouchableOpacity>
+      {locationPermissionPrompt?.canOpenSettings ? (
+        <TouchableOpacity style={styles.permissionRetryButton} onPress={() => loadNearbyShops()}>
+          <Text style={styles.permissionRetryText}>I allowed it, try again</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+
   const renderLoading = () => (
     <View style={styles.loadingState}>
       <ActivityIndicator size="large" color="#FF6B35" />
@@ -471,7 +587,7 @@ export default function HomeScreen({ navigation }: Props) {
         keyExtractor={(item) => item._id}
         renderItem={renderShopItem}
         ListHeaderComponent={renderHeader}
-        ListEmptyComponent={loading ? renderLoading : renderEmpty}
+        ListEmptyComponent={loading ? renderLoading : locationPermissionPrompt ? renderLocationRequired : renderEmpty}
         contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom, 14) }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops(true)} tintColor="#FF6B35" />
@@ -611,6 +727,17 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontWeight: "800",
     color: "#FFFFFF"
+  },
+  quickActiveDot: {
+    position: "absolute",
+    top: -3,
+    right: -5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#2B9C4A",
+    borderWidth: 2,
+    borderColor: "#FFFFFF"
   },
   heroArt: {
     height: 98,
@@ -931,6 +1058,36 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 11,
     color: "#7A7168"
+  },
+  permissionTitle: {
+    marginTop: 8
+  },
+  permissionText: {
+    maxWidth: 250,
+    textAlign: "center",
+    lineHeight: 16
+  },
+  permissionButton: {
+    marginTop: 12,
+    borderRadius: 999,
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 18,
+    paddingVertical: 10
+  },
+  permissionButtonText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#FFFFFF"
+  },
+  permissionRetryButton: {
+    marginTop: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 5
+  },
+  permissionRetryText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#FF6B35"
   },
   loadingState: {
     marginHorizontal: 14,

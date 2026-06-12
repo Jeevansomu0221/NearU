@@ -27,6 +27,16 @@ type Job = {
     shopName?: string;
     address?: AddressLike;
   };
+  isBundledDelivery?: boolean;
+  deliveryBundleSize?: number;
+  pickupStops?: Array<{
+    orderId: string;
+    partnerId?: {
+      restaurantName?: string;
+      shopName?: string;
+      address?: AddressLike;
+    };
+  }>;
   customerId?: {
     name?: string;
   };
@@ -105,7 +115,12 @@ export default function NewJobBanner({
     typeof job.distance === "number" ? `${job.distance.toFixed(1)} km` : "Distance pending";
   const travelText = typeof job.travelTime === "number" ? `${Math.round(job.travelTime)} min` : "-- min";
   const earnings = job.estimatedEarnings || job.deliveryFee || 49;
-  const restaurantName = job.partnerId?.restaurantName || job.partnerId?.shopName || "Restaurant";
+  const restaurantName = job.isBundledDelivery
+    ? `${job.pickupStops?.length || job.deliveryBundleSize || 2} restaurant pickups`
+    : job.partnerId?.restaurantName || job.partnerId?.shopName || "Restaurant";
+  const pickupAddress = job.isBundledDelivery
+    ? "Open details for pickup sequence"
+    : formatAddress(job.partnerId?.address, { short: true });
   const paymentLabel = job.paymentMethod === "CASH_ON_DELIVERY" ? "Cash on delivery" : "Pre-paid";
 
   return (
@@ -137,7 +152,7 @@ export default function NewJobBanner({
           <View style={styles.routeText}>
             <Text style={styles.routeLabel}>Pickup</Text>
             <Text style={styles.routeValue} numberOfLines={2}>
-              {restaurantName} - {formatAddress(job.partnerId?.address, { short: true })}
+              {restaurantName} - {pickupAddress}
             </Text>
           </View>
         </View>

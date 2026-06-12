@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import RazorpayCheckout from "react-native-razorpay";
 import { useCart } from "../context/CartContext";
-import { createShopOrder } from "../api/order.api";
+import { cancelOrder, createShopOrder } from "../api/order.api";
 import { createRazorpayOrder, verifyPayment } from "../api/payment.api";
 import SuccessCelebration from "../components/SuccessCelebration";
 
@@ -39,6 +39,52 @@ const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
   return `Rs ${rounded || "0"}`;
 };
+
+class OnlinePaymentFailedError extends Error {
+  isOnlinePaymentFailure = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "OnlinePaymentFailedError";
+  }
+}
+
+const isOnlinePaymentFailure = (error: any) => Boolean(error?.isOnlinePaymentFailure);
+
+const hasValidRazorpaySuccess = (result: any) =>
+  Boolean(result?.razorpay_order_id && result?.razorpay_payment_id && result?.razorpay_signature);
+
+const getOnlinePaymentFailureMessage = (error: any) => {
+  const rawMessage = String(
+    error?.description ||
+      error?.error?.description ||
+      error?.message ||
+      error?.reason ||
+      ""
+  );
+  const normalizedMessage = rawMessage.toLowerCase();
+  const code = String(error?.code || error?.error?.code || "");
+
+  if (code === "0" || normalizedMessage.includes("cancel")) {
+    return "Payment was cancelled before it was completed.";
+  }
+
+  if (normalizedMessage.includes("verification") || normalizedMessage.includes("signature")) {
+    return "Payment could not be verified. If money was deducted, please contact support with the payment reference.";
+  }
+
+  if (rawMessage.trim()) {
+    return rawMessage;
+  }
+
+  return "Online payment did not complete.";
+};
+
+const ONLINE_PAYMENT_FAILED_MESSAGE =
+  "Payment failed. Please try online payment again or switch to Cash on Delivery.";
+
+const createDeliveryBundleId = () =>
+  `bundle_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
 export default function PaymentScreen({ route, navigation }: any) {
   const { userProfile, orderSummary } = route.params;
@@ -109,7 +155,12 @@ export default function PaymentScreen({ route, navigation }: any) {
     return orderSummary?.deliveryLocation;
   };
 
-  const createOrderForGroup = async (group: CheckoutGroup, selectedMethod: string, orderDeliveryLocation?: { latitude: number; longitude: number }) => {
+  const createOrderForGroup = async (
+    group: CheckoutGroup,
+    selectedMethod: string,
+    orderDeliveryLocation?: { latitude: number; longitude: number },
+    bundle?: { id: string; size: number; sequence: number }
+  ) => {
     if (
       !orderDeliveryLocation ||
       !Number.isFinite(orderDeliveryLocation.latitude) ||
@@ -132,7 +183,8 @@ export default function PaymentScreen({ route, navigation }: any) {
       orderItems,
       orderSummary.note || "",
       selectedMethod,
-      orderDeliveryLocation
+      orderDeliveryLocation,
+      bundle
     );
 
     if (!response.success || !response.data) {
@@ -145,9 +197,17 @@ export default function PaymentScreen({ route, navigation }: any) {
   const placeOrders = async (selectedMethod: string) => {
     const createdOrders = [];
     const orderDeliveryLocation = await getDeliveryPin();
+    const deliveryBundleId = groupedShops.length > 1 ? createDeliveryBundleId() : undefined;
 
-    for (const group of groupedShops) {
-      createdOrders.push(await createOrderForGroup(group, selectedMethod, orderDeliveryLocation));
+    for (const [index, group] of groupedShops.entries()) {
+      createdOrders.push(
+        await createOrderForGroup(
+          group,
+          selectedMethod,
+          orderDeliveryLocation,
+          deliveryBundleId ? { id: deliveryBundleId, size: groupedShops.length, sequence: index + 1 } : undefined
+        )
+      );
     }
 
     return createdOrders;
@@ -155,53 +215,93 @@ export default function PaymentScreen({ route, navigation }: any) {
 
   const placeOnlineOrders = async () => {
     const paidOrders = [];
+    let pendingOnlineOrders: any[] = [];
     const orderDeliveryLocation = await getDeliveryPin();
+    const deliveryBundleId = groupedShops.length > 1 ? createDeliveryBundleId() : undefined;
 
-    for (const group of groupedShops) {
-      const createdOrder = await createOrderForGroup(group, "RAZORPAY", orderDeliveryLocation);
-      const paymentOrderResponse = await createRazorpayOrder({ orderId: createdOrder._id });
+    const cleanupPendingOnlineOrders = async () => {
+      const ordersToCancel = pendingOnlineOrders.filter((order) => order?._id);
+      if (ordersToCancel.length === 0) return;
 
-      if (!paymentOrderResponse.success || !paymentOrderResponse.data) {
-        throw new Error(paymentOrderResponse.message || `Failed to create payment for ${group.shopName}`);
-      }
+      await Promise.allSettled(
+        ordersToCancel.map((order) =>
+          cancelOrder(order._id).catch((error) => {
+            console.warn("Failed to cancel unpaid online order:", error);
+          })
+        )
+      );
+      pendingOnlineOrders = [];
+    };
 
-      const paymentOrder = paymentOrderResponse.data;
-      if (!paymentOrder.keyId) {
-        throw new Error("Payment gateway key is not configured");
-      }
+    for (const [index, group] of groupedShops.entries()) {
+      const createdOrder = await createOrderForGroup(
+        group,
+        "RAZORPAY",
+        orderDeliveryLocation,
+        deliveryBundleId ? { id: deliveryBundleId, size: groupedShops.length, sequence: index + 1 } : undefined
+      );
+      pendingOnlineOrders.push(createdOrder);
 
-      const paymentResult: any = await RazorpayCheckout.open({
-        key: paymentOrder.keyId,
-        amount: paymentOrder.amount,
-        currency: paymentOrder.currency || "INR",
-        name: "Vyaha",
-        description: `Order from ${group.shopName}`,
-        order_id: paymentOrder.id,
-        prefill: {
-          name: userProfile.name,
-          contact: userProfile.phone
-        },
-        theme: { color: "#FF6B35" },
-        method: {
-          upi: true,
-          card: true,
-          netbanking: true,
-          wallet: true
+      try {
+        const paymentOrderResponse = await createRazorpayOrder({ orderId: createdOrder._id });
+
+        if (!paymentOrderResponse.success || !paymentOrderResponse.data) {
+          throw new OnlinePaymentFailedError(paymentOrderResponse.message || `Failed to create payment for ${group.shopName}`);
         }
-      });
 
-      const verifyResponse = await verifyPayment({
-        orderId: createdOrder._id,
-        razorpay_order_id: paymentResult.razorpay_order_id,
-        razorpay_payment_id: paymentResult.razorpay_payment_id,
-        razorpay_signature: paymentResult.razorpay_signature
-      });
+        const paymentOrder = paymentOrderResponse.data;
+        if (!paymentOrder.keyId) {
+          throw new OnlinePaymentFailedError("Online payment is temporarily unavailable.");
+        }
 
-      if (!verifyResponse.success) {
-        throw new Error(verifyResponse.message || `Payment verification failed for ${group.shopName}`);
+        let paymentResult: any;
+        try {
+          paymentResult = await RazorpayCheckout.open({
+            key: paymentOrder.keyId,
+            amount: paymentOrder.amount,
+            currency: paymentOrder.currency || "INR",
+            name: "Vyaha",
+            description: `Order from ${group.shopName}`,
+            order_id: paymentOrder.id,
+            prefill: {
+              name: userProfile.name,
+              contact: userProfile.phone
+            },
+            theme: { color: "#FF6B35" },
+            method: {
+              upi: true,
+              card: true,
+              netbanking: true,
+              wallet: true
+            }
+          });
+        } catch (paymentError: any) {
+          throw new OnlinePaymentFailedError(getOnlinePaymentFailureMessage(paymentError));
+        }
+
+        if (!hasValidRazorpaySuccess(paymentResult)) {
+          throw new OnlinePaymentFailedError("Payment was not completed. Please try again or switch to Cash on Delivery.");
+        }
+
+        const verifyResponse = await verifyPayment({
+          orderId: createdOrder._id,
+          razorpay_order_id: paymentResult.razorpay_order_id,
+          razorpay_payment_id: paymentResult.razorpay_payment_id,
+          razorpay_signature: paymentResult.razorpay_signature
+        });
+
+        if (!verifyResponse.success) {
+          throw new OnlinePaymentFailedError(verifyResponse.message || `Payment verification failed for ${group.shopName}`);
+        }
+
+        pendingOnlineOrders = pendingOnlineOrders.filter((order) => order?._id !== createdOrder._id);
+        paidOrders.push(verifyResponse.data || createdOrder);
+      } catch (error: any) {
+        await cleanupPendingOnlineOrders();
+        throw isOnlinePaymentFailure(error)
+          ? error
+          : new OnlinePaymentFailedError(getOnlinePaymentFailureMessage(error));
       }
-
-      paidOrders.push(verifyResponse.data || createdOrder);
     }
 
     return paidOrders;
@@ -252,6 +352,22 @@ export default function PaymentScreen({ route, navigation }: any) {
         errorMessage = "Cannot connect to server. Please check your internet connection.";
       } else if (error.message) {
         errorMessage = error.message;
+      }
+
+      if (paymentMethod === "RAZORPAY" && isOnlinePaymentFailure(error)) {
+        Alert.alert(
+          "Payment Failed",
+          ONLINE_PAYMENT_FAILED_MESSAGE,
+          [
+            { text: "Try Online Again", style: "cancel" },
+            {
+              text: "Switch to COD",
+              onPress: () => setPaymentMethod("CASH_ON_DELIVERY")
+            }
+          ]
+        );
+        setLoading(false);
+        return;
       }
 
       Alert.alert("Order Failed", errorMessage);

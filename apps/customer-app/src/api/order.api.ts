@@ -18,6 +18,9 @@ interface CreateOrderRequest {
   items: OrderItem[];
   note?: string;
   paymentMethod?: string;
+  deliveryBundleId?: string;
+  deliveryBundleSize?: number;
+  deliveryBundleSequence?: number;
 }
 
 export interface OrderPricingGroup {
@@ -92,7 +95,8 @@ export const createShopOrder = (
   items: OrderItem[],
   note: string | undefined,
   paymentMethod: string | undefined,
-  deliveryLocation: { latitude: number; longitude: number }
+  deliveryLocation: { latitude: number; longitude: number },
+  bundle?: { id: string; size: number; sequence: number }
 ): Promise<ApiResponse<Order>> => {
   const requestData: CreateOrderRequest = {
     partnerId,
@@ -105,6 +109,12 @@ export const createShopOrder = (
   // Add payment method if provided
   if (paymentMethod) {
     requestData.paymentMethod = paymentMethod;
+  }
+
+  if (bundle?.id) {
+    requestData.deliveryBundleId = bundle.id;
+    requestData.deliveryBundleSize = bundle.size;
+    requestData.deliveryBundleSequence = bundle.sequence;
   }
 
   return apiPost<Order>("/orders", requestData);

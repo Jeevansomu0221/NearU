@@ -27,6 +27,24 @@ const OrderSchema = new Schema({
     ref: "User"
   },
 
+  deliveryBundleId: {
+    type: String,
+    trim: true,
+    default: ""
+  },
+
+  deliveryBundleSize: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
+
+  deliveryBundleSequence: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
+
   deliveryRejectedBy: {
     type: [Types.ObjectId],
     ref: "User",
@@ -316,5 +334,7 @@ OrderSchema.index({ deliveryRejectedBy: 1, status: 1 });
 OrderSchema.index({ deliveryLocation: "2dsphere" });
 OrderSchema.index({ "selfDelivery.expiresAt": 1 });
 OrderSchema.index({ "selfDelivery.reservedFor": 1, status: 1 });
+OrderSchema.index({ deliveryBundleId: 1, deliveryBundleSequence: 1 });
+OrderSchema.index({ deliveryBundleId: 1, status: 1 });
 
 export default model("Order", OrderSchema);

@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   StatusBar,
@@ -543,14 +544,16 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       </View>
 
       <Modal visible={Boolean(previewImage)} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
-        <View style={styles.imagePreviewOverlay}>
+        <Pressable style={styles.imagePreviewOverlay} onPress={() => setPreviewImage(null)}>
           <TouchableOpacity style={styles.imagePreviewClose} onPress={() => setPreviewImage(null)} activeOpacity={0.85}>
             <Feather name="x" size={22} color="#FFFFFF" />
           </TouchableOpacity>
           {previewImage ? (
-            <Image source={{ uri: previewImage }} style={styles.imagePreview} resizeMode="contain" />
+            <View pointerEvents="none" style={styles.imagePreviewFrame}>
+              <Image source={{ uri: previewImage }} style={styles.imagePreview} resizeMode="contain" />
+            </View>
           ) : null}
-        </View>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -1069,9 +1072,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 18
   },
-  imagePreview: {
+  imagePreviewFrame: {
     width: "100%",
     height: "82%"
+  },
+  imagePreview: {
+    width: "100%",
+    height: "100%"
   },
   imagePreviewClose: {
     position: "absolute",

@@ -509,13 +509,17 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     return null;
   }
 
+  const pickupStops = job.pickupStops?.length
+    ? job.pickupStops
+    : [{ partnerId: job.partnerId, orderId: job._id, sequence: 1, status: job.status, items: job.items, itemTotal: job.itemTotal, deliveryFee: job.deliveryFee, grandTotal: job.grandTotal }];
+
   return (
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.orderHeader}>
           <Text style={styles.orderNumber}>
-            Order #{job._id.slice(-6).toUpperCase()}
+            {job.isBundledDelivery ? "Bundled Delivery" : `Order #${job._id.slice(-6).toUpperCase()}`}
           </Text>
           <View style={[
             styles.statusBadge,
@@ -536,42 +540,46 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="restaurant" size={20} color="#2E7D32" />
-          <Text style={styles.sectionTitle}>Pickup from Restaurant</Text>
+          <Text style={styles.sectionTitle}>
+            {pickupStops.length > 1 ? `Pickup from ${pickupStops.length} Restaurants` : "Pickup from Restaurant"}
+          </Text>
         </View>
-        <View style={styles.infoCard}>
-          <Text style={styles.restaurantName}>
-            {job.partnerId?.restaurantName || job.partnerId?.shopName || "Restaurant"}
-          </Text>
-          <Text style={styles.addressText}>
-            📍 {formatAddress(job.partnerId?.address)}
-          </Text>
-          {job.partnerId?.phone && (
+        {pickupStops.map((stop, index) => (
+          <View key={stop.orderId || `${job._id}-${index}`} style={styles.infoCard}>
+            <Text style={styles.restaurantName}>
+              Pickup {pickupStops.length > 1 ? index + 1 : ""} {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
+            </Text>
+            <Text style={styles.addressText}>
+              📍 {formatAddress(stop.partnerId?.address)}
+            </Text>
+            {stop.partnerId?.phone && (
+              <TouchableOpacity
+                style={styles.contactButton}
+                onPress={() => handleCall(stop.partnerId!.phone)}
+              >
+                <Ionicons name="call" size={16} color="#4CAF50" />
+                <Text style={styles.contactButtonText}>
+                  Call Restaurant: {stop.partnerId.phone}
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={styles.contactButton}
-              onPress={() => handleCall(job.partnerId!.phone)}
+              style={styles.mapButton}
+              onPress={() =>
+                handleOpenMaps({
+                  address: stop.partnerId?.address,
+                  googleMapsLink: stop.partnerId?.googleMapsLink || getAddressGoogleMapsLink(stop.partnerId?.address),
+                  location: stop.partnerId?.location,
+                  destinationLabel: stop.partnerId?.restaurantName || stop.partnerId?.shopName,
+                  contactPhone: stop.partnerId?.phone
+                })
+              }
             >
-              <Ionicons name="call" size={16} color="#4CAF50" />
-              <Text style={styles.contactButtonText}>
-                Call Restaurant: {job.partnerId.phone}
-              </Text>
+              <Ionicons name="navigate" size={16} color="#1976D2" />
+              <Text style={styles.mapButtonText}>Directions in Google Maps</Text>
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={styles.mapButton}
-            onPress={() =>
-              handleOpenMaps({
-                address: job.partnerId?.address,
-                googleMapsLink: job.partnerId?.googleMapsLink || getAddressGoogleMapsLink(job.partnerId?.address),
-                location: job.partnerId?.location,
-                destinationLabel: job.partnerId?.restaurantName || job.partnerId?.shopName,
-                contactPhone: job.partnerId?.phone
-              })
-            }
-          >
-            <Ionicons name="navigate" size={16} color="#1976D2" />
-            <Text style={styles.mapButtonText}>Directions in Google Maps</Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        ))}
       </View>
 
       {/* Delivery Section */}
@@ -626,7 +634,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         <View style={styles.orderDetailsCard}>
           {job.items.map((item, index) => (
             <View key={index} style={styles.itemRow}>
-              <Text style={styles.itemName}>{item.name}</Text>
+              <Text style={styles.itemName}>
+                {(item as any).shopName ? `${(item as any).shopName}: ` : ""}{item.name}
+              </Text>
               <View style={styles.itemDetails}>
                 <Text style={styles.itemQuantity}>x{item.quantity}</Text>
                 <Text style={styles.itemPrice}>₹{item.price * item.quantity}</Text>
@@ -737,12 +747,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>Mark as Picked Up</Text>
+                <Text style={styles.actionButtonText}>
+                  {job.isBundledDelivery ? "All Pickups Completed" : "Mark as Picked Up"}
+                </Text>
               </>
             )}
           </TouchableOpacity>
           <Text style={styles.actionHint}>
-            Click this when you've collected the order from the restaurant
+            {job.isBundledDelivery
+              ? "Use this after collecting orders from every restaurant listed above"
+              : "Click this when you've collected the order from the restaurant"}
           </Text>
         </View>
       )}

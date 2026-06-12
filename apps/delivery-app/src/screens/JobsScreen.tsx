@@ -448,6 +448,9 @@ export default function JobsScreen({ navigation }: any) {
   const renderJobItem = ({ item }: { item: CalculatedJob }) => {
     const earnings = item.estimatedEarnings || item.deliveryFee || 49;
     const accepted = acceptingJobId === item._id;
+    const pickupStops = item.pickupStops?.length
+      ? item.pickupStops
+      : [{ partnerId: item.partnerId, orderId: item._id, sequence: 1, status: item.status, items: item.items, itemTotal: item.itemTotal, deliveryFee: item.deliveryFee, grandTotal: item.grandTotal }];
     return (
       <TouchableOpacity
         style={styles.jobCard}
@@ -456,7 +459,9 @@ export default function JobsScreen({ navigation }: any) {
       >
         <View style={styles.jobTop}>
           <View style={styles.jobTopLeft}>
-            <Text style={styles.orderId}>#{item._id?.slice(-6).toUpperCase() || "N/A"}</Text>
+            <Text style={styles.orderId}>
+              {item.isBundledDelivery ? "Bundled Job" : `#${item._id?.slice(-6).toUpperCase() || "N/A"}`}
+            </Text>
             <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
           </View>
           <View style={styles.jobEarningsBadge}>
@@ -472,10 +477,14 @@ export default function JobsScreen({ navigation }: any) {
             <View style={styles.routePinHome} />
           </View>
           <View style={styles.routeInfo}>
-            <View style={styles.routeInfoBlock}>
-              <Text style={styles.routeName}>{item.partnerId?.restaurantName || item.partnerId?.shopName || "Restaurant"}</Text>
-              <Text style={styles.routeAddress} numberOfLines={1}>{formatAddress(item.partnerId?.address, { short: true })}</Text>
-            </View>
+            {pickupStops.map((stop, index) => (
+              <View key={stop.orderId || `${item._id}-${index}`} style={styles.routeInfoBlock}>
+                <Text style={styles.routeName}>
+                  Pickup {pickupStops.length > 1 ? index + 1 : ""} {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
+                </Text>
+                <Text style={styles.routeAddress} numberOfLines={1}>{formatAddress(stop.partnerId?.address, { short: true })}</Text>
+              </View>
+            ))}
             <View style={styles.routeInfoBlock}>
               <Text style={styles.routeName}>{item.customerId?.name || "Customer"}</Text>
               <Text style={styles.routeAddress} numberOfLines={1}>{formatAddress(item.deliveryAddress, { short: true })}</Text>
@@ -610,9 +619,11 @@ export default function JobsScreen({ navigation }: any) {
                   <Text style={styles.confirmMetaValue}>#{selectedJobAction.job._id.slice(-6).toUpperCase()}</Text>
                 </View>
                 <View style={styles.confirmMetaRow}>
-                  <Text style={styles.confirmMetaLabel}>Restaurant</Text>
+                  <Text style={styles.confirmMetaLabel}>{selectedJobAction.job.isBundledDelivery ? "Pickups" : "Restaurant"}</Text>
                   <Text style={styles.confirmMetaValue}>
-                    {selectedJobAction.job.partnerId?.restaurantName || selectedJobAction.job.partnerId?.shopName || "Restaurant"}
+                    {selectedJobAction.job.isBundledDelivery
+                      ? `${selectedJobAction.job.pickupStops?.length || selectedJobAction.job.deliveryBundleSize || 2} restaurants`
+                      : selectedJobAction.job.partnerId?.restaurantName || selectedJobAction.job.partnerId?.shopName || "Restaurant"}
                   </Text>
                 </View>
                 <View style={styles.confirmMetaRow}>

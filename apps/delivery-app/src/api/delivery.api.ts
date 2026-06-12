@@ -59,6 +59,20 @@ export interface DeliveryOrder {
   estimatedEarnings?: number;
   deliveryEarnings?: number;
   collectedAmount?: number;
+  deliveryBundleId?: string;
+  deliveryBundleSize?: number;
+  isBundledDelivery?: boolean;
+  pickupStops?: Array<{
+    orderId: string;
+    sequence: number;
+    status: string;
+    partnerId: PartnerInfo;
+    items: OrderItem[];
+    itemTotal: number;
+    deliveryFee: number;
+    grandTotal: number;
+  }>;
+  bundleOrders?: DeliveryOrder[];
 }
 
 export interface DeliveryJob extends DeliveryOrder {
