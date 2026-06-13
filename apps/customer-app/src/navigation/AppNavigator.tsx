@@ -14,6 +14,7 @@ import CartScreen from '../screens/CartScreen';
 import ProfileScreen from "../screens/ProfileScreen";
 import OrderStatusScreen from "../screens/OrderStatusScreen";
 import OrdersScreen from "../screens/OrdersScreen";
+import SupportChatScreen from "../screens/SupportChatScreen";
 import PaymentScreen from '../screens/PaymentScreen'; // Keep PaymentScreen
 import { getUserProfile } from '../api/user.api';
 
@@ -117,6 +118,10 @@ export type RootStackParamList = {
     orderId: string;
   };
   Orders: undefined;
+  SupportChat: {
+    mode: "chat" | "report";
+    subject?: string;
+  };
   Payment: { // Only Payment screen remains
     userProfile: UserProfile;
     orderSummary: OrderSummary;
@@ -309,6 +314,13 @@ export default function AppNavigator() {
         name="Orders" 
         component={OrdersScreen}
         options={{ title: 'My Orders' }}
+      />
+      <Stack.Screen
+        name="SupportChat"
+        component={SupportChatScreen}
+        options={({ route }) => ({
+          title: route.params?.mode === "report" ? "Report an Issue" : "Customer Support"
+        })}
       />
       {/* Only Payment screen remains */}
       <Stack.Screen 

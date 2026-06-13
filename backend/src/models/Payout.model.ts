@@ -14,7 +14,10 @@ const PayoutSchema = new Schema(
     recipientSnapshot: {
       name: { type: String, default: "" },
       phone: { type: String, default: "" },
-      secondaryName: { type: String, default: "" }
+      secondaryName: { type: String, default: "" },
+      ownerPhone: { type: String, default: "" },
+      ownerEmail: { type: String, default: "" },
+      restaurantPhone: { type: String, default: "" }
     },
     periodType: {
       type: String,

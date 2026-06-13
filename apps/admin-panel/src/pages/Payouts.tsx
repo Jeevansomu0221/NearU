@@ -13,6 +13,7 @@ import {
   Statistic,
   Table,
   Tag,
+  Tooltip,
   Typography,
   message
 } from "antd";
@@ -114,7 +115,12 @@ export default function Payouts() {
     if (!normalizedQuery) return rows;
 
     return rows.filter((row) => {
-      const haystack = `${row.name} ${row.secondaryName} ${row.phone} ${row.bankDetails.accountHolderName} ${row.bankDetails.accountNumber} ${row.bankDetails.ifsc}`.toLowerCase();
+      const haystack =
+        `${row.name} ${row.secondaryName} ${row.phone} ${row.ownerPhone || ""} ${row.ownerEmail || ""} ${
+          row.restaurantPhone || ""
+        } ${row.walletBalance || ""} ${row.bankDetails.accountHolderName} ${row.bankDetails.accountNumber} ${
+          row.bankDetails.ifsc
+        }`.toLowerCase();
       return haystack.includes(normalizedQuery);
     });
   }, [query, rows]);
@@ -123,6 +129,8 @@ export default function Payouts() {
   const activeCount = activeRecipient === "PARTNER" ? summary?.totals.partnerCount : summary?.totals.deliveryCount;
   const recipientLabel = getRecipientLabel(activeRecipient);
   const isDeliveryView = activeRecipient === "DELIVERY_PARTNER";
+  const partnerWalletAmount = summary?.totals.partnerWalletAmount || 0;
+  const partnerWalletCount = summary?.totals.partnerWalletCount || 0;
 
   const closeMarkPaidModal = () => {
     setMarkingRow(null);
@@ -192,7 +200,9 @@ export default function Payouts() {
         <Col xs={24} md={8}>
           <Card bordered={false}>
             <Statistic title="Restaurant Payouts" value={formatCurrency(summary?.totals.partnerAmount || 0)} />
-            <Typography.Text type="secondary">{summary?.totals.partnerCount || 0} restaurants pending</Typography.Text>
+            <Typography.Text type="secondary">
+              {summary?.totals.partnerCount || 0} restaurants in period · {formatCurrency(partnerWalletAmount)} wallet
+            </Typography.Text>
           </Card>
         </Col>
         <Col xs={24} md={8}>
@@ -245,12 +255,15 @@ export default function Payouts() {
               <Typography.Text type="secondary">
                 {formatDate(summary?.periodStart)} to {formatDate(summary?.periodEnd)} · {activeCount || 0} pending ·{" "}
                 {formatCurrency(activeTotal || 0)}
+                {activeRecipient === "PARTNER"
+                  ? ` · ${partnerWalletCount} wallets unpaid (${formatCurrency(partnerWalletAmount)})`
+                  : ""}
               </Typography.Text>
             </div>
             <Input
               allowClear
               prefix={<SearchOutlined />}
-              placeholder="Search name, phone, account, IFSC"
+              placeholder="Search name, owner phone, email, account, IFSC"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               style={{ maxWidth: 360 }}
@@ -261,7 +274,7 @@ export default function Payouts() {
             type="info"
             showIcon
             message="Payout formula"
-            description="Restaurants are owed delivered order item totals. Delivery riders are owed delivery fees after COD cash held is offset. Any cash left after offset remains due to the platform."
+            description="Restaurants are owed delivered order item totals. The wallet column shows all unpaid restaurant orders, while the amount to send is only for the selected week/month. Delivery riders are owed delivery fees after COD cash held is offset."
           />
 
           <Table
@@ -277,9 +290,27 @@ export default function Payouts() {
                     <Typography.Text strong>{row.name}</Typography.Text>
                     <div>
                       <Typography.Text type="secondary">
-                        {[row.secondaryName, row.phone].filter(Boolean).join(" · ") || "No contact details"}
+                        {row.secondaryName || "No owner / alias"}
                       </Typography.Text>
                     </div>
+                    {row.recipientType === "PARTNER" ? (
+                      <>
+                        <div>
+                          <Typography.Text type="secondary">
+                            Owner: {[row.ownerPhone, row.ownerEmail].filter(Boolean).join(" · ") || "No owner contact"}
+                          </Typography.Text>
+                        </div>
+                        <div>
+                          <Typography.Text type="secondary">
+                            Shop phone: {row.restaurantPhone || row.phone || "-"}
+                          </Typography.Text>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <Typography.Text type="secondary">{row.phone || "No phone"}</Typography.Text>
+                      </div>
+                    )}
                   </div>
                 )
               },
@@ -316,6 +347,30 @@ export default function Payouts() {
                 title: "Orders",
                 dataIndex: "orderCount"
               },
+              ...(activeRecipient === "PARTNER"
+                ? [
+                    {
+                      title: "Wallet",
+                      render: (_: unknown, row: PayoutSummaryRow) => {
+                        const walletBalance = row.walletBalance ?? row.amount;
+                        const walletUnpaidOrderCount = row.walletUnpaidOrderCount ?? row.orderCount;
+                        const hasOutsidePeriodBalance = walletBalance > row.amount;
+
+                        return (
+                          <div>
+                            <Typography.Text strong>{formatCurrency(walletBalance)}</Typography.Text>
+                            <div>
+                              <Typography.Text type="secondary">
+                                {walletUnpaidOrderCount} unpaid order{walletUnpaidOrderCount === 1 ? "" : "s"}
+                              </Typography.Text>
+                            </div>
+                            {hasOutsidePeriodBalance && <Tag color="orange">Includes other periods</Tag>}
+                          </div>
+                        );
+                      }
+                    }
+                  ]
+                : []),
               ...(isDeliveryView
                 ? [
                     {
@@ -337,22 +392,41 @@ export default function Payouts() {
                   ]
                 : []),
               {
-                title: isDeliveryView ? "Net To Send" : "Amount To Send",
+                title: isDeliveryView ? "Net To Send" : "Selected Period",
                 dataIndex: "amount",
                 render: (value: number) => <Typography.Text strong>{formatCurrency(value)}</Typography.Text>
               },
               {
                 title: "Actions",
-                render: (_, row) => (
-                  <Space wrap>
-                    <Button size="small" onClick={() => setSelectedRow(row)}>
-                      Details
-                    </Button>
-                    <Button size="small" type="primary" icon={<CheckCircleOutlined />} onClick={() => setMarkingRow(row)}>
+                render: (_, row) => {
+                  const canMarkPaid = row.orderCount > 0 && (row.amount > 0 || row.recipientType === "DELIVERY_PARTNER");
+                  const markPaidButton = (
+                    <Button
+                      size="small"
+                      type="primary"
+                      icon={<CheckCircleOutlined />}
+                      disabled={!canMarkPaid}
+                      onClick={() => setMarkingRow(row)}
+                    >
                       Mark Paid
                     </Button>
-                  </Space>
-                )
+                  );
+
+                  return (
+                    <Space wrap>
+                      <Button size="small" onClick={() => setSelectedRow(row)}>
+                        Details
+                      </Button>
+                      {canMarkPaid ? (
+                        markPaidButton
+                      ) : (
+                        <Tooltip title="This wallet balance is outside the selected payout period. Change the date/month to the period that contains those delivered orders.">
+                          <span>{markPaidButton}</span>
+                        </Tooltip>
+                      )}
+                    </Space>
+                  );
+                }
               }
             ]}
           />
@@ -376,6 +450,16 @@ export default function Payouts() {
                       {[payout.recipientSnapshot.secondaryName, payout.recipientSnapshot.phone].filter(Boolean).join(" · ")}
                     </Typography.Text>
                   </div>
+                  {payout.recipientType === "PARTNER" && (
+                    <div>
+                      <Typography.Text type="secondary">
+                        Owner:{" "}
+                        {[payout.recipientSnapshot.ownerPhone, payout.recipientSnapshot.ownerEmail]
+                          .filter(Boolean)
+                          .join(" · ") || "-"}
+                      </Typography.Text>
+                    </div>
+                  )}
                 </div>
               )
             },
@@ -436,7 +520,28 @@ export default function Payouts() {
               <Descriptions.Item label="Recipient Type">{getRecipientLabel(selectedRow.recipientType)}</Descriptions.Item>
               <Descriptions.Item label="Name">{selectedRow.name}</Descriptions.Item>
               <Descriptions.Item label="Owner / Alias">{selectedRow.secondaryName || "-"}</Descriptions.Item>
-              <Descriptions.Item label="Phone">{selectedRow.phone || "-"}</Descriptions.Item>
+              {selectedRow.recipientType === "PARTNER" ? (
+                <>
+                  <Descriptions.Item label="Owner Phone">{selectedRow.ownerPhone || "-"}</Descriptions.Item>
+                  <Descriptions.Item label="Owner Email">{selectedRow.ownerEmail || "-"}</Descriptions.Item>
+                  <Descriptions.Item label="Shop Phone">
+                    {selectedRow.restaurantPhone || selectedRow.phone || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Wallet Balance">
+                    {formatCurrency(selectedRow.walletBalance ?? selectedRow.amount)}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Wallet Unpaid Orders">
+                    {selectedRow.walletUnpaidOrderCount ?? selectedRow.orderCount}
+                  </Descriptions.Item>
+                  {(selectedRow.walletOldestDeliveredAt || selectedRow.walletLatestDeliveredAt) && (
+                    <Descriptions.Item label="Wallet Delivery Dates">
+                      {formatDate(selectedRow.walletOldestDeliveredAt)} to {formatDate(selectedRow.walletLatestDeliveredAt)}
+                    </Descriptions.Item>
+                  )}
+                </>
+              ) : (
+                <Descriptions.Item label="Phone">{selectedRow.phone || "-"}</Descriptions.Item>
+              )}
               <Descriptions.Item label="Account Holder">
                 {selectedRow.bankDetails.accountHolderName || "-"}
               </Descriptions.Item>

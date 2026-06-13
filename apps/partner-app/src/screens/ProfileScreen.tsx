@@ -257,6 +257,11 @@ export default function ProfileScreen({ navigation }: any) {
   const [kyc, setKyc] = useState<Documents>({});
   const [kycEditingField, setKycEditingField] = useState<keyof Documents | null>(null);
   const [kycDraftValue, setKycDraftValue] = useState("");
+  const [bankDetails, setBankDetails] = useState({
+    accountHolderName: "",
+    accountNumber: "",
+    ifsc: ""
+  });
 
   useEffect(() => {
     loadProfile();
@@ -290,7 +295,13 @@ export default function ProfileScreen({ navigation }: any) {
       isOpen: data.isOpen !== false,
       weeklyHolidays: data.weeklyHolidays || []
     });
-    setKyc(normalizeDocumentsFromApi(data.documents));
+    const normalizedDocs = normalizeDocumentsFromApi(data.documents);
+    setKyc(normalizedDocs);
+    setBankDetails({
+      accountHolderName: normalizedDocs.bankAccountHolderName || "",
+      accountNumber: normalizedDocs.bankAccountNumber || "",
+      ifsc: normalizedDocs.bankIfsc || ""
+    });
   };
 
   const loadProfile = async () => {
@@ -478,6 +489,35 @@ export default function ProfileScreen({ navigation }: any) {
 
   const handleSaveKyc = () =>
     saveUpdate({ documents: { ...kyc } }, "KYC details updated");
+
+  const handleSaveBankDetails = async () => {
+    const accountHolderName = bankDetails.accountHolderName.trim();
+    const accountNumber = bankDetails.accountNumber.replace(/\D/g, "");
+    const ifsc = bankDetails.ifsc.trim().toUpperCase();
+
+    if (!accountHolderName || !accountNumber || !ifsc) {
+      Alert.alert("Bank details", "Enter account holder name, account number, and IFSC before saving.");
+      return;
+    }
+    if (!/^[0-9]{6,20}$/.test(accountNumber)) {
+      Alert.alert("Account number", "Account number must be 6 to 20 digits.");
+      return;
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+      Alert.alert("IFSC", "Enter a valid 11-character IFSC code.");
+      return;
+    }
+
+    const nextDocs: Documents = {
+      ...kyc,
+      bankAccountHolderName: accountHolderName,
+      bankAccountNumber: accountNumber,
+      bankIfsc: ifsc
+    };
+    setKyc(nextDocs);
+    setBankDetails({ accountHolderName, accountNumber, ifsc });
+    await saveUpdate({ documents: nextDocs }, "Bank details updated for manual payouts");
+  };
 
   const startEditKycField = (field: keyof Documents) => {
     setKycEditingField(field);
@@ -1201,6 +1241,44 @@ export default function ProfileScreen({ navigation }: any) {
 
       <View style={styles.card}>
         {renderSectionHeader("Payments", "Track wallet balance, weekly Vyaha payouts, and bank transfer history.")}
+        <View style={styles.detailBlock}>
+          <Text style={styles.detailLabel}>Manual payout account</Text>
+          <Text style={styles.detailValue}>
+            Admins use these details in the payout dashboard to send money manually after delivered online-paid orders.
+          </Text>
+        </View>
+        <Text style={styles.label}>Account holder name</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Name as per bank account"
+          placeholderTextColor="#98A2B3"
+          value={bankDetails.accountHolderName}
+          onChangeText={(text) => setBankDetails((prev) => ({ ...prev, accountHolderName: text }))}
+        />
+        <Text style={styles.label}>Account number</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Bank account number"
+          placeholderTextColor="#98A2B3"
+          value={bankDetails.accountNumber}
+          onChangeText={(text) => setBankDetails((prev) => ({ ...prev, accountNumber: text.replace(/\D/g, "").slice(0, 20) }))}
+          keyboardType="number-pad"
+        />
+        <Text style={styles.label}>IFSC code</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="ABCD0123456"
+          placeholderTextColor="#98A2B3"
+          value={bankDetails.ifsc}
+          onChangeText={(text) =>
+            setBankDetails((prev) => ({ ...prev, ifsc: text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11) }))
+          }
+          autoCapitalize="characters"
+          maxLength={11}
+        />
+        <TouchableOpacity style={styles.primaryButton} onPress={handleSaveBankDetails} disabled={saving}>
+          {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save bank details</Text>}
+        </TouchableOpacity>
         <TouchableOpacity style={styles.linkRow} onPress={() => navigation.navigate("PaymentHistory")}>
           <View style={styles.linkRowLeft}>
             <View style={[styles.linkIconCircle, { backgroundColor: "#EAF3FF" }]}>

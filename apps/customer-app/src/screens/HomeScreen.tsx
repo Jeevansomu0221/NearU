@@ -530,7 +530,6 @@ export default function HomeScreen({ navigation }: Props) {
   const renderShopItem = ({ item }: { item: Shop }) => {
     const displayName = getPublicShopName(item.shopName || item.restaurantName || "Local Shop");
     const category = categoryLabels[item.category] || item.category;
-    const address = formatAddress(item.address) || "Address not available";
     const imageUrl = item.shopImageUrl || shopPlaceholders[item.category] || shopPlaceholders["mini-restaurant"];
     const isFavorite = favoriteRestaurantIds.has(item._id);
 
@@ -557,20 +556,43 @@ export default function HomeScreen({ navigation }: Props) {
               <Text style={styles.shopCategory}>{category}</Text>
             </View>
 
-            <View style={styles.shopActions}>
-              <TouchableOpacity
-                style={[styles.favoriteButton, isFavorite && styles.favoriteButtonActive]}
-                onPress={() => toggleFavorite(item)}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={isFavorite ? "Remove restaurant from favorites" : "Add restaurant to favorites"}
-              >
-                <MaterialCommunityIcons
-                  name={isFavorite ? "heart" : "heart-outline"}
-                  size={17}
-                  color={isFavorite ? "#E11D48" : "#FF6B35"}
-                />
-              </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.favoriteButton, isFavorite && styles.favoriteButtonActive]}
+              onPress={() => toggleFavorite(item)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={isFavorite ? "Remove restaurant from favorites" : "Add restaurant to favorites"}
+            >
+              <MaterialCommunityIcons
+                name={isFavorite ? "heart" : "heart-outline"}
+                size={17}
+                color={isFavorite ? "#E11D48" : "#FF6B35"}
+              />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.shopMetaRow}>
+            <View style={styles.ratingRow}>
+              <Feather name="star" size={12} color="#F59E0B" />
+              <Text style={styles.ratingText}>{item.rating?.toFixed(1) || "4.0"}</Text>
+            </View>
+            <Text style={styles.timeText} numberOfLines={1}>
+              {item.openingTime && item.closingTime ? `${item.openingTime} - ${item.closingTime}` : "08:00 - 22:00"}
+            </Text>
+          </View>
+
+          <View style={styles.shopFooterRow}>
+            <View style={styles.shopFooterLeft}>
+              {typeof item.distanceKm === "number" ? (
+                <Text style={styles.distanceText}>{item.distanceKm.toFixed(1)} km</Text>
+              ) : null}
+              <View style={[styles.statusPill, !item.isOpen && styles.statusPillClosed]}>
+                <Text style={[styles.statusText, !item.isOpen && styles.statusTextClosed]}>
+                  {item.isOpen ? "Open" : "Closed"}
+                </Text>
+              </View>
+            </View>
+
               <TouchableOpacity
                 style={styles.menuButton}
                 onPress={() =>
@@ -584,38 +606,6 @@ export default function HomeScreen({ navigation }: Props) {
                 <Text style={styles.menuButtonText}>Menu</Text>
                 <Feather name="chevron-right" size={14} color="#FF6B35" />
               </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.addressRow}>
-            <Feather name="map-pin" size={11} color="#8A7E75" />
-            <Text style={styles.shopAddress} numberOfLines={1}>
-              {address}
-            </Text>
-          </View>
-
-          <View style={styles.shopInfoRow}>
-            {typeof item.distanceKm === "number" ? (
-              <Text style={styles.distanceText}>{item.distanceKm.toFixed(1)} km away</Text>
-            ) : (
-              <View />
-            )}
-            <View style={[styles.statusPill, !item.isOpen && styles.statusPillClosed]}>
-              <Text style={[styles.statusText, !item.isOpen && styles.statusTextClosed]}>
-                {item.isOpen ? "Open" : "Closed"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.shopBottom}>
-            <View style={styles.ratingRow}>
-              <Feather name="star" size={12} color="#F59E0B" />
-              <Text style={styles.ratingText}>{item.rating?.toFixed(1) || "4.0"}</Text>
-            </View>
-
-            <Text style={styles.timeText}>
-              {item.openingTime && item.closingTime ? `${item.openingTime} - ${item.closingTime}` : "08:00 - 22:00"}
-            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -657,11 +647,12 @@ export default function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {renderHeader()}
       <FlatList
+        style={styles.shopList}
         data={filteredShops}
         keyExtractor={(item) => item._id}
         renderItem={renderShopItem}
-        ListHeaderComponent={renderHeader()}
         ListEmptyComponent={loading ? renderLoading : locationPermissionPrompt ? renderLocationRequired : renderEmpty}
         contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom, 14) }]}
         keyboardShouldPersistTaps="always"
@@ -680,13 +671,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FBF8F4"
   },
+  shopList: {
+    flex: 1
+  },
   listContent: {
-    paddingBottom: 14
+    paddingTop: 4,
+    paddingBottom: 14,
+    flexGrow: 1
   },
   headerWrap: {
-    paddingTop: 8,
-    paddingHorizontal: 14,
-    paddingBottom: 6
+    paddingTop: 4,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    backgroundColor: "#FBF8F4"
   },
   heroRow: {
     flexDirection: "row",
@@ -699,10 +696,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start"
   },
   brandLogo: {
-    width: 142,
-    height: 50,
-    marginLeft: -4,
-    marginBottom: 8
+    width: 154,
+    height: 48,
+    marginLeft: -6,
+    marginBottom: 2
   },
   subheading: {
     marginTop: 2,
@@ -722,19 +719,19 @@ const styles = StyleSheet.create({
   },
   heroStatsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 2,
+    gap: 6,
+    marginTop: 0,
     width: "100%"
   },
   heroStatBox: {
     flex: 1,
-    minHeight: 58,
-    borderRadius: 16,
+    minHeight: 48,
+    borderRadius: 14,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#F1DED0",
-    paddingHorizontal: 10,
-    paddingVertical: 9,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
     justifyContent: "center"
   },
   heroStatBoxOpen: {
@@ -742,8 +739,8 @@ const styles = StyleSheet.create({
     borderColor: "#DDEFD8"
   },
   heroStatValue: {
-    fontSize: 18,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 18,
     fontWeight: "900",
     color: "#FF6B35"
   },
@@ -751,23 +748,23 @@ const styles = StyleSheet.create({
     color: "#2B9C4A"
   },
   heroStatLabel: {
-    marginTop: 4,
-    fontSize: 11,
+    marginTop: 3,
+    fontSize: 10,
     fontWeight: "800",
     color: "#554B43"
   },
   heroRight: {
-    width: 162
+    width: 148
   },
   quickActions: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 8
+    marginBottom: 5
   },
   quickActionCard: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
+    width: 46,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#EFE8DF",
@@ -817,8 +814,8 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF"
   },
   heroArt: {
-    height: 98,
-    borderRadius: 24,
+    height: 78,
+    borderRadius: 20,
     backgroundColor: "#FFF5EC",
     overflow: "hidden",
     position: "relative"
@@ -940,9 +937,9 @@ const styles = StyleSheet.create({
     top: 28
   },
   searchBar: {
-    marginTop: 10,
-    height: 44,
-    borderRadius: 22,
+    marginTop: 8,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#EEE8E0",
@@ -959,9 +956,9 @@ const styles = StyleSheet.create({
     paddingVertical: 0
   },
   categoryRow: {
-    paddingTop: 9,
-    paddingBottom: 2,
-    gap: 8
+    paddingTop: 7,
+    paddingBottom: 0,
+    gap: 7
   },
   categoryChip: {
     flexDirection: "row",
@@ -970,8 +967,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#F1DED0",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     gap: 6
   },
   categoryChipActive: {
@@ -1034,13 +1031,13 @@ const styles = StyleSheet.create({
     color: "#E9FFED"
   },
   shopCard: {
-    marginHorizontal: 14,
-    marginTop: 7,
+    marginHorizontal: 12,
+    marginTop: 6,
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#EEE8E0",
-    padding: 9,
+    padding: 8,
     flexDirection: "row",
     shadowColor: "#E9DED2",
     shadowOffset: { width: 0, height: 4 },
@@ -1049,14 +1046,14 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   shopImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 14,
+    width: 64,
+    height: 64,
+    borderRadius: 12,
     backgroundColor: "#F3E7DA"
   },
   shopContent: {
     flex: 1,
-    paddingLeft: 10
+    paddingLeft: 9
   },
   shopTop: {
     flexDirection: "row",
@@ -1065,16 +1062,12 @@ const styles = StyleSheet.create({
   },
   shopMainInfo: {
     flex: 1,
-    paddingRight: 8
-  },
-  shopActions: {
-    alignItems: "flex-end",
-    gap: 8
+    paddingRight: 10
   },
   favoriteButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#FFF4EB",
     borderWidth: 1,
     borderColor: "#F2D7C6",
@@ -1086,20 +1079,24 @@ const styles = StyleSheet.create({
     borderColor: "#FFC8D2"
   },
   shopName: {
-    fontSize: 14,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: "900",
     color: "#201914"
   },
   shopCategory: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 10,
     fontWeight: "700",
     color: "#FF6B35"
   },
   menuButton: {
     flexDirection: "row",
-    alignItems: "center"
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FFF4EB"
   },
   menuButtonText: {
     fontSize: 11,
@@ -1107,24 +1104,12 @@ const styles = StyleSheet.create({
     color: "#FF6B35",
     marginRight: 1
   },
-  addressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4
-  },
-  shopAddress: {
-    flex: 1,
-    marginLeft: 4,
-    fontSize: 10,
-    lineHeight: 13,
-    color: "#7A7168"
-  },
-  shopInfoRow: {
-    marginTop: 3,
+  shopMetaRow: {
+    marginTop: 6,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8
+    gap: 10
   },
   distanceText: {
     fontSize: 10,
@@ -1132,12 +1117,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#2B9C4A"
   },
-  shopBottom: {
-    marginTop: 4,
+  shopFooterRow: {
+    marginTop: 8,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 8
+  },
+  shopFooterLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
   },
   ratingRow: {
     flexDirection: "row",

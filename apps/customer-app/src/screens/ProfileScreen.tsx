@@ -32,13 +32,8 @@ import {
 } from "../api/user.api";
 import { getMyOrders, type Order } from "../api/order.api";
 import {
-  createSupportTicket,
-  getMySupportTickets,
   getSupportFAQs,
-  sendSupportMessage,
-  type FAQEntry,
-  type SupportTicketCategory,
-  type SupportTicket
+  type FAQEntry
 } from "../api/support.api";
 import { buildLegalUrl } from "../constants/legal";
 import { getPublicShopName } from "../utils/display";
@@ -163,12 +158,8 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [addressFormMode, setAddressFormMode] = useState<AddressFormMode>("edit");
   const [editingAddressId, setEditingAddressId] = useState<string | undefined>(undefined);
-  const [supportModal, setSupportModal] = useState<"chat" | "faq" | "report" | null>(null);
-  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [supportModal, setSupportModal] = useState<"faq" | null>(null);
   const [faqs, setFaqs] = useState<FAQEntry[]>([]);
-  const [supportSubject, setSupportSubject] = useState("Customer support");
-  const [supportMessage, setSupportMessage] = useState("");
-  const [supportSending, setSupportSending] = useState(false);
   const [favoriteRestaurants, setFavoriteRestaurants] = useState<FavoriteRestaurant[]>([]);
 
   const [name, setName] = useState("");
@@ -528,64 +519,18 @@ export default function ProfileScreen({ navigation, route }: any) {
     Alert.alert(title, message);
   };
 
-  const getSupportCategoryForMode = (mode: "chat" | "report"): SupportTicketCategory =>
-    mode === "report" ? "REPORT_ISSUE" : "CUSTOMER_SUPPORT";
-
-  const openSupportModal = async (mode: "chat" | "faq" | "report") => {
-    setSupportModal(mode);
-    setSupportTickets([]);
-    if (mode === "report") {
-      setSupportSubject((current) => current && current !== "Customer support" ? current : "Report an issue");
-    } else if (mode === "chat") {
-      setSupportSubject("Customer support");
-    }
-
-    try {
-      if (mode === "faq") {
-        const response = await getSupportFAQs();
-        setFaqs(response.data || []);
-      } else {
-        const response = await getMySupportTickets(getSupportCategoryForMode(mode));
-        setSupportTickets(response.data || []);
-      }
-    } catch (error: any) {
-      Alert.alert("Support", error.message || "Failed to load support details");
-    }
-  };
-
-  const handleSendSupportRequest = async (category: "CUSTOMER_SUPPORT" | "REPORT_ISSUE") => {
-    const message = supportMessage.trim();
-    if (!message) {
-      Alert.alert("Support", "Please write a message so the admin team has enough context.");
+  const openSupport = async (mode: "chat" | "faq" | "report", subject?: string) => {
+    if (mode !== "faq") {
+      navigation.navigate("SupportChat", { mode, subject });
       return;
     }
 
+    setSupportModal("faq");
     try {
-      setSupportSending(true);
-      const openTicket = category === "CUSTOMER_SUPPORT"
-        ? supportTickets.find((ticket) => !["RESOLVED", "CLOSED"].includes(ticket.status))
-        : undefined;
-      const response = openTicket
-        ? await sendSupportMessage(openTicket._id, message)
-        : await createSupportTicket({
-          subject: supportSubject.trim() || (category === "REPORT_ISSUE" ? "Report an issue" : "Customer support"),
-          message,
-          category,
-          priority: category === "REPORT_ISSUE" ? "HIGH" : "NORMAL"
-        });
-
-      if (!response.success || !response.data) {
-        Alert.alert("Support", response.message || "Failed to send support request");
-        return;
-      }
-
-      setSupportMessage("");
-      const ticketsResponse = await getMySupportTickets(category);
-      setSupportTickets(ticketsResponse.data || []);
+      const response = await getSupportFAQs();
+      setFaqs(response.data || []);
     } catch (error: any) {
-      Alert.alert("Support", error.message || "Failed to send support request");
-    } finally {
-      setSupportSending(false);
+      Alert.alert("Support", error.message || "Failed to load support details");
     }
   };
 
@@ -615,93 +560,30 @@ export default function ProfileScreen({ navigation, route }: any) {
   );
 
   const renderSupportModal = () => {
-    const activeTicket = supportTickets.find((ticket) => !["RESOLVED", "CLOSED"].includes(ticket.status)) || supportTickets[0];
-    const isReport = supportModal === "report";
-
     return (
       <Modal visible={Boolean(supportModal)} transparent animationType="slide" onRequestClose={() => setSupportModal(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.supportModal}>
             <View style={styles.supportHeader}>
-              <Text style={styles.supportTitle}>
-                {supportModal === "faq" ? "FAQs" : isReport ? "Report an Issue" : "Customer Support"}
-              </Text>
+              <Text style={styles.supportTitle}>FAQs</Text>
               <TouchableOpacity onPress={() => setSupportModal(null)}>
                 <MaterialCommunityIcons name="close" size={22} color="#475467" />
               </TouchableOpacity>
             </View>
 
-            {supportModal === "faq" ? (
-              <ScrollView style={styles.supportScroll} showsVerticalScrollIndicator={false}>
-                {(faqs.length > 0 ? faqs : [
-                  {
-                    question: "How do I get support?",
-                    answer: "Open Customer Support or Report an Issue from this page. Your message goes directly to the Vyaha admin panel."
-                  }
-                ]).map((faq) => (
-                  <View key={faq.question} style={styles.faqCard}>
-                    <Text style={styles.faqQuestion}>{faq.question}</Text>
-                    <Text style={styles.faqAnswer}>{faq.answer}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            ) : (
-              <>
-                <Text style={styles.supportIntro}>
-                  {isReport
-                    ? "Report app bugs, UI issues, payment problems, feature requests, or other platform problems. This stays separate from order support."
-                    : "Chat with Vyaha admin for order related help. Replies stay in this customer support conversation."}
-                </Text>
-
-                {activeTicket ? (
-                  <ScrollView style={styles.chatHistory} showsVerticalScrollIndicator={false}>
-                    <Text style={styles.ticketStatus}>Ticket: {activeTicket.subject} - {activeTicket.status}</Text>
-                    {activeTicket.messages?.map((message, index) => (
-                      <View
-                        key={`${message.createdAt || index}-${index}`}
-                        style={[
-                          styles.chatBubble,
-                          message.senderRole === "customer" ? styles.chatBubbleCustomer : styles.chatBubbleAdmin
-                        ]}
-                      >
-                        <Text style={styles.chatSender}>{message.senderRole === "customer" ? "You" : "Vyaha Admin"}</Text>
-                        <Text style={styles.chatText}>{message.message}</Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                ) : null}
-
-                {isReport ? (
-                  <TextInput
-                    style={[styles.input, focusedField === "supportSubject" && styles.inputFocused]}
-                    value={supportSubject}
-                    onChangeText={setSupportSubject}
-                    placeholder="Issue subject"
-                    placeholderTextColor="#98A2B3"
-                    onFocus={() => setFocusedField("supportSubject")}
-                    onBlur={() => setFocusedField(null)}
-                  />
-                ) : null}
-                <TextInput
-                  style={[styles.supportInput, focusedField === "supportMessage" && styles.inputFocused]}
-                  value={supportMessage}
-                  onChangeText={setSupportMessage}
-                  placeholder={isReport ? "Describe the app bug, UI issue, payment problem, feature request, or platform issue..." : "Type your order support message..."}
-                  placeholderTextColor="#98A2B3"
-                  multiline
-                  textAlignVertical="top"
-                  onFocus={() => setFocusedField("supportMessage")}
-                  onBlur={() => setFocusedField(null)}
-                />
-                <TouchableOpacity
-                  style={styles.supportSendButton}
-                  onPress={() => handleSendSupportRequest(isReport ? "REPORT_ISSUE" : "CUSTOMER_SUPPORT")}
-                  disabled={supportSending}
-                >
-                  {supportSending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.supportSendText}>{isReport ? "Send Report" : "Send Message"}</Text>}
-                </TouchableOpacity>
-              </>
-            )}
+            <ScrollView style={styles.supportScroll} showsVerticalScrollIndicator={false}>
+              {(faqs.length > 0 ? faqs : [
+                {
+                  question: "How do I get support?",
+                  answer: "Open Customer Support or Report an Issue from this page. Your conversation opens on a separate screen."
+                }
+              ]).map((faq) => (
+                <View key={faq.question} style={styles.faqCard}>
+                  <Text style={styles.faqQuestion}>{faq.question}</Text>
+                  <Text style={styles.faqAnswer}>{faq.answer}</Text>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1321,10 +1203,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                             <Text style={styles.orderActionLink}>Live tracking</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
-                            onPress={() => {
-                              setSupportSubject(`Issue with order #${order._id.slice(-6)}`);
-                              openSupportModal("report");
-                            }}
+                            onPress={() => openSupport("report", `Issue with order #${order._id.slice(-6)}`)}
                           >
                             <Text style={styles.orderActionLink}>Report issue</Text>
                           </TouchableOpacity>
@@ -1385,7 +1264,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   key={item.title}
                   style={styles.listRow}
                   onPress={() =>
-                    openSupportModal(item.title === "FAQs" ? "faq" : item.title === "Report an Issue" ? "report" : "chat")
+                    openSupport(item.title === "FAQs" ? "faq" : item.title === "Report an Issue" ? "report" : "chat")
                   }
                 >
                   <View style={styles.listRowLeft}>

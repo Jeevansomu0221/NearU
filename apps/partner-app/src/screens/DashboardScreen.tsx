@@ -144,7 +144,16 @@ export default function DashboardScreen({ navigation }: any) {
               {partner.restaurantName || partner.shopName || "Your Shop"}
             </Text>
           </View>
-          <NotificationButton count={stats.pendingOrders} onPress={() => navigation.navigate("Orders")} />
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={() => navigation.navigate("Settings")}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="settings-outline" size={22} color="#143A66" />
+            </TouchableOpacity>
+            <NotificationButton count={stats.pendingOrders} onPress={() => navigation.navigate("Orders")} />
+          </View>
         </View>
 
         <View style={[styles.statusBanner, shopOpen ? styles.statusBannerOpen : styles.statusBannerClosed]}>
@@ -314,6 +323,26 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
     marginRight: 12
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
+  settingsButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    shadowColor: "#143A66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1
   },
   welcomeText: {
     fontSize: 13,

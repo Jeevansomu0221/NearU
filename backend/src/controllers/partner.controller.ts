@@ -1385,6 +1385,34 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
       const incomingDocs = documents as Record<string, any>;
       const mergedDocs: Record<string, any> = { ...existingDocs, ...incomingDocs };
 
+      const bankFieldsChanged = ["bankAccountHolderName", "bankAccountNumber", "bankIfsc"].some((key) =>
+        Object.prototype.hasOwnProperty.call(incomingDocs, key)
+          && firstString(incomingDocs[key]) !== firstString(existingDocs[key])
+      );
+      if (bankFieldsChanged) {
+        mergedDocs.bankAccountHolderName = firstString(mergedDocs.bankAccountHolderName);
+        mergedDocs.bankAccountNumber = firstString(mergedDocs.bankAccountNumber).replace(/\D/g, "");
+        mergedDocs.bankIfsc = firstString(mergedDocs.bankIfsc).toUpperCase();
+
+        const hasAnyBankDetail = Boolean(
+          mergedDocs.bankAccountHolderName ||
+            mergedDocs.bankAccountNumber ||
+            mergedDocs.bankIfsc
+        );
+
+        if (hasAnyBankDetail) {
+          if (!mergedDocs.bankAccountHolderName) {
+            throw validationError("Bank account holder name is required");
+          }
+          if (!/^[0-9]{6,20}$/.test(mergedDocs.bankAccountNumber)) {
+            throw validationError("Bank account number must be 6 to 20 digits");
+          }
+          if (!ifscRegex.test(mergedDocs.bankIfsc)) {
+            throw validationError("IFSC code format is invalid");
+          }
+        }
+      }
+
       // Auto-clear any re-upload flags for keys whose URL changed in this update.
       const reuploadFlags = { ...(existingDocs.reuploadFlags || {}) } as Record<string, boolean>;
       const docUrlKeys = [

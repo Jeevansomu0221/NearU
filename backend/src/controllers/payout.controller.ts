@@ -89,7 +89,17 @@ const buildOrderSummary = (order: any, amount: number) => ({
 });
 
 const buildRows = (groups: Map<string, any>) =>
-  Array.from(groups.values()).sort((a, b) => b.amount - a.amount);
+  Array.from(groups.values()).sort((a, b) => {
+    const amountDifference = Number(b.amount || 0) - Number(a.amount || 0);
+    if (amountDifference !== 0) return amountDifference;
+    return Number(b.walletBalance || 0) - Number(a.walletBalance || 0);
+  });
+
+const buildPartnerContactDetails = (partner: any) => ({
+  ownerPhone: partner?.ownerPhone || partner?.phone || "",
+  ownerEmail: partner?.email || "",
+  restaurantPhone: partner?.restaurantPhone || partner?.phone || ""
+});
 
 const getRiderPayoutBreakdown = (grossEarnings: number, cashBalance: number) => {
   const cashHeld = Math.max(Number(cashBalance || 0), 0);
@@ -103,12 +113,7 @@ const getRiderPayoutBreakdown = (grossEarnings: number, cashBalance: number) => 
   };
 };
 
-const getPayoutOrders = async (
-  recipientType: RecipientType,
-  periodStart: Date,
-  periodEnd: Date,
-  recipientId?: string
-) => {
+const getUnpaidPayoutOrders = async (recipientType: RecipientType, recipientId?: string) => {
   const baseQuery: Record<string, unknown> = {
     status: "DELIVERED",
     paymentStatus: "PAID"
@@ -122,9 +127,18 @@ const getPayoutOrders = async (
     baseQuery.deliveryPartnerId = { $exists: true, $ne: null };
   }
 
-  const orders = await Order.find(baseQuery)
+  return Order.find(baseQuery)
     .select("partnerId deliveryPartnerId itemTotal deliveryFee grandTotal createdAt updatedAt deliveredAt")
     .lean();
+};
+
+const getPayoutOrders = async (
+  recipientType: RecipientType,
+  periodStart: Date,
+  periodEnd: Date,
+  recipientId?: string
+) => {
+  const orders = await getUnpaidPayoutOrders(recipientType, recipientType === "PARTNER" ? recipientId : undefined);
 
   return orders.filter((order) => {
     if (!isInPeriod(order, periodStart, periodEnd)) return false;
@@ -142,19 +156,26 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
     }
 
     const { periodStart, periodEnd } = getPeriodRange(periodType, req.query.date);
-    const [partnerOrders, deliveryOrders] = await Promise.all([
+    const [partnerOrders, deliveryOrders, allPartnerUnpaidOrders] = await Promise.all([
       getPayoutOrders("PARTNER", periodStart, periodEnd),
-      getPayoutOrders("DELIVERY_PARTNER", periodStart, periodEnd)
+      getPayoutOrders("DELIVERY_PARTNER", periodStart, periodEnd),
+      getUnpaidPayoutOrders("PARTNER")
     ]);
 
-    const partnerIds = [...new Set(partnerOrders.map((order) => String(order.partnerId)).filter(Boolean))];
+    const partnerIds = [
+      ...new Set(
+        [...partnerOrders, ...allPartnerUnpaidOrders]
+          .map((order) => (order.partnerId ? String(order.partnerId) : ""))
+          .filter(Boolean)
+      )
+    ];
     const deliveryUserIds = [
       ...new Set(deliveryOrders.map((order) => String(order.deliveryPartnerId)).filter(Boolean))
     ];
 
     const [partners, deliveryPartners] = await Promise.all([
       Partner.find({ _id: { $in: partnerIds } })
-        .select("ownerName restaurantName phone documents settings")
+        .select("ownerName restaurantName phone ownerPhone restaurantPhone email documents settings")
         .lean(),
       DeliveryPartner.find({ userId: { $in: deliveryUserIds } })
         .select("userId name phone documents cashBalance pendingDepositAmount")
@@ -166,6 +187,27 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
       deliveryPartners.map((partner: any) => [String(partner.userId), partner])
     );
 
+    const partnerWalletSummaries = new Map<string, any>();
+    allPartnerUnpaidOrders.forEach((order: any) => {
+      if (!order.partnerId) return;
+      const key = String(order.partnerId);
+
+      const amount = Number(order.itemTotal || 0);
+      const deliveredAt = getOrderDeliveredAt(order);
+      const current = partnerWalletSummaries.get(key) || {
+        walletBalance: 0,
+        walletUnpaidOrderCount: 0,
+        walletOldestDeliveredAt: deliveredAt,
+        walletLatestDeliveredAt: deliveredAt
+      };
+
+      current.walletBalance += amount;
+      current.walletUnpaidOrderCount += 1;
+      if (deliveredAt < current.walletOldestDeliveredAt) current.walletOldestDeliveredAt = deliveredAt;
+      if (deliveredAt > current.walletLatestDeliveredAt) current.walletLatestDeliveredAt = deliveredAt;
+      partnerWalletSummaries.set(key, current);
+    });
+
     const partnerGroups = new Map<string, any>();
     partnerOrders.forEach((order: any) => {
       const partner = partnerMap.get(String(order.partnerId));
@@ -174,13 +216,22 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
       const amount = Number(order.itemTotal || 0);
       const key = String(partner._id);
       const bankDetails = getBankDetails(partner, "PARTNER");
+      const contactDetails = buildPartnerContactDetails(partner);
+      const walletSummary = partnerWalletSummaries.get(key) || {};
       const current = partnerGroups.get(key) || {
         key: `PARTNER-${key}`,
         recipientType: "PARTNER",
         recipientId: key,
         name: partner.restaurantName || "Unknown restaurant",
         secondaryName: partner.ownerName || "",
-        phone: partner.phone || "",
+        phone: contactDetails.restaurantPhone || partner.phone || "",
+        ownerPhone: contactDetails.ownerPhone,
+        ownerEmail: contactDetails.ownerEmail,
+        restaurantPhone: contactDetails.restaurantPhone,
+        walletBalance: Number(walletSummary.walletBalance || 0),
+        walletUnpaidOrderCount: Number(walletSummary.walletUnpaidOrderCount || 0),
+        walletOldestDeliveredAt: walletSummary.walletOldestDeliveredAt,
+        walletLatestDeliveredAt: walletSummary.walletLatestDeliveredAt,
         bankDetails,
         missingBankDetails: hasMissingBankDetails(bankDetails),
         periodType,
@@ -195,6 +246,39 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
       current.amount += amount;
       current.orders.push(buildOrderSummary(order, amount));
       partnerGroups.set(key, current);
+    });
+
+    partnerWalletSummaries.forEach((walletSummary, key) => {
+      if (partnerGroups.has(key)) return;
+
+      const partner = partnerMap.get(key);
+      if (!partner) return;
+
+      const bankDetails = getBankDetails(partner, "PARTNER");
+      const contactDetails = buildPartnerContactDetails(partner);
+      partnerGroups.set(key, {
+        key: `PARTNER-${key}`,
+        recipientType: "PARTNER",
+        recipientId: key,
+        name: partner.restaurantName || "Unknown restaurant",
+        secondaryName: partner.ownerName || "",
+        phone: contactDetails.restaurantPhone || partner.phone || "",
+        ownerPhone: contactDetails.ownerPhone,
+        ownerEmail: contactDetails.ownerEmail,
+        restaurantPhone: contactDetails.restaurantPhone,
+        walletBalance: Number(walletSummary.walletBalance || 0),
+        walletUnpaidOrderCount: Number(walletSummary.walletUnpaidOrderCount || 0),
+        walletOldestDeliveredAt: walletSummary.walletOldestDeliveredAt,
+        walletLatestDeliveredAt: walletSummary.walletLatestDeliveredAt,
+        bankDetails,
+        missingBankDetails: hasMissingBankDetails(bankDetails),
+        periodType,
+        periodStart,
+        periodEnd,
+        orderCount: 0,
+        amount: 0,
+        orders: []
+      });
     });
 
     const deliveryGroups = new Map<string, any>();
@@ -241,6 +325,8 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
 
     const partnerRows = buildRows(partnerGroups);
     const deliveryPartnerRows = buildRows(deliveryGroups);
+    const partnerPeriodRows = partnerRows.filter((row) => Number(row.amount || 0) > 0);
+    const partnerWalletRows = partnerRows.filter((row) => Number(row.walletBalance || 0) > 0);
 
     res.json({
       success: true,
@@ -249,15 +335,17 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
         periodStart,
         periodEnd,
         totals: {
-          partnerAmount: partnerRows.reduce((sum, row) => sum + row.amount, 0),
-          partnerCount: partnerRows.length,
+          partnerAmount: partnerPeriodRows.reduce((sum, row) => sum + row.amount, 0),
+          partnerCount: partnerPeriodRows.length,
+          partnerWalletAmount: partnerWalletRows.reduce((sum, row) => sum + row.walletBalance, 0),
+          partnerWalletCount: partnerWalletRows.length,
           deliveryGrossAmount: deliveryPartnerRows.reduce((sum, row) => sum + row.grossEarnings, 0),
           deliveryCashOffset: deliveryPartnerRows.reduce((sum, row) => sum + row.offsetApplied, 0),
           deliveryCashDueToPlatform: deliveryPartnerRows.reduce((sum, row) => sum + row.cashDueToPlatform, 0),
           deliveryAmount: deliveryPartnerRows.reduce((sum, row) => sum + row.netPayable, 0),
           deliveryCount: deliveryPartnerRows.length,
           totalAmount:
-            partnerRows.reduce((sum, row) => sum + row.amount, 0) +
+            partnerPeriodRows.reduce((sum, row) => sum + row.amount, 0) +
             deliveryPartnerRows.reduce((sum, row) => sum + row.netPayable, 0)
         },
         partners: partnerRows,
@@ -320,7 +408,9 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
 
     const recipient =
       recipientType === "PARTNER"
-        ? await Partner.findById(recipientId).select("ownerName restaurantName phone documents settings").lean()
+        ? await Partner.findById(recipientId)
+            .select("ownerName restaurantName phone ownerPhone restaurantPhone email documents settings")
+            .lean()
         : await DeliveryPartner.findById(recipientId).select("userId name phone documents cashBalance").lean();
 
     if (!recipient) {
@@ -352,6 +442,8 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
     }
 
     const bankSnapshot = getBankDetails(recipient, recipientType);
+    const partnerContactDetails =
+      recipientType === "PARTNER" ? buildPartnerContactDetails(recipient) : null;
     const now = new Date();
     const payout = await Payout.create({
       recipientType,
@@ -360,8 +452,11 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
         recipientType === "PARTNER"
           ? {
               name: (recipient as any).restaurantName || "",
-              phone: (recipient as any).phone || "",
-              secondaryName: (recipient as any).ownerName || ""
+              phone: partnerContactDetails?.restaurantPhone || (recipient as any).phone || "",
+              secondaryName: (recipient as any).ownerName || "",
+              ownerPhone: partnerContactDetails?.ownerPhone || "",
+              ownerEmail: partnerContactDetails?.ownerEmail || "",
+              restaurantPhone: partnerContactDetails?.restaurantPhone || ""
             }
           : {
               name: (recipient as any).name || "",

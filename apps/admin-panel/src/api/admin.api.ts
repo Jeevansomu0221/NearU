@@ -222,6 +222,9 @@ export interface PayoutSummaryRow {
   name: string;
   secondaryName: string;
   phone: string;
+  ownerPhone?: string;
+  ownerEmail?: string;
+  restaurantPhone?: string;
   bankDetails: PayoutBankDetails;
   missingBankDetails: boolean;
   periodType: PayoutPeriodType;
@@ -234,6 +237,10 @@ export interface PayoutSummaryRow {
   netPayable?: number;
   cashDueToPlatform?: number;
   pendingDepositAmount?: number;
+  walletBalance?: number;
+  walletUnpaidOrderCount?: number;
+  walletOldestDeliveredAt?: string;
+  walletLatestDeliveredAt?: string;
   amount: number;
   orders: PayoutOrderSummary[];
 }
@@ -245,6 +252,8 @@ export interface PayoutSummary {
   totals: {
     partnerAmount: number;
     partnerCount: number;
+    partnerWalletAmount?: number;
+    partnerWalletCount?: number;
     deliveryGrossAmount?: number;
     deliveryCashOffset?: number;
     deliveryCashDueToPlatform?: number;
@@ -264,6 +273,9 @@ export interface PayoutRecord {
     name: string;
     phone: string;
     secondaryName: string;
+    ownerPhone?: string;
+    ownerEmail?: string;
+    restaurantPhone?: string;
   };
   periodType: PayoutPeriodType;
   periodStart: string;

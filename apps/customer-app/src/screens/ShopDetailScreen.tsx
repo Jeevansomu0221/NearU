@@ -424,77 +424,69 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollArea} contentContainerStyle={[styles.content, { paddingBottom: 118 + Math.max(insets.bottom, 12) }]}>
-        <View style={styles.headerBackground}>
-          <TouchableOpacity style={styles.bannerCard} activeOpacity={0.9} onPress={() => setPreviewImage(bannerImage)}>
-            <Image source={{ uri: bannerImage }} style={styles.bannerImage} resizeMode="cover" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.infoCard}>
-          <View style={styles.shopIconBubble}>
-            <MaterialCommunityIcons name={getShopCategoryIcon()} size={22} color="#FFFFFF" />
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={[styles.content, { paddingBottom: 118 + Math.max(insets.bottom, 12) }]}
+        stickyHeaderIndices={[1]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View>
+          <View style={styles.headerBackground}>
+            <TouchableOpacity style={styles.bannerCard} activeOpacity={0.9} onPress={() => setPreviewImage(bannerImage)}>
+              <Image source={{ uri: bannerImage }} style={styles.bannerImage} resizeMode="cover" />
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.infoTopRow}>
-            <View style={styles.infoTextBlock}>
-              <Text style={styles.shopName}>{getShopName()}</Text>
-              <View style={styles.categoryTimeRow}>
-                <View style={styles.categoryChip}>
-                  <MaterialCommunityIcons name={getShopCategoryIcon()} size={13} color="#C96C2F" />
-                  <Text style={styles.categoryChipText}>{getShopCategoryLabel()}</Text>
+          <View style={styles.infoCard}>
+            <View style={styles.shopIconBubble}>
+              <MaterialCommunityIcons name={getShopCategoryIcon()} size={22} color="#FFFFFF" />
+            </View>
+
+            <View style={styles.infoTopRow}>
+              <View style={styles.infoTextBlock}>
+                <Text style={styles.shopName}>{getShopName()}</Text>
+                <View style={styles.categoryTimeRow}>
+                  <View style={styles.categoryChip}>
+                    <MaterialCommunityIcons name={getShopCategoryIcon()} size={13} color="#C96C2F" />
+                    <Text style={styles.categoryChipText}>{getShopCategoryLabel()}</Text>
+                  </View>
+                  <View style={styles.timeChip}>
+                    <Feather name="clock" size={13} color="#2F7553" />
+                    <Text style={styles.timeValue}>
+                      {shop.openingTime && shop.closingTime ? `${shop.openingTime} - ${shop.closingTime}` : "08:00 - 22:00"}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.timeChip}>
-                  <Feather name="clock" size={13} color="#2F7553" />
-                  <Text style={styles.timeValue}>
-                    {shop.openingTime && shop.closingTime ? `${shop.openingTime} - ${shop.closingTime}` : "08:00 - 22:00"}
+              </View>
+
+              <View style={styles.infoMetaBlock}>
+                <View style={[styles.statusPill, !shop.isOpen && styles.statusPillClosed]}>
+                  <Text style={[styles.statusText, !shop.isOpen && styles.statusTextClosed]}>
+                    {shop.isOpen ? "Open" : "Closed"}
                   </Text>
                 </View>
+                <View style={styles.ratingBlock}>
+                  <Feather name="star" size={15} color="#F2A514" />
+                  <Text style={styles.ratingValue}>{shop.rating?.toFixed(1) || "4.0"}</Text>
+                </View>
+                <Text style={styles.reviewText}>(120 reviews)</Text>
               </View>
             </View>
-
-            <View style={styles.infoMetaBlock}>
-              <View style={[styles.statusPill, !shop.isOpen && styles.statusPillClosed]}>
-                <Text style={[styles.statusText, !shop.isOpen && styles.statusTextClosed]}>
-                  {shop.isOpen ? "Open" : "Closed"}
-                </Text>
-              </View>
-              <View style={styles.ratingBlock}>
-                <Feather name="star" size={15} color="#F2A514" />
-                <Text style={styles.ratingValue}>{shop.rating?.toFixed(1) || "4.0"}</Text>
-              </View>
-              <Text style={styles.reviewText}>(120 reviews)</Text>
-            </View>
           </View>
-
         </View>
 
-        <View style={styles.menuHeader}>
-          <Text style={styles.menuTitle}>Menu</Text>
-          <Text style={styles.menuSubtitle}>
-            {vegModeOnly ? `${visibleMenu.length} veg items` : `${menu.length} items available`}
-          </Text>
-        </View>
+        <View style={styles.menuStickySection}>
+          <View style={styles.menuHeader}>
+            <Text style={styles.menuTitle}>Menu</Text>
+            <Text style={styles.menuSubtitle}>
+              {vegModeOnly ? `${visibleMenu.length} veg items` : `${menu.length} items available`}
+            </Text>
+          </View>
 
-        {loading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#FF6B35" />
-            <Text style={styles.loadingText}>Loading menu...</Text>
-          </View>
-        ) : menu.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Menu unavailable</Text>
-            <Text style={styles.emptyBody}>This restaurant has not added any available items yet.</Text>
-          </View>
-        ) : visibleMenu.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No veg items available</Text>
-            <Text style={styles.emptyBody}>Veg Mode is on, but this restaurant has no available veg items right now.</Text>
-          </View>
-        ) : (
-          <>
+          {!loading && menu.length > 0 && visibleMenu.length > 0 ? (
             <ScrollView
               horizontal
+              nestedScrollEnabled
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoryTabs}
             >
@@ -518,27 +510,44 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                 );
               })}
             </ScrollView>
+          ) : null}
+        </View>
 
-            <View style={styles.menuList}>
-              {selectedItems.map((item, index) => {
-                const quantity = getCartQuantity(item);
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#FF6B35" />
+            <Text style={styles.loadingText}>Loading menu...</Text>
+          </View>
+        ) : menu.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Menu unavailable</Text>
+            <Text style={styles.emptyBody}>This restaurant has not added any available items yet.</Text>
+          </View>
+        ) : visibleMenu.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No veg items available</Text>
+            <Text style={styles.emptyBody}>Veg Mode is on, but this restaurant has no available veg items right now.</Text>
+          </View>
+        ) : (
+          <View style={styles.menuList}>
+            {selectedItems.map((item, index) => {
+              const quantity = getCartQuantity(item);
 
-                return (
-                  <MenuCardItem
-                    key={item._id}
-                    item={item}
-                    index={index}
-                    quantity={quantity}
-                    selectedCategory={selectedCategory}
-                    getMenuImage={getMenuImage}
-                    handleIncrement={handleIncrement}
-                    handleDecrement={handleDecrement}
-                    setPreviewImage={setPreviewImage}
-                  />
-                );
-              })}
-            </View>
-          </>
+              return (
+                <MenuCardItem
+                  key={item._id}
+                  item={item}
+                  index={index}
+                  quantity={quantity}
+                  selectedCategory={selectedCategory}
+                  getMenuImage={getMenuImage}
+                  handleIncrement={handleIncrement}
+                  handleDecrement={handleDecrement}
+                  setPreviewImage={setPreviewImage}
+                />
+              );
+            })}
+          </View>
         )}
       </ScrollView>
 
@@ -786,6 +795,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 12
+  },
+  menuStickySection: {
+    backgroundColor: "#FBF8F4",
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEE8E0"
   },
   menuTitle: {
     fontSize: 19,
