@@ -12,6 +12,7 @@ export interface ApiResponse<T = any> {
 const DEV_LAN_HOST = "10.3.8.130";
 const ANDROID_EMULATOR_HOST = "10.0.2.2";
 const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
+const API_TIMEOUT_MS = 15000;
 const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
 const isDev = typeof __DEV__ !== "undefined" && __DEV__;
 
@@ -84,7 +85,7 @@ const isFormDataPayload = (value: any) => {
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: API_TIMEOUT_MS,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json"
@@ -168,11 +169,16 @@ api.interceptors.response.use(
   },
   async (error: any) => {
     const requestConfig = error.config;
+    const statusCode = error.response?.status;
+    const serverMessage = error.response?.data?.message || "";
     const currentRetryIndex = requestConfig?._baseUrlRetryIndex || 0;
     const nextBaseUrl = API_BASE_URLS[currentRetryIndex + 1];
-    const isNetworkError = error.message === "Network Error" || (error.request && !error.response);
+    const isTimeoutError =
+      error.code === "ECONNABORTED" ||
+      String(error.message || "").toLowerCase().includes("timeout");
+    const isNetworkError = error.message === "Network Error" || isTimeoutError || (error.request && !error.response);
 
-    if (isNetworkError && requestConfig && nextBaseUrl) {
+    if (isNetworkError && requestConfig && nextBaseUrl && !requestConfig._skipBaseUrlRetry) {
       logDebug(`Trying fallback API base URL: ${nextBaseUrl}`);
       requestConfig._baseUrlRetryIndex = currentRetryIndex + 1;
       requestConfig.baseURL = nextBaseUrl;
@@ -181,10 +187,14 @@ api.interceptors.response.use(
     }
 
     if (
-      error.response?.status === 401 &&
+      statusCode === 401 &&
       requestConfig &&
       !requestConfig._tokenRefreshRetry &&
-      !requestConfig.url?.includes("/auth/refresh")
+      !requestConfig.url?.includes("/auth/refresh") &&
+      (
+        String(serverMessage).toLowerCase().includes("token expired") ||
+        String(serverMessage).toLowerCase().includes("session expired")
+      )
     ) {
       const refreshedToken = await refreshAccessToken();
 
@@ -196,6 +206,10 @@ api.interceptors.response.use(
       }
 
       await clearSessionAndNotify();
+    }
+
+    if (isNetworkError) {
+      return Promise.reject(new Error("The server is taking longer than usual. Please wait a moment and try again."));
     }
 
     logDebug("API Error:", {

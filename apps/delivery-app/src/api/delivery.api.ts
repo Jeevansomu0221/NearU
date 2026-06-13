@@ -115,6 +115,12 @@ export interface LocationUpdate {
   longitude: number;
 }
 
+const STATUS_UPDATE_REQUEST_CONFIG = {
+  // Status updates are mutations. Retrying them against fallback hosts can make
+  // the button appear stuck and can duplicate a pickup/delivery transition.
+  _skipBaseUrlRetry: true
+};
+
 // =================== DELIVERY JOBS ===================
 
 /**
@@ -177,7 +183,7 @@ export const updateDeliveryStatus = (
   if (location) {
     data.location = location;
   }
-  return apiPost<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data);
+  return apiPost<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data, STATUS_UPDATE_REQUEST_CONFIG);
 };
 
 /**
@@ -205,7 +211,7 @@ export const markAsDelivered = (
   if (location) {
     data.location = location;
   }
-  return apiPost<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data);
+  return apiPost<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data, STATUS_UPDATE_REQUEST_CONFIG);
 };
 
 // =================== DELIVERY STATS ===================
