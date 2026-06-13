@@ -32,7 +32,7 @@ export type PartnerWallet = {
   todayEarnings: number;
   todayOrderCount: number;
   walletBalance: number;
-  unpaidOrderCount: number;
+  pendingPayoutOrderCount: number;
   lifetimeEarnings: number;
   lifetimeOrderCount: number;
   paidTotal: number;
@@ -46,7 +46,7 @@ export type PartnerWallet = {
     upiId: string;
     hasBankDetails: boolean;
   };
-  recentUnpaidOrders: PartnerWalletOrder[];
+  recentPendingPayoutOrders: PartnerWalletOrder[];
   payouts: PartnerPayoutHistoryItem[];
 };
 

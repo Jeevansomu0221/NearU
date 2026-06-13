@@ -78,7 +78,7 @@ export default function PaymentHistoryScreen({ route }: Props) {
     }
   };
 
-  const renderUnpaidOrder = (order: PartnerWalletOrder) => (
+  const renderPendingPayoutOrder = (order: PartnerWalletOrder) => (
     <View style={styles.historyRow} key={order._id}>
       <View style={styles.historyIcon}>
         <Ionicons name="receipt-outline" size={18} color="#60A5FA" />
@@ -140,7 +140,8 @@ export default function PaymentHistoryScreen({ route }: Props) {
         <Text style={styles.heroLabel}>Wallet balance</Text>
         <Text style={styles.heroAmount}>{formatMoney(wallet.walletBalance)}</Text>
         <Text style={styles.heroSub}>
-          {wallet.unpaidOrderCount} delivered order{wallet.unpaidOrderCount === 1 ? "" : "s"} pending payout
+          {wallet.pendingPayoutOrderCount} paid delivered order
+          {wallet.pendingPayoutOrderCount === 1 ? "" : "s"} pending payout
         </Text>
       </View>
 
@@ -179,9 +180,9 @@ export default function PaymentHistoryScreen({ route }: Props) {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Pending payment orders</Text>
-        {wallet.recentUnpaidOrders.length ? (
-          wallet.recentUnpaidOrders.map(renderUnpaidOrder)
+        <Text style={styles.cardTitle}>Orders pending payout</Text>
+        {wallet.recentPendingPayoutOrders.length ? (
+          wallet.recentPendingPayoutOrders.map(renderPendingPayoutOrder)
         ) : (
           <Text style={styles.emptyText}>No pending payout orders right now.</Text>
         )}

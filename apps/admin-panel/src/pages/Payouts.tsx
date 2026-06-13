@@ -132,6 +132,17 @@ export default function Payouts() {
   const partnerWalletAmount = summary?.totals.partnerWalletAmount || 0;
   const partnerWalletCount = summary?.totals.partnerWalletCount || 0;
 
+  const getPayableAmount = (row: PayoutSummaryRow) =>
+    row.recipientType === "PARTNER" ? Number(row.walletBalance ?? row.amount) : Number(row.amount || 0);
+
+  const getPayableOrderCount = (row: PayoutSummaryRow) =>
+    row.recipientType === "PARTNER"
+      ? Number(row.walletPendingPayoutOrderCount ?? row.orderCount)
+      : Number(row.orderCount || 0);
+
+  const getPayableOrders = (row: PayoutSummaryRow) =>
+    row.recipientType === "PARTNER" ? row.walletOrders || row.orders : row.orders;
+
   const closeMarkPaidModal = () => {
     setMarkingRow(null);
     setPaidReference("");
@@ -150,6 +161,7 @@ export default function Payouts() {
         periodType: markingRow.periodType,
         periodStart: markingRow.periodStart,
         periodEnd: markingRow.periodEnd,
+        payAllPending: markingRow.recipientType === "PARTNER",
         paidReference: paidReference.trim(),
         paidNotes: paidNotes.trim()
       });
@@ -199,9 +211,9 @@ export default function Payouts() {
         </Col>
         <Col xs={24} md={8}>
           <Card bordered={false}>
-            <Statistic title="Restaurant Payouts" value={formatCurrency(summary?.totals.partnerAmount || 0)} />
+            <Statistic title="Restaurant Wallets" value={formatCurrency(partnerWalletAmount)} />
             <Typography.Text type="secondary">
-              {summary?.totals.partnerCount || 0} restaurants in period · {formatCurrency(partnerWalletAmount)} wallet
+              {partnerWalletCount} restaurants pending payout · {formatCurrency(summary?.totals.partnerAmount || 0)} in period
             </Typography.Text>
           </Card>
         </Col>
@@ -256,7 +268,7 @@ export default function Payouts() {
                 {formatDate(summary?.periodStart)} to {formatDate(summary?.periodEnd)} · {activeCount || 0} pending ·{" "}
                 {formatCurrency(activeTotal || 0)}
                 {activeRecipient === "PARTNER"
-                  ? ` · ${partnerWalletCount} wallets unpaid (${formatCurrency(partnerWalletAmount)})`
+                  ? ` · ${partnerWalletCount} wallets pending payout (${formatCurrency(partnerWalletAmount)})`
                   : ""}
               </Typography.Text>
             </div>
@@ -274,7 +286,7 @@ export default function Payouts() {
             type="info"
             showIcon
             message="Payout formula"
-            description="Restaurants are owed delivered order item totals. The wallet column shows all unpaid restaurant orders, while the amount to send is only for the selected week/month. Delivery riders are owed delivery fees after COD cash held is offset."
+            description="Restaurants are owed delivered order item totals only after customer payment is successful. The wallet column shows all paid delivered orders pending partner payout, while the amount to send is only for the selected week/month."
           />
 
           <Table
@@ -331,17 +343,27 @@ export default function Payouts() {
                 )
               },
               {
-                title: "Period",
-                render: (_, row) => (
-                  <div>
-                    <Tag color="blue">{row.periodType}</Tag>
+                title: activeRecipient === "PARTNER" ? "Payout Date" : "Period",
+                render: (_, row) =>
+                  row.recipientType === "PARTNER" ? (
                     <div>
-                      <Typography.Text type="secondary">
-                        {formatDate(row.periodStart)} to {formatDate(row.periodEnd)}
-                      </Typography.Text>
+                      <Tag color="green">Due {formatDate(row.walletNextPayoutAt)}</Tag>
+                      <div>
+                        <Typography.Text type="secondary">
+                          First paid order {formatDate(row.walletOldestDeliveredAt)}
+                        </Typography.Text>
+                      </div>
                     </div>
-                  </div>
-                )
+                  ) : (
+                    <div>
+                      <Tag color="blue">{row.periodType}</Tag>
+                      <div>
+                        <Typography.Text type="secondary">
+                          {formatDate(row.periodStart)} to {formatDate(row.periodEnd)}
+                        </Typography.Text>
+                      </div>
+                    </div>
+                  )
               },
               {
                 title: "Orders",
@@ -353,7 +375,7 @@ export default function Payouts() {
                       title: "Wallet",
                       render: (_: unknown, row: PayoutSummaryRow) => {
                         const walletBalance = row.walletBalance ?? row.amount;
-                        const walletUnpaidOrderCount = row.walletUnpaidOrderCount ?? row.orderCount;
+                        const walletPendingPayoutOrderCount = row.walletPendingPayoutOrderCount ?? row.orderCount;
                         const hasOutsidePeriodBalance = walletBalance > row.amount;
 
                         return (
@@ -361,7 +383,8 @@ export default function Payouts() {
                             <Typography.Text strong>{formatCurrency(walletBalance)}</Typography.Text>
                             <div>
                               <Typography.Text type="secondary">
-                                {walletUnpaidOrderCount} unpaid order{walletUnpaidOrderCount === 1 ? "" : "s"}
+                                {walletPendingPayoutOrderCount} paid order
+                                {walletPendingPayoutOrderCount === 1 ? "" : "s"} pending payout
                               </Typography.Text>
                             </div>
                             {hasOutsidePeriodBalance && <Tag color="orange">Includes other periods</Tag>}
@@ -399,7 +422,7 @@ export default function Payouts() {
               {
                 title: "Actions",
                 render: (_, row) => {
-                  const canMarkPaid = row.orderCount > 0 && (row.amount > 0 || row.recipientType === "DELIVERY_PARTNER");
+                  const canMarkPaid = getPayableOrderCount(row) > 0 && getPayableAmount(row) > 0;
                   const markPaidButton = (
                     <Button
                       size="small"
@@ -420,7 +443,7 @@ export default function Payouts() {
                       {canMarkPaid ? (
                         markPaidButton
                       ) : (
-                        <Tooltip title="This wallet balance is outside the selected payout period. Change the date/month to the period that contains those delivered orders.">
+                        <Tooltip title="No paid delivered orders are pending payout for this recipient.">
                           <span>{markPaidButton}</span>
                         </Tooltip>
                       )}
@@ -530,8 +553,11 @@ export default function Payouts() {
                   <Descriptions.Item label="Wallet Balance">
                     {formatCurrency(selectedRow.walletBalance ?? selectedRow.amount)}
                   </Descriptions.Item>
-                  <Descriptions.Item label="Wallet Unpaid Orders">
-                    {selectedRow.walletUnpaidOrderCount ?? selectedRow.orderCount}
+                  <Descriptions.Item label="Wallet Orders Pending Payout">
+                    {selectedRow.walletPendingPayoutOrderCount ?? selectedRow.orderCount}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Payout Due Date">
+                    {formatDate(selectedRow.walletNextPayoutAt)}
                   </Descriptions.Item>
                   {(selectedRow.walletOldestDeliveredAt || selectedRow.walletLatestDeliveredAt) && (
                     <Descriptions.Item label="Wallet Delivery Dates">
@@ -566,13 +592,20 @@ export default function Payouts() {
                   </Descriptions.Item>
                 </>
               )}
-              <Descriptions.Item label="Amount">{formatCurrency(selectedRow.amount)}</Descriptions.Item>
+              <Descriptions.Item label={selectedRow.recipientType === "PARTNER" ? "Wallet Amount To Pay" : "Amount"}>
+                {formatCurrency(getPayableAmount(selectedRow))}
+              </Descriptions.Item>
+              {selectedRow.recipientType === "PARTNER" && selectedRow.amount !== getPayableAmount(selectedRow) && (
+                <Descriptions.Item label="Selected Period Amount">
+                  {formatCurrency(selectedRow.amount)}
+                </Descriptions.Item>
+              )}
             </Descriptions>
             <Table
               rowKey="_id"
               size="small"
               pagination={{ pageSize: 5 }}
-              dataSource={selectedRow.orders}
+              dataSource={getPayableOrders(selectedRow)}
               columns={[
                 {
                   title: "Order",
@@ -612,13 +645,15 @@ export default function Payouts() {
             <Alert
               type={markingRow.missingBankDetails ? "warning" : "success"}
               showIcon
-              message={`${formatCurrency(markingRow.amount)} net payout for ${markingRow.orderCount} orders`}
+              message={`${formatCurrency(getPayableAmount(markingRow))} net payout for ${getPayableOrderCount(
+                markingRow
+              )} orders`}
               description={
                 markingRow.recipientType === "DELIVERY_PARTNER"
                   ? `Gross ${formatCurrency(markingRow.grossEarnings || markingRow.amount)} minus COD offset ${formatCurrency(markingRow.offsetApplied || 0)}. Cash due after offset: ${formatCurrency(markingRow.cashDueToPlatform || 0)}.`
                   : markingRow.missingBankDetails
                   ? "Bank details are incomplete. Confirm payment details before marking this payout as paid."
-                  : `Send to ${markingRow.bankDetails.accountHolderName} · ${markingRow.bankDetails.accountNumber} · ${markingRow.bankDetails.ifsc}`
+                  : `This pays all paid delivered orders currently pending payout. Send to ${markingRow.bankDetails.accountHolderName} · ${markingRow.bankDetails.accountNumber} · ${markingRow.bankDetails.ifsc}`
               }
             />
             <Input

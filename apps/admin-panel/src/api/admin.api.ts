@@ -238,9 +238,11 @@ export interface PayoutSummaryRow {
   cashDueToPlatform?: number;
   pendingDepositAmount?: number;
   walletBalance?: number;
-  walletUnpaidOrderCount?: number;
+  walletPendingPayoutOrderCount?: number;
   walletOldestDeliveredAt?: string;
   walletLatestDeliveredAt?: string;
+  walletNextPayoutAt?: string;
+  walletOrders?: PayoutOrderSummary[];
   amount: number;
   orders: PayoutOrderSummary[];
 }
@@ -463,6 +465,7 @@ export const createPayout = async (payload: {
   periodType: PayoutPeriodType;
   periodStart: string;
   periodEnd: string;
+  payAllPending?: boolean;
   paidReference?: string;
   paidNotes?: string;
 }) => {

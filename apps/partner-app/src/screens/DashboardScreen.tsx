@@ -200,7 +200,7 @@ export default function DashboardScreen({ navigation }: any) {
             <View style={styles.subStatItem}>
               <Text style={styles.subStatLabel}>To Payout</Text>
               <Text style={styles.subStatValue}>
-                {wallet?.unpaidOrderCount ?? 0}
+                {wallet?.pendingPayoutOrderCount ?? 0}
               </Text>
             </View>
             <View style={styles.verticalDivider} />

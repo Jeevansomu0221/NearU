@@ -165,6 +165,12 @@ const resolvePartnerForAuth = async (authReq: AuthRequest) => {
 
 const getOrderEarningDate = (order: any) => new Date(order.deliveredAt || order.updatedAt || order.createdAt);
 
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
 const getNextWeeklyPayoutDate = (referenceDate = new Date()) => {
   const next = new Date(referenceDate);
   next.setHours(10, 0, 0, 0);
@@ -1098,7 +1104,7 @@ export const getPartnerWallet = async (req: Request, res: Response) => {
     const tomorrowStart = new Date(todayStart);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
-    const unpaidOrderFilter = {
+    const pendingPayoutOrderFilter = {
       partnerId: partner._id,
       status: "DELIVERED",
       paymentStatus: "PAID",
@@ -1118,14 +1124,15 @@ export const getPartnerWallet = async (req: Request, res: Response) => {
     };
 
     const [
-      unpaidSummary,
+      pendingPayoutSummary,
       todaySummary,
       lifetimeSummary,
       payouts,
-      recentUnpaidOrders
+      recentPendingPayoutOrders,
+      oldestPendingPayoutOrder
     ] = await Promise.all([
       Order.aggregate([
-        { $match: unpaidOrderFilter },
+        { $match: pendingPayoutOrderFilter },
         { $group: { _id: null, amount: { $sum: "$itemTotal" }, orderCount: { $sum: 1 } } }
       ]),
       Order.aggregate([
@@ -1140,30 +1147,39 @@ export const getPartnerWallet = async (req: Request, res: Response) => {
         .sort({ paidAt: -1 })
         .limit(50)
         .lean(),
-      Order.find(unpaidOrderFilter)
+      Order.find(pendingPayoutOrderFilter)
         .sort({ deliveredAt: -1, updatedAt: -1 })
         .limit(10)
         .select("_id itemTotal grandTotal createdAt updatedAt deliveredAt partnerPayout")
+        .lean(),
+      Order.findOne(pendingPayoutOrderFilter)
+        .sort({ deliveredAt: 1, updatedAt: 1 })
+        .select("_id createdAt updatedAt deliveredAt")
         .lean()
     ]);
 
     const paidTotal = payouts.reduce((sum: number, payout: any) => sum + Number(payout.amount || 0), 0);
+    const oldestPendingPayoutDate = oldestPendingPayoutOrder ? getOrderEarningDate(oldestPendingPayoutOrder) : null;
+    const nextPayoutDate =
+      oldestPendingPayoutDate && !Number.isNaN(oldestPendingPayoutDate.getTime())
+        ? addDays(oldestPendingPayoutDate, 7)
+        : getNextWeeklyPayoutDate();
 
     return res.json({
       success: true,
       data: {
         todayEarnings: Number(todaySummary[0]?.amount || 0),
         todayOrderCount: Number(todaySummary[0]?.orderCount || 0),
-        walletBalance: Number(unpaidSummary[0]?.amount || 0),
-        unpaidOrderCount: Number(unpaidSummary[0]?.orderCount || 0),
+        walletBalance: Number(pendingPayoutSummary[0]?.amount || 0),
+        pendingPayoutOrderCount: Number(pendingPayoutSummary[0]?.orderCount || 0),
         lifetimeEarnings: Number(lifetimeSummary[0]?.amount || 0),
         lifetimeOrderCount: Number(lifetimeSummary[0]?.orderCount || 0),
         paidTotal,
         payoutCycle: "WEEKLY",
-        nextPayoutDate: getNextWeeklyPayoutDate().toISOString(),
-        payoutNote: "Vyaha sends partner payouts weekly to the saved bank account.",
+        nextPayoutDate: nextPayoutDate.toISOString(),
+        payoutNote: "Vyaha schedules partner payouts 7 days after the first paid delivered order in the wallet.",
         bankDetails: buildPartnerBankSummary(partner),
-        recentUnpaidOrders: recentUnpaidOrders.map((order: any) => ({
+        recentPendingPayoutOrders: recentPendingPayoutOrders.map((order: any) => ({
           _id: String(order._id),
           amount: Number(order.itemTotal || 0),
           grandTotal: Number(order.grandTotal || 0),

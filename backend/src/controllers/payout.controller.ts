@@ -59,6 +59,12 @@ const getPeriodRange = (periodType: PeriodType, referenceDateValue?: unknown) =>
 
 const getOrderDeliveredAt = (order: any) => new Date(order.deliveredAt || order.updatedAt || order.createdAt);
 
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
 const isInPeriod = (order: any, periodStart: Date, periodEnd: Date) => {
   const deliveredAt = getOrderDeliveredAt(order);
   return deliveredAt >= periodStart && deliveredAt < periodEnd;
@@ -113,7 +119,7 @@ const getRiderPayoutBreakdown = (grossEarnings: number, cashBalance: number) => 
   };
 };
 
-const getUnpaidPayoutOrders = async (recipientType: RecipientType, recipientId?: string) => {
+const getPendingPayoutOrders = async (recipientType: RecipientType, recipientId?: string) => {
   const baseQuery: Record<string, unknown> = {
     status: "DELIVERED",
     paymentStatus: "PAID"
@@ -138,7 +144,7 @@ const getPayoutOrders = async (
   periodEnd: Date,
   recipientId?: string
 ) => {
-  const orders = await getUnpaidPayoutOrders(recipientType, recipientType === "PARTNER" ? recipientId : undefined);
+  const orders = await getPendingPayoutOrders(recipientType, recipientType === "PARTNER" ? recipientId : undefined);
 
   return orders.filter((order) => {
     if (!isInPeriod(order, periodStart, periodEnd)) return false;
@@ -156,15 +162,15 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
     }
 
     const { periodStart, periodEnd } = getPeriodRange(periodType, req.query.date);
-    const [partnerOrders, deliveryOrders, allPartnerUnpaidOrders] = await Promise.all([
+    const [partnerOrders, deliveryOrders, allPartnerPendingPayoutOrders] = await Promise.all([
       getPayoutOrders("PARTNER", periodStart, periodEnd),
       getPayoutOrders("DELIVERY_PARTNER", periodStart, periodEnd),
-      getUnpaidPayoutOrders("PARTNER")
+      getPendingPayoutOrders("PARTNER")
     ]);
 
     const partnerIds = [
       ...new Set(
-        [...partnerOrders, ...allPartnerUnpaidOrders]
+        [...partnerOrders, ...allPartnerPendingPayoutOrders]
           .map((order) => (order.partnerId ? String(order.partnerId) : ""))
           .filter(Boolean)
       )
@@ -188,7 +194,7 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
     );
 
     const partnerWalletSummaries = new Map<string, any>();
-    allPartnerUnpaidOrders.forEach((order: any) => {
+    allPartnerPendingPayoutOrders.forEach((order: any) => {
       if (!order.partnerId) return;
       const key = String(order.partnerId);
 
@@ -196,15 +202,19 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
       const deliveredAt = getOrderDeliveredAt(order);
       const current = partnerWalletSummaries.get(key) || {
         walletBalance: 0,
-        walletUnpaidOrderCount: 0,
+        walletPendingPayoutOrderCount: 0,
         walletOldestDeliveredAt: deliveredAt,
-        walletLatestDeliveredAt: deliveredAt
+        walletLatestDeliveredAt: deliveredAt,
+        walletNextPayoutAt: addDays(deliveredAt, 7),
+        walletOrders: []
       };
 
       current.walletBalance += amount;
-      current.walletUnpaidOrderCount += 1;
+      current.walletPendingPayoutOrderCount += 1;
+      current.walletOrders.push(buildOrderSummary(order, amount));
       if (deliveredAt < current.walletOldestDeliveredAt) current.walletOldestDeliveredAt = deliveredAt;
       if (deliveredAt > current.walletLatestDeliveredAt) current.walletLatestDeliveredAt = deliveredAt;
+      current.walletNextPayoutAt = addDays(current.walletOldestDeliveredAt, 7);
       partnerWalletSummaries.set(key, current);
     });
 
@@ -229,9 +239,11 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
         ownerEmail: contactDetails.ownerEmail,
         restaurantPhone: contactDetails.restaurantPhone,
         walletBalance: Number(walletSummary.walletBalance || 0),
-        walletUnpaidOrderCount: Number(walletSummary.walletUnpaidOrderCount || 0),
+        walletPendingPayoutOrderCount: Number(walletSummary.walletPendingPayoutOrderCount || 0),
         walletOldestDeliveredAt: walletSummary.walletOldestDeliveredAt,
         walletLatestDeliveredAt: walletSummary.walletLatestDeliveredAt,
+        walletNextPayoutAt: walletSummary.walletNextPayoutAt,
+        walletOrders: walletSummary.walletOrders || [],
         bankDetails,
         missingBankDetails: hasMissingBankDetails(bankDetails),
         periodType,
@@ -267,9 +279,11 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
         ownerEmail: contactDetails.ownerEmail,
         restaurantPhone: contactDetails.restaurantPhone,
         walletBalance: Number(walletSummary.walletBalance || 0),
-        walletUnpaidOrderCount: Number(walletSummary.walletUnpaidOrderCount || 0),
+        walletPendingPayoutOrderCount: Number(walletSummary.walletPendingPayoutOrderCount || 0),
         walletOldestDeliveredAt: walletSummary.walletOldestDeliveredAt,
         walletLatestDeliveredAt: walletSummary.walletLatestDeliveredAt,
+        walletNextPayoutAt: walletSummary.walletNextPayoutAt,
+        walletOrders: walletSummary.walletOrders || [],
         bankDetails,
         missingBankDetails: hasMissingBankDetails(bankDetails),
         periodType,
@@ -345,7 +359,7 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
           deliveryAmount: deliveryPartnerRows.reduce((sum, row) => sum + row.netPayable, 0),
           deliveryCount: deliveryPartnerRows.length,
           totalAmount:
-            partnerPeriodRows.reduce((sum, row) => sum + row.amount, 0) +
+            partnerWalletRows.reduce((sum, row) => sum + row.walletBalance, 0) +
             deliveryPartnerRows.reduce((sum, row) => sum + row.netPayable, 0)
         },
         partners: partnerRows,
@@ -387,6 +401,7 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
     const recipientType = String(req.body.recipientType || "").toUpperCase() as RecipientType;
     const periodType = String(req.body.periodType || "").toUpperCase() as PeriodType;
     const recipientId = String(req.body.recipientId || "");
+    const payAllPending = recipientType === "PARTNER" && req.body.payAllPending === true;
 
     if (!VALID_RECIPIENT_TYPES.has(recipientType)) {
       return res.status(400).json({ success: false, message: "Invalid recipient type" });
@@ -400,9 +415,12 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: "Invalid recipient" });
     }
 
-    const periodStart = new Date(req.body.periodStart);
-    const periodEnd = new Date(req.body.periodEnd);
-    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime()) || periodStart >= periodEnd) {
+    let periodStart = new Date(req.body.periodStart);
+    let periodEnd = new Date(req.body.periodEnd);
+    if (
+      !payAllPending &&
+      (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime()) || periodStart >= periodEnd)
+    ) {
       return res.status(400).json({ success: false, message: "Invalid payout period" });
     }
 
@@ -419,13 +437,25 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
 
     const orders =
       recipientType === "PARTNER"
-        ? await getPayoutOrders("PARTNER", periodStart, periodEnd, recipientId)
+        ? payAllPending
+          ? await getPendingPayoutOrders("PARTNER", recipientId)
+          : await getPayoutOrders("PARTNER", periodStart, periodEnd, recipientId)
         : (
             await getPayoutOrders("DELIVERY_PARTNER", periodStart, periodEnd)
           ).filter((order: any) => String(order.deliveryPartnerId) === String((recipient as any).userId));
 
     if (!orders.length) {
-      return res.status(400).json({ success: false, message: "No unpaid delivered orders found for this payout" });
+      return res.status(400).json({ success: false, message: "No payment-successful orders are pending payout" });
+    }
+
+    const now = new Date();
+    if (payAllPending) {
+      const deliveredDates = orders
+        .map(getOrderDeliveredAt)
+        .filter((date: Date) => !Number.isNaN(date.getTime()))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+      periodStart = deliveredDates[0] || now;
+      periodEnd = deliveredDates.length ? addDays(deliveredDates[deliveredDates.length - 1], 1) : addDays(now, 1);
     }
 
     const grossAmount = orders.reduce((sum, order: any) => {
@@ -444,7 +474,6 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
     const bankSnapshot = getBankDetails(recipient, recipientType);
     const partnerContactDetails =
       recipientType === "PARTNER" ? buildPartnerContactDetails(recipient) : null;
-    const now = new Date();
     const payout = await Payout.create({
       recipientType,
       recipientId,
