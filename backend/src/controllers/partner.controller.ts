@@ -163,7 +163,7 @@ const resolvePartnerForAuth = async (authReq: AuthRequest) => {
   return partner;
 };
 
-const getOrderEarningDate = (order: any) => new Date(order.deliveredAt || order.updatedAt || order.createdAt);
+const getOrderEarningDate = (order: any) => new Date(order.deliveredAt || order.createdAt);
 
 const addDays = (date: Date, days: number) => {
   const next = new Date(date);
@@ -1017,8 +1017,8 @@ export const getPartnerStats = async (req: Request, res: Response) => {
     const todayEarningDateFilter = {
       $or: [
         { deliveredAt: { $gte: todayStart, $lt: tomorrowStart } },
-        { deliveredAt: { $exists: false }, updatedAt: { $gte: todayStart, $lt: tomorrowStart } },
-        { deliveredAt: null, updatedAt: { $gte: todayStart, $lt: tomorrowStart } }
+        { deliveredAt: { $exists: false }, createdAt: { $gte: todayStart, $lt: tomorrowStart } },
+        { deliveredAt: null, createdAt: { $gte: todayStart, $lt: tomorrowStart } }
       ]
     };
     const [todayOrders, totalOrders, pendingOrders, totalEarningsResult, todayEarningsResult] =
@@ -1118,8 +1118,8 @@ export const getPartnerWallet = async (req: Request, res: Response) => {
     const todayEarningDateFilter = {
       $or: [
         { deliveredAt: { $gte: todayStart, $lt: tomorrowStart } },
-        { deliveredAt: { $exists: false }, updatedAt: { $gte: todayStart, $lt: tomorrowStart } },
-        { deliveredAt: null, updatedAt: { $gte: todayStart, $lt: tomorrowStart } }
+        { deliveredAt: { $exists: false }, createdAt: { $gte: todayStart, $lt: tomorrowStart } },
+        { deliveredAt: null, createdAt: { $gte: todayStart, $lt: tomorrowStart } }
       ]
     };
 
