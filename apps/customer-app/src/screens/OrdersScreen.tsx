@@ -18,6 +18,7 @@ export default function OrdersScreen({ navigation }: any) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   const loadOrders = async () => {
     try {
@@ -129,6 +130,9 @@ export default function OrdersScreen({ navigation }: any) {
     </TouchableOpacity>
   );
 
+  const displayedOrders = showAllHistory ? orders : orders.slice(0, 3);
+  const hasMoreHistory = orders.length > 3;
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -157,9 +161,31 @@ export default function OrdersScreen({ navigation }: any) {
         </View>
       ) : (
         <FlatList
-          data={orders}
+          data={displayedOrders}
           keyExtractor={(item) => item._id}
           renderItem={renderOrderItem}
+          ListHeaderComponent={
+            <View style={styles.historyHeader}>
+              <View>
+                <Text style={styles.historyTitle}>
+                  {showAllHistory ? "Complete Order History" : "Latest Orders"}
+                </Text>
+                <Text style={styles.historySubtitle}>
+                  {showAllHistory ? `${orders.length} total orders` : "Showing your latest 3 orders"}
+                </Text>
+              </View>
+              {hasMoreHistory ? (
+                <TouchableOpacity
+                  style={styles.historyButton}
+                  onPress={() => setShowAllHistory((current) => !current)}
+                >
+                  <Text style={styles.historyButtonText}>
+                    {showAllHistory ? "Show Latest 3" : "View All History"}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
           refreshControl={
@@ -234,6 +260,34 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingBottom: 20,
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 12,
+  },
+  historyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
+  },
+  historySubtitle: {
+    marginTop: 3,
+    fontSize: 13,
+    color: '#888',
+  },
+  historyButton: {
+    backgroundColor: '#FFF1E8',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  historyButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF6B35',
   },
   orderCard: {
     backgroundColor: '#fff',

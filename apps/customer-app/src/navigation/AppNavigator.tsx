@@ -107,6 +107,7 @@ export type RootStackParamList = {
   ShopDetail: { 
     shopId: string;
     shop?: Shop;
+    vegMode?: boolean;
   };
   Cart: {
     shop?: Shop;

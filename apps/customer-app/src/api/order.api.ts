@@ -84,6 +84,18 @@ export interface Order {
   cancellationReason?: string;
   customerCancellationMessage?: string;
   autoCancelledAt?: string;
+  restaurantRating?: {
+    foodQuality?: number;
+    packaging?: number;
+    overallExperience?: number;
+    comment?: string;
+  };
+  deliveryRating?: {
+    deliverySpeed?: number;
+    partnerBehavior?: number;
+    comment?: string;
+  };
+  ratingSubmittedAt?: string;
 }
 
 /**
@@ -149,4 +161,23 @@ export const getOrderDetails = (orderId: string): Promise<ApiResponse<Order>> =>
  */
 export const cancelOrder = (orderId: string): Promise<ApiResponse<any>> => {
   return apiPost<any>(`/orders/${orderId}/cancel`);
+};
+
+export const submitOrderRating = (
+  orderId: string,
+  payload: {
+    restaurantRating: {
+      foodQuality: number;
+      packaging: number;
+      overallExperience: number;
+      comment?: string;
+    };
+    deliveryRating: {
+      deliverySpeed: number;
+      partnerBehavior: number;
+      comment?: string;
+    };
+  }
+): Promise<ApiResponse<Order>> => {
+  return apiPost<Order>(`/orders/${orderId}/ratings`, payload);
 };

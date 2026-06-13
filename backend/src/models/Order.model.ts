@@ -257,6 +257,53 @@ const OrderSchema = new Schema({
     type: Date
   },
 
+  restaurantRating: {
+    foodQuality: {
+      type: Number,
+      min: 1,
+      max: 5
+    },
+    packaging: {
+      type: Number,
+      min: 1,
+      max: 5
+    },
+    overallExperience: {
+      type: Number,
+      min: 1,
+      max: 5
+    },
+    comment: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: ""
+    }
+  },
+
+  deliveryRating: {
+    deliverySpeed: {
+      type: Number,
+      min: 1,
+      max: 5
+    },
+    partnerBehavior: {
+      type: Number,
+      min: 1,
+      max: 5
+    },
+    comment: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: ""
+    }
+  },
+
+  ratingSubmittedAt: {
+    type: Date
+  },
+
   codCollection: {
     collectedAmount: {
       type: Number,
@@ -336,5 +383,6 @@ OrderSchema.index({ "selfDelivery.expiresAt": 1 });
 OrderSchema.index({ "selfDelivery.reservedFor": 1, status: 1 });
 OrderSchema.index({ deliveryBundleId: 1, deliveryBundleSequence: 1 });
 OrderSchema.index({ deliveryBundleId: 1, status: 1 });
+OrderSchema.index({ customerId: 1, ratingSubmittedAt: -1 });
 
 export default model("Order", OrderSchema);

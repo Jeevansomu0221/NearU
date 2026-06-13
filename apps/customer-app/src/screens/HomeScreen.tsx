@@ -6,6 +6,7 @@ import {
   Image,
   Linking,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -19,9 +20,11 @@ import * as Location from "expo-location";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import { getPartners } from "../api/menu.api";
 import { getMyOrders } from "../api/order.api";
+import { addFavoriteRestaurant, getMyFavorites, removeFavoriteRestaurant } from "../api/user.api";
 import { useCart } from "../context/CartContext";
 import { getPublicAddressText, getPublicShopName } from "../utils/display";
 import { getOrderBadgeCount } from "../utils/orderBadges";
+import { getVegModePreference, setVegModePreference } from "../utils/vegMode";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
@@ -63,20 +66,20 @@ const categoryLabels: Record<string, string> = {
   other: "Local Shop"
 };
 
-const filterOptions = [
-  { key: "all", label: "All", icon: "view-grid-outline" },
-  { key: "tiffin-center", label: "Tiffins", icon: "food-outline" },
-  { key: "cloud-kitchen", label: "Cloud Kitchen", icon: "chef-hat" },
+const categoryOptions = [
+  { key: "all", label: "All", icon: "storefront-outline" },
+  { key: "bakery", label: "Bakery", icon: "baguette" },
   { key: "mini-restaurant", label: "Restaurant", icon: "silverware-fork-knife" },
-  { key: "bakery", label: "Bakery", icon: "cupcake-outline" },
+  { key: "tiffin-center", label: "Tiffins", icon: "food-variant" },
+  { key: "cloud-kitchen", label: "Cloud Kitchen", icon: "chef-hat" },
   { key: "fast-food", label: "Fast Food", icon: "hamburger" },
-  { key: "sweets", label: "Sweets", icon: "cookie-outline" },
-  { key: "other", label: "More", icon: "storefront-outline" }
-];
+  { key: "sweets", label: "Sweets", icon: "candy-outline" },
+  { key: "ice-creams", label: "Ice Creams", icon: "ice-cream" }
+] as const;
 
 const NEARBY_RADIUS_KM = 3;
 const LOCATION_TIMEOUT_MS = 8000;
-const PERMISSION_TIMEOUT_MS = 10000;
+const INITIAL_LOCATION_REQUEST_DELAY_MS = 1200;
 const LOCATION_PERMISSION_MESSAGE = `Allow location to view shops within ${NEARBY_RADIUS_KM} km of you.`;
 
 type LocationPermissionPrompt = {
@@ -127,11 +130,13 @@ export default function HomeScreen({ navigation }: Props) {
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [locationMessage, setLocationMessage] = useState(`Showing shops within ${NEARBY_RADIUS_KM} km`);
   const [locationPermissionPrompt, setLocationPermissionPrompt] = useState<LocationPermissionPrompt | null>(null);
   const [activeOrderCount, setActiveOrderCount] = useState(0);
+  const [vegMode, setVegMode] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [favoriteRestaurantIds, setFavoriteRestaurantIds] = useState<Set<string>>(new Set());
 
   const loadOrderBadgeCount = useCallback(async () => {
     try {
@@ -143,15 +148,34 @@ export default function HomeScreen({ navigation }: Props) {
     }
   }, []);
 
-  useEffect(() => {
-    loadNearbyShops();
-    loadOrderBadgeCount();
+  const loadFavorites = useCallback(async () => {
+    try {
+      const response = await getMyFavorites();
+      const restaurants = response.data?.restaurants || [];
+      setFavoriteRestaurantIds(new Set(restaurants.map((restaurant) => restaurant._id)));
+    } catch {
+      setFavoriteRestaurantIds(new Set());
+    }
   }, []);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", loadOrderBadgeCount);
+    const locationTimer = setTimeout(() => {
+      promptForLocationPermission();
+    }, INITIAL_LOCATION_REQUEST_DELAY_MS);
+    loadOrderBadgeCount();
+    loadFavorites();
+    getVegModePreference().then(setVegMode).catch(() => {});
+
+    return () => clearTimeout(locationTimer);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      loadOrderBadgeCount();
+      loadFavorites();
+    });
     return unsubscribe;
-  }, [loadOrderBadgeCount, navigation]);
+  }, [loadFavorites, loadOrderBadgeCount, navigation]);
 
   const openLocationSettings = () => {
     Linking.openSettings().catch(() => {
@@ -168,10 +192,7 @@ export default function HomeScreen({ navigation }: Props) {
             { text: "Not Now", style: "cancel" },
             { text: "Open Settings", onPress: openLocationSettings }
           ]
-        : [
-            { text: "Not Now", style: "cancel" },
-            { text: "Allow Location", onPress: () => loadNearbyShops() }
-          ]
+        : [{ text: "OK" }]
     );
   };
 
@@ -190,15 +211,7 @@ export default function HomeScreen({ navigation }: Props) {
   };
 
   const requestHomeLocationPermission = async () => {
-    const existingPermission = await resolveWithTimeout(
-      Location.getForegroundPermissionsAsync(),
-      PERMISSION_TIMEOUT_MS
-    );
-    if (!existingPermission) {
-      requireLocationPermission(false, "Location permission did not open. Tap Allow Location to try again.");
-      return false;
-    }
-
+    const existingPermission = await Location.getForegroundPermissionsAsync();
     if (existingPermission.status === "granted") {
       return true;
     }
@@ -208,12 +221,11 @@ export default function HomeScreen({ navigation }: Props) {
       return false;
     }
 
-    const permission = await resolveWithTimeout(
-      Location.requestForegroundPermissionsAsync(),
-      PERMISSION_TIMEOUT_MS
-    );
-    if (!permission) {
-      requireLocationPermission(false, "Location permission did not open. Tap Allow Location to try again.");
+    let permission: Location.LocationPermissionResponse;
+    try {
+      permission = await Location.requestForegroundPermissionsAsync();
+    } catch {
+      requireLocationPermission(true);
       return false;
     }
 
@@ -221,7 +233,7 @@ export default function HomeScreen({ navigation }: Props) {
       return true;
     }
 
-    requireLocationPermission(permission.canAskAgain === false);
+    requireLocationPermission(true);
     return false;
   };
 
@@ -230,6 +242,7 @@ export default function HomeScreen({ navigation }: Props) {
     const approvedShops = extractShops(fallbackResponse);
 
     setShops(approvedShops);
+    setLocationPermissionPrompt(null);
     setLocationMessage(messageForCount(approvedShops.length));
   };
 
@@ -252,10 +265,10 @@ export default function HomeScreen({ navigation }: Props) {
         LOCATION_TIMEOUT_MS
       );
       if (locationServicesEnabled === false) {
-        requireLocationPermission(
-          true,
-          "Turn on device location to view shops near you.",
-          false
+        await loadApprovedShops((count) =>
+          count > 0
+            ? "Showing approved shops. Turn on device location to sort by nearby shops."
+            : "No approved shops found. Check partner approval and setup status."
         );
         return;
       }
@@ -264,19 +277,19 @@ export default function HomeScreen({ navigation }: Props) {
       try {
         location = await getCurrentPositionWithTimeout();
       } catch {
-        requireLocationPermission(
-          true,
-          "We could not get your location. Turn on device location or pull to refresh to try again.",
-          false
+        await loadApprovedShops((count) =>
+          count > 0
+            ? "Showing approved shops while we retry nearby sorting."
+            : "No approved shops found. Check partner approval and setup status."
         );
         return;
       }
 
       if (!location) {
-        requireLocationPermission(
-          true,
-          "We could not get your location yet. Turn on device location or pull to refresh to try again.",
-          false
+        await loadApprovedShops((count) =>
+          count > 0
+            ? "Showing approved shops while we wait for your location. Pull to refresh to try nearby sorting."
+            : "No approved shops found. Check partner approval and setup status."
         );
         return;
       }
@@ -321,6 +334,17 @@ export default function HomeScreen({ navigation }: Props) {
     }
   };
 
+  const promptForLocationPermission = async () => {
+    const hasLocationPermission = await requestHomeLocationPermission();
+    if (!hasLocationPermission) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    await loadNearbyShops();
+  };
+
   const formatAddress = (address: string | AddressObject): string => {
     if (!address) return "Address not available";
     if (typeof address === "string") return getPublicAddressText(address);
@@ -331,9 +355,7 @@ export default function HomeScreen({ navigation }: Props) {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
     return shops.filter((shop) => {
-      const matchesFilter = selectedFilter === "all" || shop.category === selectedFilter;
-      if (!matchesFilter) return false;
-
+      if (activeCategory !== "all" && shop.category !== activeCategory) return false;
       if (!normalizedQuery) return true;
 
       const haystack = [
@@ -348,10 +370,65 @@ export default function HomeScreen({ navigation }: Props) {
 
       return haystack.includes(normalizedQuery);
     });
-  }, [searchQuery, selectedFilter, shops]);
+  }, [activeCategory, searchQuery, shops]);
 
   const openNowCount = shops.filter((shop) => shop.isOpen).length;
   const cartItemCount = getItemCount();
+
+  const updateVegMode = (enabled: boolean) => {
+    setVegMode(enabled);
+    setVegModePreference(enabled).catch(() => {});
+  };
+
+  const toggleFavorite = async (shop: Shop) => {
+    const wasFavorite = favoriteRestaurantIds.has(shop._id);
+    const nextIds = new Set(favoriteRestaurantIds);
+    if (wasFavorite) {
+      nextIds.delete(shop._id);
+    } else {
+      nextIds.add(shop._id);
+    }
+    setFavoriteRestaurantIds(nextIds);
+
+    try {
+      const response = wasFavorite
+        ? await removeFavoriteRestaurant(shop._id)
+        : await addFavoriteRestaurant(shop._id);
+      const restaurants = response.data?.restaurants || [];
+      setFavoriteRestaurantIds(new Set(restaurants.map((restaurant) => restaurant._id)));
+    } catch (error: any) {
+      setFavoriteRestaurantIds(favoriteRestaurantIds);
+      Alert.alert("Favorites", error?.message || "Could not update favorites right now.");
+    }
+  };
+
+  const renderCategoryChips = () => (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="always"
+      contentContainerStyle={styles.categoryRow}
+    >
+      {categoryOptions.map((category) => {
+        const isActive = activeCategory === category.key;
+        return (
+          <TouchableOpacity
+            key={category.key}
+            style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+            onPress={() => setActiveCategory(category.key)}
+            activeOpacity={0.85}
+          >
+            <MaterialCommunityIcons
+              name={category.icon as any}
+              size={15}
+              color={isActive ? "#FFFFFF" : "#FF6B35"}
+            />
+            <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>{category.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
 
   const renderHeroArt = () => (
     <View style={styles.heroArt}>
@@ -427,42 +504,26 @@ export default function HomeScreen({ navigation }: Props) {
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search for shops, food or cuisines..."
+          placeholder="Search for shops, food"
           placeholderTextColor="#A0958D"
         />
         <TouchableOpacity
-          style={styles.searchFilterButton}
-          onPress={() => Alert.alert("Filters", "Advanced sorting and filters can be added next.")}
+          style={[styles.vegSearchToggle, vegMode && styles.vegSearchToggleActive]}
+          onPress={() => updateVegMode(!vegMode)}
+          activeOpacity={0.85}
         >
-          <Feather name="sliders" size={16} color="#FF6B35" />
+          <View style={[styles.vegToggleKnob, vegMode && styles.vegToggleKnobActive]}>
+            <MaterialCommunityIcons name="leaf" size={10} color={vegMode ? "#2B9C4A" : "#9BA79E"} />
+          </View>
+          <View>
+            <Text style={[styles.vegSearchToggleText, vegMode && styles.vegSearchToggleTextActive]}>Veg</Text>
+            <Text style={[styles.vegSearchToggleState, vegMode && styles.vegSearchToggleStateActive]}>
+              {vegMode ? "ON" : "OFF"}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
-
-      <FlatList
-        data={filterOptions}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.key}
-        contentContainerStyle={styles.filtersRow}
-        renderItem={({ item }) => {
-          const active = selectedFilter === item.key;
-
-          return (
-            <TouchableOpacity
-              style={[styles.filterChip, active && styles.filterChipActive]}
-              onPress={() => setSelectedFilter(item.key)}
-            >
-              <MaterialCommunityIcons
-                name={item.icon as any}
-                size={15}
-                color={active ? "#FFFFFF" : "#605750"}
-                style={styles.filterChipIcon}
-              />
-              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{item.label}</Text>
-            </TouchableOpacity>
-          );
-        }}
-      />
+      {renderCategoryChips()}
     </View>
   );
 
@@ -471,6 +532,7 @@ export default function HomeScreen({ navigation }: Props) {
     const category = categoryLabels[item.category] || item.category;
     const address = formatAddress(item.address) || "Address not available";
     const imageUrl = item.shopImageUrl || shopPlaceholders[item.category] || shopPlaceholders["mini-restaurant"];
+    const isFavorite = favoriteRestaurantIds.has(item._id);
 
     return (
       <TouchableOpacity
@@ -479,7 +541,8 @@ export default function HomeScreen({ navigation }: Props) {
         onPress={() =>
           navigation.navigate("ShopDetail", {
             shopId: item._id,
-            shop: item
+            shop: item,
+            vegMode
           })
         }
       >
@@ -494,18 +557,34 @@ export default function HomeScreen({ navigation }: Props) {
               <Text style={styles.shopCategory}>{category}</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.menuButton}
-              onPress={() =>
-                navigation.navigate("ShopDetail", {
-                  shopId: item._id,
-                  shop: item
-                })
-              }
-            >
-              <Text style={styles.menuButtonText}>Menu</Text>
-              <Feather name="chevron-right" size={14} color="#FF6B35" />
-            </TouchableOpacity>
+            <View style={styles.shopActions}>
+              <TouchableOpacity
+                style={[styles.favoriteButton, isFavorite && styles.favoriteButtonActive]}
+                onPress={() => toggleFavorite(item)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={isFavorite ? "Remove restaurant from favorites" : "Add restaurant to favorites"}
+              >
+                <MaterialCommunityIcons
+                  name={isFavorite ? "heart" : "heart-outline"}
+                  size={17}
+                  color={isFavorite ? "#E11D48" : "#FF6B35"}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.menuButton}
+                onPress={() =>
+                  navigation.navigate("ShopDetail", {
+                    shopId: item._id,
+                    shop: item,
+                    vegMode
+                  })
+                }
+              >
+                <Text style={styles.menuButtonText}>Menu</Text>
+                <Feather name="chevron-right" size={14} color="#FF6B35" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.addressRow}>
@@ -559,17 +638,13 @@ export default function HomeScreen({ navigation }: Props) {
       </Text>
       <TouchableOpacity
         style={styles.permissionButton}
-        onPress={locationPermissionPrompt?.canOpenSettings ? openLocationSettings : () => loadNearbyShops()}
+        onPress={openLocationSettings}
       >
-        <Text style={styles.permissionButtonText}>
-          {locationPermissionPrompt?.canOpenSettings ? "Open Settings" : "Allow Location"}
-        </Text>
+        <Text style={styles.permissionButtonText}>Open Settings</Text>
       </TouchableOpacity>
-      {locationPermissionPrompt?.canOpenSettings ? (
-        <TouchableOpacity style={styles.permissionRetryButton} onPress={() => loadNearbyShops()}>
-          <Text style={styles.permissionRetryText}>I allowed it, try again</Text>
-        </TouchableOpacity>
-      ) : null}
+      <TouchableOpacity style={styles.permissionRetryButton} onPress={() => loadNearbyShops()}>
+        <Text style={styles.permissionRetryText}>I allowed it, try again</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -586,9 +661,11 @@ export default function HomeScreen({ navigation }: Props) {
         data={filteredShops}
         keyExtractor={(item) => item._id}
         renderItem={renderShopItem}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={renderHeader()}
         ListEmptyComponent={loading ? renderLoading : locationPermissionPrompt ? renderLocationRequired : renderEmpty}
         contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom, 14) }]}
+        keyboardShouldPersistTaps="always"
+        keyboardDismissMode="none"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops(true)} tintColor="#FF6B35" />
         }
@@ -881,43 +958,80 @@ const styles = StyleSheet.create({
     color: "#2A211B",
     paddingVertical: 0
   },
-  searchFilterButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#FFF4EB",
-    alignItems: "center",
-    justifyContent: "center"
+  categoryRow: {
+    paddingTop: 9,
+    paddingBottom: 2,
+    gap: 8
   },
-  filtersRow: {
-    paddingTop: 10,
-    paddingBottom: 2
-  },
-  filterChip: {
+  categoryChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#EEE8E0",
-    marginRight: 7
+    borderColor: "#F1DED0",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6
   },
-  filterChipActive: {
+  categoryChipActive: {
     backgroundColor: "#FF6B35",
     borderColor: "#FF6B35"
   },
-  filterChipIcon: {
-    marginRight: 5
-  },
-  filterChipText: {
+  categoryChipText: {
     fontSize: 11,
-    fontWeight: "700",
-    color: "#4F4740"
+    fontWeight: "900",
+    color: "#6B5E55"
   },
-  filterChipTextActive: {
+  categoryChipTextActive: {
     color: "#FFFFFF"
+  },
+  vegSearchToggle: {
+    minWidth: 62,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F5F0EA",
+    borderWidth: 1,
+    borderColor: "#E3D8CC",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    gap: 5
+  },
+  vegSearchToggleActive: {
+    backgroundColor: "#2B9C4A",
+    borderColor: "#2B9C4A"
+  },
+  vegToggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  vegToggleKnobActive: {
+    backgroundColor: "#FFFFFF"
+  },
+  vegSearchToggleText: {
+    fontSize: 9,
+    lineHeight: 10,
+    fontWeight: "900",
+    color: "#756B63"
+  },
+  vegSearchToggleTextActive: {
+    color: "#FFFFFF"
+  },
+  vegSearchToggleState: {
+    marginTop: 1,
+    fontSize: 8,
+    lineHeight: 9,
+    fontWeight: "900",
+    color: "#9A8E84"
+  },
+  vegSearchToggleStateActive: {
+    color: "#E9FFED"
   },
   shopCard: {
     marginHorizontal: 14,
@@ -952,6 +1066,24 @@ const styles = StyleSheet.create({
   shopMainInfo: {
     flex: 1,
     paddingRight: 8
+  },
+  shopActions: {
+    alignItems: "flex-end",
+    gap: 8
+  },
+  favoriteButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#FFF4EB",
+    borderWidth: 1,
+    borderColor: "#F2D7C6",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  favoriteButtonActive: {
+    backgroundColor: "#FFF1F3",
+    borderColor: "#FFC8D2"
   },
   shopName: {
     fontSize: 14,

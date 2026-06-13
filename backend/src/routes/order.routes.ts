@@ -12,6 +12,7 @@ import {
   getMyOrders,
   getOrderDetails,
   cancelOrder,
+  submitOrderRating,
   getAvailableDeliveryJobs,
   acceptDeliveryJob,
   rejectDeliveryJob
@@ -46,6 +47,13 @@ router.get(
   authMiddleware, 
   roleMiddleware([...CONSUMER_APP_ROLES]), 
   getMyOrders
+);
+
+router.post(
+  "/:orderId/ratings",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  submitOrderRating
 );
 
 // Get order details (customer only)

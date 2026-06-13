@@ -9,10 +9,12 @@ import {
   BackHandler,
   TouchableOpacity,
   RefreshControl,
-  Linking
+  Linking,
+  TextInput
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { getOrderDetails } from "../api/order.api";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { cancelOrder, getOrderDetails, submitOrderRating } from "../api/order.api";
 import type { Order } from "../api/order.api";
 import { getPublicShopName } from "../utils/display";
 
@@ -22,8 +24,12 @@ type TimelineStep = {
   caption: string;
 };
 
+type RestaurantRatingKey = "foodQuality" | "packaging" | "overallExperience";
+type DeliveryRatingKey = "deliverySpeed" | "partnerBehavior";
+
 const STATUS_STEPS: TimelineStep[] = [
-  { status: "CONFIRMED", label: "Confirmed", caption: "Restaurant accepted your order" },
+  { status: "CONFIRMED", label: "Order placed", caption: "Waiting for restaurant confirmation" },
+  { status: "ACCEPTED", label: "Restaurant confirmed", caption: "Restaurant accepted your order" },
   { status: "PREPARING", label: "Preparing", caption: "Food is getting ready" },
   { status: "READY", label: "Ready", caption: "Packed and ready for pickup" },
   { status: "ASSIGNED", label: "Assigned", caption: "Delivery partner assigned" },
@@ -36,11 +42,26 @@ const formatAmount = (value = 0) => {
   return `Rs ${rounded || "0"}`;
 };
 
+const CANCELLABLE_ORDER_STATUSES = new Set(["PENDING", "CONFIRMED"]);
+
 export default function OrderStatusScreen({ route, navigation }: any) {
   const { orderId } = route.params;
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [restaurantRatings, setRestaurantRatings] = useState<Record<RestaurantRatingKey, number>>({
+    foodQuality: 0,
+    packaging: 0,
+    overallExperience: 0
+  });
+  const [deliveryRatings, setDeliveryRatings] = useState<Record<DeliveryRatingKey, number>>({
+    deliverySpeed: 0,
+    partnerBehavior: 0
+  });
+  const [restaurantComment, setRestaurantComment] = useState("");
+  const [deliveryComment, setDeliveryComment] = useState("");
 
   const loadOrderDetails = useCallback(async (options?: { silent?: boolean }) => {
     try {
@@ -71,6 +92,22 @@ export default function OrderStatusScreen({ route, navigation }: any) {
 
     return () => clearInterval(interval);
   }, [loadOrderDetails]);
+
+  useEffect(() => {
+    if (!order?.ratingSubmittedAt) return;
+
+    setRestaurantRatings({
+      foodQuality: order.restaurantRating?.foodQuality || 0,
+      packaging: order.restaurantRating?.packaging || 0,
+      overallExperience: order.restaurantRating?.overallExperience || 0
+    });
+    setDeliveryRatings({
+      deliverySpeed: order.deliveryRating?.deliverySpeed || 0,
+      partnerBehavior: order.deliveryRating?.partnerBehavior || 0
+    });
+    setRestaurantComment(order.restaurantRating?.comment || "");
+    setDeliveryComment(order.deliveryRating?.comment || "");
+  }, [order]);
 
   useFocusEffect(
     useCallback(() => {
@@ -104,6 +141,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       case "DELIVERED":
         return { bg: "#DDF8E5", text: "#216E39", pill: "#216E39" };
       case "CONFIRMED":
+      case "ACCEPTED":
       case "ASSIGNED":
       case "PICKED_UP":
         return { bg: "#E8F1FF", text: "#225EA8", pill: "#225EA8" };
@@ -122,9 +160,11 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const getStatusText = (status: string) => {
     switch (status) {
       case "PENDING":
-        return "Waiting for confirmation";
+        return "Payment pending";
       case "CONFIRMED":
-        return "Order confirmed";
+        return "Order placed";
+      case "ACCEPTED":
+        return "Restaurant confirmed";
       case "PREPARING":
         return "Preparing your food";
       case "READY":
@@ -162,9 +202,11 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const getStatusDescription = (status: string) => {
     switch (status) {
       case "PENDING":
-        return "We are waiting for the restaurant to confirm your order.";
+        return "Your order is waiting for payment confirmation.";
       case "CONFIRMED":
-        return "The restaurant has accepted your order and will start preparing it.";
+        return "Your order has been placed. The restaurant will confirm it shortly.";
+      case "ACCEPTED":
+        return "The restaurant has confirmed your order and will start preparing it.";
       case "PREPARING":
         return "Your items are being prepared now.";
       case "READY":
@@ -198,6 +240,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
     return STATUS_STEPS.findIndex((step) => step.status === order.status);
   }, [order]);
 
+  const canCancelOrder = Boolean(order && CANCELLABLE_ORDER_STATUSES.has(order.status));
+
   const openPhone = async (phone?: string) => {
     if (!phone) return;
 
@@ -214,6 +258,104 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       Alert.alert("Error", "Unable to open the dialer");
     }
   };
+
+  const confirmCancelOrder = () => {
+    if (!order || !canCancelOrder || cancelling) return;
+
+    Alert.alert(
+      "Cancel order?",
+      "You can cancel only before the restaurant confirms the order. Once cancelled, this order cannot be restored.",
+      [
+        { text: "Keep Order", style: "cancel" },
+        {
+          text: "Cancel Order",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setCancelling(true);
+              const response = await cancelOrder(order._id);
+              if (!response.success) {
+                throw new Error(response.message || "Failed to cancel order");
+              }
+
+              setOrder(response.data || { ...order, status: "CANCELLED", paymentStatus: "CANCELLED" });
+              Alert.alert("Order Cancelled", "Your order has been cancelled.");
+            } catch (error: any) {
+              Alert.alert(
+                "Could not cancel order",
+                error?.message || "This order can only be cancelled before the restaurant confirms it."
+              );
+              loadOrderDetails({ silent: true });
+            } finally {
+              setCancelling(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const canSubmitRatings = [
+    restaurantRatings.foodQuality,
+    restaurantRatings.packaging,
+    restaurantRatings.overallExperience,
+    deliveryRatings.deliverySpeed,
+    deliveryRatings.partnerBehavior
+  ].every((score) => score >= 1 && score <= 5);
+
+  const handleSubmitRatings = async () => {
+    if (!order || ratingSubmitting) return;
+
+    if (!canSubmitRatings) {
+      Alert.alert("Ratings", "Please rate every restaurant and delivery category.");
+      return;
+    }
+
+    try {
+      setRatingSubmitting(true);
+      const response = await submitOrderRating(order._id, {
+        restaurantRating: {
+          ...restaurantRatings,
+          comment: restaurantComment.trim()
+        },
+        deliveryRating: {
+          ...deliveryRatings,
+          comment: deliveryComment.trim()
+        }
+      });
+
+      if (!response.success || !response.data) {
+        Alert.alert("Ratings", response.message || "Failed to submit ratings");
+        return;
+      }
+
+      setOrder(response.data);
+      Alert.alert("Thank you", "Your ratings have been submitted.");
+    } catch (error: any) {
+      Alert.alert("Ratings", error?.message || "Failed to submit ratings");
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
+
+  const renderStars = (value: number, onChange: (nextValue: number) => void, disabled = false) => (
+    <View style={styles.ratingStars}>
+      {[1, 2, 3, 4, 5].map((score) => (
+        <TouchableOpacity
+          key={score}
+          onPress={() => onChange(score)}
+          disabled={disabled}
+          style={styles.ratingStarButton}
+        >
+          <MaterialCommunityIcons
+            name={score <= value ? "star" : "star-outline"}
+            size={26}
+            color={score <= value ? "#F59E0B" : "#D0C5BA"}
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
   if (loading) {
     return (
@@ -247,6 +389,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const deliveryGst = order.deliveryGst ?? deliveryFee * 0.18;
   const platformFee = order.platformFee ?? 0;
   const taxDiscount = order.taxDiscount ?? foodGst + deliveryGst + platformFee;
+  const hasSubmittedRating = Boolean(order.ratingSubmittedAt);
+  const canRateOrder = order.status === "DELIVERED";
 
   return (
     <ScrollView
@@ -448,6 +592,102 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         <Text style={styles.offerNote}>You saved {formatAmount(taxDiscount)} with waived GST and platform fee.</Text>
       </View>
 
+      {canRateOrder ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Rate this order</Text>
+          {hasSubmittedRating ? (
+            <Text style={styles.ratingSubmittedText}>Thanks for rating this order. Your feedback has been saved.</Text>
+          ) : (
+            <Text style={styles.ratingHint}>Rate the restaurant and delivery separately after completion.</Text>
+          )}
+
+          <View style={styles.ratingGroup}>
+            <Text style={styles.ratingGroupTitle}>Restaurant Rating</Text>
+            <View style={styles.ratingRowBlock}>
+              <Text style={styles.ratingLabel}>Food Quality</Text>
+              {renderStars(restaurantRatings.foodQuality, (score) =>
+                setRestaurantRatings((current) => ({ ...current, foodQuality: score })), hasSubmittedRating)}
+            </View>
+            <View style={styles.ratingRowBlock}>
+              <Text style={styles.ratingLabel}>Packaging</Text>
+              {renderStars(restaurantRatings.packaging, (score) =>
+                setRestaurantRatings((current) => ({ ...current, packaging: score })), hasSubmittedRating)}
+            </View>
+            <View style={styles.ratingRowBlock}>
+              <Text style={styles.ratingLabel}>Overall Experience</Text>
+              {renderStars(restaurantRatings.overallExperience, (score) =>
+                setRestaurantRatings((current) => ({ ...current, overallExperience: score })), hasSubmittedRating)}
+            </View>
+            <TextInput
+              style={styles.ratingCommentInput}
+              value={restaurantComment}
+              onChangeText={setRestaurantComment}
+              editable={!hasSubmittedRating}
+              multiline
+              placeholder="Optional restaurant feedback"
+              placeholderTextColor="#A3968D"
+            />
+          </View>
+
+          <View style={styles.ratingGroup}>
+            <Text style={styles.ratingGroupTitle}>Delivery Rating</Text>
+            <View style={styles.ratingRowBlock}>
+              <Text style={styles.ratingLabel}>Delivery Speed</Text>
+              {renderStars(deliveryRatings.deliverySpeed, (score) =>
+                setDeliveryRatings((current) => ({ ...current, deliverySpeed: score })), hasSubmittedRating)}
+            </View>
+            <View style={styles.ratingRowBlock}>
+              <Text style={styles.ratingLabel}>Delivery Partner Behavior</Text>
+              {renderStars(deliveryRatings.partnerBehavior, (score) =>
+                setDeliveryRatings((current) => ({ ...current, partnerBehavior: score })), hasSubmittedRating)}
+            </View>
+            <TextInput
+              style={styles.ratingCommentInput}
+              value={deliveryComment}
+              onChangeText={setDeliveryComment}
+              editable={!hasSubmittedRating}
+              multiline
+              placeholder="Optional delivery feedback"
+              placeholderTextColor="#A3968D"
+            />
+          </View>
+
+          {!hasSubmittedRating ? (
+            <TouchableOpacity
+              style={[styles.primaryButton, (!canSubmitRatings || ratingSubmitting) && styles.primaryButtonDisabled]}
+              onPress={handleSubmitRatings}
+              disabled={!canSubmitRatings || ratingSubmitting}
+            >
+              {ratingSubmitting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Submit Ratings</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
+      {canCancelOrder ? (
+        <View style={[styles.sectionCard, styles.cancelCard]}>
+          <Text style={styles.cancelTitle}>Need to cancel?</Text>
+          <Text style={styles.cancelText}>
+            You can cancel this order only before the restaurant confirms it.
+          </Text>
+          <TouchableOpacity
+            style={[styles.cancelButton, cancelling && styles.cancelButtonDisabled]}
+            onPress={confirmCancelOrder}
+            disabled={cancelling}
+          >
+            {cancelling ? (
+              <ActivityIndicator color="#B42318" />
+            ) : (
+              <Text style={styles.cancelButtonText}>Cancel Order</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       <View style={styles.supportCard}>
         <Text style={styles.supportTitle}>Need help with this order?</Text>
         <Text style={styles.supportText}>
@@ -579,6 +819,38 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#2C2018",
     marginBottom: 14
+  },
+  cancelCard: {
+    backgroundColor: "#FFF8F4",
+    borderColor: "#FFD7C3"
+  },
+  cancelTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 6
+  },
+  cancelText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#7B6D63",
+    marginBottom: 12
+  },
+  cancelButton: {
+    borderWidth: 1,
+    borderColor: "#F5B4AE",
+    backgroundColor: "#FFF1F0",
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: "center"
+  },
+  cancelButtonDisabled: {
+    opacity: 0.65
+  },
+  cancelButtonText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#B42318"
   },
   timeline: {
     paddingTop: 2
@@ -774,6 +1046,62 @@ const styles = StyleSheet.create({
     color: "#216E39",
     fontWeight: "700"
   },
+  ratingHint: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#6B5E55",
+    marginBottom: 14
+  },
+  ratingSubmittedText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#216E39",
+    fontWeight: "700",
+    marginBottom: 14
+  },
+  ratingGroup: {
+    backgroundColor: "#FFFCF8",
+    borderWidth: 1,
+    borderColor: "#F2E7DB",
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12
+  },
+  ratingGroupTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#2C2018",
+    marginBottom: 10
+  },
+  ratingRowBlock: {
+    marginBottom: 12
+  },
+  ratingLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#6B5E55",
+    marginBottom: 6
+  },
+  ratingStars: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  ratingStarButton: {
+    paddingRight: 4,
+    paddingVertical: 2
+  },
+  ratingCommentInput: {
+    minHeight: 70,
+    borderWidth: 1,
+    borderColor: "#E6D8CB",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: "#2C2018",
+    textAlignVertical: "top",
+    backgroundColor: "#FFFFFF"
+  },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -819,6 +1147,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: "center"
+  },
+  primaryButtonDisabled: {
+    opacity: 0.55
   },
   primaryButtonText: {
     color: "#FFFFFF",

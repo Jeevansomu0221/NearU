@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -24,7 +24,9 @@ import {
   addAddress,
   setDefaultAddress,
   deleteAddress,
+  getMyFavorites,
   deleteMyAccount,
+  type FavoriteRestaurant,
   type SavedAddress,
   type UserProfile
 } from "../api/user.api";
@@ -35,6 +37,7 @@ import {
   getSupportFAQs,
   sendSupportMessage,
   type FAQEntry,
+  type SupportTicketCategory,
   type SupportTicket
 } from "../api/support.api";
 import { buildLegalUrl } from "../constants/legal";
@@ -42,9 +45,9 @@ import { getPublicShopName } from "../utils/display";
 import { unregisterPushNotifications } from "../services/notifications";
 
 const supportItems = [
-  { icon: "headset", title: "Customer Support", detail: "Start a support chat connected to Vyaha admin." },
+  { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha admin." },
   { icon: "help-circle-outline", title: "FAQs", detail: "Delivery timings, cancellations, refunds, and account help." },
-  { icon: "alert-circle-outline", title: "Report an Issue", detail: "Report payment, order, delivery, or account problems." }
+  { icon: "alert-circle-outline", title: "Report an Issue", detail: "App bugs, UI issues, payments, feature requests, and platform problems." }
 ] as const;
 
 const formatCurrency = (value?: number) => `Rs ${Number(value || 0).toFixed(0)}`;
@@ -166,6 +169,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [supportSubject, setSupportSubject] = useState("Customer support");
   const [supportMessage, setSupportMessage] = useState("");
   const [supportSending, setSupportSending] = useState(false);
+  const [favoriteRestaurants, setFavoriteRestaurants] = useState<FavoriteRestaurant[]>([]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -250,6 +254,9 @@ export default function ProfileScreen({ navigation, route }: any) {
         } else {
           setOrders([]);
         }
+
+        const favoritesResponse = await getMyFavorites().catch(() => null);
+        setFavoriteRestaurants(favoritesResponse?.data?.restaurants || []);
       }
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to load profile");
@@ -521,8 +528,12 @@ export default function ProfileScreen({ navigation, route }: any) {
     Alert.alert(title, message);
   };
 
+  const getSupportCategoryForMode = (mode: "chat" | "report"): SupportTicketCategory =>
+    mode === "report" ? "REPORT_ISSUE" : "CUSTOMER_SUPPORT";
+
   const openSupportModal = async (mode: "chat" | "faq" | "report") => {
     setSupportModal(mode);
+    setSupportTickets([]);
     if (mode === "report") {
       setSupportSubject((current) => current && current !== "Customer support" ? current : "Report an issue");
     } else if (mode === "chat") {
@@ -534,7 +545,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         const response = await getSupportFAQs();
         setFaqs(response.data || []);
       } else {
-        const response = await getMySupportTickets();
+        const response = await getMySupportTickets(getSupportCategoryForMode(mode));
         setSupportTickets(response.data || []);
       }
     } catch (error: any) {
@@ -569,9 +580,8 @@ export default function ProfileScreen({ navigation, route }: any) {
       }
 
       setSupportMessage("");
-      const ticketsResponse = await getMySupportTickets();
+      const ticketsResponse = await getMySupportTickets(category);
       setSupportTickets(ticketsResponse.data || []);
-      Alert.alert("Support", "Your message has been sent to the Vyaha admin panel.");
     } catch (error: any) {
       Alert.alert("Support", error.message || "Failed to send support request");
     } finally {
@@ -639,8 +649,8 @@ export default function ProfileScreen({ navigation, route }: any) {
               <>
                 <Text style={styles.supportIntro}>
                   {isReport
-                    ? "Tell us what went wrong. This creates a high-priority support ticket for the admin team."
-                    : "Send a message to Vyaha support. Admin replies will appear in this conversation."}
+                    ? "Report app bugs, UI issues, payment problems, feature requests, or other platform problems. This stays separate from order support."
+                    : "Chat with Vyaha admin for order related help. Replies stay in this customer support conversation."}
                 </Text>
 
                 {activeTicket ? (
@@ -676,7 +686,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   style={[styles.supportInput, focusedField === "supportMessage" && styles.inputFocused]}
                   value={supportMessage}
                   onChangeText={setSupportMessage}
-                  placeholder={isReport ? "Describe the issue, order ID, payment reference, or delivery problem..." : "Type your message..."}
+                  placeholder={isReport ? "Describe the app bug, UI issue, payment problem, feature request, or platform issue..." : "Type your order support message..."}
                   placeholderTextColor="#98A2B3"
                   multiline
                   textAlignVertical="top"
@@ -688,7 +698,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   onPress={() => handleSendSupportRequest(isReport ? "REPORT_ISSUE" : "CUSTOMER_SUPPORT")}
                   disabled={supportSending}
                 >
-                  {supportSending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.supportSendText}>Send to Support</Text>}
+                  {supportSending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.supportSendText}>{isReport ? "Send Report" : "Send Message"}</Text>}
                 </TouchableOpacity>
               </>
             )}
@@ -703,20 +713,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const addressLines = buildAddressLines(defaultAddress, profile?.name);
   const memberSince = profile ? formatDate(profile.createdAt) : "N/A";
   const ongoingOrders = orders.filter((order) => !["DELIVERED", "CANCELLED", "REJECTED"].includes(order.status)).slice(0, 3);
-  const recentOrders = orders.slice(0, 5);
-
-  const favoriteRestaurants = useMemo(() => {
-    const deduped = new Map<string, string>();
-    orders.forEach((order) => {
-      const partnerName = getPublicShopName(
-        (order.partnerId as any)?.restaurantName ||
-        (order.partnerId as any)?.shopName ||
-        "Local Partner"
-      );
-      deduped.set(partnerName, partnerName);
-    });
-    return Array.from(deduped.values()).slice(0, 4);
-  }, [orders]);
+  const recentOrders = orders.slice(0, 3);
 
   if (loading) {
     return (
@@ -988,6 +985,37 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={styles.shortcutTitle}>Payments</Text>
             <Text style={styles.shortcutDetail}>Manage methods</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Favorites</Text>
+            <TouchableOpacity style={styles.inlineLink} onPress={() => navigation.navigate("Home")}>
+              <Text style={styles.inlineLinkText}>Add More</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.sectionHint}>Restaurants saved with the heart icon appear here.</Text>
+          {favoriteRestaurants.length === 0 ? (
+            <Text style={styles.emptyText}>No favorite restaurants yet.</Text>
+          ) : (
+            <View style={styles.favoriteBlock}>
+              {favoriteRestaurants.map((restaurant) => (
+                <TouchableOpacity
+                  key={restaurant._id}
+                  style={styles.favoriteChip}
+                  onPress={() => navigation.navigate("ShopDetail", { shopId: restaurant._id, shop: restaurant as any })}
+                >
+                  <MaterialCommunityIcons name="heart" size={16} color="#E11D48" />
+                  <Text style={styles.favoriteChipText}>
+                    {getPublicShopName(restaurant.restaurantName || restaurant.shopName || "Restaurant")}
+                  </Text>
+                  {typeof restaurant.rating === "number" ? (
+                    <Text style={styles.favoriteChipCount}>{restaurant.rating.toFixed(1)}</Text>
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -1312,7 +1340,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Text style={styles.subSectionTitle}>Past Orders</Text>
                   {recentOrders.length > 0 ? (
                     <TouchableOpacity onPress={() => navigation.navigate("Orders")}>
-                      <Text style={styles.inlineLinkText}>View all</Text>
+                      <Text style={styles.inlineLinkText}>View All History</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>

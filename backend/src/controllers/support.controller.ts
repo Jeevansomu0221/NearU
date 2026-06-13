@@ -26,6 +26,23 @@ const FAQs = [
   }
 ];
 
+const SUPPORT_CATEGORIES = [
+  "CUSTOMER_SUPPORT",
+  "ORDER",
+  "PAYMENT",
+  "DELIVERY",
+  "ACCOUNT",
+  "REPORT_ISSUE",
+  "OTHER"
+] as const;
+
+const SUPPORT_CATEGORY_SET = new Set<string>(SUPPORT_CATEGORIES);
+
+const normalizeCategoryFilter = (value: unknown) => {
+  if (typeof value !== "string" || value === "ALL") return undefined;
+  return SUPPORT_CATEGORY_SET.has(value) ? value : undefined;
+};
+
 const ensureCustomer = (req: AuthRequest, res: Response) => {
   if (!req.user) {
     errorResponse(res, "Unauthorized", 401);
@@ -43,7 +60,13 @@ export const getMySupportTickets = async (req: AuthRequest, res: Response) => {
   if (!ensureCustomer(req, res)) return;
 
   try {
-    const tickets = await SupportTicket.find({ userId: req.user!.id })
+    const category = normalizeCategoryFilter(req.query.category);
+    const filter = {
+      userId: req.user!.id,
+      ...(category ? { category } : {})
+    };
+
+    const tickets = await SupportTicket.find(filter)
       .sort({ updatedAt: -1 })
       .lean();
 
@@ -61,6 +84,7 @@ export const createSupportTicket = async (req: AuthRequest, res: Response) => {
     const { subject, message, category, orderId, priority } = req.body;
     const cleanSubject = String(subject || "").trim();
     const cleanMessage = String(message || "").trim();
+    const cleanCategory = SUPPORT_CATEGORY_SET.has(category) ? category : "CUSTOMER_SUPPORT";
 
     if (!cleanSubject || !cleanMessage) {
       return errorResponse(res, "Subject and message are required", 400);
@@ -69,7 +93,7 @@ export const createSupportTicket = async (req: AuthRequest, res: Response) => {
     const ticket = await SupportTicket.create({
       userId: req.user!.id,
       orderId: orderId || undefined,
-      category: category || "CUSTOMER_SUPPORT",
+      category: cleanCategory,
       subject: cleanSubject,
       priority: priority || "NORMAL",
       status: "OPEN",
@@ -121,7 +145,11 @@ export const addCustomerSupportMessage = async (req: AuthRequest, res: Response)
 export const getAllSupportTickets = async (req: AuthRequest, res: Response) => {
   try {
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
-    const filter = status && status !== "ALL" ? { status } : {};
+    const category = normalizeCategoryFilter(req.query.category);
+    const filter = {
+      ...(status && status !== "ALL" ? { status } : {}),
+      ...(category ? { category } : {})
+    };
 
     const tickets = await SupportTicket.find(filter)
       .populate("userId", "name phone email")

@@ -279,6 +279,107 @@ export const getSavedAddresses = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getMyFavorites = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const userData = await User.findById(req.user.id)
+      .select("favoriteRestaurants favoriteFoodItems")
+      .populate("favoriteRestaurants", "restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime")
+      .populate("favoriteFoodItems", "name price imageUrl category partnerId rating")
+      .lean();
+
+    if (!userData) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    return successResponse(
+      res,
+      {
+        restaurants: (userData as any).favoriteRestaurants || [],
+        foodItems: (userData as any).favoriteFoodItems || []
+      },
+      "Favorites retrieved successfully"
+    );
+  } catch (err: any) {
+    console.error("getMyFavorites error:", err);
+    return errorResponse(res, "Failed to get favorites");
+  }
+};
+
+export const addFavoriteRestaurant = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const partner = await Partner.findById(req.params.partnerId).select("_id");
+    if (!partner) {
+      return errorResponse(res, "Restaurant not found", 404);
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { $addToSet: { favoriteRestaurants: partner._id } },
+      { new: true }
+    )
+      .select("favoriteRestaurants favoriteFoodItems")
+      .populate("favoriteRestaurants", "restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime")
+      .populate("favoriteFoodItems", "name price imageUrl category partnerId rating");
+
+    if (!updatedUser) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    return successResponse(
+      res,
+      {
+        restaurants: (updatedUser as any).favoriteRestaurants || [],
+        foodItems: (updatedUser as any).favoriteFoodItems || []
+      },
+      "Restaurant added to favorites"
+    );
+  } catch (err: any) {
+    console.error("addFavoriteRestaurant error:", err);
+    return errorResponse(res, "Failed to add favorite restaurant");
+  }
+};
+
+export const removeFavoriteRestaurant = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { $pull: { favoriteRestaurants: req.params.partnerId } },
+      { new: true }
+    )
+      .select("favoriteRestaurants favoriteFoodItems")
+      .populate("favoriteRestaurants", "restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime")
+      .populate("favoriteFoodItems", "name price imageUrl category partnerId rating");
+
+    if (!updatedUser) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    return successResponse(
+      res,
+      {
+        restaurants: (updatedUser as any).favoriteRestaurants || [],
+        foodItems: (updatedUser as any).favoriteFoodItems || []
+      },
+      "Restaurant removed from favorites"
+    );
+  } catch (err: any) {
+    console.error("removeFavoriteRestaurant error:", err);
+    return errorResponse(res, "Failed to remove favorite restaurant");
+  }
+};
+
 export const addUserAddress = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {

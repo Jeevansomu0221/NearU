@@ -204,6 +204,16 @@ const UserSchema = new Schema({
     type: [AddressSchema],
     default: []
   },
+  favoriteRestaurants: {
+    type: [Types.ObjectId],
+    ref: "Partner",
+    default: []
+  },
+  favoriteFoodItems: {
+    type: [Types.ObjectId],
+    ref: "MenuItem",
+    default: []
+  },
   fcmToken: {
     type: String
   },
@@ -238,6 +248,8 @@ UserSchema.index(
   }
 );
 UserSchema.index({ "notificationTokens.token": 1 });
+UserSchema.index({ favoriteRestaurants: 1 });
+UserSchema.index({ favoriteFoodItems: 1 });
 
 const User = model("User", UserSchema);
 

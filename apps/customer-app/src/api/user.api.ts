@@ -34,6 +34,34 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export interface FavoriteRestaurant {
+  _id: string;
+  shopName?: string;
+  restaurantName?: string;
+  category?: string;
+  address?: any;
+  isOpen?: boolean;
+  rating?: number;
+  shopImageUrl?: string;
+  openingTime?: string;
+  closingTime?: string;
+}
+
+export interface FavoriteFoodItem {
+  _id: string;
+  name: string;
+  price?: number;
+  imageUrl?: string;
+  category?: string;
+  partnerId?: string;
+  rating?: number;
+}
+
+export interface FavoritesResponse {
+  restaurants: FavoriteRestaurant[];
+  foodItems: FavoriteFoodItem[];
+}
+
 /**
  * GET USER PROFILE
  */
@@ -104,6 +132,18 @@ export const setDefaultAddress = (addressId: string): Promise<ApiResponse<UserPr
  */
 export const deleteAddress = (addressId: string): Promise<ApiResponse<UserProfile>> => {
   return apiDelete<UserProfile>(`/users/address/${addressId}`);
+};
+
+export const getMyFavorites = (): Promise<ApiResponse<FavoritesResponse>> => {
+  return apiGet<FavoritesResponse>("/users/favorites");
+};
+
+export const addFavoriteRestaurant = (partnerId: string): Promise<ApiResponse<FavoritesResponse>> => {
+  return apiPost<FavoritesResponse>(`/users/favorites/restaurants/${partnerId}`);
+};
+
+export const removeFavoriteRestaurant = (partnerId: string): Promise<ApiResponse<FavoritesResponse>> => {
+  return apiDelete<FavoritesResponse>(`/users/favorites/restaurants/${partnerId}`);
 };
 
 export const deleteMyAccount = (): Promise<ApiResponse<null>> => {

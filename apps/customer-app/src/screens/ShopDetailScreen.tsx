@@ -20,6 +20,7 @@ import { RootStackParamList, Shop } from "../navigation/AppNavigator";
 import { getPartnerDetails, getPartnerMenu } from "../api/menu.api";
 import { useCart } from "../context/CartContext";
 import { getPublicShopName } from "../utils/display";
+import { getVegModePreference } from "../utils/vegMode";
 
 type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, "ShopDetail">;
 
@@ -30,6 +31,7 @@ interface MenuItem {
   description?: string;
   category?: string;
   isAvailable: boolean;
+  isVegetarian?: boolean;
   imageUrl?: string;
 }
 
@@ -38,6 +40,7 @@ interface Props {
     params: {
       shopId: string;
       shop?: Shop;
+      vegMode?: boolean;
     };
   };
   navigation: ShopDetailScreenNavigationProp;
@@ -225,11 +228,12 @@ function MenuCardItem({
 
 export default function ShopDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { shopId, shop: passedShop } = route.params;
+  const { shopId, shop: passedShop, vegMode: initialVegMode } = route.params;
   const [shop, setShop] = useState<Shop | null>(passedShop || null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [vegModeOnly, setVegModeOnly] = useState(Boolean(initialVegMode));
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const { items, addItem, updateQuantity, getItemCount, getCartTotal } = useCart();
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
@@ -264,10 +268,21 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     loadData();
   }, [passedShop, shopId]);
 
+  useEffect(() => {
+    getVegModePreference()
+      .then((enabled) => setVegModeOnly(typeof initialVegMode === "boolean" ? initialVegMode : enabled))
+      .catch(() => {});
+  }, [initialVegMode]);
+
+  const visibleMenu = useMemo(
+    () => (vegModeOnly ? menu.filter((item) => item.isVegetarian !== false) : menu),
+    [menu, vegModeOnly]
+  );
+
   const groupedMenu = useMemo(() => {
     const map = new Map<string, MenuItem[]>();
 
-    menu.forEach((item) => {
+    visibleMenu.forEach((item) => {
       const key = item.category?.trim() || "Popular";
       const existing = map.get(key) || [];
       existing.push(item);
@@ -275,22 +290,30 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     });
 
     return Array.from(map.entries());
-  }, [menu]);
+  }, [visibleMenu]);
 
   useEffect(() => {
     if (!selectedCategory && groupedMenu.length > 0) {
+      setSelectedCategory("All");
+    }
+
+    if (
+      selectedCategory &&
+      selectedCategory !== "All" &&
+      !groupedMenu.some(([title]) => title === selectedCategory)
+    ) {
       setSelectedCategory("All");
     }
   }, [groupedMenu, selectedCategory]);
 
   const selectedItems = useMemo(() => {
     if (selectedCategory === "All") {
-      return menu;
+      return visibleMenu;
     }
 
     const activeSection = groupedMenu.find(([title]) => title === selectedCategory);
     return activeSection?.[1] || groupedMenu[0]?.[1] || [];
-  }, [groupedMenu, menu, selectedCategory]);
+  }, [groupedMenu, selectedCategory, visibleMenu]);
 
   const getShopName = () => getPublicShopName(shop?.restaurantName || shop?.shopName || "Restaurant");
 
@@ -448,7 +471,9 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
         <View style={styles.menuHeader}>
           <Text style={styles.menuTitle}>Menu</Text>
-          <Text style={styles.menuSubtitle}>{menu.length} items available for order</Text>
+          <Text style={styles.menuSubtitle}>
+            {vegModeOnly ? `${visibleMenu.length} veg items` : `${menu.length} items available`}
+          </Text>
         </View>
 
         {loading ? (
@@ -460,6 +485,11 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Menu unavailable</Text>
             <Text style={styles.emptyBody}>This restaurant has not added any available items yet.</Text>
+          </View>
+        ) : visibleMenu.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No veg items available</Text>
+            <Text style={styles.emptyBody}>Veg Mode is on, but this restaurant has no available veg items right now.</Text>
           </View>
         ) : (
           <>

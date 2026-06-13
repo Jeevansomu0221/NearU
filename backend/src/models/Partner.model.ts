@@ -160,6 +160,11 @@ const PartnerSchema = new Schema(
       type: Number,
       default: 4
     },
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
     documents: {
       fssaiNumber: String,
       fssaiUrl: String,

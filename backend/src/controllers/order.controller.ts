@@ -1443,6 +1443,103 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const normalizeRatingScore = (value: unknown) => {
+  const score = Number(value);
+  return Number.isInteger(score) && score >= 1 && score <= 5 ? score : null;
+};
+
+const updateAverageRating = (currentRating: number, currentCount: number, nextRating: number) => {
+  const safeCount = Number.isFinite(currentCount) && currentCount > 0 ? currentCount : 0;
+  const safeRating = Number.isFinite(currentRating) && currentRating > 0 ? currentRating : 0;
+  return Number(((safeRating * safeCount + nextRating) / (safeCount + 1)).toFixed(2));
+};
+
+export const submitOrderRating = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { orderId } = req.params;
+
+    if (!user || !isConsumerAppRole(user.role)) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const restaurantRating = {
+      foodQuality: normalizeRatingScore(req.body?.restaurantRating?.foodQuality),
+      packaging: normalizeRatingScore(req.body?.restaurantRating?.packaging),
+      overallExperience: normalizeRatingScore(req.body?.restaurantRating?.overallExperience),
+      comment: String(req.body?.restaurantRating?.comment || "").trim()
+    };
+    const deliveryRating = {
+      deliverySpeed: normalizeRatingScore(req.body?.deliveryRating?.deliverySpeed),
+      partnerBehavior: normalizeRatingScore(req.body?.deliveryRating?.partnerBehavior),
+      comment: String(req.body?.deliveryRating?.comment || "").trim()
+    };
+
+    const hasInvalidScore = [
+      restaurantRating.foodQuality,
+      restaurantRating.packaging,
+      restaurantRating.overallExperience,
+      deliveryRating.deliverySpeed,
+      deliveryRating.partnerBehavior
+    ].some((score) => score === null);
+
+    if (hasInvalidScore) {
+      return errorResponse(res, "All ratings must be between 1 and 5", 400);
+    }
+
+    const order: any = await Order.findOne({ _id: orderId, customerId: user.id });
+    if (!order) {
+      return errorResponse(res, "Order not found", 404);
+    }
+
+    if (order.status !== "DELIVERED") {
+      return errorResponse(res, "Ratings can be submitted after order delivery", 400);
+    }
+
+    if (order.ratingSubmittedAt) {
+      return errorResponse(res, "Ratings already submitted for this order", 400);
+    }
+
+    order.restaurantRating = restaurantRating;
+    order.deliveryRating = deliveryRating;
+    order.ratingSubmittedAt = new Date();
+    await order.save();
+
+    const partner: any = await Partner.findById(order.partnerId).select("rating ratingCount");
+    if (partner && restaurantRating.overallExperience) {
+      const nextCount = Number(partner.ratingCount || 0) + 1;
+      partner.rating = updateAverageRating(Number(partner.rating || 0), Number(partner.ratingCount || 0), restaurantRating.overallExperience);
+      partner.ratingCount = nextCount;
+      await partner.save();
+    }
+
+    if (order.deliveryPartnerId) {
+      const deliveryPartner: any = await DeliveryPartner.findOne({ userId: order.deliveryPartnerId }).select("rating ratingCount");
+      if (deliveryPartner && deliveryRating.deliverySpeed && deliveryRating.partnerBehavior) {
+        const nextDeliveryScore = Number(((deliveryRating.deliverySpeed + deliveryRating.partnerBehavior) / 2).toFixed(2));
+        const nextCount = Number(deliveryPartner.ratingCount || 0) + 1;
+        deliveryPartner.rating = updateAverageRating(Number(deliveryPartner.rating || 0), Number(deliveryPartner.ratingCount || 0), nextDeliveryScore);
+        deliveryPartner.ratingCount = nextCount;
+        await deliveryPartner.save();
+      }
+    }
+
+    const updatedOrder = await Order.findById(order._id)
+      .populate("customerId", "name phone")
+      .populate({
+        path: "partnerId",
+        select: "restaurantName shopName phone address category location rating ratingCount",
+        transform: formatPartnerForDelivery
+      })
+      .populate("deliveryPartnerId", "name phone");
+
+    return successResponse(res, updatedOrder, "Ratings submitted successfully");
+  } catch (err: any) {
+    console.error("submitOrderRating error:", err);
+    return errorResponse(res, "Failed to submit ratings");
+  }
+};
+
 /**
  * ================================
  * GET ORDER DETAILS

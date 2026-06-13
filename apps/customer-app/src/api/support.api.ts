@@ -23,12 +23,14 @@ export interface SupportTicket {
   updatedAt: string;
 }
 
+export type SupportTicketCategory = SupportTicket["category"];
+
 export const getSupportFAQs = (): Promise<ApiResponse<FAQEntry[]>> => {
   return apiGet<FAQEntry[]>("/support/faqs");
 };
 
-export const getMySupportTickets = (): Promise<ApiResponse<SupportTicket[]>> => {
-  return apiGet<SupportTicket[]>("/support/tickets");
+export const getMySupportTickets = (category?: SupportTicketCategory): Promise<ApiResponse<SupportTicket[]>> => {
+  return apiGet<SupportTicket[]>("/support/tickets", category ? { params: { category } } : undefined);
 };
 
 export const createSupportTicket = (payload: {
