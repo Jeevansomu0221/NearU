@@ -13,6 +13,7 @@ import {
   View
 } from "react-native";
 import api from "../api/client";
+import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { partnerTheme } from "../theme";
 
 interface OrderItem {
@@ -41,6 +42,8 @@ interface Order {
   itemTotal: number;
   paymentMethod: string;
   paymentStatus: string;
+  cancellationReason?: string;
+  customerCancellationMessage?: string;
 }
 
 interface ApiResponse<T = any> {
@@ -50,10 +53,11 @@ interface ApiResponse<T = any> {
 }
 
 type OrderStatusUpdate = "ACCEPTED" | "REJECTED" | "PREPARING" | "READY";
+type OrderStatusOverride = OrderStatusUpdate | "CANCELLED";
 
 type OrderDetailsRouteParams = {
   orderId: string;
-  orderStatus?: OrderStatusUpdate;
+  orderStatus?: OrderStatusOverride;
   orderStatusUpdatedAt?: number;
 };
 
@@ -69,7 +73,7 @@ const ORDER_STATUS_RANK: Record<string, number> = {
 
 const TERMINAL_ORDER_STATUSES = new Set(["CANCELLED", "REJECTED", "DELIVERED"]);
 
-const applyStatusOverride = (nextOrder: Order, statusOverride: OrderStatusUpdate | undefined, orderId: string) => {
+const applyStatusOverride = (nextOrder: Order, statusOverride: OrderStatusOverride | undefined, orderId: string) => {
   if (!statusOverride || nextOrder._id !== orderId) return nextOrder;
   if (TERMINAL_ORDER_STATUSES.has(nextOrder.status) && nextOrder.status !== statusOverride) return nextOrder;
 
@@ -204,15 +208,16 @@ function SwipeAction({ title, subtitle, actionLabel, accentColor, onConfirm, dis
 }
 
 export default function OrderDetailsScreen({ route, navigation }: any) {
+  const { isDarkMode, theme } = usePartnerTheme();
   const { orderId, orderStatus, orderStatusUpdatedAt } = route.params as OrderDetailsRouteParams;
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<OrderStatusUpdate | null>(null);
-  const [localStatusOverride, setLocalStatusOverride] = useState<OrderStatusUpdate | null>(null);
+  const [localStatusOverride, setLocalStatusOverride] = useState<OrderStatusOverride | null>(null);
 
-  const loadOrderDetails = useCallback(async (statusOverride?: OrderStatusUpdate) => {
+  const loadOrderDetails = useCallback(async (statusOverride?: OrderStatusOverride) => {
     try {
       const res = await api.get(`/orders/partner/${orderId}`);
       const response = res.data as ApiResponse<Order>;
@@ -388,6 +393,27 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
     }
   };
 
+  const getCancellationReasonText = (targetOrder: Order) => {
+    const reason = String(targetOrder.cancellationReason || "").trim();
+    const lowerReason = reason.toLowerCase();
+
+    if (lowerReason.includes("no delivery partner accepted")) {
+      return "No current riders are available";
+    }
+
+    if (lowerReason.includes("restaurant rejected")) {
+      return "Restaurant rejected the order";
+    }
+
+    if (lowerReason.includes("customer")) {
+      return "Customer cancelled";
+    }
+
+    if (reason) return reason;
+    if (targetOrder.status === "REJECTED") return "Restaurant rejected the order";
+    return "Customer cancelled";
+  };
+
   const getPendingStatusTitle = () => {
     switch (pendingStatus) {
       case "ACCEPTED":
@@ -412,16 +438,16 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={partnerTheme.colors.primary} />
-        <Text style={styles.loadingText}>Loading order details...</Text>
+      <View style={[styles.loadingContainer, isDarkMode && styles.containerDark]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, isDarkMode && styles.mutedTextDark]}>Loading order details...</Text>
       </View>
     );
   }
 
   if (!order) {
     return (
-      <View style={styles.errorContainer}>
+      <View style={[styles.errorContainer, isDarkMode && styles.containerDark]}>
         <Text style={styles.errorText}>Order not found</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>Go Back</Text>
@@ -438,22 +464,22 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
 
   return (
     <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[partnerTheme.colors.primary]} tintColor={partnerTheme.colors.primary} />}
+      style={[styles.container, isDarkMode && styles.containerDark]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} tintColor={theme.colors.primary} />}
       contentContainerStyle={{ paddingBottom: 24 }}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.header}>
+      <View style={[styles.header, isDarkMode && styles.cardDark]}>
         <View>
-          <Text style={styles.orderId}>Order #{order._id.slice(-6)}</Text>
-          <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
+          <Text style={[styles.orderId, isDarkMode && styles.textDark]}>Order #{order._id.slice(-6)}</Text>
+          <Text style={[styles.orderDate, isDarkMode && styles.mutedTextDark]}>{formatDate(order.createdAt)}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
           <Text style={styles.statusText}>{getStatusText(order.status)}</Text>
         </View>
       </View>
 
-      <View style={styles.actionsContainer}>
+      <View style={[styles.actionsContainer, isDarkMode && styles.cardDark]}>
         {showRejectButton && (
           <TouchableOpacity
             style={[styles.actionButton, styles.rejectButton]}
@@ -502,51 +528,51 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       ) : null}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Parcel Handoff</Text>
-        <View style={styles.infoCard}>
+        <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Parcel Handoff</Text>
+        <View style={[styles.infoCard, isDarkMode && styles.cardDark]}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Order ID:</Text>
-            <Text style={styles.infoValue}>#{order._id.slice(-6).toUpperCase()}</Text>
+            <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Order ID:</Text>
+            <Text style={[styles.infoValue, isDarkMode && styles.textDark]}>#{order._id.slice(-6).toUpperCase()}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Delivery Partner:</Text>
-            <Text style={styles.infoValue}>{getDeliveryPartnerName(order.deliveryPartnerId)}</Text>
+            <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Delivery Partner:</Text>
+            <Text style={[styles.infoValue, isDarkMode && styles.textDark]}>{getDeliveryPartnerName(order.deliveryPartnerId)}</Text>
           </View>
           {order.note ? (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Packing Note:</Text>
-              <Text style={styles.infoValue}>{order.note}</Text>
+              <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Packing Note:</Text>
+              <Text style={[styles.infoValue, isDarkMode && styles.textDark]}>{order.note}</Text>
             </View>
           ) : null}
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Order Items</Text>
-        <View style={styles.infoCard}>
+        <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Order Items</Text>
+        <View style={[styles.infoCard, isDarkMode && styles.cardDark]}>
           {order.items?.map((item, index) => (
             <View key={index} style={styles.itemRow}>
               <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>
+                <Text style={[styles.itemName, isDarkMode && styles.textDark]}>
                   {item.quantity} x {item.name}
                 </Text>
-                <Text style={styles.itemPrice}>Rs {item.price} each</Text>
+                <Text style={[styles.itemPrice, isDarkMode && styles.mutedTextDark]}>Rs {item.price} each</Text>
               </View>
-              <Text style={styles.itemTotal}>Rs {item.price * item.quantity}</Text>
+              <Text style={[styles.itemTotal, isDarkMode && styles.textDark]}>Rs {item.price * item.quantity}</Text>
             </View>
           ))}
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Payment Details</Text>
-        <View style={styles.infoCard}>
+        <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Payment Details</Text>
+        <View style={[styles.infoCard, isDarkMode && styles.cardDark]}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Payment Method:</Text>
-            <Text style={styles.infoValue}>{getPaymentMethodText(order.paymentMethod)}</Text>
+            <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Payment Method:</Text>
+            <Text style={[styles.infoValue, isDarkMode && styles.textDark]}>{getPaymentMethodText(order.paymentMethod)}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Payment Status:</Text>
+            <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Payment Status:</Text>
             <View
               style={[
                 styles.paymentStatusBadge,
@@ -567,62 +593,32 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Order Summary</Text>
-        <View style={styles.infoCard}>
+        <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Order Summary</Text>
+        <View style={[styles.infoCard, isDarkMode && styles.cardDark]}>
           <View style={styles.grandTotalRow}>
-            <Text style={styles.grandTotalLabel}>Food Total</Text>
+            <Text style={[styles.grandTotalLabel, isDarkMode && styles.textDark]}>Food Total</Text>
             <Text style={styles.grandTotalValue}>Rs {order.itemTotal}</Text>
           </View>
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Order Timeline</Text>
+        <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Order Timeline</Text>
         <View style={styles.timeline}>
           <View style={styles.timelineItem}>
             <View style={[styles.timelineDot, { backgroundColor: getStatusColor("CONFIRMED") }]} />
             <View style={styles.timelineContent}>
-              <Text style={styles.timelineTitle}>Order Placed</Text>
-              <Text style={styles.timelineTime}>{formatDate(order.createdAt)}</Text>
+              <Text style={[styles.timelineTitle, isDarkMode && styles.textDark]}>Order Placed</Text>
+              <Text style={[styles.timelineTime, isDarkMode && styles.mutedTextDark]}>{formatDate(order.createdAt)}</Text>
             </View>
           </View>
-
-          {!isCancelledOrder && order.status !== "CONFIRMED" && (
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: getStatusColor("ACCEPTED") }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTitle}>Order Accepted</Text>
-                <Text style={styles.timelineTime}>-</Text>
-              </View>
-            </View>
-          )}
 
           {isCancelledOrder && (
             <View style={styles.timelineItem}>
               <View style={[styles.timelineDot, { backgroundColor: getStatusColor("CANCELLED") }]} />
               <View style={styles.timelineContent}>
-                <Text style={styles.timelineTitle}>Order Cancelled</Text>
-                <Text style={styles.timelineTime}>Refund will be completed within today if online payment was done.</Text>
-              </View>
-            </View>
-          )}
-
-          {["PREPARING", "READY", "ASSIGNED", "PICKED_UP", "DELIVERED"].includes(order.status) && (
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: getStatusColor("PREPARING") }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTitle}>Food Preparation</Text>
-                <Text style={styles.timelineTime}>-</Text>
-              </View>
-            </View>
-          )}
-
-          {["READY", "ASSIGNED", "PICKED_UP", "DELIVERED"].includes(order.status) && (
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: getStatusColor("READY") }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTitle}>Ready for Pickup</Text>
-                <Text style={styles.timelineTime}>-</Text>
+                <Text style={[styles.timelineTitle, isDarkMode && styles.textDark]}>Order Cancelled</Text>
+                <Text style={[styles.timelineTime, isDarkMode && styles.mutedTextDark]}>{getCancellationReasonText(order)}</Text>
               </View>
             </View>
           )}
@@ -658,6 +654,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: partnerTheme.colors.background
+  },
+  containerDark: {
+    backgroundColor: "#0B1220"
+  },
+  cardDark: {
+    backgroundColor: "#111827",
+    borderColor: "#263449"
+  },
+  textDark: {
+    color: "#E5EDF7"
+  },
+  mutedTextDark: {
+    color: "#9FB0C5"
   },
   loadingContainer: {
     flex: 1,

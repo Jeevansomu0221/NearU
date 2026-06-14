@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, { bootstrapSessionRefresh } from "../api/client";
+import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { clearAuthData } from "../utils/storage";
 
 // Import screens
@@ -46,6 +47,7 @@ interface PartnerStatusErrorResponse {
 type PartnerStatusResponse = PartnerStatusSuccessResponse | PartnerStatusErrorResponse;
 
 export default function AppNavigator() {
+  const { theme } = usePartnerTheme();
   const [initialRoute, setInitialRoute] = useState<string>("Loading");
   const [loading, setLoading] = useState(true);
 
@@ -155,9 +157,9 @@ export default function AppNavigator() {
 
   if (loading || initialRoute === "Loading") {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F8FF" }}>
-        <ActivityIndicator size="large" color="#60A5FA" />
-        <Text style={{ marginTop: 20, fontSize: 16, color: "#5E7897" }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: theme.colors.background }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 20, fontSize: 16, color: theme.colors.muted }}>
           Loading your account...
         </Text>
       </View>
@@ -169,16 +171,16 @@ export default function AppNavigator() {
       initialRouteName={initialRoute}
       screenOptions={{
         headerStyle: {
-          backgroundColor: "#F4F8FF",
+          backgroundColor: theme.colors.background,
         },
-        headerTintColor: "#143A66",
+        headerTintColor: theme.colors.primaryDark,
         headerTitleStyle: {
           fontWeight: "700",
         },
         headerBackTitle: "Back",
         headerShadowVisible: false,
         contentStyle: {
-          backgroundColor: "#F4F8FF"
+          backgroundColor: theme.colors.background
         }
       }}
     >

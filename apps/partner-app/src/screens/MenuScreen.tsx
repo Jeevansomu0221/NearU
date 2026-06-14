@@ -18,6 +18,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import api, { uploadMultipart } from "../api/client";
 import NotificationButton from "../components/NotificationButton";
+import { usePartnerTheme } from "../context/PartnerThemeContext";
 
 interface MenuItem {
   _id: string;
@@ -115,6 +116,7 @@ const getMenuImageUrl = (url: string) => {
 };
 
 export default function MenuScreen({ navigation }: any) {
+  const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -368,14 +370,14 @@ export default function MenuScreen({ navigation }: any) {
   );
 
   const renderStatCard = (label: string, value: number, tone: "total" | "available" | "unavailable") => (
-    <View style={[styles.statCard, styles[`${tone}StatCard`]]}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={[styles.statCard, styles[`${tone}StatCard`], isDarkMode && styles.cardDark]}>
+      <Text style={[styles.statValue, isDarkMode && styles.textDark]}>{value}</Text>
+      <Text style={[styles.statLabel, isDarkMode && styles.mutedTextDark]}>{label}</Text>
     </View>
   );
 
   const renderItem = ({ item }: { item: MenuItem }) => (
-    <View style={styles.menuItem}>
+    <View style={[styles.menuItem, isDarkMode && styles.cardDark]}>
       {item.imageUrl ? (
         <Image source={{ uri: getMenuImageUrl(item.imageUrl) }} style={styles.itemImage} />
       ) : (
@@ -387,8 +389,8 @@ export default function MenuScreen({ navigation }: any) {
       <View style={styles.itemInfo}>
         <View style={styles.itemHeader}>
           <View style={styles.itemTitleWrap}>
-            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.itemDescription} numberOfLines={1}>
+            <Text style={[styles.itemName, isDarkMode && styles.textDark]} numberOfLines={1}>{item.name}</Text>
+            <Text style={[styles.itemDescription, isDarkMode && styles.mutedTextDark]} numberOfLines={1}>
               {item.description || "Freshly prepared in-store."}
             </Text>
           </View>
@@ -425,22 +427,22 @@ export default function MenuScreen({ navigation }: any) {
 
   if (loading && menuItems.length === 0) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#60A5FA" />
-        <Text style={styles.loadingText}>Loading menu...</Text>
+      <View style={[styles.loadingContainer, isDarkMode && styles.containerDark]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, isDarkMode && styles.mutedTextDark]}>Loading menu...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isDarkMode && styles.containerDark]}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#143A66" />
+        <TouchableOpacity style={[styles.backButton, isDarkMode && styles.cardDark]} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.primaryDark} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>Menu Management</Text>
-          <Text style={styles.subtitle}>Quick edits for prices, photos, and availability</Text>
+          <Text style={[styles.title, isDarkMode && styles.textDark]}>Menu Management</Text>
+          <Text style={[styles.subtitle, isDarkMode && styles.mutedTextDark]}>Quick edits for prices, photos, and availability</Text>
         </View>
         <NotificationButton onPress={() => navigation.navigate("Orders")} />
       </View>
@@ -451,12 +453,12 @@ export default function MenuScreen({ navigation }: any) {
         {renderStatCard("Hidden", menuStats.unavailable, "unavailable")}
       </View>
 
-      <View style={styles.searchWrap}>
+      <View style={[styles.searchWrap, isDarkMode && styles.cardDark]}>
         <View style={styles.searchRow}>
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, isDarkMode && styles.inputDark]}
             placeholder="Search menu items"
-            placeholderTextColor="#98A2B3"
+            placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
             value={search}
             onChangeText={setSearch}
           />
@@ -475,11 +477,11 @@ export default function MenuScreen({ navigation }: any) {
             return (
               <TouchableOpacity
                 key={category}
-                style={[styles.filterChip, selected && styles.filterChipSelected]}
+                style={[styles.filterChip, isDarkMode && styles.filterChipDark, selected && styles.filterChipSelected]}
                 onPress={() => setSelectedCategoryFilter(category)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{category}</Text>
+                <Text style={[styles.filterChipText, isDarkMode && styles.mutedTextDark, selected && styles.filterChipTextSelected]}>{category}</Text>
               </TouchableOpacity>
             );
           })}
@@ -487,9 +489,9 @@ export default function MenuScreen({ navigation }: any) {
       </View>
 
       {filteredItems.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>{menuItems.length === 0 ? "No menu items yet" : "No matching items"}</Text>
-          <Text style={styles.emptySubtext}>
+        <View style={[styles.emptyState, isDarkMode && styles.cardDark]}>
+          <Text style={[styles.emptyTitle, isDarkMode && styles.textDark]}>{menuItems.length === 0 ? "No menu items yet" : "No matching items"}</Text>
+          <Text style={[styles.emptySubtext, isDarkMode && styles.mutedTextDark]}>
             {menuItems.length === 0 ? "Add your first item to start receiving customer orders." : "Try a different search term."}
           </Text>
           {menuItems.length === 0 ? (
@@ -648,6 +650,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F4F8FF"
+  },
+  containerDark: {
+    backgroundColor: "#0B1220"
+  },
+  cardDark: {
+    backgroundColor: "#111827",
+    borderColor: "#263449"
+  },
+  textDark: {
+    color: "#E5EDF7"
+  },
+  mutedTextDark: {
+    color: "#9FB0C5"
+  },
+  inputDark: {
+    backgroundColor: "#0F172A",
+    borderColor: "#263449",
+    color: "#E5EDF7"
+  },
+  filterChipDark: {
+    backgroundColor: "#1D2A3D",
+    borderColor: "#263449"
   },
   loadingContainer: {
     flex: 1,

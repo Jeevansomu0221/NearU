@@ -9,13 +9,13 @@ import {
   Alert,
   ScrollView,
   TextInput,
-  Switch,
   Linking
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import api, { uploadMultipart } from "../api/client";
+import { usePartnerTheme } from "../context/PartnerThemeContext";
 
 type ReuploadFlags = {
   fssaiUrl?: boolean;
@@ -132,6 +132,12 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const HOURS_12 = Array.from({ length: 12 }, (_, index) => index + 1);
+const MINUTE_OPTIONS = ["00", "15", "30", "45"];
+const PERIOD_OPTIONS = ["AM", "PM"] as const;
+
+type TimeField = "openingTime" | "closingTime";
+type TimePeriod = typeof PERIOD_OPTIONS[number];
 
 type DocumentKey =
   | "fssaiUrl"
@@ -200,6 +206,33 @@ const maskValue = (value?: string, visible = 4) => {
   return `${"*".repeat(Math.max(trimmed.length - visible, 4))}${trimmed.slice(-visible)}`;
 };
 
+const maskBankAccountNumber = (value?: string) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "Not added yet";
+  return `Account ${maskValue(digits, 4)}`;
+};
+
+const parseTimeToTwelveHour = (value: string) => {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(value || "");
+  const hour24 = match ? Number(match[1]) : 8;
+  const minute = match ? match[2] : "00";
+  const period: TimePeriod = hour24 >= 12 ? "PM" : "AM";
+  const hour = hour24 % 12 || 12;
+
+  return { hour, minute, period };
+};
+
+const toTwentyFourHourTime = (hour: number, minute: string, period: TimePeriod) => {
+  let hour24 = hour % 12;
+  if (period === "PM") hour24 += 12;
+  return `${String(hour24).padStart(2, "0")}:${minute}`;
+};
+
+const formatTwelveHourTime = (value: string) => {
+  const parsed = parseTimeToTwelveHour(value);
+  return `${parsed.hour}:${parsed.minute} ${parsed.period}`;
+};
+
 const normalizeDocumentsFromApi = (input?: Documents | null): Documents => {
   const docs = (input || {}) as Record<string, any>;
   return {
@@ -214,7 +247,27 @@ const normalizeDocumentsFromApi = (input?: Documents | null): Documents => {
   };
 };
 
+const hasCompleteVerificationDocuments = (docs?: Documents | null) => {
+  const documents = docs || {};
+  const isGstRegistered =
+    documents.gstRegistered === true || documents.gstRegistered === "true" || documents.gstRegistered === "yes";
+
+  return Boolean(
+    String(documents.fssaiNumber || "").trim() &&
+      String(documents.fssaiUrl || "").trim() &&
+      String(documents.panNumber || "").trim() &&
+      String(documents.panFrontUrl || documents.ownerPanUrl || "").trim() &&
+      String(documents.aadhaarNumber || "").trim() &&
+      String(documents.aadhaarFrontUrl || "").trim() &&
+      (!isGstRegistered || (String(documents.gstNumber || "").trim() && String(documents.gstUrl || "").trim()))
+  );
+};
+
+const isProfileVerificationLocked = (profile?: PartnerProfile | null, docs?: Documents | null) =>
+  profile?.status === "APPROVED" && hasCompleteVerificationDocuments(docs);
+
 export default function ProfileScreen({ navigation }: any) {
+  const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -253,6 +306,7 @@ export default function ProfileScreen({ navigation }: any) {
     isOpen: true,
     weeklyHolidays: [] as string[]
   });
+  const [activeTimeField, setActiveTimeField] = useState<TimeField>("openingTime");
 
   const [kyc, setKyc] = useState<Documents>({});
   const [kycEditingField, setKycEditingField] = useState<keyof Documents | null>(null);
@@ -262,6 +316,8 @@ export default function ProfileScreen({ navigation }: any) {
     accountNumber: "",
     ifsc: ""
   });
+  const [bankChangeRequestReason, setBankChangeRequestReason] = useState("");
+  const [bankChangeRequestSubmitting, setBankChangeRequestSubmitting] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -387,15 +443,19 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
-  const handleSaveBasics = () =>
-    saveUpdate(
-      {
-        ownerName: basics.ownerName.trim(),
-        email: basics.email.trim(),
-        shopDescription: basics.shopDescription.trim()
-      },
-      "Basic shop details updated"
-    );
+  const handleSaveBasics = () => {
+    const locked = isProfileVerificationLocked(profile, kyc);
+    const payload: Record<string, any> = {
+      shopDescription: basics.shopDescription.trim()
+    };
+
+    if (!locked) {
+      payload.ownerName = basics.ownerName.trim();
+      payload.email = basics.email.trim();
+    }
+
+    return saveUpdate(payload, locked ? "Shop description updated" : "Basic shop details updated");
+  };
 
   const captureShopLocation = async () => {
     try {
@@ -435,6 +495,14 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const handleSaveAddress = async () => {
+    if (isProfileVerificationLocked(profile, kyc)) {
+      Alert.alert(
+        "Verified address locked",
+        "Your verified shop address can only be changed by sending a support request with the reason for change."
+      );
+      return;
+    }
+
     if (!address.roadStreet || !address.colony || !address.area || !address.city || !address.state) {
       Alert.alert("Missing details", "Fill all address fields before saving.");
       return;
@@ -480,17 +548,33 @@ export default function ProfileScreen({ navigation }: any) {
       {
         openingTime: hours.openingTime,
         closingTime: hours.closingTime,
-        isOpen: hours.isOpen,
         weeklyHolidays: hours.weeklyHolidays
       },
       "Business hours updated"
     );
   };
 
-  const handleSaveKyc = () =>
-    saveUpdate({ documents: { ...kyc } }, "KYC details updated");
+  const handleSaveKyc = () => {
+    if (isProfileVerificationLocked(profile, kyc)) {
+      Alert.alert(
+        "Verification locked",
+        "Verified document details can only be changed through support after review."
+      );
+      return;
+    }
+
+    return saveUpdate({ documents: { ...kyc } }, "KYC details updated");
+  };
 
   const handleSaveBankDetails = async () => {
+    if (isProfileVerificationLocked(profile, kyc)) {
+      Alert.alert(
+        "Bank details locked",
+        "For security, verified payout details can only be changed after support reviews your request and reason."
+      );
+      return;
+    }
+
     const accountHolderName = bankDetails.accountHolderName.trim();
     const accountNumber = bankDetails.accountNumber.replace(/\D/g, "");
     const ifsc = bankDetails.ifsc.trim().toUpperCase();
@@ -519,7 +603,46 @@ export default function ProfileScreen({ navigation }: any) {
     await saveUpdate({ documents: nextDocs }, "Bank details updated for manual payouts");
   };
 
+  const submitBankChangeRequest = async () => {
+    const reason = bankChangeRequestReason.trim();
+    if (reason.length < 15) {
+      Alert.alert("Reason required", "Please add a clear reason with at least 15 characters.");
+      return;
+    }
+
+    try {
+      setBankChangeRequestSubmitting(true);
+      await api.post("/support/tickets", {
+        subject: "Partner bank account change request",
+        category: "PAYMENT",
+        priority: "HIGH",
+        message: [
+          `Partner: ${profile?.restaurantName || "Unknown shop"}`,
+          `Registered phone: ${profile?.phone || "Not available"}`,
+          `Current payout account: ${maskBankAccountNumber(bankDetails.accountNumber)}`,
+          `Current IFSC: ${bankDetails.ifsc || "Not added"}`,
+          "",
+          `Reason for change: ${reason}`
+        ].join("\n")
+      });
+      setBankChangeRequestReason("");
+      Alert.alert("Request sent", "Support will review your bank account change request before any payout details are updated.");
+    } catch (error: any) {
+      Alert.alert("Request failed", error.response?.data?.message || error.message || "Could not send request");
+    } finally {
+      setBankChangeRequestSubmitting(false);
+    }
+  };
+
   const startEditKycField = (field: keyof Documents) => {
+    if (isProfileVerificationLocked(profile, kyc) && String(kyc[field] || "").trim()) {
+      Alert.alert(
+        "Verified detail locked",
+        "This verified detail can only be changed through support after review."
+      );
+      return;
+    }
+
     setKycEditingField(field);
     setKycDraftValue(((kyc[field] as string) || "").toString());
   };
@@ -561,6 +684,17 @@ export default function ProfileScreen({ navigation }: any) {
         : [...prev.weeklyHolidays, day]
     }));
 
+  const updateTimePart = (field: TimeField, next: Partial<ReturnType<typeof parseTimeToTwelveHour>>) => {
+    setHours((prev) => {
+      const current = parseTimeToTwelveHour(prev[field]);
+      const nextTime = { ...current, ...next };
+      return {
+        ...prev,
+        [field]: toTwentyFourHourTime(nextTime.hour, nextTime.minute, nextTime.period)
+      };
+    });
+  };
+
   const coordinateText = useMemo(() => {
     if (capturedLocation) {
       return `${capturedLocation.latitude.toFixed(6)}, ${capturedLocation.longitude.toFixed(6)} (new pin, save to apply)`;
@@ -597,25 +731,29 @@ export default function ProfileScreen({ navigation }: any) {
 
   if (loading && !profile) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#60A5FA" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
+      <View style={[styles.loadingContainer, isDarkMode && styles.safeAreaScreenDark]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, isDarkMode && styles.mutedTextDark]}>Loading profile...</Text>
       </View>
     );
   }
 
   if (!profile) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Profile not found</Text>
+      <View style={[styles.loadingContainer, isDarkMode && styles.safeAreaScreenDark]}>
+        <Text style={[styles.loadingText, isDarkMode && styles.mutedTextDark]}>Profile not found</Text>
       </View>
     );
   }
 
+  const verificationDetailsLocked = isProfileVerificationLocked(profile, kyc);
+  const lockedDetailsCopy =
+    "Verified registration, document, address, phone, and payout details are locked for account safety. Send a support request with the reason if anything must change.";
+
   const renderSectionHeader = (title: string, hint?: string) => (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {hint ? <Text style={styles.sectionHint}>{hint}</Text> : null}
+      <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>{title}</Text>
+      {hint ? <Text style={[styles.sectionHint, isDarkMode && styles.mutedTextDark]}>{hint}</Text> : null}
     </View>
   );
 
@@ -667,6 +805,7 @@ export default function ProfileScreen({ navigation }: any) {
     const isEditing = kycEditingField === field;
     const display = options.mask ? maskValue(raw, 4) : raw;
     const showVerified = hasValue;
+    const locked = verificationDetailsLocked && hasValue;
 
     return (
       <View style={styles.kycField} key={field as string}>
@@ -715,13 +854,17 @@ export default function ProfileScreen({ navigation }: any) {
               {hasValue ? display : "Not provided yet - add this to complete profile"}
             </Text>
             <View style={styles.kycFieldActions}>
-              <TouchableOpacity
-                style={styles.docActionGhost}
-                onPress={() => startEditKycField(field)}
-                disabled={saving}
-              >
-                <Text style={styles.docActionGhostText}>{hasValue ? "Change" : "Add"}</Text>
-              </TouchableOpacity>
+              {locked ? (
+                <Text style={styles.fieldLockText}>Locked after verification</Text>
+              ) : (
+                <TouchableOpacity
+                  style={styles.docActionGhost}
+                  onPress={() => startEditKycField(field)}
+                  disabled={saving}
+                >
+                  <Text style={styles.docActionGhostText}>{hasValue ? "Change" : "Add"}</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </>
         )}
@@ -734,11 +877,12 @@ export default function ProfileScreen({ navigation }: any) {
     const isBusy = uploadingKey === `doc:${doc.key}`;
     const reuploadRequested = Boolean(kyc.reuploadFlags?.[doc.key]);
     const hasFile = Boolean(url);
+    const locked = verificationDetailsLocked && hasFile && !reuploadRequested;
 
     let badgeStyle: any = styles.docBadgeVerified;
     let badgeTextStyle: any = styles.docBadgeVerifiedText;
     let badgeLabel = "Verified";
-    let statusLine = "Submitted during registration";
+    let statusLine = locked ? "Verified and locked after approval" : "Submitted during registration";
     let actionLabel = "Change";
     let actionStyle: any = styles.docActionGhost;
     let actionTextStyle: any = styles.docActionGhostText;
@@ -790,27 +934,111 @@ export default function ProfileScreen({ navigation }: any) {
             <Text style={styles.documentLinkText}>View</Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity
-          style={actionStyle}
-          onPress={() =>
-            uploadAndSave(`doc:${doc.key}`, async (uploadedUrl) => {
-              const nextDocs: Documents = {
-                ...kyc,
-                [doc.key]: uploadedUrl,
-                reuploadFlags: { ...(kyc.reuploadFlags || {}), [doc.key]: false }
-              };
-              setKyc(nextDocs);
-              await saveUpdate({ documents: nextDocs });
-            })
-          }
-          disabled={pickerBusy || saving || Boolean(uploadingKey)}
-        >
-          {isBusy ? (
-            <ActivityIndicator size="small" color={reuploadRequested ? "#FFFFFF" : "#60A5FA"} />
-          ) : (
-            <Text style={actionTextStyle}>{actionLabel}</Text>
-          )}
-        </TouchableOpacity>
+        {locked ? (
+          <Text style={styles.fieldLockText}>Locked</Text>
+        ) : (
+          <TouchableOpacity
+            style={actionStyle}
+            onPress={() =>
+              uploadAndSave(`doc:${doc.key}`, async (uploadedUrl) => {
+                const nextDocs: Documents = {
+                  ...kyc,
+                  [doc.key]: uploadedUrl,
+                  reuploadFlags: { ...(kyc.reuploadFlags || {}), [doc.key]: false }
+                };
+                setKyc(nextDocs);
+                await saveUpdate({ documents: nextDocs });
+              })
+            }
+            disabled={pickerBusy || saving || Boolean(uploadingKey)}
+          >
+            {isBusy ? (
+              <ActivityIndicator size="small" color={reuploadRequested ? "#FFFFFF" : "#60A5FA"} />
+            ) : (
+              <Text style={actionTextStyle}>{actionLabel}</Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  const renderTimeCard = (field: TimeField, label: string) => {
+    const selected = activeTimeField === field;
+    return (
+      <TouchableOpacity
+        style={[styles.timeCard, selected && styles.timeCardSelected]}
+        onPress={() => setActiveTimeField(field)}
+      >
+        <Text style={[styles.timeCardLabel, selected && styles.timeCardLabelSelected]}>{label}</Text>
+        <Text style={[styles.timeCardValue, selected && styles.timeCardValueSelected]}>
+          {formatTwelveHourTime(hours[field])}
+        </Text>
+        <Text style={[styles.timeCardHint, selected && styles.timeCardHintSelected]}>
+          Tap to select
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderTimePicker = () => {
+    const current = parseTimeToTwelveHour(hours[activeTimeField]);
+    const activeLabel = activeTimeField === "openingTime" ? "Opening time" : "Closing time";
+
+    return (
+      <View style={styles.timePickerPanel}>
+        <View style={styles.timePickerHeader}>
+          <Text style={styles.timePickerTitle}>{activeLabel}</Text>
+          <Text style={styles.timePickerValue}>{formatTwelveHourTime(hours[activeTimeField])}</Text>
+        </View>
+
+        <Text style={styles.timePickerLabel}>Hour</Text>
+        <View style={styles.timeOptionRow}>
+          {HOURS_12.map((hour) => {
+            const selected = current.hour === hour;
+            return (
+              <TouchableOpacity
+                key={hour}
+                style={[styles.timeOptionChip, selected && styles.timeOptionChipSelected]}
+                onPress={() => updateTimePart(activeTimeField, { hour })}
+              >
+                <Text style={[styles.timeOptionText, selected && styles.timeOptionTextSelected]}>{hour}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.timePickerLabel}>Minutes</Text>
+        <View style={styles.timeOptionRow}>
+          {MINUTE_OPTIONS.map((minute) => {
+            const selected = current.minute === minute;
+            return (
+              <TouchableOpacity
+                key={minute}
+                style={[styles.timeOptionChip, selected && styles.timeOptionChipSelected]}
+                onPress={() => updateTimePart(activeTimeField, { minute })}
+              >
+                <Text style={[styles.timeOptionText, selected && styles.timeOptionTextSelected]}>{minute}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.timePickerLabel}>AM / PM</Text>
+        <View style={styles.periodRow}>
+          {PERIOD_OPTIONS.map((period) => {
+            const selected = current.period === period;
+            return (
+              <TouchableOpacity
+                key={period}
+                style={[styles.periodChip, selected && styles.timeOptionChipSelected]}
+                onPress={() => updateTimePart(activeTimeField, { period })}
+              >
+                <Text style={[styles.periodText, selected && styles.timeOptionTextSelected]}>{period}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     );
   };
@@ -818,9 +1046,9 @@ export default function ProfileScreen({ navigation }: any) {
   const isGstRegistered = kyc.gstRegistered === true || kyc.gstRegistered === "true" || kyc.gstRegistered === "yes";
 
   return (
-    <View style={styles.safeAreaScreen}>
+    <View style={[styles.safeAreaScreen, isDarkMode && styles.safeAreaScreenDark]}>
       <ScrollView
-        style={styles.container}
+        style={[styles.container, isDarkMode && styles.safeAreaScreenDark]}
         contentContainerStyle={{ paddingTop: 10, paddingBottom: insets.bottom + 36 }}
         showsVerticalScrollIndicator={false}
       >
@@ -875,8 +1103,20 @@ export default function ProfileScreen({ navigation }: any) {
       ) : null}
 
       {/* Basic Shop Details */}
-      <View style={styles.card}>
-        {renderSectionHeader("Basic Shop Details", "Shop name and phone stay fixed after registration.")}
+      <View style={[styles.card, isDarkMode && styles.cardDark]}>
+        {renderSectionHeader(
+          "Basic Shop Details",
+          verificationDetailsLocked ? "Verified identity and contact details are locked after approval." : "Shop name and phone stay fixed after registration."
+        )}
+        {verificationDetailsLocked ? (
+          <View style={styles.lockedNotice}>
+            <Ionicons name="lock-closed-outline" size={18} color="#1D4E89" />
+            <View style={styles.lockedNoticeCopy}>
+              <Text style={styles.lockedNoticeTitle}>Verified details protected</Text>
+              <Text style={styles.lockedNoticeText}>{lockedDetailsCopy}</Text>
+            </View>
+          </View>
+        ) : null}
         <View style={styles.readOnlyField}>
           <Text style={styles.readOnlyLabel}>Shop name</Text>
           <Text style={styles.readOnlyValue}>{profile.restaurantName}</Text>
@@ -890,25 +1130,40 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.readOnlyValue}>{CATEGORY_LABELS[profile.category] || profile.category}</Text>
         </View>
 
-        <Text style={styles.label}>Owner name</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Owner name"
-          placeholderTextColor="#98A2B3"
-          value={basics.ownerName}
-          onChangeText={(text) => setBasics({ ...basics, ownerName: text })}
-        />
+        {verificationDetailsLocked ? (
+          <>
+            <View style={styles.readOnlyField}>
+              <Text style={styles.readOnlyLabel}>Owner name</Text>
+              <Text style={styles.readOnlyValue}>{basics.ownerName || "Not provided"}</Text>
+            </View>
+            <View style={styles.readOnlyField}>
+              <Text style={styles.readOnlyLabel}>Email</Text>
+              <Text style={styles.readOnlyValue}>{basics.email || "Not provided"}</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Owner name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Owner name"
+              placeholderTextColor="#98A2B3"
+              value={basics.ownerName}
+              onChangeText={(text) => setBasics({ ...basics, ownerName: text })}
+            />
 
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Business email"
-          placeholderTextColor="#98A2B3"
-          value={basics.email}
-          onChangeText={(text) => setBasics({ ...basics, email: text })}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Business email"
+              placeholderTextColor="#98A2B3"
+              value={basics.email}
+              onChangeText={(text) => setBasics({ ...basics, email: text })}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </>
+        )}
 
         <Text style={styles.label}>Shop description</Text>
         <TextInput
@@ -921,92 +1176,118 @@ export default function ProfileScreen({ navigation }: any) {
         />
 
         <TouchableOpacity style={styles.primaryButton} onPress={handleSaveBasics} disabled={saving}>
-          {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save basics</Text>}
+          {saving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.primaryButtonText}>{verificationDetailsLocked ? "Save shop description" : "Save basics"}</Text>
+          )}
         </TouchableOpacity>
       </View>
 
       {/* Address & Location */}
-      <View style={styles.card}>
-        {renderSectionHeader("Address & Location", "Customers within your delivery radius rely on these coordinates.")}
+      <View style={[styles.card, isDarkMode && styles.cardDark]}>
+        {renderSectionHeader(
+          "Address & Location",
+          verificationDetailsLocked ? "Verified shop address changes require support review." : "Customers within your delivery radius rely on these coordinates."
+        )}
+        {verificationDetailsLocked ? (
+          <View style={styles.lockedNotice}>
+            <Ionicons name="shield-checkmark-outline" size={18} color="#1D4E89" />
+            <View style={styles.lockedNoticeCopy}>
+              <Text style={styles.lockedNoticeTitle}>Address locked after verification</Text>
+              <Text style={styles.lockedNoticeText}>
+                This protects customer trust, tax records, and payout review. Contact support with your reason to move the shop location.
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         <Text style={styles.label}>Road / street</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
           placeholder="Road / street"
           placeholderTextColor="#98A2B3"
           value={address.roadStreet}
           onChangeText={(text) => setAddress({ ...address, roadStreet: text })}
+          editable={!verificationDetailsLocked}
         />
 
         <Text style={styles.label}>Colony / society</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
           placeholder="Colony or society"
           placeholderTextColor="#98A2B3"
           value={address.colony}
           onChangeText={(text) => setAddress({ ...address, colony: text })}
+          editable={!verificationDetailsLocked}
         />
 
         <Text style={styles.label}>Area / locality</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
           placeholder="Area or locality"
           placeholderTextColor="#98A2B3"
           value={address.area}
           onChangeText={(text) => setAddress({ ...address, area: text })}
+          editable={!verificationDetailsLocked}
         />
 
         <View style={styles.row}>
           <View style={styles.half}>
             <Text style={styles.label}>City</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
               placeholder="City"
               placeholderTextColor="#98A2B3"
               value={address.city}
               onChangeText={(text) => setAddress({ ...address, city: text })}
+              editable={!verificationDetailsLocked}
             />
           </View>
           <View style={styles.half}>
             <Text style={styles.label}>State</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
               placeholder="State"
               placeholderTextColor="#98A2B3"
               value={address.state}
               onChangeText={(text) => setAddress({ ...address, state: text })}
+              editable={!verificationDetailsLocked}
             />
           </View>
         </View>
 
         <Text style={styles.label}>Pincode</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
           placeholder="6-digit pincode"
           placeholderTextColor="#98A2B3"
           value={address.pincode}
           onChangeText={(text) => setAddress({ ...address, pincode: text.replace(/\D/g, "") })}
           keyboardType="number-pad"
           maxLength={6}
+          editable={!verificationDetailsLocked}
         />
 
         <Text style={styles.label}>Landmark / nearby places</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
           placeholder="Eg. Beside SBI ATM, opposite KFC"
           placeholderTextColor="#98A2B3"
           value={address.landmark}
           onChangeText={(text) => setAddress({ ...address, landmark: text })}
+          editable={!verificationDetailsLocked}
         />
 
         <Text style={styles.label}>Google Maps link</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
           placeholder="Paste shop Google Maps link"
           placeholderTextColor="#98A2B3"
           value={address.googleMapsLink}
           onChangeText={(text) => setAddress({ ...address, googleMapsLink: text })}
           autoCapitalize="none"
+          editable={!verificationDetailsLocked}
         />
 
         <View style={styles.inlineActions}>
@@ -1030,7 +1311,11 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.detailValue}>{coordinateText}</Text>
         </View>
 
-        <TouchableOpacity style={styles.secondaryButton} onPress={captureShopLocation} disabled={saving || capturingLocation}>
+        <TouchableOpacity
+          style={[styles.secondaryButton, verificationDetailsLocked && styles.secondaryButtonDisabled]}
+          onPress={captureShopLocation}
+          disabled={saving || capturingLocation || verificationDetailsLocked}
+        >
           {capturingLocation ? (
             <ActivityIndicator color="#60A5FA" />
           ) : (
@@ -1040,13 +1325,17 @@ export default function ProfileScreen({ navigation }: any) {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSaveAddress} disabled={saving}>
+        <TouchableOpacity
+          style={[styles.primaryButton, verificationDetailsLocked && styles.primaryButtonDisabled]}
+          onPress={handleSaveAddress}
+          disabled={saving || verificationDetailsLocked}
+        >
           {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save address</Text>}
         </TouchableOpacity>
       </View>
 
       {/* Store Images */}
-      <View style={styles.card}>
+      <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader("Store Images", "Logo, banner, and food/product photos shown to customers.")}
 
         {renderImageSlot(
@@ -1115,36 +1404,19 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
 
       {/* Business Hours */}
-      <View style={styles.card}>
-        {renderSectionHeader("Business Hours", "Control daily opening hours and weekly off days.")}
+      <View style={[styles.card, isDarkMode && styles.cardDark]}>
+        {renderSectionHeader("Business Hours", "Select opening hours in 12-hour AM/PM format and set weekly off days.")}
 
         <View style={styles.row}>
           <View style={styles.half}>
-            <Text style={styles.label}>Opening time</Text>
-            <TextInput
-              style={styles.input}
-              value={hours.openingTime}
-              onChangeText={(text) => setHours({ ...hours, openingTime: text })}
-              placeholder="08:00"
-              placeholderTextColor="#98A2B3"
-            />
+            {renderTimeCard("openingTime", "Opening time")}
           </View>
           <View style={styles.half}>
-            <Text style={styles.label}>Closing time</Text>
-            <TextInput
-              style={styles.input}
-              value={hours.closingTime}
-              onChangeText={(text) => setHours({ ...hours, closingTime: text })}
-              placeholder="22:00"
-              placeholderTextColor="#98A2B3"
-            />
+            {renderTimeCard("closingTime", "Closing time")}
           </View>
         </View>
 
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Open for orders right now</Text>
-          <Switch value={hours.isOpen} onValueChange={(value) => setHours({ ...hours, isOpen: value })} />
-        </View>
+        {renderTimePicker()}
 
         <Text style={styles.label}>Weekly holidays</Text>
         <View style={styles.pillRow}>
@@ -1168,11 +1440,13 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
 
       {/* KYC / Verification */}
-      <View style={styles.card}>
+      <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader(
           "KYC / Verification",
-          profileCompletion.isComplete
-            ? "All required registration details are on file. Tap Change to update anything."
+          verificationDetailsLocked
+            ? "All verified document details are locked. Re-upload is available only when admin requests it."
+            : profileCompletion.isComplete
+            ? "All required registration details are on file."
             : "Some required details are incomplete. Add the missing document details here."
         )}
 
@@ -1222,7 +1496,7 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
 
       {/* Menu Management */}
-      <View style={styles.card}>
+      <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader("Menu Management", "Add dishes, set prices, mark veg/non-veg, and manage stock.")}
         <View style={styles.statRow}>
           <View style={styles.statItem}>
@@ -1239,46 +1513,93 @@ export default function ProfileScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.card}>
-        {renderSectionHeader("Payments", "Track wallet balance, weekly Vyaha payouts, and bank transfer history.")}
-        <View style={styles.detailBlock}>
-          <Text style={styles.detailLabel}>Manual payout account</Text>
-          <Text style={styles.detailValue}>
-            Admins use these details in the payout dashboard to send money manually after delivered online-paid orders.
-          </Text>
+      <View style={[styles.card, isDarkMode && styles.cardDark]}>
+        {renderSectionHeader(
+          "Payments",
+          verificationDetailsLocked
+            ? "Payout details are private. Account changes require a support review."
+            : "Add payout details before verification. Account numbers stay hidden on screen."
+        )}
+        <View style={styles.payoutSummaryCard}>
+          <View style={styles.payoutIconCircle}>
+            <Ionicons name="card-outline" size={20} color="#1D4E89" />
+          </View>
+          <View style={styles.payoutSummaryCopy}>
+            <Text style={styles.payoutSummaryTitle}>{bankDetails.accountHolderName || "Payout account"}</Text>
+            <Text style={styles.payoutSummaryMeta}>{maskBankAccountNumber(bankDetails.accountNumber)}</Text>
+            <Text style={styles.payoutSummaryMeta}>IFSC {bankDetails.ifsc || "not added"}</Text>
+          </View>
         </View>
-        <Text style={styles.label}>Account holder name</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Name as per bank account"
-          placeholderTextColor="#98A2B3"
-          value={bankDetails.accountHolderName}
-          onChangeText={(text) => setBankDetails((prev) => ({ ...prev, accountHolderName: text }))}
-        />
-        <Text style={styles.label}>Account number</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Bank account number"
-          placeholderTextColor="#98A2B3"
-          value={bankDetails.accountNumber}
-          onChangeText={(text) => setBankDetails((prev) => ({ ...prev, accountNumber: text.replace(/\D/g, "").slice(0, 20) }))}
-          keyboardType="number-pad"
-        />
-        <Text style={styles.label}>IFSC code</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="ABCD0123456"
-          placeholderTextColor="#98A2B3"
-          value={bankDetails.ifsc}
-          onChangeText={(text) =>
-            setBankDetails((prev) => ({ ...prev, ifsc: text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11) }))
-          }
-          autoCapitalize="characters"
-          maxLength={11}
-        />
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSaveBankDetails} disabled={saving}>
-          {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save bank details</Text>}
-        </TouchableOpacity>
+
+        {verificationDetailsLocked ? (
+          <>
+            <View style={styles.lockedNotice}>
+              <Ionicons name="lock-closed-outline" size={18} color="#1D4E89" />
+              <View style={styles.lockedNoticeCopy}>
+                <Text style={styles.lockedNoticeTitle}>Bank account changes need review</Text>
+                <Text style={styles.lockedNoticeText}>
+                  Share the reason for change. Support will verify it before updating payout details.
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.label}>Reason for bank account change</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Example: Bank account closed, wrong account submitted, ownership change..."
+              placeholderTextColor="#98A2B3"
+              value={bankChangeRequestReason}
+              onChangeText={setBankChangeRequestReason}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.primaryButton, bankChangeRequestSubmitting && styles.primaryButtonDisabled]}
+              onPress={submitBankChangeRequest}
+              disabled={bankChangeRequestSubmitting}
+            >
+              {bankChangeRequestSubmitting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Send change request</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Account holder name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Name as per bank account"
+              placeholderTextColor="#98A2B3"
+              value={bankDetails.accountHolderName}
+              onChangeText={(text) => setBankDetails((prev) => ({ ...prev, accountHolderName: text }))}
+            />
+            <Text style={styles.label}>Account number</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Bank account number"
+              placeholderTextColor="#98A2B3"
+              value={bankDetails.accountNumber}
+              onChangeText={(text) => setBankDetails((prev) => ({ ...prev, accountNumber: text.replace(/\D/g, "").slice(0, 20) }))}
+              keyboardType="number-pad"
+              secureTextEntry
+            />
+            <Text style={styles.label}>IFSC code</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="ABCD0123456"
+              placeholderTextColor="#98A2B3"
+              value={bankDetails.ifsc}
+              onChangeText={(text) =>
+                setBankDetails((prev) => ({ ...prev, ifsc: text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11) }))
+              }
+              autoCapitalize="characters"
+              maxLength={11}
+            />
+            <TouchableOpacity style={styles.primaryButton} onPress={handleSaveBankDetails} disabled={saving}>
+              {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save bank details</Text>}
+            </TouchableOpacity>
+          </>
+        )}
         <TouchableOpacity style={styles.linkRow} onPress={() => navigation.navigate("PaymentHistory")}>
           <View style={styles.linkRowLeft}>
             <View style={[styles.linkIconCircle, { backgroundColor: "#EAF3FF" }]}>
@@ -1287,13 +1608,6 @@ export default function ProfileScreen({ navigation }: any) {
             <Text style={styles.linkRowText}>Payment history</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#8AA4C2" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.card}>
-        {renderSectionHeader("App Settings", "Order, delivery, payout, and notification settings are in Settings screen.")}
-        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate("Settings")}>
-          <Text style={styles.primaryButtonText}>Open Settings</Text>
         </TouchableOpacity>
       </View>
       </ScrollView>
@@ -1305,6 +1619,19 @@ const styles = StyleSheet.create({
   safeAreaScreen: {
     flex: 1,
     backgroundColor: "#F4F8FF"
+  },
+  safeAreaScreenDark: {
+    backgroundColor: "#0B1220"
+  },
+  cardDark: {
+    backgroundColor: "#111827",
+    borderColor: "#263449"
+  },
+  textDark: {
+    color: "#E5EDF7"
+  },
+  mutedTextDark: {
+    color: "#9FB0C5"
   },
   container: {
     flex: 1,
@@ -1481,9 +1808,132 @@ const styles = StyleSheet.create({
     backgroundColor: "#F9FCFF",
     marginBottom: 12
   },
+  inputDisabled: {
+    backgroundColor: "#EEF4FB",
+    color: "#5E7897"
+  },
   textArea: {
     minHeight: 88,
     textAlignVertical: "top"
+  },
+  timeCard: {
+    backgroundColor: "#F9FCFF",
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12
+  },
+  timeCardSelected: {
+    backgroundColor: "#EAF3FF",
+    borderColor: "#60A5FA"
+  },
+  timeCardLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#5E7897",
+    textTransform: "uppercase",
+    letterSpacing: 0.4
+  },
+  timeCardLabelSelected: {
+    color: "#1D4E89"
+  },
+  timeCardValue: {
+    marginTop: 6,
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#143A66"
+  },
+  timeCardValueSelected: {
+    color: "#1D4E89"
+  },
+  timeCardHint: {
+    marginTop: 3,
+    fontSize: 11,
+    color: "#8FA3BD",
+    fontWeight: "700"
+  },
+  timeCardHintSelected: {
+    color: "#60A5FA"
+  },
+  timePickerPanel: {
+    backgroundColor: "#F9FCFF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    borderRadius: 18,
+    padding: 12,
+    marginBottom: 14
+  },
+  timePickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10
+  },
+  timePickerTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#143A66"
+  },
+  timePickerValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#60A5FA"
+  },
+  timePickerLabel: {
+    marginTop: 8,
+    marginBottom: 6,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#5E7897",
+    textTransform: "uppercase",
+    letterSpacing: 0.4
+  },
+  timeOptionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap"
+  },
+  timeOptionChip: {
+    minWidth: 42,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    marginRight: 7,
+    marginBottom: 7
+  },
+  timeOptionChipSelected: {
+    backgroundColor: "#60A5FA",
+    borderColor: "#60A5FA"
+  },
+  timeOptionText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#44678E"
+  },
+  timeOptionTextSelected: {
+    color: "#FFFFFF"
+  },
+  periodRow: {
+    flexDirection: "row"
+  },
+  periodChip: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    borderRadius: 14,
+    paddingVertical: 11,
+    marginRight: 8
+  },
+  periodText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#44678E"
   },
   row: {
     flexDirection: "row"
@@ -1520,6 +1970,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginTop: 4
   },
+  primaryButtonDisabled: {
+    backgroundColor: "#9FC8FF"
+  },
   primaryButtonText: {
     color: "#FFFFFF",
     fontSize: 14,
@@ -1531,6 +1984,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     paddingVertical: 13
+  },
+  secondaryButtonDisabled: {
+    backgroundColor: "#EEF4FB"
   },
   secondaryButtonText: {
     color: "#60A5FA",
@@ -1576,6 +2032,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#143A66",
     fontWeight: "700"
+  },
+  lockedNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#EEF6FF",
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12
+  },
+  lockedNoticeCopy: {
+    flex: 1,
+    marginLeft: 10
+  },
+  lockedNoticeTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#143A66"
+  },
+  lockedNoticeText: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#355877"
   },
   imageSlot: {
     marginBottom: 14
@@ -1879,6 +2360,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8
   },
+  fieldLockText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#5E7897"
+  },
   kycEditInput: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
@@ -1961,5 +2447,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#143A66"
+  },
+  payoutSummaryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FCFF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12
+  },
+  payoutIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF3FF",
+    marginRight: 12
+  },
+  payoutSummaryCopy: {
+    flex: 1
+  },
+  payoutSummaryTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#143A66",
+    marginBottom: 3
+  },
+  payoutSummaryMeta: {
+    fontSize: 12,
+    color: "#5E7897",
+    fontWeight: "700",
+    marginTop: 2
   }
 });

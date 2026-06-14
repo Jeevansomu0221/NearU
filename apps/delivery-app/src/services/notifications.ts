@@ -136,6 +136,11 @@ const postToken = async (token: string) => {
 const navigateFromData = (navigationRef: any, data?: Record<string, any> | null) => {
   if (!navigationRef?.isReady?.()) return false;
 
+  if (data?.type === "PAYOUT_PAID") {
+    navigationRef.navigate("Main", { screen: "Earnings" });
+    return true;
+  }
+
   const orderId = data?.orderId || data?.jobId;
   if (orderId) {
     navigationRef.navigate("JobDetails", { orderId: String(orderId) });

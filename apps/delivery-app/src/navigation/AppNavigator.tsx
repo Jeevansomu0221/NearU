@@ -17,6 +17,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 import ReviewStatusScreen from "../screens/ReviewStatusScreen";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
+import { requestRiderLocationPermission } from "../utils/riderLocation";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -24,6 +25,10 @@ const Tab = createBottomTabNavigator();
 // Tab Navigator (Main screen)
 function MainTabs() {
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    requestRiderLocationPermission({ showDeniedAlert: true }).catch(() => {});
+  }, []);
 
   return (
     <Tab.Navigator

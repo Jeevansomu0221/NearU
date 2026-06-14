@@ -19,10 +19,8 @@ import {
   DeliveryOrder 
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
-import * as Location from 'expo-location';
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
-
-const LOCATION_LOOKUP_TIMEOUT_MS = 5000;
+import { getCurrentRiderLocation } from "../utils/riderLocation";
 
 interface Props {
   route: any;
@@ -68,7 +66,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [job, setJob] = useState<DeliveryOrder | null>(initialJob || null);
   const [loading, setLoading] = useState(!initialJob);
   const [updating, setUpdating] = useState(false);
-  const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [cashConfirmVisible, setCashConfirmVisible] = useState(false);
   const [statusModal, setStatusModal] = useState<{
     title: string;
@@ -80,40 +77,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     loadJobDetails();
-    getCurrentLocation().then(setUserLocation).catch(() => {});
+    getCurrentRiderLocation({ showDeniedAlert: false }).catch(() => {});
   }, []);
-
-  const getCurrentPositionWithTimeout = async (timeoutMs = LOCATION_LOOKUP_TIMEOUT_MS) => {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-    try {
-      return await Promise.race<Location.LocationObject | null>([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null),
-        new Promise<null>((resolve) => {
-          timeoutId = setTimeout(() => resolve(null), timeoutMs);
-        })
-      ]);
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    }
-  };
-
-  const getCurrentLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      return null;
-    }
-
-    const lastKnownLocation = await Location.getLastKnownPositionAsync({
-      maxAge: 60000,
-      requiredAccuracy: 200
-    }).catch(() => null);
-    const currentLocation = await getCurrentPositionWithTimeout();
-
-    return currentLocation || lastKnownLocation;
-  };
 
   const returnToJobs = () => {
     if (navigation.canGoBack?.()) {
@@ -374,25 +339,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const handlePickUp = async () => {
     try {
       setUpdating(true);
-      
-      let location: Location.LocationObject | null = userLocation;
-      try {
-        if (!location) {
-          location = await getCurrentLocation();
-        }
-        if (location) {
-          setUserLocation(location);
-        }
-      } catch (error) {
-        console.error("Error getting location:", error);
+
+      const location = await getCurrentRiderLocation({ required: true, showDeniedAlert: true });
+      if (!location) {
+        return;
       }
 
       const response = await markAsPickedUp(
         orderId,
-        location ? {
+        {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude
-        } : undefined
+        }
       );
 
       if (response.success) {
@@ -428,25 +386,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const confirmDelivery = async (collectedAmount?: number) => {
     try {
       setUpdating(true);
-      
-      let location: Location.LocationObject | null = userLocation;
-      try {
-        if (!location) {
-          location = await getCurrentLocation();
-        }
-        if (location) {
-          setUserLocation(location);
-        }
-      } catch (error) {
-        console.error("Error getting location:", error);
+
+      const location = await getCurrentRiderLocation({ required: true, showDeniedAlert: true });
+      if (!location) {
+        return;
       }
 
       const response = await markAsDelivered(
         orderId,
-        location ? {
+        {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude
-        } : undefined,
+        },
         collectedAmount
       );
 

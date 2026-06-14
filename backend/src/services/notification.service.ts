@@ -87,6 +87,9 @@ const compactStrings = (values: any[]) =>
 const truncate = (value: string, maxLength: number) =>
   value.length > maxLength ? `${value.slice(0, Math.max(0, maxLength - 3)).trim()}...` : value;
 
+const formatMoneyForNotification = (amount: number) =>
+  `Rs ${Math.round(Number(amount || 0)).toLocaleString("en-IN")}`;
+
 const formatAddressForNotification = (address: any) => {
   if (!address) return "";
   if (typeof address === "string") return truncate(address.trim(), 120);
@@ -436,6 +439,39 @@ export const notifyDeliveryDocumentReupload = async (deliveryPartner: any) => {
     data: {
       type: "DELIVERY_REUPLOAD",
       status: deliveryPartner.status || "REJECTED"
+    }
+  });
+};
+
+export const notifyPayoutPaid = async (payout: any) => {
+  const recipientType = payout?.recipientType;
+  const recipientId = idString(payout?.recipientId);
+  if (!recipientId) return;
+
+  const recipient =
+    recipientType === "PARTNER"
+      ? await Partner.findById(recipientId).select("userId").lean()
+      : recipientType === "DELIVERY_PARTNER"
+        ? await DeliveryPartner.findById(recipientId).select("userId").lean()
+        : null;
+  const userId = idString((recipient as any)?.userId);
+  if (!userId) return;
+
+  const amount = Number(payout?.amount || 0);
+  await sendNotificationToUsers([userId], {
+    app: recipientType === "PARTNER" ? "partner" : "delivery",
+    title: "Wallet money paid",
+    body:
+      amount > 0
+        ? `${formatMoneyForNotification(amount)} has been paid to your bank account. Please check your bank.`
+        : "Your payout has been settled. Please check your wallet history.",
+    data: {
+      type: "PAYOUT_PAID",
+      payoutId: idString(payout?._id),
+      recipientType,
+      amount,
+      status: payout?.status || "PAID",
+      paidAt: payout?.paidAt instanceof Date ? payout.paidAt.toISOString() : payout?.paidAt
     }
   });
 };

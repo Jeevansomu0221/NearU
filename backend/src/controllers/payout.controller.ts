@@ -5,6 +5,7 @@ import Partner from "../models/Partner.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import Payout from "../models/Payout.model";
 import CashLedgerEntry from "../models/CashLedgerEntry.model";
+import { notifyPayoutPaid } from "../services/notification.service";
 
 interface AuthRequest extends Request {
   user?: {
@@ -575,6 +576,10 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
         }
       );
     }
+
+    void notifyPayoutPaid(payout).catch((error) => {
+      console.error("Failed to notify payout paid:", error);
+    });
 
     res.status(201).json({
       success: true,

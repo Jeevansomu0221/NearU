@@ -96,7 +96,7 @@ const updateDeliveryPartnerForUser = (user: NonNullable<AuthRequest["user"]>, up
   return filters.length > 0 ? DeliveryPartner.findOneAndUpdate({ $or: filters }, update, options) : null;
 };
 
-const isDeliveryProfileComplete = (profile: {
+type DeliveryProfileCompletionInput = {
   name?: string;
   dateOfBirth?: string | Date | null;
   address?: string;
@@ -130,33 +130,46 @@ const isDeliveryProfileComplete = (profile: {
     bankPassbookUrl?: string;
     bankStatementUrl?: string;
   };
-}) => {
+};
+
+const getMissingDeliveryProfileFields = (profile: DeliveryProfileCompletionInput) => {
   const requiresMotorDocuments = vehicleTypeRequiresMotorDocuments(profile.vehicleType);
+  const missingFields: string[] = [];
   const hasRealName =
     !!safeTrimmedString(profile.name) &&
     !/^Delivery\s\d{4}$/.test(safeTrimmedString(profile.name)) &&
     safeTrimmedString(profile.name).length >= 3;
 
-  const hasMandatoryDocuments = Boolean(
-    (safeTrimmedString(profile.documents?.aadhaarFrontUrl) || safeTrimmedString(profile.documents?.aadhaarUrl)) &&
-      safeTrimmedString(profile.documents?.aadhaarNumber) &&
-      safeTrimmedString(profile.documents?.selfiePhotoUrl) &&
-      (!requiresMotorDocuments ||
-        ((safeTrimmedString(profile.documents?.drivingLicenseFrontUrl) || safeTrimmedString(profile.documents?.drivingLicenseUrl)) &&
-          safeTrimmedString(profile.documents?.drivingLicenseBackUrl)))
-  );
+  if (!hasRealName) missingFields.push("name");
+  if (!hasValidDateOfBirth(profile.dateOfBirth)) missingFields.push("date of birth");
+  if (!safeTrimmedString(profile.emergencyContactName)) missingFields.push("emergency contact name");
+  if (!emergencyPhoneRegex.test(safeTrimmedString(profile.emergencyContactPhone))) {
+    missingFields.push("emergency contact phone");
+  }
+  if (!profile.termsAcceptedAt) missingFields.push("accepted terms");
+  if (!safeTrimmedString(profile.vehicleType)) missingFields.push("vehicle type");
+  if (requiresMotorDocuments && !safeTrimmedString(profile.vehicleNumber)) missingFields.push("vehicle number");
+  if (requiresMotorDocuments && !safeTrimmedString(profile.licenseNumber)) missingFields.push("driving license number");
+  if (!(safeTrimmedString(profile.documents?.aadhaarFrontUrl) || safeTrimmedString(profile.documents?.aadhaarUrl))) {
+    missingFields.push("Aadhaar front");
+  }
+  if (!safeTrimmedString(profile.documents?.aadhaarNumber)) missingFields.push("Aadhaar number");
+  if (!safeTrimmedString(profile.documents?.selfiePhotoUrl)) missingFields.push("selfie photo");
+  if (
+    requiresMotorDocuments &&
+    !(safeTrimmedString(profile.documents?.drivingLicenseFrontUrl) || safeTrimmedString(profile.documents?.drivingLicenseUrl))
+  ) {
+    missingFields.push("driving license front");
+  }
+  if (requiresMotorDocuments && !safeTrimmedString(profile.documents?.drivingLicenseBackUrl)) {
+    missingFields.push("driving license back");
+  }
 
-  return Boolean(
-    hasRealName &&
-      hasValidDateOfBirth(profile.dateOfBirth) &&
-      safeTrimmedString(profile.emergencyContactName) &&
-      emergencyPhoneRegex.test(safeTrimmedString(profile.emergencyContactPhone)) &&
-      Boolean(profile.termsAcceptedAt) &&
-      safeTrimmedString(profile.vehicleType) &&
-      (!requiresMotorDocuments || safeTrimmedString(profile.vehicleNumber)) &&
-      (!requiresMotorDocuments || safeTrimmedString(profile.licenseNumber)) &&
-      hasMandatoryDocuments
-  );
+  return missingFields;
+};
+
+const isDeliveryProfileComplete = (profile: DeliveryProfileCompletionInput) => {
+  return getMissingDeliveryProfileFields(profile).length === 0;
 };
 
 export const getDeliveryProfile = async (req: AuthRequest, res: Response) => {
@@ -690,9 +703,11 @@ export const updateDeliveryPartnerStatusByAdmin = async (req: AuthRequest, res: 
     }
 
     if (["VERIFIED", "ACTIVE"].includes(status)) {
-      const userDoc = await User.findById(deliveryPartner.userId).select("name");
-      const isComplete = isDeliveryProfileComplete({
-        name: userDoc?.name,
+      const userDoc = deliveryPartner.userId
+        ? await User.findById(deliveryPartner.userId).select("name")
+        : null;
+      const missingFields = getMissingDeliveryProfileFields({
+        name: firstString(userDoc?.name, deliveryPartner.name),
         dateOfBirth: deliveryPartner.dateOfBirth,
         address: deliveryPartner.address,
         emergencyContactName: deliveryPartner.emergencyContactName,
@@ -705,12 +720,22 @@ export const updateDeliveryPartnerStatusByAdmin = async (req: AuthRequest, res: 
         documents: deliveryPartner.documents
       });
 
-      if (!isComplete) {
-        return errorResponse(res, "Cannot approve until the delivery partner completes registration documents", 400);
+      if (missingFields.length) {
+        return errorResponse(
+          res,
+          `Cannot approve until the delivery partner completes: ${missingFields.join(", ")}`,
+          400,
+          { missingFields }
+        );
       }
     }
 
     deliveryPartner.status = status;
+    if (status === "ACTIVE") {
+      deliveryPartner.isAvailable = true;
+    } else if (["PENDING", "REJECTED", "SUSPENDED", "INACTIVE"].includes(status)) {
+      deliveryPartner.isAvailable = false;
+    }
     deliveryPartner.reviewComment = typeof reviewComment === "string" ? reviewComment.trim() : "";
     await deliveryPartner.save();
 

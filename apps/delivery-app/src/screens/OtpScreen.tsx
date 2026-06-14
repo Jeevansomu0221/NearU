@@ -19,6 +19,7 @@ import {
   sendFirebaseOtp
 } from "../services/firebasePhoneAuth";
 import { registerForPushNotifications } from "../services/notifications";
+import { requestRiderLocationPermission } from "../utils/riderLocation";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone } = route.params;
@@ -128,7 +129,7 @@ export default function OtpScreen({ route, navigation }: any) {
         ["user", JSON.stringify(response.data.user)]
       ]);
 
-      registerForPushNotifications().catch((error) => {
+      const notificationRegistration = registerForPushNotifications().catch((error) => {
         console.log("Failed to register push notifications:", error);
       });
 
@@ -137,6 +138,11 @@ export default function OtpScreen({ route, navigation }: any) {
         profileResponse.success && profileResponse.data
           ? resolveDeliveryRoute(profileResponse.data)
           : "CompleteProfile";
+
+      if (nextRoute === "Main") {
+        await notificationRegistration;
+        await requestRiderLocationPermission({ showDeniedAlert: true });
+      }
 
       navigation.reset({
         index: 0,

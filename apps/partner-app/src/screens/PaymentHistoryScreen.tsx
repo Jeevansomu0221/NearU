@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -16,6 +16,8 @@ import {
   type PartnerWallet,
   type PartnerWalletOrder
 } from "../api/partner.api";
+import { usePartnerTheme } from "../context/PartnerThemeContext";
+import type { PartnerTheme } from "../theme";
 
 type Props = {
   route?: {
@@ -51,6 +53,8 @@ const formatDateTime = (value?: string) => {
 };
 
 export default function PaymentHistoryScreen({ route }: Props) {
+  const { theme } = usePartnerTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const [wallet, setWallet] = useState<PartnerWallet | null>(route?.params?.wallet || null);
   const [loading, setLoading] = useState(!route?.params?.wallet);
@@ -110,7 +114,7 @@ export default function PaymentHistoryScreen({ route }: Props) {
   if (loading && !wallet) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color="#60A5FA" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading wallet...</Text>
       </View>
     );
@@ -131,9 +135,7 @@ export default function PaymentHistoryScreen({ route }: Props) {
     <ScrollView
       style={styles.container}
       contentContainerStyle={{ paddingTop: 10, paddingBottom: insets.bottom + 32 }}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={() => loadWallet(true)} colors={["#60A5FA"]} />
-      }
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadWallet(true)} colors={[theme.colors.primary]} />}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.heroCard}>
@@ -200,41 +202,41 @@ export default function PaymentHistoryScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: PartnerTheme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F4F8FF"
+    backgroundColor: theme.colors.background
   },
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F4F8FF",
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 24
   },
   loadingText: {
     marginTop: 12,
-    color: "#5E7897",
+    color: theme.colors.muted,
     fontSize: 15,
     fontWeight: "600",
     textAlign: "center"
   },
   retryButton: {
     marginTop: 16,
-    backgroundColor: "#60A5FA",
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     paddingHorizontal: 18,
     paddingVertical: 12
   },
   retryButtonText: {
-    color: "#FFFFFF",
+    color: theme.colors.card,
     fontSize: 14,
     fontWeight: "800"
   },
   heroCard: {
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: "#60A5FA",
+    backgroundColor: theme.colors.primary,
     borderRadius: 24,
     padding: 20
   },
@@ -260,10 +262,10 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.card,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#D9E6F7",
+    borderColor: theme.colors.border,
     padding: 16
   },
   cardTitleRow: {
@@ -274,45 +276,45 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: "900",
-    color: "#143A66",
+    color: theme.colors.primaryDark,
     marginLeft: 8
   },
   nextDate: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#143A66"
+    color: theme.colors.primaryDark
   },
   helperText: {
     marginTop: 6,
     fontSize: 13,
     lineHeight: 18,
-    color: "#5E7897",
+    color: theme.colors.muted,
     fontWeight: "600"
   },
   bankBox: {
     marginTop: 14,
-    backgroundColor: "#F9FCFF",
+    backgroundColor: theme.colors.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#D9E6F7",
+    borderColor: theme.colors.border,
     padding: 12
   },
   bankLabel: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#5E7897",
+    color: theme.colors.muted,
     textTransform: "uppercase",
     marginBottom: 4
   },
   bankValue: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#143A66"
+    color: theme.colors.primaryDark
   },
   bankSub: {
     marginTop: 3,
     fontSize: 13,
-    color: "#5E7897",
+    color: theme.colors.muted,
     fontWeight: "600"
   },
   summaryGrid: {
@@ -323,29 +325,29 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.card,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#D9E6F7",
+    borderColor: theme.colors.border,
     padding: 14
   },
   summaryLabel: {
     fontSize: 12,
-    color: "#5E7897",
+    color: theme.colors.muted,
     fontWeight: "800"
   },
   summaryValue: {
     marginTop: 4,
     fontSize: 18,
     fontWeight: "900",
-    color: "#143A66"
+    color: theme.colors.primaryDark
   },
   historyRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#E6EEF9"
+    borderBottomColor: theme.colors.borderSoft
   },
   historyIcon: {
     width: 38,
@@ -353,7 +355,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F0F6FE",
+    backgroundColor: theme.colors.neutralSoft,
     marginRight: 10
   },
   paidIcon: {
@@ -367,12 +369,12 @@ const styles = StyleSheet.create({
   historyTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#143A66"
+    color: theme.colors.primaryDark
   },
   historySub: {
     marginTop: 2,
     fontSize: 12,
-    color: "#5E7897",
+    color: theme.colors.muted,
     fontWeight: "600"
   },
   referenceText: {
@@ -384,11 +386,11 @@ const styles = StyleSheet.create({
   historyAmount: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#143A66"
+    color: theme.colors.primaryDark
   },
   emptyText: {
     marginTop: 10,
-    color: "#5E7897",
+    color: theme.colors.muted,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "600"

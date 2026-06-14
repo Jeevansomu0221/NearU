@@ -68,6 +68,25 @@ const selfDeliveryEligibleStatuses = ["VERIFIED", "ACTIVE"];
 
 const validationError = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
 
+const lockedProfileError = () =>
+  Object.assign(
+    new Error("Verified profile details are locked. Submit a support request with the reason for change."),
+    { statusCode: 403 }
+  );
+
+const comparableDocumentValue = (key: string, value: any) => {
+  if (key === "bankAccountNumber" || key === "aadhaarNumber" || key === "fssaiNumber") {
+    return firstString(value).replace(/\D/g, "");
+  }
+  if (key === "bankIfsc" || key === "panNumber" || key === "gstNumber") {
+    return firstString(value).toUpperCase();
+  }
+  if (key === "gstRegistered") {
+    return isGstRegisteredValue(value) ? "true" : "false";
+  }
+  return firstString(value);
+};
+
 const phoneLookupCandidates = (value: unknown) => {
   const raw = String(value || "").trim();
   const compact = raw.replace(/[\s().-]/g, "");
@@ -1314,12 +1333,20 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     }
 
     const updates: any = {};
+    const verificationLocked =
+      partner.status === "APPROVED" && hasCompleteProfileDocuments((partner.documents || {}) as Record<string, any>);
 
     if (ownerName !== undefined) {
+      if (verificationLocked && firstString(ownerName) !== firstString(partner.ownerName)) {
+        throw lockedProfileError();
+      }
       updates.ownerName = String(ownerName).trim();
     }
 
     if (email !== undefined) {
+      if (verificationLocked && firstString(email).toLowerCase() !== firstString(partner.email).toLowerCase()) {
+        throw lockedProfileError();
+      }
       updates.email = String(email || "").trim().toLowerCase();
     }
 
@@ -1360,6 +1387,9 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     }
 
     if (address && typeof address === "object") {
+      if (verificationLocked) {
+        throw lockedProfileError();
+      }
       updates.address = {
         ...partner.address,
         ...address
@@ -1378,6 +1408,9 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
 
     // Direct GPS pin (from "Use my shop location" button) always wins.
     if (incomingLocation && typeof incomingLocation === "object") {
+      if (verificationLocked) {
+        throw lockedProfileError();
+      }
       const lat = Number(incomingLocation.latitude);
       const lng = Number(incomingLocation.longitude);
       if (
@@ -1399,6 +1432,40 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     if (documents && typeof documents === "object") {
       const existingDocs = (partner.documents || {}) as Record<string, any>;
       const incomingDocs = documents as Record<string, any>;
+      if (verificationLocked) {
+        const protectedDocKeys = [
+          "fssaiNumber",
+          "panNumber",
+          "aadhaarNumber",
+          "gstRegistered",
+          "gstNumber",
+          "fssaiUrl",
+          "panFrontUrl",
+          "aadhaarFrontUrl",
+          "aadhaarBackUrl",
+          "gstUrl",
+          "shopLicenseUrl",
+          "ownerPanUrl",
+          "bankAccountHolderName",
+          "bankAccountNumber",
+          "bankIfsc",
+          "bankDocumentType",
+          "bankProofUrl",
+          "addressProofUrl",
+          "menuProofUrl"
+        ];
+        const reuploadFlags = (existingDocs.reuploadFlags || {}) as Record<string, boolean>;
+        const hasProtectedChange = protectedDocKeys.some((key) => {
+          if (!Object.prototype.hasOwnProperty.call(incomingDocs, key)) return false;
+          const docUrlReuploadAllowed = key.endsWith("Url") && reuploadFlags[key] === true;
+          if (docUrlReuploadAllowed) return false;
+          return comparableDocumentValue(key, incomingDocs[key]) !== comparableDocumentValue(key, existingDocs[key]);
+        });
+
+        if (hasProtectedChange) {
+          throw lockedProfileError();
+        }
+      }
       const mergedDocs: Record<string, any> = { ...existingDocs, ...incomingDocs };
 
       const bankFieldsChanged = ["bankAccountHolderName", "bankAccountNumber", "bankIfsc"].some((key) =>

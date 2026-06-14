@@ -14,6 +14,9 @@ type PartnerOrder = {
   }>;
 };
 
+type QuickOrderStatus = "ACCEPTED" | "REJECTED";
+type DetailStatusOverride = QuickOrderStatus | "CANCELLED";
+
 type Props = {
   navigationRef: any;
 };
@@ -99,14 +102,14 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
   }, [navigationRef, newOrderAlert]);
 
   const updateOrderStatus = useCallback(
-    async (status: "ACCEPTED" | "REJECTED") => {
+    async (status: QuickOrderStatus) => {
       if (!newOrderAlert) return;
 
       const orderId = newOrderAlert._id;
 
       try {
         const res = await api.post(`/orders/partner/${orderId}/status`, { status });
-        const response = res.data as { success: boolean; message?: string };
+        const response = res.data as { success: boolean; message?: string; data?: PartnerOrder };
         if (!response.success) {
           Alert.alert("Order update failed", response.message || "Please try again.");
           return;
@@ -116,19 +119,25 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
         setNewOrderAlert(null);
         await loadPendingOrders();
 
-        if (status === "ACCEPTED") {
-          navigationRef?.navigate?.("OrderDetails", {
-            orderId,
-            orderStatus: status,
-            orderStatusUpdatedAt: Date.now()
-          });
-        }
+        const detailStatus: DetailStatusOverride =
+          status === "REJECTED" || response.data?.status === "CANCELLED" ? "CANCELLED" : "ACCEPTED";
+
+        navigationRef?.navigate?.("OrderDetails", {
+          orderId,
+          orderStatus: detailStatus,
+          orderStatusUpdatedAt: Date.now()
+        });
       } catch (error: any) {
         const message = error.response?.data?.message || "Please try again.";
         if (status === "REJECTED" && String(message).includes("CANCELLED")) {
           knownOrderIds.current.add(orderId);
           setNewOrderAlert(null);
           await loadPendingOrders();
+          navigationRef?.navigate?.("OrderDetails", {
+            orderId,
+            orderStatus: "CANCELLED",
+            orderStatusUpdatedAt: Date.now()
+          });
           return;
         }
 

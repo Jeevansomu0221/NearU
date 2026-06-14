@@ -14,6 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 import { getPartnerWallet, type PartnerWallet } from "../api/partner.api";
 import NotificationButton from "../components/NotificationButton";
+import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 
 
@@ -21,6 +22,7 @@ const isAwaitingPartnerAction = (status: string) =>
   status === "CONFIRMED";
 
 export default function DashboardScreen({ navigation }: any) {
+  const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
   const [shopOpen, setShopOpen] = useState(true);
   const [partner, setPartner] = useState<any>(null);
@@ -115,56 +117,74 @@ export default function DashboardScreen({ navigation }: any) {
 
   if (loading && !partner) {
     return (
-      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color="#60A5FA" />
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      <View style={[styles.loadingContainer, isDarkMode && styles.containerDark, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, isDarkMode && styles.mutedTextDark]}>Loading dashboard...</Text>
       </View>
     );
   }
 
   if (!partner) {
     return (
-      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-        <Text style={styles.loadingText}>Unable to load partner details.</Text>
+      <View style={[styles.loadingContainer, isDarkMode && styles.containerDark, { paddingTop: insets.top }]}>
+        <Text style={[styles.loadingText, isDarkMode && styles.mutedTextDark]}>Unable to load partner details.</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, isDarkMode && styles.containerDark, { paddingTop: insets.top }]}>
       <ScrollView
-        style={styles.container}
+        style={[styles.container, isDarkMode && styles.containerDark]}
         contentContainerStyle={{ paddingTop: 6, paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerContainer}>
           <View style={styles.headerLeft}>
-            <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.shopNameText} numberOfLines={1}>
+            <Text style={[styles.welcomeText, isDarkMode && styles.mutedTextDark]}>Welcome back,</Text>
+            <Text style={[styles.shopNameText, isDarkMode && styles.textDark]} numberOfLines={1}>
               {partner.restaurantName || partner.shopName || "Your Shop"}
             </Text>
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.settingsButton}
+              style={[styles.settingsButton, isDarkMode && styles.cardDark]}
               onPress={() => navigation.navigate("Settings")}
               activeOpacity={0.75}
             >
-              <Ionicons name="settings-outline" size={22} color="#143A66" />
+              <Ionicons name="settings-outline" size={22} color={theme.colors.primaryDark} />
             </TouchableOpacity>
             <NotificationButton count={stats.pendingOrders} onPress={() => navigation.navigate("Orders")} />
           </View>
         </View>
 
-        <View style={[styles.statusBanner, shopOpen ? styles.statusBannerOpen : styles.statusBannerClosed]}>
-          <View style={styles.statusIndicatorCircle}>
+        <View
+          style={[
+            styles.statusBanner,
+            shopOpen ? styles.statusBannerOpen : styles.statusBannerClosed,
+            isDarkMode && (shopOpen ? styles.statusBannerOpenDark : styles.statusBannerClosedDark)
+          ]}
+        >
+          <View style={[styles.statusIndicatorCircle, isDarkMode && styles.statusIndicatorCircleDark]}>
             <View style={[styles.pulseDot, shopOpen ? styles.pulseDotOpen : styles.pulseDotClosed]} />
           </View>
           <View style={styles.statusTextContainer}>
-            <Text style={[styles.statusHeading, shopOpen ? styles.statusHeadingOpen : styles.statusHeadingClosed]}>
+            <Text
+              style={[
+                styles.statusHeading,
+                shopOpen ? styles.statusHeadingOpen : styles.statusHeadingClosed,
+                isDarkMode && (shopOpen ? styles.statusHeadingOpenDark : styles.statusHeadingClosedDark)
+              ]}
+            >
               {shopOpen ? "Store is Open" : "Store is Offline"}
             </Text>
-            <Text style={[styles.statusSubheading, shopOpen ? styles.statusSubheadingOpen : styles.statusSubheadingClosed]}>
+            <Text
+              style={[
+                styles.statusSubheading,
+                shopOpen ? styles.statusSubheadingOpen : styles.statusSubheadingClosed,
+                isDarkMode && (shopOpen ? styles.statusSubheadingOpenDark : styles.statusSubheadingClosedDark)
+              ]}
+            >
               {shopOpen ? "Accepting customer orders" : "Tap switch to go online"}
             </Text>
           </View>
@@ -176,42 +196,42 @@ export default function DashboardScreen({ navigation }: any) {
           />
         </View>
 
-        <View style={styles.metricsCard}>
+        <View style={[styles.metricsCard, isDarkMode && styles.cardDark]}>
           <View style={styles.metricsHeader}>
             <View style={styles.metricAmountBlock}>
-              <Text style={styles.metricsLabel}>Today's Earnings</Text>
-              <Text style={styles.metricsValue}>{formatMoney(wallet?.todayEarnings ?? stats.todayEarnings)}</Text>
+              <Text style={[styles.metricsLabel, isDarkMode && styles.mutedTextDark]}>Today's Earnings</Text>
+              <Text style={[styles.metricsValue, isDarkMode && styles.metricValueDark]}>{formatMoney(wallet?.todayEarnings ?? stats.todayEarnings)}</Text>
             </View>
-            <TouchableOpacity style={styles.walletSummaryButton} onPress={openWallet} activeOpacity={0.75}>
-              <View style={styles.earningsIconContainer}>
+            <TouchableOpacity style={[styles.walletSummaryButton, isDarkMode && styles.walletSummaryButtonDark]} onPress={openWallet} activeOpacity={0.75}>
+              <View style={[styles.earningsIconContainer, isDarkMode && styles.earningsIconContainerDark]}>
                 <Ionicons name="wallet-outline" size={22} color="#60A5FA" />
               </View>
               <View style={styles.walletSummaryCopy}>
-                <Text style={styles.walletSummaryLabel}>Wallet</Text>
-                <Text style={styles.walletSummaryValue}>{formatMoney(wallet?.walletBalance || 0)}</Text>
+                <Text style={[styles.walletSummaryLabel, isDarkMode && styles.mutedTextDark]}>Wallet</Text>
+                <Text style={[styles.walletSummaryValue, isDarkMode && styles.textDark]}>{formatMoney(wallet?.walletBalance || 0)}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color="#8AA4C2" />
+              <Ionicons name="chevron-forward" size={16} color={isDarkMode ? "#9FB0C5" : "#8AA4C2"} />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, isDarkMode && styles.dividerDark]} />
 
           <View style={styles.metricsSubGrid}>
             <View style={styles.subStatItem}>
-              <Text style={styles.subStatLabel}>To Payout</Text>
-              <Text style={styles.subStatValue}>
+              <Text style={[styles.subStatLabel, isDarkMode && styles.mutedTextDark]}>To Payout</Text>
+              <Text style={[styles.subStatValue, isDarkMode && styles.textDark]}>
                 {wallet?.pendingPayoutOrderCount ?? 0}
               </Text>
             </View>
-            <View style={styles.verticalDivider} />
+            <View style={[styles.verticalDivider, isDarkMode && styles.dividerDark]} />
             <View style={styles.subStatItem}>
-              <Text style={styles.subStatLabel}>Orders Today</Text>
-              <Text style={styles.subStatValue}>{stats.todayOrders}</Text>
+              <Text style={[styles.subStatLabel, isDarkMode && styles.mutedTextDark]}>Orders Today</Text>
+              <Text style={[styles.subStatValue, isDarkMode && styles.textDark]}>{stats.todayOrders}</Text>
             </View>
-            <View style={styles.verticalDivider} />
+            <View style={[styles.verticalDivider, isDarkMode && styles.dividerDark]} />
             <View style={styles.subStatItem}>
-              <Text style={styles.subStatLabel}>Pending Orders</Text>
-              <Text style={[styles.subStatValue, stats.pendingOrders > 0 ? styles.subStatPendingHighlight : null]}>
+              <Text style={[styles.subStatLabel, isDarkMode && styles.mutedTextDark]}>Pending Orders</Text>
+              <Text style={[styles.subStatValue, isDarkMode && styles.textDark, stats.pendingOrders > 0 ? styles.subStatPendingHighlight : null]}>
                 {stats.pendingOrders}
               </Text>
             </View>
@@ -219,73 +239,73 @@ export default function DashboardScreen({ navigation }: any) {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick actions</Text>
+          <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Quick actions</Text>
           <View style={styles.gridContainer}>
-            <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Orders")} activeOpacity={0.7}>
+            <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Orders")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#EBF3FE" }]}>
                 <Ionicons name="cart" size={22} color="#60A5FA" />
               </View>
-              <Text style={styles.gridCardTitle}>Orders</Text>
-              <Text style={styles.gridCardDesc}>Live & past orders</Text>
+              <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Orders</Text>
+              <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Live & past orders</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Menu")} activeOpacity={0.7}>
+            <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Menu")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#FFF6ED" }]}>
                 <Ionicons name="restaurant" size={20} color="#EA580C" />
               </View>
-              <Text style={styles.gridCardTitle}>Menu</Text>
-              <Text style={styles.gridCardDesc}>Items & pricing</Text>
+              <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Menu</Text>
+              <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Items & pricing</Text>
             </TouchableOpacity>
           </View>
 
           <View style={[styles.gridContainer, { marginTop: 10 }]}>
-            <TouchableOpacity style={styles.gridCard} onPress={() => navigation.navigate("Profile")} activeOpacity={0.7}>
+            <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Profile")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#ECFDF5" }]}>
                 <Ionicons name="storefront" size={20} color="#10B981" />
               </View>
-              <Text style={styles.gridCardTitle}>Profile</Text>
-              <Text style={styles.gridCardDesc}>Business & details</Text>
+              <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Profile</Text>
+              <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Business & details</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.gridCard} onPress={openWallet} activeOpacity={0.7}>
+            <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={openWallet} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#F0F6FE" }]}>
                 <Ionicons name="wallet" size={20} color="#60A5FA" />
               </View>
-              <Text style={styles.gridCardTitle}>Wallet</Text>
-              <Text style={styles.gridCardDesc}>Payout date & history</Text>
+              <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Wallet</Text>
+              <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Payout date & history</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Business snapshot</Text>
+            <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Business snapshot</Text>
             <TouchableOpacity onPress={loadDashboardData}>
               <Text style={styles.linkText}>Refresh</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.snapshotCard}>
+          <View style={[styles.snapshotCard, isDarkMode && styles.cardDark]}>
             <View style={styles.snapshotRow}>
               <View style={styles.snapshotRowLeft}>
                 <Ionicons name="analytics-outline" size={18} color="#5E7897" style={styles.rowIcon} />
-                <Text style={styles.snapshotLabel}>Total orders</Text>
+                <Text style={[styles.snapshotLabel, isDarkMode && styles.mutedTextDark]}>Total orders</Text>
               </View>
-              <Text style={styles.snapshotValue}>{stats.totalOrders}</Text>
+              <Text style={[styles.snapshotValue, isDarkMode && styles.textDark]}>{stats.totalOrders}</Text>
             </View>
 
             <View style={styles.snapshotRow}>
               <View style={styles.snapshotRowLeft}>
                 <Ionicons name="cash-outline" size={18} color="#5E7897" style={styles.rowIcon} />
-                <Text style={styles.snapshotLabel}>Total earnings</Text>
+                <Text style={[styles.snapshotLabel, isDarkMode && styles.mutedTextDark]}>Total earnings</Text>
               </View>
-              <Text style={styles.snapshotValue}>Rs {stats.totalEarnings}</Text>
+              <Text style={[styles.snapshotValue, isDarkMode && styles.textDark]}>Rs {stats.totalEarnings}</Text>
             </View>
 
             <View style={[styles.snapshotRow, { borderBottomWidth: 0 }]}>
               <View style={styles.snapshotRowLeft}>
                 <Ionicons name="checkbox-outline" size={18} color="#5E7897" style={styles.rowIcon} />
-                <Text style={styles.snapshotLabel}>Approval status</Text>
+                <Text style={[styles.snapshotLabel, isDarkMode && styles.mutedTextDark]}>Approval status</Text>
               </View>
               <Text style={[styles.snapshotValue, styles.statusBadgeText]}>{partner.status || "APPROVED"}</Text>
             </View>
@@ -301,6 +321,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F4F8FF"
+  },
+  containerDark: {
+    backgroundColor: "#0B1220"
+  },
+  cardDark: {
+    backgroundColor: "#111827",
+    borderColor: "#263449"
+  },
+  textDark: {
+    color: "#E5EDF7"
+  },
+  mutedTextDark: {
+    color: "#9FB0C5"
+  },
+  metricValueDark: {
+    color: "#F8FBFF"
+  },
+  dividerDark: {
+    backgroundColor: "#263449"
   },
   loadingContainer: {
     flex: 1,
@@ -374,9 +413,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#ECFDF5",
     borderColor: "#A7F3D0"
   },
+  statusBannerOpenDark: {
+    backgroundColor: "#12382C",
+    borderColor: "#1E6B50"
+  },
   statusBannerClosed: {
     backgroundColor: "#FEF2F2",
     borderColor: "#FECDD3"
+  },
+  statusBannerClosedDark: {
+    backgroundColor: "#3B171C",
+    borderColor: "#7F1D1D"
   },
   statusIndicatorCircle: {
     width: 24,
@@ -390,6 +437,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 1
+  },
+  statusIndicatorCircleDark: {
+    backgroundColor: "#0F172A"
   },
   pulseDot: {
     width: 10,
@@ -414,8 +464,14 @@ const styles = StyleSheet.create({
   statusHeadingOpen: {
     color: "#065F46"
   },
+  statusHeadingOpenDark: {
+    color: "#A7F3D0"
+  },
   statusHeadingClosed: {
     color: "#991B1B"
+  },
+  statusHeadingClosedDark: {
+    color: "#FECACA"
   },
   statusSubheading: {
     fontSize: 12,
@@ -425,8 +481,14 @@ const styles = StyleSheet.create({
   statusSubheadingOpen: {
     color: "#047857"
   },
+  statusSubheadingOpenDark: {
+    color: "#6EE7B7"
+  },
   statusSubheadingClosed: {
     color: "#B91C1C"
+  },
+  statusSubheadingClosedDark: {
+    color: "#FCA5A5"
   },
   metricsCard: {
     marginHorizontal: 16,
@@ -475,6 +537,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E1EEFE"
   },
+  earningsIconContainerDark: {
+    backgroundColor: "#1D2A3D",
+    borderColor: "#263449"
+  },
   walletSummaryButton: {
     maxWidth: "48%",
     flexDirection: "row",
@@ -485,6 +551,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: "#F9FCFF"
+  },
+  walletSummaryButtonDark: {
+    backgroundColor: "#0F172A",
+    borderColor: "#263449"
   },
   walletSummaryCopy: {
     flex: 1,

@@ -38,6 +38,7 @@ export default function DeliveryPartners() {
   const [reuploadKeys, setReuploadKeys] = useState<DeliveryDocumentReuploadKey[]>([]);
   const [reuploadNote, setReuploadNote] = useState("");
   const [reuploadSubmitting, setReuploadSubmitting] = useState(false);
+  const [statusSubmitting, setStatusSubmitting] = useState(false);
 
   const loadPartners = async () => {
     setLoading(true);
@@ -155,11 +156,18 @@ export default function DeliveryPartners() {
       return;
     }
 
-    await updateDeliveryPartnerStatus(reviewing.partner._id, reviewing.nextStatus, reviewComment.trim() || undefined);
-    message.success(`Delivery partner moved to ${reviewing.nextStatus}`);
-    setReviewing(null);
-    setReviewComment("");
-    loadPartners();
+    try {
+      setStatusSubmitting(true);
+      await updateDeliveryPartnerStatus(reviewing.partner._id, reviewing.nextStatus, reviewComment.trim() || undefined);
+      message.success(`Delivery partner moved to ${reviewing.nextStatus}`);
+      setReviewing(null);
+      setReviewComment("");
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || error?.message || "Failed to update delivery partner status");
+    } finally {
+      setStatusSubmitting(false);
+    }
   };
 
   const documentRows: Array<{ label: string; url?: string; required: boolean; reuploadKey: DeliveryDocumentReuploadKey }> = selected
@@ -457,6 +465,7 @@ export default function DeliveryPartners() {
           setReviewComment("");
         }}
         onOk={submitStatus}
+        confirmLoading={statusSubmitting}
         okText={reviewing?.nextStatus === "REJECTED" ? "Reject" : reviewing?.nextStatus === "ACTIVE" ? "Activate" : "Verify"}
         okButtonProps={{ danger: reviewing?.nextStatus === "REJECTED" }}
       >

@@ -19,6 +19,7 @@ import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, getDeliver
 import { getDeliveryProfile, updateDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { formatAddress } from "../utils/address";
+import { getCurrentRiderLocation } from "../utils/riderLocation";
 import NewJobBanner from "../components/NewJobBanner";
 
 interface CalculatedJob extends DeliveryJob {
@@ -65,21 +66,16 @@ export default function JobsScreen({ navigation }: any) {
     return true;
   }, [navigation]);
 
-  const refreshLocation = useCallback(async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setLocationError("Location permission is off. Turn it on to see nearby jobs.");
-        return null;
-      }
-      const location = await Location.getCurrentPositionAsync({});
-      setUserLocation(location);
-      setLocationError(null);
-      return location;
-    } catch {
-      setLocationError("Unable to get your current location.");
+  const refreshLocation = useCallback(async (showDeniedAlert = false) => {
+    const location = await getCurrentRiderLocation({ showDeniedAlert });
+    if (!location) {
+      setLocationError("Location permission is off. Turn it on to see nearby jobs.");
       return null;
     }
+
+    setUserLocation(location);
+    setLocationError(null);
+    return location;
   }, []);
 
   const calculateJobDetails = useCallback(
@@ -174,7 +170,7 @@ export default function JobsScreen({ navigation }: any) {
   }, [calculateJobDetails, ensureAccountCanAccessJobs]);
 
   useEffect(() => {
-    refreshLocation().catch(() => {});
+    refreshLocation(false).catch(() => {});
     loadAvailabilityPreference();
   }, [refreshLocation]);
 
@@ -239,7 +235,7 @@ export default function JobsScreen({ navigation }: any) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refreshLocation();
+    await refreshLocation(true);
     await loadAvailableJobs();
   };
 
