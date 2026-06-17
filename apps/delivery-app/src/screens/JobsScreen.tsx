@@ -15,12 +15,19 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, getDeliveryStats, getMyDeliveryOrders, rejectJob, updateLocation } from "../api/delivery.api";
 import { getDeliveryProfile, updateDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { formatAddress } from "../utils/address";
 import { getCurrentRiderLocation } from "../utils/riderLocation";
 import NewJobBanner from "../components/NewJobBanner";
+
+const AVAILABILITY_STORAGE_KEY = "driverAvailability";
+const GREEN_PRIMARY = "#16A34A";
+const GREEN_DARK = "#15803D";
+const GREEN_DEEP = "#166534";
+const GREEN_SOFT = "#DCFCE7";
 
 interface CalculatedJob extends DeliveryJob {
   distance?: number | null;
@@ -37,7 +44,8 @@ export default function JobsScreen({ navigation }: any) {
   const [acceptingJobId, setAcceptingJobId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [isAvailable, setIsAvailable] = useState(true);
+  const [isAvailable, setIsAvailable] = useState(false);
+  const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
   const [newJobAlert, setNewJobAlert] = useState<CalculatedJob | null>(null);
   const [selectedJobAction, setSelectedJobAction] = useState<{ job: CalculatedJob; action: "accept" | "reject" } | null>(null);
   const [emptyMessage, setEmptyMessage] = useState("When restaurants mark orders as READY, they will appear here for delivery.");
@@ -50,11 +58,18 @@ export default function JobsScreen({ navigation }: any) {
   const onlineStartRef = useRef<Date | null>(null);
   const onlineTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const applyAvailabilityPreference = useCallback((value: boolean) => {
+    setIsAvailable(value);
+    setAvailabilityLoaded(true);
+    AsyncStorage.setItem(AVAILABILITY_STORAGE_KEY, value.toString()).catch(() => {});
+  }, []);
+
   const ensureAccountCanAccessJobs = useCallback(async () => {
     const profileResponse = await getDeliveryProfile();
     if (!profileResponse.success || !profileResponse.data) {
       return false;
     }
+    applyAvailabilityPreference(typeof profileResponse.data.isAvailable === "boolean" ? profileResponse.data.isAvailable : true);
     const nextRoute = resolveDeliveryRoute(profileResponse.data);
     if (nextRoute !== "Main") {
       navigation.getParent()?.reset({
@@ -64,7 +79,7 @@ export default function JobsScreen({ navigation }: any) {
       return false;
     }
     return true;
-  }, [navigation]);
+  }, [applyAvailabilityPreference, navigation]);
 
   const refreshLocation = useCallback(async (showDeniedAlert = false) => {
     const location = await getCurrentRiderLocation({ showDeniedAlert });
@@ -171,19 +186,31 @@ export default function JobsScreen({ navigation }: any) {
 
   useEffect(() => {
     refreshLocation(false).catch(() => {});
-    loadAvailabilityPreference();
   }, [refreshLocation]);
 
-  const loadAvailabilityPreference = async () => {
+  const loadAvailabilityPreference = useCallback(async () => {
     try {
-      const saved = await AsyncStorage.getItem("driverAvailability");
+      const saved = await AsyncStorage.getItem(AVAILABILITY_STORAGE_KEY);
       if (saved !== null) {
-        setIsAvailable(saved === "true");
+        applyAvailabilityPreference(saved === "true");
+      }
+      const profileResponse = await getDeliveryProfile();
+      if (profileResponse.success && profileResponse.data) {
+        applyAvailabilityPreference(typeof profileResponse.data.isAvailable === "boolean" ? profileResponse.data.isAvailable : true);
+      } else if (saved === null) {
+        setAvailabilityLoaded(true);
       }
     } catch (error) {
       console.error("Failed to load availability preference", error);
+      setAvailabilityLoaded(true);
     }
-  };
+  }, [applyAvailabilityPreference]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAvailabilityPreference().catch(() => {});
+    }, [loadAvailabilityPreference])
+  );
 
   useEffect(() => {
     if (isAvailable) {
@@ -210,10 +237,14 @@ export default function JobsScreen({ navigation }: any) {
 
   const toggleAvailability = async (value: boolean) => {
     setIsAvailable(value);
+    setAvailabilityLoaded(true);
     try {
-      await AsyncStorage.setItem("driverAvailability", value.toString());
+      await AsyncStorage.setItem(AVAILABILITY_STORAGE_KEY, value.toString());
       await updateDeliveryProfile({ isAvailable: value });
     } catch (error) {
+      const revertedValue = !value;
+      setIsAvailable(revertedValue);
+      await AsyncStorage.setItem(AVAILABILITY_STORAGE_KEY, revertedValue.toString()).catch(() => {});
       console.error("Failed to save availability preference", error);
     }
   };
@@ -365,7 +396,7 @@ export default function JobsScreen({ navigation }: any) {
             </Text>
           </View>
           <TouchableOpacity onPress={onRefresh} style={styles.refreshButton} accessibilityLabel="Refresh jobs">
-            <Ionicons name="refresh" size={20} color="#C2410C" />
+            <Ionicons name="refresh" size={20} color={GREEN_DEEP} />
           </TouchableOpacity>
         </View>
 
@@ -388,26 +419,29 @@ export default function JobsScreen({ navigation }: any) {
       </View>
 
       <TouchableOpacity
-        style={[styles.availabilityCard, isAvailable ? styles.availabilityCardOnline : styles.availabilityCardOffline]}
-        onPress={() => toggleAvailability(!isAvailable)}
+        style={[styles.availabilityCard, availabilityLoaded && isAvailable ? styles.availabilityCardOnline : styles.availabilityCardOffline]}
+        onPress={() => availabilityLoaded && toggleAvailability(!isAvailable)}
         activeOpacity={0.85}
+        disabled={!availabilityLoaded}
       >
         <View style={styles.availabilityLeft}>
-          <View style={[styles.availabilityDot, isAvailable && styles.availabilityDotOnline]} />
+          <View style={[styles.availabilityDot, availabilityLoaded && isAvailable && styles.availabilityDotOnline]} />
           <View>
-            <Text style={[styles.availabilityTitle, !isAvailable && styles.availabilityTitleOffline]}>
-              {isAvailable ? "You're online" : "You're offline"}
+            <Text style={[styles.availabilityTitle, (!availabilityLoaded || !isAvailable) && styles.availabilityTitleOffline]}>
+              {!availabilityLoaded ? "Checking status" : isAvailable ? "You're online" : "You're offline"}
             </Text>
             <Text style={styles.availabilitySub}>
-              {isAvailable
+              {!availabilityLoaded
+                ? "Syncing your availability"
+                : isAvailable
                 ? "New job alerts are active"
                 : "Tap to go online and receive jobs"}
             </Text>
           </View>
         </View>
-        <View style={[styles.availabilityToggle, isAvailable ? styles.availabilityToggleOnline : styles.availabilityToggleOffline]}>
-          <Text style={[styles.availabilityToggleText, isAvailable && styles.availabilityToggleTextOnline]}>
-            {isAvailable ? "ON" : "OFF"}
+        <View style={[styles.availabilityToggle, availabilityLoaded && isAvailable ? styles.availabilityToggleOnline : styles.availabilityToggleOffline]}>
+          <Text style={[styles.availabilityToggleText, availabilityLoaded && isAvailable && styles.availabilityToggleTextOnline]}>
+            {!availabilityLoaded ? "..." : isAvailable ? "ON" : "OFF"}
           </Text>
         </View>
       </TouchableOpacity>
@@ -544,7 +578,7 @@ export default function JobsScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top + 14 }]}>
+      <View style={styles.container}>
         {renderHeader()}
         {renderSkeleton()}
       </View>
@@ -565,7 +599,7 @@ export default function JobsScreen({ navigation }: any) {
         keyExtractor={(item) => item._id}
         renderItem={renderJobItem}
         ListHeaderComponent={renderHeader}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#C2410C"]} tintColor="#C2410C" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[GREEN_PRIMARY]} tintColor={GREEN_PRIMARY} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconWrap}>
@@ -661,7 +695,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F7FA"
   },
   header: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: GREEN_PRIMARY,
     paddingHorizontal: 16,
     paddingBottom: 0
   },
@@ -757,7 +791,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#98A2B3"
   },
   availabilityDotOnline: {
-    backgroundColor: "#039855"
+    backgroundColor: GREEN_DARK
   },
   availabilityTitle: {
     fontSize: 15,
@@ -777,7 +811,7 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   availabilityToggleOnline: {
-    backgroundColor: "#039855"
+    backgroundColor: GREEN_DARK
   },
   availabilityToggleOffline: {
     backgroundColor: "#E4E7EC"
@@ -869,7 +903,7 @@ const styles = StyleSheet.create({
     marginTop: 3
   },
   jobEarningsBadge: {
-    backgroundColor: "#FFF4EE",
+    backgroundColor: GREEN_SOFT,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
@@ -878,12 +912,12 @@ const styles = StyleSheet.create({
   jobEarningsValue: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#C2410C"
+    color: GREEN_DEEP
   },
   jobEarningsLabel: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#C2410C",
+    color: GREEN_DEEP,
     marginTop: 1
   },
   routeSection: {
@@ -942,7 +976,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 10,
     marginBottom: 12,
-    backgroundColor: "#FFFBFA",
+    backgroundColor: "#F0FDF4",
     borderRadius: 12,
     paddingHorizontal: 8
   },
@@ -1055,7 +1089,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: "#FF6B35"
+    backgroundColor: GREEN_PRIMARY
   },
   emptyRefreshText: {
     color: "#FFFFFF",

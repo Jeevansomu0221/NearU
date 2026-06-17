@@ -190,6 +190,17 @@ export interface SupportTicketRecord {
   status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
   priority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
   messages: SupportMessageRecord[];
+  metadata?: {
+    type?: string;
+    partnerId?: string;
+    requestedBankDetails?: {
+      accountHolderName?: string;
+      accountNumber?: string;
+      ifsc?: string;
+    };
+    appliedAt?: string;
+    appliedBy?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }

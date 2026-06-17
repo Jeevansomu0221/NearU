@@ -79,6 +79,28 @@ const idString = (value: any) => {
 const compactIds = (values: any[]) =>
   Array.from(new Set(values.map((value) => idString(value)).filter(Boolean)));
 
+const getAvailableDeliveryUserIds = async (userIds?: string[]) => {
+  const filter: Record<string, any> = {
+    status: { $in: ["ACTIVE", "VERIFIED"] },
+    isAvailable: { $ne: false }
+  };
+
+  const normalizedUserIds = compactIds(userIds || []);
+  if (normalizedUserIds.length) {
+    filter.userId = {
+      $in: normalizedUserIds
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        .map((id) => new mongoose.Types.ObjectId(id))
+    };
+  }
+
+  const riders = await DeliveryPartner.find(filter)
+    .select("userId")
+    .lean();
+
+  return compactIds(riders.map((rider: any) => rider.userId));
+};
+
 const compactStrings = (values: any[]) =>
   values
     .map((value) => (typeof value === "string" ? value.trim() : ""))
@@ -292,16 +314,7 @@ export const notifyCustomerOrderStatus = async (order: any, status: string) => {
 export const notifyDeliveryJobReady = async (order: any) => {
   const selfDelivery = order.selfDelivery || {};
   const reservedFor = compactIds(Array.isArray(selfDelivery.reservedFor) ? selfDelivery.reservedFor : []);
-  const targetUserIds = reservedFor.length
-    ? reservedFor
-    : compactIds(
-        (await DeliveryPartner.find({
-          status: { $in: ["ACTIVE", "VERIFIED"] },
-          isAvailable: { $ne: false }
-        })
-          .select("userId")
-          .lean()).map((partner: any) => partner.userId)
-      );
+  const targetUserIds = await getAvailableDeliveryUserIds(reservedFor.length ? reservedFor : undefined);
   const details = await getDeliveryJobNotificationDetails(order);
   const bodyParts = [
     `Pickup: ${details.restaurantName}${details.pickupAddress ? ` - ${details.pickupAddress}` : ""}`,

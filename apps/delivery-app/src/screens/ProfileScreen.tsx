@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { API_BASE_URLS } from "../api/client";
 import { buildLegalUrl } from "../constants/legal";
 import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
@@ -33,10 +34,19 @@ import {
 } from "../services/notifications";
 
 const DRAFT_KEY = "delivery_registration_draft_v2";
-const TERMS_URL = buildLegalUrl("delivery-policy");
+const AVAILABILITY_STORAGE_KEY = "driverAvailability";
+const DELIVERY_POLICY_URL = buildLegalUrl("delivery-policy");
+const TERMS_URL = buildLegalUrl("terms");
+const PRIVACY_URL = buildLegalUrl("privacy");
 const DELETE_ACCOUNT_URL = buildLegalUrl("delete-account");
 const STEPS = ["Basic", "Vehicle", "Documents", "Bank"] as const;
 const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "EV", "Bicycle", "Car"];
+const GREEN_PRIMARY = "#16A34A";
+const GREEN_DARK = "#15803D";
+const GREEN_DEEP = "#166534";
+const GREEN_SOFT = "#DCFCE7";
+type SupportInitialMode = "main" | "faq" | "chat" | "report" | "tickets";
+const UPI_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z][a-zA-Z0-9.\-_]{2,64}$/;
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   "image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"
 ]);
@@ -150,7 +160,7 @@ const emptyDocs = (): Docs => ({
   vehicleRcFrontUrl: "", vehicleRcBackUrl: "", vehicleRcUrl: "", insuranceUrl: "",
   // Kept for future bank proof uploads; current registration does not ask for bank proof type.
   bankDocumentType: "", bankAccountHolderName: "", cancelledChequeUrl: "",
-  bankPassbookUrl: "", bankStatementUrl: "", bankAccountNumber: "", bankIfsc: "",
+  bankPassbookUrl: "", bankStatementUrl: "", bankAccountNumber: "", bankIfsc: "", bankUpiId: "",
   submittedAt: "", isComplete: false, reuploadFlags: {}, reuploadNotes: ""
 });
 
@@ -252,7 +262,6 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [bankSaving, setBankSaving] = useState(false);
-  const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const [uploadingFields, setUploadingFields] = useState<UploadField[]>([]);
   const [profile, setProfile] = useState<DeliveryProfile | null>(null);
   const [step, setStep] = useState(0);
@@ -260,6 +269,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [stats, setStats] = useState<DeliveryStats | null>(null);
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
+  const [supportInitialMode, setSupportInitialMode] = useState<SupportInitialMode>("main");
   const [stepAnim] = useState(() => new Animated.Value(0));
 
   const [name, setName] = useState("");
@@ -302,7 +312,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     setVehicleNumber(data.vehicleNumber || "");
     setLicenseNumber(data.licenseNumber || "");
     setProfilePhotoUrl(data.profilePhotoUrl || "");
-    setIsAvailable(typeof data.isAvailable === "boolean" ? data.isAvailable : true);
+    const nextAvailability = typeof data.isAvailable === "boolean" ? data.isAvailable : true;
+    setIsAvailable(nextAvailability);
+    AsyncStorage.setItem(AVAILABILITY_STORAGE_KEY, nextAvailability.toString()).catch(() => {});
     setTermsAccepted(Boolean(data.termsAcceptedAt));
     setBankDetailsSkipped(false);
     setDocuments(normalizeDocuments(data.documents));
@@ -358,6 +370,24 @@ export default function ProfileScreen({ navigation, route }: any) {
     load();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (loading) return;
+      let isActive = true;
+      getDeliveryProfile()
+        .then((response) => {
+          if (isActive && response.success && response.data) {
+            syncProfile(response.data);
+            if (response.data.status === "ACTIVE") loadDashboardStats().catch(() => {});
+          }
+        })
+        .catch(() => {});
+      return () => {
+        isActive = false;
+      };
+    }, [loading])
+  );
+
   useEffect(() => {
     AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
       name, email, dateOfBirth, address: formattedAddress, addressForm,
@@ -371,6 +401,24 @@ export default function ProfileScreen({ navigation, route }: any) {
   const safeValue = (value?: string | null, fallback = "Not added") => {
     const trimmed = value?.trim();
     return trimmed ? trimmed : fallback;
+  };
+  const formatAcceptanceRate = (value?: DeliveryStats | null) => {
+    if (!value || typeof value.acceptanceRate !== "number") return "No job responses yet";
+    const totalResponses = (value.acceptedJobs || 0) + (value.rejectedJobs || 0);
+    if (totalResponses === 0) return "No job responses yet";
+    return `${Math.round(value.acceptanceRate)}%`;
+  };
+  const formatAverageDeliveryTime = (minutes?: number | null) => {
+    const value = Math.max(0, Math.round(minutes || 0));
+    if (value === 0) return "No completed deliveries yet";
+    if (value < 60) return `${value} min`;
+    const hours = Math.floor(value / 60);
+    const mins = value % 60;
+    return mins ? `${hours}h ${mins}m` : `${hours}h`;
+  };
+  const openSupport = (mode: SupportInitialMode) => {
+    setSupportInitialMode(mode);
+    setSupportModalVisible(true);
   };
 
   const isAdultDateOfBirth = (value: string) => {
@@ -427,31 +475,27 @@ export default function ProfileScreen({ navigation, route }: any) {
     ]);
   };
 
-  const handleAvailabilityToggle = async () => {
-    const nextValue = !isAvailable;
-    setIsAvailable(nextValue);
-    setAvailabilitySaving(true);
-    try {
-      const response = await updateDeliveryProfile({ isAvailable: nextValue });
-      if (!response.success || !response.data) throw new Error(response.message || "Failed to update availability");
-      syncProfile(response.data);
-    } catch (error: any) {
-      setIsAvailable(!nextValue);
-      Alert.alert("Error", error.message || "Failed to update availability");
-    } finally {
-      setAvailabilitySaving(false);
-    }
-  };
-
   const handleSaveBankDetails = async () => {
-    if (!documents.bankAccountHolderName?.trim()) { Alert.alert("Missing details", "Account holder name is required."); return; }
-    if (!documents.bankAccountNumber?.trim()) { Alert.alert("Missing details", "Bank account number is required."); return; }
-    if (!documents.bankIfsc?.trim()) { Alert.alert("Missing details", "IFSC code is required."); return; }
-    if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) { Alert.alert("Invalid details", "Bank account number must be numeric."); return; }
+    const hasBankInput = Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim());
+    const bankUpiId = documents.bankUpiId?.trim().toLowerCase() || "";
+    if (hasBankInput) {
+      if (!documents.bankAccountHolderName?.trim()) { Alert.alert("Missing details", "Account holder name is required if you add bank details."); return; }
+      if (!documents.bankAccountNumber?.trim()) { Alert.alert("Missing details", "Bank account number is required if you add bank details."); return; }
+      if (!documents.bankIfsc?.trim()) { Alert.alert("Missing details", "IFSC code is required if you add bank details."); return; }
+      if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) { Alert.alert("Invalid details", "Bank account number must be numeric."); return; }
+      if (documents.bankIfsc?.trim() && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) { Alert.alert("Invalid details", "IFSC code format is invalid."); return; }
+    }
+    if (bankUpiId && !UPI_REGEX.test(bankUpiId)) { Alert.alert("Invalid details", "UPI ID format is invalid."); return; }
     setBankSaving(true);
     try {
       const response = await updateDeliveryProfile({
-        documents: { ...documents, bankAccountHolderName: documents.bankAccountHolderName?.trim(), bankAccountNumber: documents.bankAccountNumber?.trim() || "", bankIfsc: documents.bankIfsc?.trim().toUpperCase() }
+        documents: {
+          ...documents,
+          bankAccountHolderName: documents.bankAccountHolderName?.trim(),
+          bankAccountNumber: documents.bankAccountNumber?.trim() || "",
+          bankIfsc: documents.bankIfsc?.trim().toUpperCase(),
+          bankUpiId
+        }
       });
       if (!response.success || !response.data) throw new Error(response.message || "Failed to update payout details");
       syncProfile(response.data);
@@ -507,6 +551,8 @@ export default function ProfileScreen({ navigation, route }: any) {
         if (!documents.bankIfsc?.trim()) return "IFSC code is required if you add bank details.";
         if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) return "IFSC code format is invalid.";
       }
+      const bankUpiId = documents.bankUpiId?.trim() || "";
+      if (!bankDetailsSkipped && bankUpiId && !UPI_REGEX.test(bankUpiId)) return "UPI ID format is invalid.";
       if (!termsAccepted) return "Please accept the delivery partner terms and conditions.";
     }
     return null;
@@ -591,6 +637,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       const bankAccountHolderName = bankDetailsSkipped ? "" : documents.bankAccountHolderName?.trim();
       const bankAccountNumber = bankDetailsSkipped ? "" : documents.bankAccountNumber?.trim() || "";
       const bankIfsc = bankDetailsSkipped ? "" : documents.bankIfsc?.trim().toUpperCase();
+      const bankUpiId = bankDetailsSkipped ? "" : documents.bankUpiId?.trim().toLowerCase() || "";
       const response = await updateDeliveryProfile({
         name: name.trim(), email: email.trim() || undefined, dateOfBirth: dateOfBirth.trim(),
         emergencyContactName: emergencyContactName.trim(),
@@ -619,6 +666,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           bankAccountHolderName,
           bankAccountNumber,
           bankIfsc,
+          bankUpiId,
           submittedAt,
           isComplete: true
         }
@@ -645,7 +693,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const renderShortcut = (icon: keyof typeof Ionicons.glyphMap, title: string, subtitle: string, onPress: () => void) => (
     <TouchableOpacity style={s.shortcutCard} onPress={onPress} key={title} activeOpacity={0.7}>
-      <View style={s.shortcutIcon}><Ionicons name={icon} size={20} color="#C2410C" /></View>
+      <View style={s.shortcutIcon}><Ionicons name={icon} size={20} color={GREEN_DEEP} /></View>
       <View style={{ flex: 1 }}>
         <Text style={s.shortcutTitle}>{title}</Text>
         <Text style={s.shortcutSubtitle}>{subtitle}</Text>
@@ -667,7 +715,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               {profilePhotoUrl ? (
                 <Image source={{ uri: profilePhotoUrl }} style={s.avatar} />
               ) : (
-                <View style={s.avatarFallback}><Ionicons name="person" size={32} color="#C2410C" /></View>
+                <View style={s.avatarFallback}><Ionicons name="person" size={32} color={GREEN_DEEP} /></View>
               )}
               <View style={s.avatarBadge}><Ionicons name={isAvailable ? "flash" : "flash-off"} size={10} color="#fff" /></View>
             </View>
@@ -689,22 +737,10 @@ export default function ProfileScreen({ navigation, route }: any) {
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.pendingDepositAmount || profile?.pendingDepositAmount || 0)}</Text><Text style={s.statLbl}>Pending deposit</Text></View>
           </View>
 
-          {/* Availability */}
-          <View style={s.section}>
-            <TouchableOpacity style={s.availCard} onPress={handleAvailabilityToggle} disabled={availabilitySaving} activeOpacity={0.8}>
-              <View style={[s.availDot, isAvailable && s.availDotOn]} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.availTitle}>{isAvailable ? "Online" : "Offline"}</Text>
-                <Text style={s.availSub}>Tap to toggle availability for new jobs</Text>
-              </View>
-              {availabilitySaving ? <ActivityIndicator size="small" color="#FF6B35" /> : <View style={[s.availSwitch, isAvailable && s.availSwitchOn]}><View style={[s.availSwitchKnob, isAvailable && s.availSwitchKnobOn]} /></View>}
-            </TouchableOpacity>
-          </View>
-
           {/* Documents */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Documents & Verification</Text>
-            <Text style={s.sectionSub}>Tap any document to view or re-upload.</Text>
+            <Text style={s.sectionSub}>Documents are locked after verification. Contact support if a change is needed.</Text>
             {activeDocumentItems.map((item) => renderActiveDocumentRow(item))}
             <View style={s.divider} />
             {renderInfoRow("Verification status", verificationStatusLabel)}
@@ -717,11 +753,13 @@ export default function ProfileScreen({ navigation, route }: any) {
             {editingBank ? (
               <>
                 <Text style={s.inputLabel}>Account Holder Name</Text>
-                <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountHolderName: v }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+                <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountHolderName: v }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor={GREEN_PRIMARY} />
                 <Text style={s.inputLabel}>Account Number</Text>
-                <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountNumber: v.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+                <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountNumber: v.replace(/\D/g, "") }))} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor={GREEN_PRIMARY} />
                 <Text style={s.inputLabel}>IFSC Code</Text>
-                <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankIfsc: v.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+                <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankIfsc: v.toUpperCase() }))} placeholder="Enter IFSC code" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor={GREEN_PRIMARY} />
+                <Text style={s.inputLabel}>UPI ID (optional)</Text>
+                <TextInput style={s.input} value={documents.bankUpiId || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankUpiId: v.trim().toLowerCase() }))} placeholder="name@upi" placeholderTextColor="#98A2B3" autoCapitalize="none" selectionColor={GREEN_PRIMARY} />
                 <View style={s.btnRow}>
                   <TouchableOpacity style={s.btnOutline} onPress={() => setEditingBank(false)}><Text style={s.btnOutlineText}>Cancel</Text></TouchableOpacity>
                   <TouchableOpacity style={[s.btnPrimary, bankSaving && s.btnDisabled]} onPress={handleSaveBankDetails} disabled={bankSaving}>
@@ -734,6 +772,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {renderInfoRow("Account holder", safeValue(documents.bankAccountHolderName))}
                 {renderInfoRow("Account number", safeValue(documents.bankAccountNumber ? `••••${documents.bankAccountNumber.slice(-4)}` : ""))}
                 {renderInfoRow("IFSC", safeValue(documents.bankIfsc))}
+                {renderInfoRow("UPI ID", safeValue(documents.bankUpiId))}
                 <TouchableOpacity style={[s.btnPrimary, { marginTop: 14 }]} onPress={() => setEditingBank(true)}><Text style={s.btnPrimaryText}>Edit Payout Details</Text></TouchableOpacity>
               </>
             )}
@@ -743,23 +782,35 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={s.section}>
             <Text style={s.sectionTitle}>Performance</Text>
             {renderInfoRow("Total deliveries", String(stats?.totalDeliveries || profile?.totalDeliveries || 0))}
+            {renderInfoRow("Today earnings", formatCurrency(todayEarnings))}
+            {renderInfoRow("Total earnings", formatCurrency(stats?.totalEarnings || profile?.totalEarnings || 0))}
+            {renderInfoRow("Average delivery time", formatAverageDeliveryTime(stats?.averageDeliveryTime))}
             {renderInfoRow("Rating", `${(profile?.rating || 0).toFixed(1)} / 5 (${profile?.ratingCount || 0} ratings)`)}
-            {renderInfoRow("Acceptance rate", "Coming soon")}
+            {renderInfoRow("Acceptance rate", formatAcceptanceRate(stats))}
+            {renderInfoRow("Accepted jobs", String(stats?.acceptedJobs || 0))}
+            {renderInfoRow("Rejected jobs", String(stats?.rejectedJobs || 0))}
+            {renderInfoRow("COD cash due", formatCurrency(stats?.cashDueToPlatform || 0))}
           </View>
 
           {/* Support */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Support & Help</Text>
-            {renderShortcut("help-circle-outline", "Help center", "FAQs, chat, and support tickets", () => setSupportModalVisible(true))}
-            {renderShortcut("flag-outline", "Report an issue", "Tell us if something is broken", () => setSupportModalVisible(true))}
-            {renderShortcut("chatbubble-ellipses-outline", "Chat with admin", "Send a message to the Vyaha team", () => setSupportModalVisible(true))}
+            {renderShortcut("help-circle-outline", "Help center", "FAQs, chat, and support tickets", () => openSupport("faq"))}
+            {renderShortcut("flag-outline", "Report an issue", "Tell us if something is broken", () => openSupport("report"))}
+            {renderShortcut("chatbubble-ellipses-outline", "Chat with admin", "Send a message to the Vyaha team", () => openSupport("chat"))}
+            {renderShortcut("mail-outline", "My support tickets", "View previous admin conversations", () => openSupport("tickets"))}
           </View>
 
           {/* Settings */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Settings</Text>
             {renderShortcut("notifications-outline", "Notifications", "Manage job and payout alerts", handleNotificationPreferences)}
+            {renderShortcut("person-circle-outline", "Profile details", "View your rider account details", () => Alert.alert("Profile details", `Name: ${name || "Not added"}\nPhone: ${profile?.phone || "Not added"}\nEmail: ${safeValue(email)}\nVehicle: ${vehicleType}${vehicleNumber ? ` (${vehicleNumber})` : ""}`))}
+            {renderShortcut("document-text-outline", "Delivery partner terms", "Read delivery partner terms", () => Linking.openURL(DELIVERY_POLICY_URL))}
+            {renderShortcut("reader-outline", "Terms & conditions", "Read Vyaha terms", () => Linking.openURL(TERMS_URL))}
+            {renderShortcut("lock-closed-outline", "Privacy policy", "Read how data is handled", () => Linking.openURL(PRIVACY_URL))}
             {renderShortcut("document-text-outline", "Account deletion policy", "Read how account deletion works", () => Linking.openURL(DELETE_ACCOUNT_URL))}
+            {renderShortcut("information-circle-outline", "App version", "Delivery app version 1.0.0", () => Alert.alert("App version", "Delivery app version 1.0.0"))}
           </View>
 
           {/* Logout / Delete */}
@@ -768,7 +819,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <TouchableOpacity style={s.deleteBtn} onPress={handleDeleteAccount}><Text style={s.deleteBtnText}>Delete Account</Text></TouchableOpacity>
           </View>
         </ScrollView>
-        <SupportModal visible={supportModalVisible} onClose={() => setSupportModalVisible(false)} />
+        <SupportModal visible={supportModalVisible} initialMode={supportInitialMode} onClose={() => setSupportModalVisible(false)} />
       </View>
     );
   };
@@ -792,7 +843,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={s.uploadTitle}>{title}{required ? " *" : ""}</Text>
             <Text style={s.uploadSub}>{subtitle}</Text>
           </View>
-          {isBusy ? <ActivityIndicator size="small" color="#FF6B35" /> : (
+          {isBusy ? <ActivityIndicator size="small" color={GREEN_PRIMARY} /> : (
             <View style={[s.uploadStatus, hasFile && s.uploadStatusDone]}>
               <Text style={[s.uploadStatusText, hasFile && s.uploadStatusTextDone]}>{hasFile ? "Uploaded" : "Upload"}</Text>
             </View>
@@ -810,21 +861,21 @@ export default function ProfileScreen({ navigation, route }: any) {
     const reuploadKey = REUPLOAD_FIELD_KEYS[item.field];
     const reuploadRequested = reuploadKey ? Boolean(documents.reuploadFlags?.[reuploadKey]) : false;
     const hasFile = Boolean(item.url);
-    const isBusy = uploadingFields.includes(item.field);
     return (
       <View key={item.field} style={[s.docRow, reuploadRequested && s.docRowAlert]}>
         <View style={s.docRowLeft}>
           <View style={[s.docDot, hasFile ? s.docDotReady : reuploadRequested ? s.docDotAlert : s.docDotMissing]} />
           <View style={{ flex: 1 }}>
             <Text style={s.docRowTitle}>{item.title}</Text>
-            <Text style={s.docRowSub}>{reuploadRequested ? "Re-upload required" : hasFile ? "Uploaded" : item.required ? "Missing — upload now" : "Optional"}</Text>
+            <Text style={s.docRowSub}>{reuploadRequested ? "Admin review note is locked" : hasFile ? "Uploaded and locked" : item.required ? "Missing from profile" : "Optional"}</Text>
           </View>
         </View>
         <View style={s.docRowActions}>
           {hasFile ? <TouchableOpacity style={s.docViewBtn} onPress={() => Linking.openURL(item.url as string)}><Text style={s.docViewBtnText}>View</Text></TouchableOpacity> : null}
-          <TouchableOpacity style={s.docUploadBtn} onPress={() => uploadFile(item.field, { persist: true })} disabled={isBusy}>
-            {isBusy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.docUploadBtnText}>{hasFile ? "Replace" : "Upload"}</Text>}
-          </TouchableOpacity>
+          <View style={s.docLockedPill}>
+            <Ionicons name="lock-closed" size={12} color="#475467" />
+            <Text style={s.docLockedText}>Locked</Text>
+          </View>
         </View>
       </View>
     );
@@ -844,6 +895,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       bankAccountHolderName: "",
       bankAccountNumber: "",
       bankIfsc: "",
+      bankUpiId: "",
       cancelledChequeUrl: "",
       bankPassbookUrl: "",
       bankStatementUrl: "",
@@ -870,20 +922,20 @@ export default function ProfileScreen({ navigation, route }: any) {
         return (
           <View>
             <Text style={s.inputLabel}>Full Name</Text>
-            <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Enter your full name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+            <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Enter your full name" placeholderTextColor="#98A2B3" selectionColor={GREEN_PRIMARY} />
 
             <Text style={s.inputLabel}>Email (optional)</Text>
-            <TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="email@example.com" placeholderTextColor="#98A2B3" autoCapitalize="none" keyboardType="email-address" selectionColor="#FF6B35" />
+            <TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="email@example.com" placeholderTextColor="#98A2B3" autoCapitalize="none" keyboardType="email-address" selectionColor={GREEN_PRIMARY} />
 
             <Text style={s.inputLabel}>Phone</Text>
             <View style={s.readField}><Text style={s.readFieldText}>{profile?.phone || "Verified with OTP"}</Text></View>
 
             <Text style={s.inputLabel}>Date of Birth</Text>
-            <TextInput style={s.input} value={dateOfBirth} onChangeText={(v) => setDateOfBirth(v.replace(/[^0-9-]/g, "").slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor="#98A2B3" keyboardType="numbers-and-punctuation" selectionColor="#FF6B35" />
+            <TextInput style={s.input} value={dateOfBirth} onChangeText={(v) => setDateOfBirth(v.replace(/[^0-9-]/g, "").slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor="#98A2B3" keyboardType="numbers-and-punctuation" selectionColor={GREEN_PRIMARY} />
 
             <Text style={s.sectionTitleSm}>Emergency Contact</Text>
-            <TextInput style={s.input} value={emergencyContactName} onChangeText={setEmergencyContactName} placeholder="Emergency contact name" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
-            <TextInput style={[s.input, { marginTop: 10 }]} value={emergencyContactPhone} onChangeText={(v) => setEmergencyContactPhone(v.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile number" placeholderTextColor="#98A2B3" keyboardType="number-pad" maxLength={10} selectionColor="#FF6B35" />
+            <TextInput style={s.input} value={emergencyContactName} onChangeText={setEmergencyContactName} placeholder="Emergency contact name" placeholderTextColor="#98A2B3" selectionColor={GREEN_PRIMARY} />
+            <TextInput style={[s.input, { marginTop: 10 }]} value={emergencyContactPhone} onChangeText={(v) => setEmergencyContactPhone(v.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile number" placeholderTextColor="#98A2B3" keyboardType="number-pad" maxLength={10} selectionColor={GREEN_PRIMARY} />
           </View>
         );
 
@@ -894,7 +946,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <View style={s.vehicleGrid}>
               {VEHICLE_TYPES.map((vt) => (
                 <TouchableOpacity key={vt} style={[s.vehicleCard, vehicleType === vt && s.vehicleCardActive]} onPress={() => handleVehicleTypeSelect(vt)}>
-                  <Ionicons name={VEHICLE_ICONS[vt]} size={24} color={vehicleType === vt ? "#C2410C" : "#667085"} />
+                  <Ionicons name={VEHICLE_ICONS[vt]} size={24} color={vehicleType === vt ? GREEN_DEEP : "#667085"} />
                   <Text style={[s.vehicleCardText, vehicleType === vt && s.vehicleCardTextActive]}>{vt}</Text>
                 </TouchableOpacity>
               ))}
@@ -906,9 +958,9 @@ export default function ProfileScreen({ navigation, route }: any) {
             {requiresMotorDocuments ? (
               <>
                 <Text style={s.inputLabel}>Vehicle Number</Text>
-                <TextInput style={s.input} value={vehicleNumber} onChangeText={setVehicleNumber} placeholder="e.g. TS09AB1234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+                <TextInput style={s.input} value={vehicleNumber} onChangeText={setVehicleNumber} placeholder="e.g. TS09AB1234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor={GREEN_PRIMARY} />
                 <Text style={s.inputLabel}>Driving License Number</Text>
-                <TextInput style={s.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder="e.g. TS0120230012345" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+                <TextInput style={s.input} value={licenseNumber} onChangeText={setLicenseNumber} placeholder="e.g. TS0120230012345" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor={GREEN_PRIMARY} />
               </>
             ) : null}
           </View>
@@ -918,7 +970,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         return (
           <View>
             <Text style={s.inputLabel}>Aadhaar Number</Text>
-            <TextInput style={s.input} value={documents.aadhaarNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, aadhaarNumber: v.replace(/\D/g, "").slice(0, 12) }))} placeholder="12-digit Aadhaar number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+            <TextInput style={s.input} value={documents.aadhaarNumber || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, aadhaarNumber: v.replace(/\D/g, "").slice(0, 12) }))} placeholder="12-digit Aadhaar number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor={GREEN_PRIMARY} />
             {renderUpload("aadhaarUrl", "Aadhaar Front", "Government ID proof", true)}
             {renderUpload("selfiePhotoUrl", "Live Selfie", "Front camera selfie for verification", true)}
             {requiresMotorDocuments ? (
@@ -956,17 +1008,19 @@ export default function ProfileScreen({ navigation, route }: any) {
             ) : (
               <>
                 <Text style={s.inputLabel}>Account Holder Name</Text>
-                <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => handleBankFieldChange({ bankAccountHolderName: v })} placeholder="As on bank account" placeholderTextColor="#98A2B3" selectionColor="#FF6B35" />
+                <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => handleBankFieldChange({ bankAccountHolderName: v })} placeholder="As on bank account" placeholderTextColor="#98A2B3" selectionColor={GREEN_PRIMARY} />
                 <Text style={s.inputLabel}>Account Number</Text>
-                <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => handleBankFieldChange({ bankAccountNumber: v.replace(/\D/g, "") })} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor="#FF6B35" />
+                <TextInput style={s.input} value={documents.bankAccountNumber || ""} onChangeText={(v) => handleBankFieldChange({ bankAccountNumber: v.replace(/\D/g, "") })} placeholder="Enter account number" placeholderTextColor="#98A2B3" keyboardType="number-pad" selectionColor={GREEN_PRIMARY} />
                 <Text style={s.inputLabel}>IFSC Code</Text>
-                <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => handleBankFieldChange({ bankIfsc: v.toUpperCase() })} placeholder="e.g. HDFC0001234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor="#FF6B35" />
+                <TextInput style={s.input} value={documents.bankIfsc || ""} onChangeText={(v) => handleBankFieldChange({ bankIfsc: v.toUpperCase() })} placeholder="e.g. HDFC0001234" placeholderTextColor="#98A2B3" autoCapitalize="characters" selectionColor={GREEN_PRIMARY} />
+                <Text style={s.inputLabel}>UPI ID (optional)</Text>
+                <TextInput style={s.input} value={documents.bankUpiId || ""} onChangeText={(v) => handleBankFieldChange({ bankUpiId: v.trim().toLowerCase() })} placeholder="name@upi" placeholderTextColor="#98A2B3" autoCapitalize="none" selectionColor={GREEN_PRIMARY} />
               </>
             )}
 
             <TouchableOpacity style={s.termsRow} onPress={() => setTermsAccepted((c) => !c)}>
-              <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={22} color={termsAccepted ? "#FF6B35" : "#98A2B3"} />
-              <Text style={s.termsText}>I agree to the delivery partner{" "}<Text style={s.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>terms and conditions</Text>.</Text>
+              <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={22} color={termsAccepted ? GREEN_PRIMARY : "#98A2B3"} />
+              <Text style={s.termsText}>I agree to the delivery partner{" "}<Text style={s.termsLink} onPress={() => Linking.openURL(DELIVERY_POLICY_URL)}>terms and conditions</Text>.</Text>
             </TouchableOpacity>
 
             <View style={s.checklist}>
@@ -980,7 +1034,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   if (loading) {
-    return <View style={[s.center, { paddingTop: insets.top }]}><ActivityIndicator size="large" color="#FF6B35" /><Text style={{ marginTop: 12, color: "#667085", fontSize: 15 }}>Loading profile...</Text></View>;
+    return <View style={[s.center, { paddingTop: insets.top }]}><ActivityIndicator size="large" color={GREEN_PRIMARY} /><Text style={{ marginTop: 12, color: "#667085", fontSize: 15 }}>Loading profile...</Text></View>;
   }
 
   const currentStatus = statusTone[profile?.status || "INACTIVE"];
@@ -993,7 +1047,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 140 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={s.regHero}>
-          <View style={s.regHeroIcon}><Ionicons name="bicycle" size={20} color="#C2410C" /></View>
+          <View style={s.regHeroIcon}><Ionicons name="bicycle" size={20} color={GREEN_DEEP} /></View>
           <Text style={s.regHeroTitle}>Become a Delivery Partner</Text>
           <Text style={s.regHeroSub}>Complete your profile to start earning. We'll verify and activate your account within 24-48 hours.</Text>
         </View>
@@ -1064,11 +1118,11 @@ const s = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F7FA" },
 
   // ── Active Dashboard ──
-  profileHeader: { backgroundColor: "#FF6B35", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28, alignItems: "center" },
+  profileHeader: { backgroundColor: GREEN_PRIMARY, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28, alignItems: "center" },
   avatarWrap: { width: 80, height: 80, borderRadius: 24, backgroundColor: "#fff", padding: 3, alignItems: "center", justifyContent: "center" },
   avatar: { width: "100%", height: "100%", borderRadius: 21 },
-  avatarFallback: { flex: 1, borderRadius: 21, backgroundColor: "#FFF4EE", alignItems: "center", justifyContent: "center" },
-  avatarBadge: { position: "absolute", bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: "#039855", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FF6B35" },
+  avatarFallback: { flex: 1, borderRadius: 21, backgroundColor: GREEN_SOFT, alignItems: "center", justifyContent: "center" },
+  avatarBadge: { position: "absolute", bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: GREEN_DARK, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: GREEN_PRIMARY },
   profileName: { fontSize: 22, fontWeight: "800", color: "#fff", marginTop: 12 },
   profileMeta: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.8)", marginTop: 4 },
   statusChip: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999 },
@@ -1083,16 +1137,6 @@ const s = StyleSheet.create({
   sectionSub: { fontSize: 13, color: "#667085", marginTop: 4, marginBottom: 4 },
   divider: { height: 1, backgroundColor: "#F2F4F7", marginVertical: 12 },
 
-  availCard: { flexDirection: "row", alignItems: "center", gap: 14, padding: 6 },
-  availDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#D0D5DD" },
-  availDotOn: { backgroundColor: "#039855" },
-  availTitle: { fontSize: 15, fontWeight: "800", color: "#1D2939" },
-  availSub: { fontSize: 12, color: "#667085", marginTop: 2 },
-  availSwitch: { width: 44, height: 24, borderRadius: 12, backgroundColor: "#E4E7EC", justifyContent: "center", paddingHorizontal: 3 },
-  availSwitchOn: { backgroundColor: "#039855" },
-  availSwitchKnob: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff" },
-  availSwitchKnobOn: { alignSelf: "flex-end" },
-
   docRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F2F4F7" },
   docRowAlert: { backgroundColor: "#FFFBFA", marginHorizontal: -12, paddingHorizontal: 12, borderRadius: 12 },
   docRowLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
@@ -1105,8 +1149,10 @@ const s = StyleSheet.create({
   docRowActions: { flexDirection: "row", gap: 8 },
   docViewBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "#E4E7EC" },
   docViewBtnText: { fontSize: 12, fontWeight: "700", color: "#475467" },
-  docUploadBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: "#FF6B35" },
+  docUploadBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: GREEN_PRIMARY },
   docUploadBtnText: { fontSize: 12, fontWeight: "700", color: "#fff" },
+  docLockedPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: "#F2F4F7" },
+  docLockedText: { fontSize: 12, fontWeight: "700", color: "#475467" },
 
   alertBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12, backgroundColor: "#FEF3F2", marginTop: 12 },
   alertBoxText: { flex: 1, fontSize: 13, fontWeight: "600", color: "#B42318" },
@@ -1117,7 +1163,7 @@ const s = StyleSheet.create({
   infoValue: { marginTop: 4, fontSize: 15, fontWeight: "700", color: "#1D2939" },
 
   shortcutCard: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
-  shortcutIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#FFF4EE", alignItems: "center", justifyContent: "center" },
+  shortcutIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: GREEN_SOFT, alignItems: "center", justifyContent: "center" },
   shortcutTitle: { fontSize: 14, fontWeight: "700", color: "#1D2939" },
   shortcutSubtitle: { fontSize: 12, color: "#667085", marginTop: 2 },
 
@@ -1127,7 +1173,7 @@ const s = StyleSheet.create({
   deleteBtnText: { fontSize: 15, fontWeight: "800", color: "#B42318" },
 
   // ── Registration ──
-  regHero: { margin: 16, padding: 20, borderRadius: 24, backgroundColor: "#FFF4EE", borderWidth: 1, borderColor: "#FFD7C2", alignItems: "center" },
+  regHero: { margin: 16, padding: 20, borderRadius: 24, backgroundColor: "#F0FDF4", borderWidth: 1, borderColor: "#BBF7D0", alignItems: "center" },
   regHeroIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginBottom: 12 },
   regHeroTitle: { fontSize: 22, fontWeight: "800", color: "#1D2939", textAlign: "center" },
   regHeroSub: { marginTop: 8, fontSize: 13, lineHeight: 19, color: "#667085", textAlign: "center" },
@@ -1139,9 +1185,9 @@ const s = StyleSheet.create({
   progressWrap: { marginHorizontal: 16, marginTop: 14, padding: 18, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#ECECEC" },
   progressBar: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
   progressConnector: { width: 40, height: 3, backgroundColor: "#F2F4F7", marginHorizontal: -2 },
-  progressConnectorActive: { backgroundColor: "#FF6B35" },
+  progressConnectorActive: { backgroundColor: GREEN_PRIMARY },
   progressDot: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#F2F4F7", alignItems: "center", justifyContent: "center" },
-  progressDotActive: { backgroundColor: "#FF6B35" },
+  progressDotActive: { backgroundColor: GREEN_PRIMARY },
   progressDotDone: { backgroundColor: "#039855" },
   progressDotText: { fontSize: 14, fontWeight: "800", color: "#98A2B3" },
   progressDotTextActive: { color: "#fff" },
@@ -1165,18 +1211,18 @@ const s = StyleSheet.create({
 
   vehicleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   vehicleCard: { width: "30%", paddingVertical: 14, borderRadius: 14, backgroundColor: "#F8FAFC", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#ECECEC" },
-  vehicleCardActive: { backgroundColor: "#FFF4EE", borderColor: "#FFD7C2" },
+  vehicleCardActive: { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" },
   vehicleCardText: { fontSize: 12, fontWeight: "700", color: "#667085" },
-  vehicleCardTextActive: { color: "#C2410C" },
+  vehicleCardTextActive: { color: GREEN_DEEP },
 
   infoCard: { flexDirection: "row", gap: 10, padding: 14, borderRadius: 14, backgroundColor: "#F8FAFC", marginTop: 14 },
   infoCardText: { flex: 1, fontSize: 13, color: "#667085", lineHeight: 18 },
 
   chipRow: { flexDirection: "row", gap: 8 },
   chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: "#F2F4F7" },
-  chipActive: { backgroundColor: "#FFF4EE" },
+  chipActive: { backgroundColor: "#F0FDF4" },
   chipText: { fontSize: 13, fontWeight: "700", color: "#667085" },
-  chipTextActive: { color: "#C2410C" },
+  chipTextActive: { color: GREEN_DEEP },
   chipHint: { marginTop: 6, fontSize: 12, color: "#98A2B3" },
   skipBankToggle: { marginTop: 14, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#E4E7EC", backgroundColor: "#F8FAFC", flexDirection: "row", alignItems: "center", gap: 12 },
   skipBankToggleActive: { backgroundColor: "#ECFDF3", borderColor: "#ABEFC6" },
@@ -1190,9 +1236,9 @@ const s = StyleSheet.create({
   skippedBankNotice: { marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: "#F6FEF9", borderWidth: 1, borderColor: "#D1FADF", flexDirection: "row", alignItems: "center", gap: 8 },
   skippedBankNoticeText: { flex: 1, fontSize: 13, fontWeight: "600", color: "#027A48" },
 
-  termsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: "#FFF8F5" },
+  termsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: "#F0FDF4" },
   termsText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "600", color: "#475467" },
-  termsLink: { color: "#C2410C", fontWeight: "800", textDecorationLine: "underline" },
+  termsLink: { color: GREEN_DEEP, fontWeight: "800", textDecorationLine: "underline" },
 
   checklist: { marginTop: 14, padding: 14, borderRadius: 14, backgroundColor: "#F8FAFC" },
   checklistTitle: { fontSize: 14, fontWeight: "800", color: "#1D2939" },
@@ -1214,7 +1260,7 @@ const s = StyleSheet.create({
   reuploadNoteText: { fontSize: 12, fontWeight: "600", color: "#B42318", flex: 1 },
 
   btnRow: { flexDirection: "row", gap: 10, marginTop: 16 },
-  btnPrimary: { flex: 1, height: 48, borderRadius: 14, backgroundColor: "#FF6B35", alignItems: "center", justifyContent: "center" },
+  btnPrimary: { flex: 1, height: 48, borderRadius: 14, backgroundColor: GREEN_PRIMARY, alignItems: "center", justifyContent: "center" },
   btnPrimaryText: { fontSize: 15, fontWeight: "800", color: "#fff" },
   btnOutline: { flex: 1, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#E4E7EC", backgroundColor: "#fff" },
   btnOutlineText: { fontSize: 15, fontWeight: "800", color: "#475467" },
@@ -1227,6 +1273,6 @@ const s = StyleSheet.create({
   footerBtnOutlineText: { fontSize: 14, fontWeight: "800", color: "#475467" },
   footerDraft: { paddingHorizontal: 8, height: 48, justifyContent: "center" },
   footerDraftText: { fontSize: 13, fontWeight: "700", color: "#98A2B3" },
-  footerBtnPrimary: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 48, borderRadius: 14, backgroundColor: "#FF6B35" },
+  footerBtnPrimary: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 48, borderRadius: 14, backgroundColor: GREEN_PRIMARY },
   footerBtnPrimaryText: { fontSize: 15, fontWeight: "800", color: "#fff" }
 });

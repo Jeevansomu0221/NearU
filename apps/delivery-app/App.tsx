@@ -22,7 +22,7 @@ export default function App() {
       <NavigationContainer ref={navigationRef}>
         <AppNavigator />
         <CustomAlert />
-        <StatusBar style="auto" />
+        <StatusBar style="light" backgroundColor="#16A34A" translucent={false} />
       </NavigationContainer>
     </SafeAreaProvider>
   );

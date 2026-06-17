@@ -59,6 +59,10 @@ const SupportTicketSchema = new Schema({
     type: [SupportMessageSchema],
     default: []
   },
+  metadata: {
+    type: Schema.Types.Mixed,
+    default: {}
+  },
   lastCustomerMessageAt: {
     type: Date,
     default: Date.now

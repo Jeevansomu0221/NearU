@@ -38,6 +38,7 @@ export interface IDeliveryPartner extends Document {
     bankStatementUrl?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
+    bankUpiId?: string;
     submittedAt?: Date;
     isComplete?: boolean;
     reuploadFlags?: Record<string, boolean>;
@@ -143,6 +144,7 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
       bankStatementUrl: { type: String, default: "" },
       bankAccountNumber: { type: String, default: "" },
       bankIfsc: { type: String, default: "" },
+      bankUpiId: { type: String, default: "" },
       submittedAt: { type: Date, default: null },
       isComplete: { type: Boolean, default: false },
       reuploadFlags: {

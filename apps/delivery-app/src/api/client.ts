@@ -12,7 +12,7 @@ export interface ApiResponse<T = any> {
 const DEV_LAN_HOST = "10.3.8.130";
 const ANDROID_EMULATOR_HOST = "10.0.2.2";
 const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
-const API_TIMEOUT_MS = 15000;
+const API_TIMEOUT_MS = 60000;
 const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
 const isDev = typeof __DEV__ !== "undefined" && __DEV__;
 
@@ -114,7 +114,7 @@ const refreshAccessToken = async () => {
         { refreshToken },
         {
           baseURL: api.defaults.baseURL || API_BASE_URL,
-          timeout: 15000,
+          timeout: API_TIMEOUT_MS,
           headers: { "Content-Type": "application/json" }
         }
       );

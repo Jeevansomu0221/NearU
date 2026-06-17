@@ -32,6 +32,7 @@ const aadhaarRegex = /^[0-9]{12}$/;
 const dlRegex = /^[A-Z]{2}[0-9]{2}[0-9A-Z]{8,14}$/;
 const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const emergencyPhoneRegex = /^[0-9]{10}$/;
+const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z][a-zA-Z0-9.\-_]{2,64}$/;
 
 const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
@@ -126,6 +127,7 @@ type DeliveryProfileCompletionInput = {
     bankDocumentType?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
+    bankUpiId?: string;
     cancelledChequeUrl?: string;
     bankPassbookUrl?: string;
     bankStatementUrl?: string;
@@ -384,6 +386,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         bankAccountHolderName: firstString(nextDocuments.bankAccountHolderName, nextDocuments.bank_account_holder_name),
         bankAccountNumber: firstString(nextDocuments.bankAccountNumber, nextDocuments.bank_account_number),
         bankIfsc: firstString(nextDocuments.bankIfsc, nextDocuments.bank_ifsc).toUpperCase(),
+        bankUpiId: firstString(nextDocuments.bankUpiId, nextDocuments.bank_upi_id, nextDocuments.upiId).toLowerCase(),
         bankDocumentType: firstString(nextDocuments.bankDocumentType, nextDocuments.bank_document_type),
         cancelledChequeUrl: firstString(nextDocuments.cancelledChequeUrl),
         bankPassbookUrl: firstString(nextDocuments.bankPassbookUrl),
@@ -411,6 +414,9 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       }
       if (normalizedDocuments.bankIfsc && !ifscRegex.test(normalizedDocuments.bankIfsc)) {
         return errorResponse(res, "IFSC code format is invalid", 400);
+      }
+      if (normalizedDocuments.bankUpiId && !upiRegex.test(normalizedDocuments.bankUpiId)) {
+        return errorResponse(res, "UPI ID format is invalid", 400);
       }
 
       const nextVehicleType = typeof vehicleType === "string" ? vehicleType : currentPartner?.vehicleType;
@@ -460,6 +466,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         drivingLicenseUrl: normalizedDocuments.drivingLicenseFrontUrl,
         vehicleRcUrl: normalizedDocuments.vehicleRcFrontUrl,
         bankIfsc: normalizedDocuments.bankIfsc,
+        bankUpiId: normalizedDocuments.bankUpiId,
         reuploadFlags: nextReuploadFlags,
         reuploadNotes: existingDocuments.reuploadNotes || "",
         submittedAt: hasMandatoryDocuments ? new Date() : currentPartner?.documents?.submittedAt || null,
@@ -572,18 +579,27 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const deliveryUserId = deliveryPartner.userId || user.id;
 
-    const [todaysOrders, deliveredOrders] = await Promise.all([
+    const [todaysOrders, deliveredOrders, acceptedJobs, rejectedJobs] = await Promise.all([
       Order.find({
-        deliveryPartnerId: user.id,
+        deliveryPartnerId: deliveryUserId,
         status: "DELIVERED",
         updatedAt: { $gte: todayStart }
       }).lean(),
       Order.find({
-        deliveryPartnerId: user.id,
+        deliveryPartnerId: deliveryUserId,
         status: "DELIVERED"
-      }).select("createdAt updatedAt deliveryFee").lean()
+      }).select("createdAt updatedAt deliveryFee").lean(),
+      Order.countDocuments({
+        deliveryPartnerId: deliveryUserId
+      }),
+      Order.countDocuments({
+        deliveryRejectedBy: deliveryUserId
+      })
     ]);
+    const totalJobResponses = acceptedJobs + rejectedJobs;
+    const acceptanceRate = totalJobResponses > 0 ? Math.round((acceptedJobs / totalJobResponses) * 100) : 0;
 
     const averageDeliveryTime =
       deliveredOrders.length > 0
@@ -612,6 +628,9 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
           0
         ),
         averageDeliveryTime,
+        acceptanceRate,
+        acceptedJobs,
+        rejectedJobs,
         cashBalance: deliveryPartner.cashBalance || 0,
         pendingDepositAmount: deliveryPartner.pendingDepositAmount || 0,
         cashDueToPlatform: Math.max((deliveryPartner.cashBalance || 0) - (deliveryPartner.pendingDepositAmount || 0), 0)

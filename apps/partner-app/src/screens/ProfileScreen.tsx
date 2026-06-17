@@ -138,6 +138,7 @@ const PERIOD_OPTIONS = ["AM", "PM"] as const;
 
 type TimeField = "openingTime" | "closingTime";
 type TimePeriod = typeof PERIOD_OPTIONS[number];
+type ProfileEditSection = "basics" | "address" | "hours" | "bank" | null;
 
 type DocumentKey =
   | "fssaiUrl"
@@ -274,6 +275,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [saving, setSaving] = useState(false);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [activeEditSection, setActiveEditSection] = useState<ProfileEditSection>(null);
 
   const [basics, setBasics] = useState({
     ownerName: "",
@@ -316,8 +318,14 @@ export default function ProfileScreen({ navigation }: any) {
     accountNumber: "",
     ifsc: ""
   });
+  const [bankChangeRequestDetails, setBankChangeRequestDetails] = useState({
+    accountHolderName: "",
+    accountNumber: "",
+    ifsc: ""
+  });
   const [bankChangeRequestReason, setBankChangeRequestReason] = useState("");
   const [bankChangeRequestSubmitting, setBankChangeRequestSubmitting] = useState(false);
+  const [showNewPayoutRequest, setShowNewPayoutRequest] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -358,6 +366,13 @@ export default function ProfileScreen({ navigation }: any) {
       accountNumber: normalizedDocs.bankAccountNumber || "",
       ifsc: normalizedDocs.bankIfsc || ""
     });
+  };
+
+  const cancelSectionEdit = () => {
+    if (profile) {
+      hydrateFromProfile(profile);
+    }
+    setActiveEditSection(null);
   };
 
   const loadProfile = async () => {
@@ -443,7 +458,7 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
-  const handleSaveBasics = () => {
+  const handleSaveBasics = async () => {
     const locked = isProfileVerificationLocked(profile, kyc);
     const payload: Record<string, any> = {
       shopDescription: basics.shopDescription.trim()
@@ -454,7 +469,8 @@ export default function ProfileScreen({ navigation }: any) {
       payload.email = basics.email.trim();
     }
 
-    return saveUpdate(payload, locked ? "Shop description updated" : "Basic shop details updated");
+    await saveUpdate(payload, locked ? "Shop description updated" : "Basic shop details updated");
+    setActiveEditSection(null);
   };
 
   const captureShopLocation = async () => {
@@ -536,15 +552,16 @@ export default function ProfileScreen({ navigation }: any) {
 
     await saveUpdate(payload, "Address & location updated");
     setCapturedLocation(null);
+    setActiveEditSection(null);
   };
 
-  const handleSaveHours = () => {
+  const handleSaveHours = async () => {
     const timeRegex = /^([01]?\d|2[0-3]):([0-5]\d)$/;
     if (!timeRegex.test(hours.openingTime) || !timeRegex.test(hours.closingTime)) {
       Alert.alert("Invalid time", "Use HH:MM format like 09:30.");
       return;
     }
-    return saveUpdate(
+    await saveUpdate(
       {
         openingTime: hours.openingTime,
         closingTime: hours.closingTime,
@@ -552,6 +569,7 @@ export default function ProfileScreen({ navigation }: any) {
       },
       "Business hours updated"
     );
+    setActiveEditSection(null);
   };
 
   const handleSaveKyc = () => {
@@ -601,10 +619,27 @@ export default function ProfileScreen({ navigation }: any) {
     setKyc(nextDocs);
     setBankDetails({ accountHolderName, accountNumber, ifsc });
     await saveUpdate({ documents: nextDocs }, "Bank details updated for manual payouts");
+    setActiveEditSection(null);
   };
 
   const submitBankChangeRequest = async () => {
     const reason = bankChangeRequestReason.trim();
+    const requestedAccountHolderName = bankChangeRequestDetails.accountHolderName.trim();
+    const requestedAccountNumber = bankChangeRequestDetails.accountNumber.replace(/\D/g, "");
+    const requestedIfsc = bankChangeRequestDetails.ifsc.trim().toUpperCase();
+
+    if (!requestedAccountHolderName || !requestedAccountNumber || !requestedIfsc) {
+      Alert.alert("New payment details", "Enter the new account holder name, account number, and IFSC before sending the request.");
+      return;
+    }
+    if (!/^[0-9]{6,20}$/.test(requestedAccountNumber)) {
+      Alert.alert("Account number", "New account number must be 6 to 20 digits.");
+      return;
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(requestedIfsc)) {
+      Alert.alert("IFSC", "Enter a valid 11-character IFSC code for the new account.");
+      return;
+    }
     if (reason.length < 15) {
       Alert.alert("Reason required", "Please add a clear reason with at least 15 characters.");
       return;
@@ -616,16 +651,32 @@ export default function ProfileScreen({ navigation }: any) {
         subject: "Partner bank account change request",
         category: "PAYMENT",
         priority: "HIGH",
+        metadata: {
+          type: "PARTNER_BANK_CHANGE_REQUEST",
+          partnerId: profile?._id,
+          requestedBankDetails: {
+            accountHolderName: requestedAccountHolderName,
+            accountNumber: requestedAccountNumber,
+            ifsc: requestedIfsc
+          }
+        },
         message: [
           `Partner: ${profile?.restaurantName || "Unknown shop"}`,
           `Registered phone: ${profile?.phone || "Not available"}`,
           `Current payout account: ${maskBankAccountNumber(bankDetails.accountNumber)}`,
           `Current IFSC: ${bankDetails.ifsc || "Not added"}`,
           "",
+          "Requested new payout details:",
+          `Account holder name: ${requestedAccountHolderName}`,
+          `Account number: ${requestedAccountNumber}`,
+          `IFSC: ${requestedIfsc}`,
+          "",
           `Reason for change: ${reason}`
         ].join("\n")
       });
+      setBankChangeRequestDetails({ accountHolderName: "", accountNumber: "", ifsc: "" });
       setBankChangeRequestReason("");
+      setShowNewPayoutRequest(false);
       Alert.alert("Request sent", "Support will review your bank account change request before any payout details are updated.");
     } catch (error: any) {
       Alert.alert("Request failed", error.response?.data?.message || error.message || "Could not send request");
@@ -695,18 +746,6 @@ export default function ProfileScreen({ navigation }: any) {
     });
   };
 
-  const coordinateText = useMemo(() => {
-    if (capturedLocation) {
-      return `${capturedLocation.latitude.toFixed(6)}, ${capturedLocation.longitude.toFixed(6)} (new pin, save to apply)`;
-    }
-
-    const [lng, lat] = profile?.location?.coordinates || [];
-    if (typeof lat !== "number" || typeof lng !== "number" || (lat === 0 && lng === 0)) {
-      return "No valid GPS pin saved yet";
-    }
-    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-  }, [capturedLocation, profile?.location?.coordinates]);
-
   const profileCompletion = useMemo(() => {
     const isGstRegistered = kyc.gstRegistered === true || kyc.gstRegistered === "true" || kyc.gstRegistered === "yes";
     const missingDetails = REQUIRED_KYC_DETAILS
@@ -747,14 +786,34 @@ export default function ProfileScreen({ navigation }: any) {
   }
 
   const verificationDetailsLocked = isProfileVerificationLocked(profile, kyc);
+  const basicsEditing = activeEditSection === "basics";
+  const addressEditing = activeEditSection === "address" && !verificationDetailsLocked;
+  const hoursEditing = activeEditSection === "hours";
+  const bankEditing = activeEditSection === "bank" && !verificationDetailsLocked;
   const lockedDetailsCopy =
     "Verified registration, document, address, phone, and payout details are locked for account safety. Send a support request with the reason if anything must change.";
 
-  const renderSectionHeader = (title: string, hint?: string) => (
+  const renderSectionHeader = (title: string, hint?: string, action?: React.ReactNode) => (
     <View style={styles.sectionHeader}>
-      <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>{title}</Text>
+      <View style={styles.sectionTitleRow}>
+        <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>{title}</Text>
+        {action}
+      </View>
       {hint ? <Text style={[styles.sectionHint, isDarkMode && styles.mutedTextDark]}>{hint}</Text> : null}
     </View>
+  );
+
+  const renderEditAction = (section: Exclude<ProfileEditSection, null>, editing: boolean, disabled = false) => (
+    <TouchableOpacity
+      style={[styles.editActionButton, isDarkMode && styles.testLinkButtonDark, disabled && styles.editActionButtonDisabled]}
+      onPress={() => (editing ? cancelSectionEdit() : setActiveEditSection(section))}
+      disabled={disabled || saving}
+      activeOpacity={0.75}
+    >
+      <Text style={[styles.editActionText, disabled && styles.editActionTextDisabled]}>
+        {editing ? "Cancel" : "Edit"}
+      </Text>
+    </TouchableOpacity>
   );
 
   const renderImageSlot = (
@@ -768,7 +827,7 @@ export default function ProfileScreen({ navigation }: any) {
     return (
       <View style={styles.imageSlot}>
         <View style={styles.imageSlotHeader}>
-          <Text style={styles.imageSlotLabel}>{label}</Text>
+          <Text style={[styles.imageSlotLabel, isDarkMode && styles.textDark]}>{label}</Text>
           <TouchableOpacity onPress={onUpload} disabled={pickerBusy || saving || isBusy}>
             <Text style={styles.linkText}>{isBusy ? "Uploading..." : url ? "Replace" : "Upload"}</Text>
           </TouchableOpacity>
@@ -777,7 +836,10 @@ export default function ProfileScreen({ navigation }: any) {
           <Image source={{ uri: url }} style={aspect === "banner" ? styles.bannerPreview : styles.logoPreview} />
         ) : (
           <TouchableOpacity
-            style={aspect === "banner" ? styles.bannerPlaceholder : styles.logoPlaceholder}
+            style={[
+              aspect === "banner" ? styles.bannerPlaceholder : styles.logoPlaceholder,
+              isDarkMode && styles.placeholderDark
+            ]}
             onPress={onUpload}
             disabled={pickerBusy || saving || isBusy}
           >
@@ -786,7 +848,7 @@ export default function ProfileScreen({ navigation }: any) {
             ) : (
               <>
                 <Ionicons name="image-outline" size={22} color="#60A5FA" />
-                <Text style={styles.placeholderHint}>Tap to upload</Text>
+                <Text style={[styles.placeholderHint, isDarkMode && styles.mutedTextDark]}>Tap to upload</Text>
               </>
             )}
           </TouchableOpacity>
@@ -808,9 +870,9 @@ export default function ProfileScreen({ navigation }: any) {
     const locked = verificationDetailsLocked && hasValue;
 
     return (
-      <View style={styles.kycField} key={field as string}>
+      <View style={[styles.kycField, isDarkMode && styles.surfaceDark]} key={field as string}>
         <View style={styles.kycFieldHeader}>
-          <Text style={styles.kycFieldLabel}>{label}</Text>
+          <Text style={[styles.kycFieldLabel, isDarkMode && styles.textDark]}>{label}</Text>
           {showVerified ? (
             <View style={[styles.docBadge, styles.docBadgeVerified]}>
               <Ionicons name="checkmark-circle" size={12} color="#0E8A4A" style={{ marginRight: 4 }} />
@@ -826,11 +888,11 @@ export default function ProfileScreen({ navigation }: any) {
         {isEditing ? (
           <>
             <TextInput
-              style={styles.kycEditInput}
+              style={[styles.kycEditInput, isDarkMode && styles.inputDark]}
               value={kycDraftValue}
               onChangeText={(text) => setKycDraftValue(sanitizeKycValue(field, text))}
               placeholder={options.placeholder || label}
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               keyboardType={options.keyboardType || "default"}
               maxLength={options.maxLength}
               autoCapitalize={field === "panNumber" || field === "bankIfsc" ? "characters" : "sentences"}
@@ -850,12 +912,12 @@ export default function ProfileScreen({ navigation }: any) {
           </>
         ) : (
           <>
-            <Text style={hasValue ? styles.kycFieldValue : styles.kycFieldValueEmpty}>
+            <Text style={[hasValue ? styles.kycFieldValue : styles.kycFieldValueEmpty, isDarkMode && (hasValue ? styles.textDark : styles.mutedTextDark)]}>
               {hasValue ? display : "Not provided yet - add this to complete profile"}
             </Text>
             <View style={styles.kycFieldActions}>
               {locked ? (
-                <Text style={styles.fieldLockText}>Locked after verification</Text>
+                <Text style={[styles.fieldLockText, isDarkMode && styles.mutedTextDark]}>Locked after verification</Text>
               ) : (
                 <TouchableOpacity
                   style={styles.docActionGhost}
@@ -914,10 +976,18 @@ export default function ProfileScreen({ navigation }: any) {
     }
 
     return (
-      <View style={[styles.documentRow, reuploadRequested && styles.documentRowAlert]} key={doc.key}>
+      <View
+        style={[
+          styles.documentRow,
+          isDarkMode && styles.surfaceDark,
+          reuploadRequested && styles.documentRowAlert,
+          reuploadRequested && isDarkMode && styles.documentRowAlertDark
+        ]}
+        key={doc.key}
+      >
         <View style={styles.documentCopy}>
           <View style={styles.documentTitleRow}>
-            <Text style={styles.documentTitle}>{doc.title}</Text>
+            <Text style={[styles.documentTitle, isDarkMode && styles.textDark]}>{doc.title}</Text>
             <View style={[styles.docBadge, badgeStyle]}>
               {badgeLabel === "Verified" ? (
                 <Ionicons name="checkmark-circle" size={12} color="#0E8A4A" style={{ marginRight: 4 }} />
@@ -925,7 +995,7 @@ export default function ProfileScreen({ navigation }: any) {
               <Text style={[styles.docBadgeText, badgeTextStyle]}>{badgeLabel}</Text>
             </View>
           </View>
-          <Text style={styles.documentStatus} numberOfLines={2}>
+          <Text style={[styles.documentStatus, isDarkMode && styles.mutedTextDark]} numberOfLines={2}>
             {isBusy ? "Uploading..." : statusLine}
           </Text>
         </View>
@@ -935,7 +1005,7 @@ export default function ProfileScreen({ navigation }: any) {
           </TouchableOpacity>
         ) : null}
         {locked ? (
-          <Text style={styles.fieldLockText}>Locked</Text>
+          <Text style={[styles.fieldLockText, isDarkMode && styles.mutedTextDark]}>Locked</Text>
         ) : (
           <TouchableOpacity
             style={actionStyle}
@@ -967,14 +1037,15 @@ export default function ProfileScreen({ navigation }: any) {
     const selected = activeTimeField === field;
     return (
       <TouchableOpacity
-        style={[styles.timeCard, selected && styles.timeCardSelected]}
+        style={[styles.timeCard, isDarkMode && styles.surfaceDark, selected && styles.timeCardSelected, selected && isDarkMode && styles.timeCardSelectedDark]}
         onPress={() => setActiveTimeField(field)}
+        disabled={!hoursEditing}
       >
-        <Text style={[styles.timeCardLabel, selected && styles.timeCardLabelSelected]}>{label}</Text>
-        <Text style={[styles.timeCardValue, selected && styles.timeCardValueSelected]}>
+        <Text style={[styles.timeCardLabel, isDarkMode && styles.mutedTextDark, selected && styles.timeCardLabelSelected]}>{label}</Text>
+        <Text style={[styles.timeCardValue, isDarkMode && styles.textDark, selected && styles.timeCardValueSelected]}>
           {formatTwelveHourTime(hours[field])}
         </Text>
-        <Text style={[styles.timeCardHint, selected && styles.timeCardHintSelected]}>
+        <Text style={[styles.timeCardHint, isDarkMode && styles.mutedTextDark, selected && styles.timeCardHintSelected]}>
           Tap to select
         </Text>
       </TouchableOpacity>
@@ -986,55 +1057,55 @@ export default function ProfileScreen({ navigation }: any) {
     const activeLabel = activeTimeField === "openingTime" ? "Opening time" : "Closing time";
 
     return (
-      <View style={styles.timePickerPanel}>
+      <View style={[styles.timePickerPanel, isDarkMode && styles.surfaceDark]}>
         <View style={styles.timePickerHeader}>
-          <Text style={styles.timePickerTitle}>{activeLabel}</Text>
+          <Text style={[styles.timePickerTitle, isDarkMode && styles.textDark]}>{activeLabel}</Text>
           <Text style={styles.timePickerValue}>{formatTwelveHourTime(hours[activeTimeField])}</Text>
         </View>
 
-        <Text style={styles.timePickerLabel}>Hour</Text>
+        <Text style={[styles.timePickerLabel, isDarkMode && styles.mutedTextDark]}>Hour</Text>
         <View style={styles.timeOptionRow}>
           {HOURS_12.map((hour) => {
             const selected = current.hour === hour;
             return (
               <TouchableOpacity
                 key={hour}
-                style={[styles.timeOptionChip, selected && styles.timeOptionChipSelected]}
+                style={[styles.timeOptionChip, isDarkMode && styles.timeOptionChipDark, selected && styles.timeOptionChipSelected]}
                 onPress={() => updateTimePart(activeTimeField, { hour })}
               >
-                <Text style={[styles.timeOptionText, selected && styles.timeOptionTextSelected]}>{hour}</Text>
+                <Text style={[styles.timeOptionText, isDarkMode && styles.mutedTextDark, selected && styles.timeOptionTextSelected]}>{hour}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        <Text style={styles.timePickerLabel}>Minutes</Text>
+        <Text style={[styles.timePickerLabel, isDarkMode && styles.mutedTextDark]}>Minutes</Text>
         <View style={styles.timeOptionRow}>
           {MINUTE_OPTIONS.map((minute) => {
             const selected = current.minute === minute;
             return (
               <TouchableOpacity
                 key={minute}
-                style={[styles.timeOptionChip, selected && styles.timeOptionChipSelected]}
+                style={[styles.timeOptionChip, isDarkMode && styles.timeOptionChipDark, selected && styles.timeOptionChipSelected]}
                 onPress={() => updateTimePart(activeTimeField, { minute })}
               >
-                <Text style={[styles.timeOptionText, selected && styles.timeOptionTextSelected]}>{minute}</Text>
+                <Text style={[styles.timeOptionText, isDarkMode && styles.mutedTextDark, selected && styles.timeOptionTextSelected]}>{minute}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        <Text style={styles.timePickerLabel}>AM / PM</Text>
+        <Text style={[styles.timePickerLabel, isDarkMode && styles.mutedTextDark]}>AM / PM</Text>
         <View style={styles.periodRow}>
           {PERIOD_OPTIONS.map((period) => {
             const selected = current.period === period;
             return (
               <TouchableOpacity
                 key={period}
-                style={[styles.periodChip, selected && styles.timeOptionChipSelected]}
+                style={[styles.periodChip, isDarkMode && styles.timeOptionChipDark, selected && styles.timeOptionChipSelected]}
                 onPress={() => updateTimePart(activeTimeField, { period })}
               >
-                <Text style={[styles.periodText, selected && styles.timeOptionTextSelected]}>{period}</Text>
+                <Text style={[styles.periodText, isDarkMode && styles.mutedTextDark, selected && styles.timeOptionTextSelected]}>{period}</Text>
               </TouchableOpacity>
             );
           })}
@@ -1090,11 +1161,11 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
 
       {!profileCompletion.isComplete ? (
-        <View style={styles.completionBanner}>
+        <View style={[styles.completionBanner, isDarkMode && styles.completionBannerDark]}>
           <Ionicons name="alert-circle" size={18} color="#8A5A00" />
           <View style={styles.completionBannerCopy}>
-            <Text style={styles.completionBannerTitle}>Profile incomplete</Text>
-            <Text style={styles.completionBannerText}>
+            <Text style={[styles.completionBannerTitle, isDarkMode && styles.completionBannerTitleDark]}>Profile incomplete</Text>
+            <Text style={[styles.completionBannerText, isDarkMode && styles.completionBannerTextDark]}>
               Add {profileCompletion.missing.slice(0, 3).join(", ")}
               {profileCompletion.missing.length > 3 ? ` and ${profileCompletion.missing.length - 3} more item${profileCompletion.missing.length - 3 === 1 ? "" : "s"}` : ""}.
             </Text>
@@ -1106,232 +1177,228 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader(
           "Basic Shop Details",
-          verificationDetailsLocked ? "Verified identity and contact details are locked after approval." : "Shop name and phone stay fixed after registration."
+          verificationDetailsLocked ? "Verified identity and contact details are locked after approval." : "Shop name and phone stay fixed after registration.",
+          renderEditAction("basics", basicsEditing)
         )}
         {verificationDetailsLocked ? (
-          <View style={styles.lockedNotice}>
+          <View style={[styles.lockedNotice, isDarkMode && styles.lockedNoticeDark]}>
             <Ionicons name="lock-closed-outline" size={18} color="#1D4E89" />
             <View style={styles.lockedNoticeCopy}>
-              <Text style={styles.lockedNoticeTitle}>Verified details protected</Text>
-              <Text style={styles.lockedNoticeText}>{lockedDetailsCopy}</Text>
+              <Text style={[styles.lockedNoticeTitle, isDarkMode && styles.textDark]}>Verified details protected</Text>
+              <Text style={[styles.lockedNoticeText, isDarkMode && styles.mutedTextDark]}>{lockedDetailsCopy}</Text>
             </View>
           </View>
         ) : null}
-        <View style={styles.readOnlyField}>
-          <Text style={styles.readOnlyLabel}>Shop name</Text>
-          <Text style={styles.readOnlyValue}>{profile.restaurantName}</Text>
+        <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
+          <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Shop name</Text>
+          <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{profile.restaurantName}</Text>
         </View>
-        <View style={styles.readOnlyField}>
-          <Text style={styles.readOnlyLabel}>Phone number</Text>
-          <Text style={styles.readOnlyValue}>{profile.phone}</Text>
+        <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
+          <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Phone number</Text>
+          <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{profile.phone}</Text>
         </View>
-        <View style={styles.readOnlyField}>
-          <Text style={styles.readOnlyLabel}>Category</Text>
-          <Text style={styles.readOnlyValue}>{CATEGORY_LABELS[profile.category] || profile.category}</Text>
+        <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
+          <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Category</Text>
+          <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{CATEGORY_LABELS[profile.category] || profile.category}</Text>
         </View>
 
         {verificationDetailsLocked ? (
           <>
-            <View style={styles.readOnlyField}>
-              <Text style={styles.readOnlyLabel}>Owner name</Text>
-              <Text style={styles.readOnlyValue}>{basics.ownerName || "Not provided"}</Text>
+            <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
+              <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Owner name</Text>
+              <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{basics.ownerName || "Not provided"}</Text>
             </View>
-            <View style={styles.readOnlyField}>
-              <Text style={styles.readOnlyLabel}>Email</Text>
-              <Text style={styles.readOnlyValue}>{basics.email || "Not provided"}</Text>
+            <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
+              <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Email</Text>
+              <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{basics.email || "Not provided"}</Text>
             </View>
           </>
         ) : (
           <>
-            <Text style={styles.label}>Owner name</Text>
+            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Owner name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, isDarkMode && styles.inputDark, !basicsEditing && styles.inputDisabled, !basicsEditing && isDarkMode && styles.inputDisabledDark]}
               placeholder="Owner name"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={basics.ownerName}
               onChangeText={(text) => setBasics({ ...basics, ownerName: text })}
+              editable={basicsEditing}
             />
 
-            <Text style={styles.label}>Email</Text>
+            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, isDarkMode && styles.inputDark, !basicsEditing && styles.inputDisabled, !basicsEditing && isDarkMode && styles.inputDisabledDark]}
               placeholder="Business email"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={basics.email}
               onChangeText={(text) => setBasics({ ...basics, email: text })}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={basicsEditing}
             />
           </>
         )}
 
-        <Text style={styles.label}>Shop description</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Shop description</Text>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, isDarkMode && styles.inputDark, !basicsEditing && styles.inputDisabled, !basicsEditing && isDarkMode && styles.inputDisabledDark]}
           placeholder="Tell customers about your shop, signature items, opening days..."
-          placeholderTextColor="#98A2B3"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={basics.shopDescription}
           onChangeText={(text) => setBasics({ ...basics, shopDescription: text })}
           multiline
+          editable={basicsEditing}
         />
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSaveBasics} disabled={saving}>
-          {saving ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.primaryButtonText}>{verificationDetailsLocked ? "Save shop description" : "Save basics"}</Text>
-          )}
-        </TouchableOpacity>
+        {basicsEditing ? (
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSaveBasics} disabled={saving}>
+            {saving ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Save</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Address & Location */}
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader(
           "Address & Location",
-          verificationDetailsLocked ? "Verified shop address changes require support review." : "Customers within your delivery radius rely on these coordinates."
+          verificationDetailsLocked ? "Verified shop address changes require support review." : "Keep the address and map link accurate for customer deliveries.",
+          verificationDetailsLocked ? null : renderEditAction("address", addressEditing)
         )}
         {verificationDetailsLocked ? (
-          <View style={styles.lockedNotice}>
+          <View style={[styles.lockedNotice, isDarkMode && styles.lockedNoticeDark]}>
             <Ionicons name="shield-checkmark-outline" size={18} color="#1D4E89" />
             <View style={styles.lockedNoticeCopy}>
-              <Text style={styles.lockedNoticeTitle}>Address locked after verification</Text>
-              <Text style={styles.lockedNoticeText}>
+              <Text style={[styles.lockedNoticeTitle, isDarkMode && styles.textDark]}>Address locked after verification</Text>
+              <Text style={[styles.lockedNoticeText, isDarkMode && styles.mutedTextDark]}>
                 This protects customer trust, tax records, and payout review. Contact support with your reason to move the shop location.
               </Text>
             </View>
           </View>
         ) : null}
 
-        <Text style={styles.label}>Road / street</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Road / street</Text>
         <TextInput
-          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
+          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
           placeholder="Road / street"
-          placeholderTextColor="#98A2B3"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.roadStreet}
           onChangeText={(text) => setAddress({ ...address, roadStreet: text })}
-          editable={!verificationDetailsLocked}
+          editable={addressEditing}
         />
 
-        <Text style={styles.label}>Colony / society</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Colony / society</Text>
         <TextInput
-          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
+          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
           placeholder="Colony or society"
-          placeholderTextColor="#98A2B3"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.colony}
           onChangeText={(text) => setAddress({ ...address, colony: text })}
-          editable={!verificationDetailsLocked}
+          editable={addressEditing}
         />
 
-        <Text style={styles.label}>Area / locality</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Area / locality</Text>
         <TextInput
-          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
+          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
           placeholder="Area or locality"
-          placeholderTextColor="#98A2B3"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.area}
           onChangeText={(text) => setAddress({ ...address, area: text })}
-          editable={!verificationDetailsLocked}
+          editable={addressEditing}
         />
 
         <View style={styles.row}>
           <View style={styles.half}>
-            <Text style={styles.label}>City</Text>
+            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>City</Text>
             <TextInput
-              style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
+              style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
               placeholder="City"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={address.city}
               onChangeText={(text) => setAddress({ ...address, city: text })}
-              editable={!verificationDetailsLocked}
+              editable={addressEditing}
             />
           </View>
           <View style={styles.half}>
-            <Text style={styles.label}>State</Text>
+            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>State</Text>
             <TextInput
-              style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
+              style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
               placeholder="State"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={address.state}
               onChangeText={(text) => setAddress({ ...address, state: text })}
-              editable={!verificationDetailsLocked}
+              editable={addressEditing}
             />
           </View>
         </View>
 
-        <Text style={styles.label}>Pincode</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Pincode</Text>
         <TextInput
-          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
+          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
           placeholder="6-digit pincode"
-          placeholderTextColor="#98A2B3"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.pincode}
           onChangeText={(text) => setAddress({ ...address, pincode: text.replace(/\D/g, "") })}
           keyboardType="number-pad"
           maxLength={6}
-          editable={!verificationDetailsLocked}
+          editable={addressEditing}
         />
 
-        <Text style={styles.label}>Landmark / nearby places</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Landmark / nearby places</Text>
         <TextInput
-          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
+          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
           placeholder="Eg. Beside SBI ATM, opposite KFC"
-          placeholderTextColor="#98A2B3"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.landmark}
           onChangeText={(text) => setAddress({ ...address, landmark: text })}
-          editable={!verificationDetailsLocked}
+          editable={addressEditing}
         />
 
-        <Text style={styles.label}>Google Maps link</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Google Maps link</Text>
         <TextInput
-          style={[styles.input, verificationDetailsLocked && styles.inputDisabled]}
+          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
           placeholder="Paste shop Google Maps link"
-          placeholderTextColor="#98A2B3"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.googleMapsLink}
           onChangeText={(text) => setAddress({ ...address, googleMapsLink: text })}
           autoCapitalize="none"
-          editable={!verificationDetailsLocked}
+          editable={addressEditing}
         />
 
-        <View style={styles.inlineActions}>
-          <TouchableOpacity style={styles.utilityButton} onPress={() => Linking.openURL("https://maps.google.com")}>
-            <Text style={styles.utilityButtonText}>Open Maps</Text>
-          </TouchableOpacity>
+        {address.googleMapsLink ? (
           <TouchableOpacity
-            style={styles.utilityButton}
-            onPress={() => {
-              if (address.googleMapsLink) {
-                Linking.openURL(address.googleMapsLink).catch(() => Alert.alert("Error", "Could not open link"));
-              }
-            }}
+            style={[styles.testLinkButton, isDarkMode && styles.testLinkButtonDark]}
+            onPress={() => Linking.openURL(address.googleMapsLink).catch(() => Alert.alert("Error", "Could not open link"))}
+            activeOpacity={0.75}
           >
-            <Text style={styles.utilityButtonText}>Test link</Text>
+            <Text style={styles.testLinkButtonText}>Test link</Text>
           </TouchableOpacity>
-        </View>
+        ) : null}
 
-        <View style={styles.detailBlock}>
-          <Text style={styles.detailLabel}>Latitude / longitude</Text>
-          <Text style={styles.detailValue}>{coordinateText}</Text>
-        </View>
+        {addressEditing ? (
+          <>
+            <TouchableOpacity
+              style={[styles.secondaryButton, isDarkMode && styles.secondaryButtonDark]}
+              onPress={captureShopLocation}
+              disabled={saving || capturingLocation}
+            >
+              {capturingLocation ? (
+                <ActivityIndicator color="#60A5FA" />
+              ) : (
+                <Text style={styles.secondaryButtonText}>
+                  {capturedLocation ? "Re-capture shop GPS pin" : "Use current shop GPS pin"}
+                </Text>
+              )}
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.secondaryButton, verificationDetailsLocked && styles.secondaryButtonDisabled]}
-          onPress={captureShopLocation}
-          disabled={saving || capturingLocation || verificationDetailsLocked}
-        >
-          {capturingLocation ? (
-            <ActivityIndicator color="#60A5FA" />
-          ) : (
-            <Text style={styles.secondaryButtonText}>
-              {capturedLocation ? "Re-capture shop GPS pin" : "Use current shop GPS pin"}
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.primaryButton, verificationDetailsLocked && styles.primaryButtonDisabled]}
-          onPress={handleSaveAddress}
-          disabled={saving || verificationDetailsLocked}
-        >
-          {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save address</Text>}
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.primaryButton} onPress={handleSaveAddress} disabled={saving}>
+              {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save address</Text>}
+            </TouchableOpacity>
+          </>
+        ) : null}
       </View>
 
       {/* Store Images */}
@@ -1363,7 +1430,7 @@ export default function ProfileScreen({ navigation }: any) {
         )}
 
         <View style={styles.imageSlotHeader}>
-          <Text style={styles.imageSlotLabel}>Food / product photos</Text>
+          <Text style={[styles.imageSlotLabel, isDarkMode && styles.textDark]}>Food / product photos</Text>
           <TouchableOpacity
             disabled={pickerBusy || saving || Boolean(uploadingKey)}
             onPress={() =>
@@ -1399,13 +1466,17 @@ export default function ProfileScreen({ navigation }: any) {
             ))}
           </View>
         ) : (
-          <Text style={styles.helperText}>Add at least 3 photos of your bestsellers for higher conversion.</Text>
+          <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>Add at least 3 photos of your bestsellers for higher conversion.</Text>
         )}
       </View>
 
       {/* Business Hours */}
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
-        {renderSectionHeader("Business Hours", "Select opening hours in 12-hour AM/PM format and set weekly off days.")}
+        {renderSectionHeader(
+          "Business Hours",
+          "Select opening hours in 12-hour AM/PM format and set weekly off days.",
+          renderEditAction("hours", hoursEditing)
+        )}
 
         <View style={styles.row}>
           <View style={styles.half}>
@@ -1416,27 +1487,30 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </View>
 
-        {renderTimePicker()}
+        {hoursEditing ? renderTimePicker() : null}
 
-        <Text style={styles.label}>Weekly holidays</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Weekly holidays</Text>
         <View style={styles.pillRow}>
           {WEEK_DAYS.map((day) => {
             const selected = hours.weeklyHolidays.includes(day);
             return (
               <TouchableOpacity
                 key={day}
-                style={[styles.dayPill, selected && styles.dayPillSelected]}
+                style={[styles.dayPill, isDarkMode && styles.timeOptionChipDark, selected && styles.dayPillSelected]}
                 onPress={() => toggleWeeklyHoliday(day)}
+                disabled={!hoursEditing}
               >
-                <Text style={[styles.dayPillText, selected && styles.dayPillTextSelected]}>{day}</Text>
+                <Text style={[styles.dayPillText, isDarkMode && styles.mutedTextDark, selected && styles.dayPillTextSelected]}>{day}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSaveHours} disabled={saving}>
-          {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save hours</Text>}
-        </TouchableOpacity>
+        {hoursEditing ? (
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSaveHours} disabled={saving}>
+            {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save hours</Text>}
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* KYC / Verification */}
@@ -1451,9 +1525,9 @@ export default function ProfileScreen({ navigation }: any) {
         )}
 
         {kyc.reuploadNotes ? (
-          <View style={styles.reuploadBanner}>
+          <View style={[styles.reuploadBanner, isDarkMode && styles.documentRowAlertDark]}>
             <Ionicons name="alert-circle" size={18} color="#B83A20" />
-            <Text style={styles.reuploadBannerText}>
+            <Text style={[styles.reuploadBannerText, isDarkMode && styles.completionBannerTextDark]}>
               {`Admin note: ${kyc.reuploadNotes}`}
             </Text>
           </View>
@@ -1476,9 +1550,9 @@ export default function ProfileScreen({ navigation }: any) {
           placeholder: "12-digit Aadhaar",
           maxLength: 12
         })}
-        <View style={styles.detailBlock}>
-          <Text style={styles.detailLabel}>GST registered</Text>
-          <Text style={styles.detailValue}>
+        <View style={[styles.detailBlock, isDarkMode && styles.surfaceDark]}>
+          <Text style={[styles.detailLabel, isDarkMode && styles.mutedTextDark]}>GST registered</Text>
+          <Text style={[styles.detailValue, isDarkMode && styles.textDark]}>
             {isGstRegistered ? "Yes" : "No"}
           </Text>
         </View>
@@ -1489,7 +1563,7 @@ export default function ProfileScreen({ navigation }: any) {
             })
           : null}
 
-        <Text style={styles.subsectionTitle}>Documents</Text>
+        <Text style={[styles.subsectionTitle, isDarkMode && styles.textDark]}>Documents</Text>
         {DOCUMENT_UPLOADS
           .filter((doc) => doc.key !== "gstUrl" || isGstRegistered)
           .map((doc) => renderDocumentRow(doc.key === "gstUrl" ? { ...doc, mandatory: true } : doc))}
@@ -1499,13 +1573,13 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader("Menu Management", "Add dishes, set prices, mark veg/non-veg, and manage stock.")}
         <View style={styles.statRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{profile.menuItemsCount || 0}</Text>
-            <Text style={styles.statLabel}>Total items</Text>
+          <View style={[styles.statItem, isDarkMode && styles.surfaceDark]}>
+            <Text style={[styles.statValue, isDarkMode && styles.textDark]}>{profile.menuItemsCount || 0}</Text>
+            <Text style={[styles.statLabel, isDarkMode && styles.mutedTextDark]}>Total items</Text>
           </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{profile.hasCompletedSetup ? "Yes" : "No"}</Text>
-            <Text style={styles.statLabel}>Setup complete</Text>
+          <View style={[styles.statItem, isDarkMode && styles.surfaceDark]}>
+            <Text style={[styles.statValue, isDarkMode && styles.textDark]}>{profile.hasCompletedSetup ? "Yes" : "No"}</Text>
+            <Text style={[styles.statLabel, isDarkMode && styles.mutedTextDark]}>Setup complete</Text>
           </View>
         </View>
         <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate("Menu")}>
@@ -1518,76 +1592,148 @@ export default function ProfileScreen({ navigation }: any) {
           "Payments",
           verificationDetailsLocked
             ? "Payout details are private. Account changes require a support review."
-            : "Add payout details before verification. Account numbers stay hidden on screen."
+            : "Add payout details before verification. Account numbers stay hidden on screen.",
+          verificationDetailsLocked ? null : renderEditAction("bank", bankEditing)
         )}
-        <View style={styles.payoutSummaryCard}>
-          <View style={styles.payoutIconCircle}>
+        <View style={[styles.payoutSummaryCard, isDarkMode && styles.surfaceDark]}>
+          <View style={[styles.payoutIconCircle, isDarkMode && styles.placeholderDark]}>
             <Ionicons name="card-outline" size={20} color="#1D4E89" />
           </View>
           <View style={styles.payoutSummaryCopy}>
-            <Text style={styles.payoutSummaryTitle}>{bankDetails.accountHolderName || "Payout account"}</Text>
-            <Text style={styles.payoutSummaryMeta}>{maskBankAccountNumber(bankDetails.accountNumber)}</Text>
-            <Text style={styles.payoutSummaryMeta}>IFSC {bankDetails.ifsc || "not added"}</Text>
+            <View style={styles.payoutTitleRow}>
+              <Text style={[styles.payoutSummaryTitle, isDarkMode && styles.textDark]}>{bankDetails.accountHolderName || "Payout account"}</Text>
+              <View style={styles.currentPayoutBadge}>
+                <Ionicons name="checkmark-circle" size={13} color="#0E8A4A" />
+                <Text style={styles.currentPayoutBadgeText}>Current payout</Text>
+              </View>
+            </View>
+            <Text style={[styles.payoutSummaryMeta, isDarkMode && styles.mutedTextDark]}>{maskBankAccountNumber(bankDetails.accountNumber)}</Text>
+            <Text style={[styles.payoutSummaryMeta, isDarkMode && styles.mutedTextDark]}>IFSC {bankDetails.ifsc || "not added"}</Text>
           </View>
         </View>
 
         {verificationDetailsLocked ? (
           <>
-            <View style={styles.lockedNotice}>
+            <View style={[styles.lockedNotice, isDarkMode && styles.lockedNoticeDark]}>
               <Ionicons name="lock-closed-outline" size={18} color="#1D4E89" />
               <View style={styles.lockedNoticeCopy}>
-                <Text style={styles.lockedNoticeTitle}>Bank account changes need review</Text>
-                <Text style={styles.lockedNoticeText}>
-                  Share the reason for change. Support will verify it before updating payout details.
+                <Text style={[styles.lockedNoticeTitle, isDarkMode && styles.textDark]}>Bank account changes need review</Text>
+                <Text style={[styles.lockedNoticeText, isDarkMode && styles.mutedTextDark]}>
+                  Enter the new payout details and reason. Support will verify them before updating payouts.
                 </Text>
               </View>
             </View>
-            <Text style={styles.label}>Reason for bank account change</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Example: Bank account closed, wrong account submitted, ownership change..."
-              placeholderTextColor="#98A2B3"
-              value={bankChangeRequestReason}
-              onChangeText={setBankChangeRequestReason}
-              multiline
-            />
-            <TouchableOpacity
-              style={[styles.primaryButton, bankChangeRequestSubmitting && styles.primaryButtonDisabled]}
-              onPress={submitBankChangeRequest}
-              disabled={bankChangeRequestSubmitting}
-            >
-              {bankChangeRequestSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Send change request</Text>
-              )}
-            </TouchableOpacity>
+            {!showNewPayoutRequest ? (
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => setShowNewPayoutRequest(true)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.primaryButtonText}>Add new payout</Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>New account holder name</Text>
+                <TextInput
+                  style={[styles.input, isDarkMode && styles.inputDark]}
+                  placeholder="Name as per new bank account"
+                  placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
+                  value={bankChangeRequestDetails.accountHolderName}
+                  onChangeText={(text) => setBankChangeRequestDetails((prev) => ({ ...prev, accountHolderName: text }))}
+                />
+                <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>New account number</Text>
+                <TextInput
+                  style={[styles.input, isDarkMode && styles.inputDark]}
+                  placeholder="New bank account number"
+                  placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
+                  value={bankChangeRequestDetails.accountNumber}
+                  onChangeText={(text) =>
+                    setBankChangeRequestDetails((prev) => ({
+                      ...prev,
+                      accountNumber: text.replace(/\D/g, "").slice(0, 20)
+                    }))
+                  }
+                  keyboardType="number-pad"
+                  secureTextEntry
+                />
+                <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>New IFSC code</Text>
+                <TextInput
+                  style={[styles.input, isDarkMode && styles.inputDark]}
+                  placeholder="ABCD0123456"
+                  placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
+                  value={bankChangeRequestDetails.ifsc}
+                  onChangeText={(text) =>
+                    setBankChangeRequestDetails((prev) => ({
+                      ...prev,
+                      ifsc: text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11)
+                    }))
+                  }
+                  autoCapitalize="characters"
+                  maxLength={11}
+                />
+                <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Reason for bank account change</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea, isDarkMode && styles.inputDark]}
+                  placeholder="Example: Bank account closed, wrong account submitted, ownership change..."
+                  placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
+                  value={bankChangeRequestReason}
+                  onChangeText={setBankChangeRequestReason}
+                  multiline
+                />
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[styles.secondaryInlineButton, isDarkMode && styles.secondaryButtonDark]}
+                    onPress={() => {
+                      setShowNewPayoutRequest(false);
+                      setBankChangeRequestDetails({ accountHolderName: "", accountNumber: "", ifsc: "" });
+                      setBankChangeRequestReason("");
+                    }}
+                    disabled={bankChangeRequestSubmitting}
+                  >
+                    <Text style={styles.secondaryInlineButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.primaryInlineButton, bankChangeRequestSubmitting && styles.primaryButtonDisabled]}
+                    onPress={submitBankChangeRequest}
+                    disabled={bankChangeRequestSubmitting}
+                  >
+                    {bankChangeRequestSubmitting ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.primaryInlineButtonText}>Submit request</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </>
         ) : (
           <>
-            <Text style={styles.label}>Account holder name</Text>
+            {bankEditing ? (
+              <>
+            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Account holder name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, isDarkMode && styles.inputDark]}
               placeholder="Name as per bank account"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={bankDetails.accountHolderName}
               onChangeText={(text) => setBankDetails((prev) => ({ ...prev, accountHolderName: text }))}
             />
-            <Text style={styles.label}>Account number</Text>
+            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Account number</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, isDarkMode && styles.inputDark]}
               placeholder="Bank account number"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={bankDetails.accountNumber}
               onChangeText={(text) => setBankDetails((prev) => ({ ...prev, accountNumber: text.replace(/\D/g, "").slice(0, 20) }))}
               keyboardType="number-pad"
               secureTextEntry
             />
-            <Text style={styles.label}>IFSC code</Text>
+            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>IFSC code</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, isDarkMode && styles.inputDark]}
               placeholder="ABCD0123456"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={bankDetails.ifsc}
               onChangeText={(text) =>
                 setBankDetails((prev) => ({ ...prev, ifsc: text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11) }))
@@ -1598,16 +1744,18 @@ export default function ProfileScreen({ navigation }: any) {
             <TouchableOpacity style={styles.primaryButton} onPress={handleSaveBankDetails} disabled={saving}>
               {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save bank details</Text>}
             </TouchableOpacity>
+              </>
+            ) : null}
           </>
         )}
-        <TouchableOpacity style={styles.linkRow} onPress={() => navigation.navigate("PaymentHistory")}>
+        <TouchableOpacity style={[styles.linkRow, isDarkMode && styles.linkRowDark]} onPress={() => navigation.navigate("PaymentHistory")}>
           <View style={styles.linkRowLeft}>
-            <View style={[styles.linkIconCircle, { backgroundColor: "#EAF3FF" }]}>
+            <View style={[styles.linkIconCircle, { backgroundColor: isDarkMode ? "#1D2A3D" : "#EAF3FF" }]}>
               <Ionicons name="wallet-outline" size={18} color="#60A5FA" />
             </View>
-            <Text style={styles.linkRowText}>Payment history</Text>
+            <Text style={[styles.linkRowText, isDarkMode && styles.textDark]}>Payment history</Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#8AA4C2" />
+          <Ionicons name="chevron-forward" size={18} color={isDarkMode ? "#9FB0C5" : "#8AA4C2"} />
         </TouchableOpacity>
       </View>
       </ScrollView>
@@ -1627,11 +1775,47 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
     borderColor: "#263449"
   },
+  surfaceDark: {
+    backgroundColor: "#0F172A",
+    borderColor: "#263449"
+  },
   textDark: {
     color: "#E5EDF7"
   },
   mutedTextDark: {
     color: "#9FB0C5"
+  },
+  inputDark: {
+    backgroundColor: "#0F172A",
+    borderColor: "#263449",
+    color: "#E5EDF7"
+  },
+  inputDisabledDark: {
+    backgroundColor: "#111827",
+    color: "#9FB0C5"
+  },
+  lockedNoticeDark: {
+    backgroundColor: "#102033",
+    borderColor: "#263449"
+  },
+  placeholderDark: {
+    backgroundColor: "#0F172A",
+    borderColor: "#263449"
+  },
+  timeCardSelectedDark: {
+    backgroundColor: "#102033",
+    borderColor: "#60A5FA"
+  },
+  timeOptionChipDark: {
+    backgroundColor: "#1D2A3D",
+    borderColor: "#263449"
+  },
+  documentRowAlertDark: {
+    backgroundColor: "#3B171C",
+    borderColor: "#7F1D1D"
+  },
+  linkRowDark: {
+    borderBottomColor: "#263449"
   },
   container: {
     flex: 1,
@@ -1734,6 +1918,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 14
   },
+  completionBannerDark: {
+    backgroundColor: "#3B2A12",
+    borderColor: "#7C5A1A"
+  },
   completionBannerCopy: {
     flex: 1,
     marginLeft: 10
@@ -1743,19 +1931,48 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#7A4F00"
   },
+  completionBannerTitleDark: {
+    color: "#FDE68A"
+  },
   completionBannerText: {
     marginTop: 3,
     fontSize: 12,
     lineHeight: 17,
     color: "#7A4F00"
   },
+  completionBannerTextDark: {
+    color: "#FCD34D"
+  },
   sectionHeader: {
     marginBottom: 12
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "800",
     color: "#143A66"
+  },
+  editActionButton: {
+    borderRadius: 999,
+    backgroundColor: "#EAF3FF",
+    paddingHorizontal: 13,
+    paddingVertical: 7
+  },
+  editActionButtonDisabled: {
+    opacity: 0.45
+  },
+  editActionText: {
+    color: "#60A5FA",
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  editActionTextDisabled: {
+    color: "#8FA3BD"
   },
   sectionHint: {
     marginTop: 4,
@@ -1978,12 +2195,70 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800"
   },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 6
+  },
+  primaryInlineButton: {
+    flex: 1.35,
+    backgroundColor: "#60A5FA",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 52,
+    paddingHorizontal: 14
+  },
+  primaryInlineButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "900",
+    textAlign: "center"
+  },
+  secondaryInlineButton: {
+    flex: 1,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#60A5FA",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 52,
+    paddingHorizontal: 12
+  },
+  secondaryInlineButtonText: {
+    color: "#60A5FA",
+    fontSize: 14,
+    fontWeight: "900",
+    textAlign: "center"
+  },
   secondaryButton: {
     marginTop: 10,
     backgroundColor: "#EAF3FF",
     borderRadius: 14,
     alignItems: "center",
     paddingVertical: 13
+  },
+  secondaryButtonDark: {
+    backgroundColor: "#102033"
+  },
+  testLinkButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#EAF3FF",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: -4,
+    marginBottom: 12
+  },
+  testLinkButtonDark: {
+    backgroundColor: "#102033"
+  },
+  testLinkButtonText: {
+    color: "#60A5FA",
+    fontSize: 13,
+    fontWeight: "800"
   },
   secondaryButtonDisabled: {
     backgroundColor: "#EEF4FB"
@@ -1998,22 +2273,6 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: "#B42318"
-  },
-  utilityButton: {
-    backgroundColor: "#EAF3FF",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginRight: 8
-  },
-  utilityButtonText: {
-    color: "#60A5FA",
-    fontSize: 13,
-    fontWeight: "700"
-  },
-  inlineActions: {
-    flexDirection: "row",
-    marginBottom: 12
   },
   detailBlock: {
     backgroundColor: "#F9FCFF",
@@ -2470,11 +2729,33 @@ const styles = StyleSheet.create({
   payoutSummaryCopy: {
     flex: 1
   },
+  payoutTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 3
+  },
   payoutSummaryTitle: {
+    flex: 1,
     fontSize: 15,
     fontWeight: "800",
     color: "#143A66",
-    marginBottom: 3
+    marginBottom: 0
+  },
+  currentPayoutBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E6F7EE",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  currentPayoutBadgeText: {
+    marginLeft: 4,
+    color: "#0E8A4A",
+    fontSize: 10,
+    fontWeight: "900"
   },
   payoutSummaryMeta: {
     fontSize: 12,

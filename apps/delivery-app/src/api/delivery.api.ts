@@ -40,6 +40,7 @@ export interface DeliveryOrder {
   status: string;
   createdAt: string;
   updatedAt: string;
+  deliveredAt?: string;
   deliveryAddress: string;
   deliveryLocation?: {
     coordinates: [number, number];
@@ -87,6 +88,9 @@ export interface DeliveryStats {
   todaysDeliveries: number;
   todaysEarnings: number;
   averageDeliveryTime: number;
+  acceptanceRate?: number;
+  acceptedJobs?: number;
+  rejectedJobs?: number;
   cashBalance?: number;
   pendingDepositAmount?: number;
   cashDueToPlatform?: number;

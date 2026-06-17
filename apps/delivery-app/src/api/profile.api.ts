@@ -39,6 +39,7 @@ export interface DeliveryProfile {
     bankStatementUrl?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
+    bankUpiId?: string;
     submittedAt?: string;
     isComplete?: boolean;
     reuploadFlags?: Partial<Record<

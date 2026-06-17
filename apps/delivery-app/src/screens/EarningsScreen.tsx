@@ -14,12 +14,23 @@ import {
 import {
   getCashLedger,
   getDeliveryStats,
+  getMyDeliveryOrders,
   getTodaysEarnings,
   submitCashDeposit,
-  type CashLedgerSummary
+  type CashLedgerSummary,
+  type DeliveryOrder
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+type EarningHistoryItem = {
+  id: string;
+  date: string;
+  orderLabel: string;
+  amount: number;
+  deliveries: number;
+  deliveredAt: number;
+};
 
 export default function EarningsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -35,6 +46,8 @@ export default function EarningsScreen({ navigation }: any) {
   const [depositProofUrl, setDepositProofUrl] = useState("");
   const [depositNote, setDepositNote] = useState("");
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
+  const [earningsHistory, setEarningsHistory] = useState<EarningHistoryItem[]>([]);
+  const [earningsModalVisible, setEarningsModalVisible] = useState(false);
 
   useEffect(() => {
     loadEarningsData();
@@ -61,6 +74,11 @@ export default function EarningsScreen({ navigation }: any) {
       if (cashResponse.success && cashResponse.data) {
         setCashLedger(cashResponse.data);
       }
+
+      const ordersResponse = await getMyDeliveryOrders();
+      if (ordersResponse.success && ordersResponse.data) {
+        setEarningsHistory(buildEarningsHistory(ordersResponse.data));
+      }
     } catch (error: any) {
       console.error("Error loading earnings:", error);
       Alert.alert("Error", "Failed to load earnings data");
@@ -78,6 +96,39 @@ export default function EarningsScreen({ navigation }: any) {
   const formatCurrency = (amount: number) => {
     return `₹${amount.toLocaleString('en-IN')}`;
   };
+
+  const formatEarningDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    const sameDay = (left: Date, right: Date) =>
+      left.getFullYear() === right.getFullYear() &&
+      left.getMonth() === right.getMonth() &&
+      left.getDate() === right.getDate();
+
+    if (sameDay(date, today)) return "Today";
+    if (sameDay(date, yesterday)) return "Yesterday";
+    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  };
+
+  const buildEarningsHistory = (orders: DeliveryOrder[]): EarningHistoryItem[] =>
+    orders
+      .filter((order) => order.status === "DELIVERED")
+      .map((order) => {
+        const deliveredAt = new Date(order.deliveredAt || order.updatedAt || order.createdAt).getTime();
+        const deliveries = Math.max(order.deliveryBundleSize || order.pickupStops?.length || order.bundleOrders?.length || 1, 1);
+        return {
+          id: order._id,
+          date: Number.isNaN(deliveredAt) ? "Delivered" : formatEarningDate(deliveredAt),
+          orderLabel: order.isBundledDelivery ? `Bundled #${order._id.slice(-6).toUpperCase()}` : `Order #${order._id.slice(-6).toUpperCase()}`,
+          amount: Number(order.deliveryEarnings || order.estimatedEarnings || order.deliveryFee || 0),
+          deliveries,
+          deliveredAt: Number.isNaN(deliveredAt) ? 0 : deliveredAt
+        };
+      })
+      .sort((left, right) => right.deliveredAt - left.deliveredAt);
 
   const handleSubmitDeposit = async () => {
     const amount = Number(depositAmount);
@@ -115,9 +166,7 @@ export default function EarningsScreen({ navigation }: any) {
     }
   };
 
-  const earningsHistory = [
-    { id: '1', date: 'Today', amount: todayEarnings, deliveries: stats?.todaysDeliveries || 0 },
-  ];
+  const recentEarnings = earningsHistory.slice(0, 3);
 
   if (loading) {
     return (
@@ -304,20 +353,27 @@ export default function EarningsScreen({ navigation }: any) {
       <View style={styles.recentCard}>
         <View style={styles.recentHeader}>
           <Text style={styles.recentTitle}>Recent Earnings</Text>
-          <TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setEarningsModalVisible(true)}
+          >
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
         </View>
         
-        {earningsHistory.map((item) => (
+        {recentEarnings.length > 0 ? recentEarnings.map((item) => (
           <View key={item.id} style={styles.recentItem}>
             <View>
               <Text style={styles.recentDate}>{item.date}</Text>
-              <Text style={styles.recentDeliveries}>{item.deliveries} deliveries</Text>
+              <Text style={styles.recentDeliveries}>{item.orderLabel} · {item.deliveries} {item.deliveries === 1 ? "delivery" : "deliveries"}</Text>
             </View>
             <Text style={styles.recentAmount}>{formatCurrency(item.amount)}</Text>
           </View>
-        ))}
+        )) : (
+          <View style={styles.emptyEarningsBox}>
+            <Ionicons name="receipt-outline" size={24} color="#9CA3AF" />
+            <Text style={styles.emptyEarningsText}>No delivered earnings yet.</Text>
+          </View>
+        )}
       </View>
 
       {/* Withdrawal Info */}
@@ -388,6 +444,40 @@ export default function EarningsScreen({ navigation }: any) {
                 <Text style={styles.withdrawButtonText}>{submittingDeposit ? "Submitting..." : "Submit"}</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={earningsModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEarningsModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.depositModal, { maxHeight: "80%" }]}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>All Earnings</Text>
+              <TouchableOpacity onPress={() => setEarningsModalVisible(false)} accessibilityLabel="Close earnings history">
+                <Ionicons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {earningsHistory.length > 0 ? earningsHistory.map((item) => (
+                <View key={item.id} style={styles.recentItem}>
+                  <View>
+                    <Text style={styles.recentDate}>{item.date}</Text>
+                    <Text style={styles.recentDeliveries}>{item.orderLabel} · {item.deliveries} {item.deliveries === 1 ? "delivery" : "deliveries"}</Text>
+                  </View>
+                  <Text style={styles.recentAmount}>{formatCurrency(item.amount)}</Text>
+                </View>
+              )) : (
+                <View style={styles.emptyEarningsBox}>
+                  <Ionicons name="receipt-outline" size={24} color="#9CA3AF" />
+                  <Text style={styles.emptyEarningsText}>No delivered earnings yet.</Text>
+                </View>
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -636,6 +726,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
+  emptyEarningsBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  emptyEarningsText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
   withdrawalCard: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
@@ -772,6 +872,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#333',
+    marginBottom: 8,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
   modalDescription: {

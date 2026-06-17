@@ -131,6 +131,27 @@ const getActiveSelfDeliveryUserIds = (partner: any): string[] => {
     .slice(0, 5);
 };
 
+const getOnlineSelfDeliveryUserIds = async (partner: any): Promise<string[]> => {
+  const selfDeliveryUserIds = getActiveSelfDeliveryUserIds(partner);
+  if (selfDeliveryUserIds.length === 0) return [];
+
+  const activeUserObjectIds = selfDeliveryUserIds
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  if (activeUserObjectIds.length === 0) return [];
+
+  const onlineRiders = await DeliveryPartner.find({
+    userId: { $in: activeUserObjectIds },
+    status: { $in: ["ACTIVE", "VERIFIED"] },
+    isAvailable: { $ne: false }
+  })
+    .select("userId")
+    .lean();
+  const onlineUserIds = new Set(onlineRiders.map((rider: any) => idString(rider.userId)));
+
+  return selfDeliveryUserIds.filter((id) => onlineUserIds.has(id));
+};
+
 const getSelfDeliveryState = (order: any, now = new Date()) => {
   const selfDelivery = order?.selfDelivery || {};
   const reservedFor = idStrings(selfDelivery.reservedFor);
@@ -200,8 +221,8 @@ const buildDeliveryAcceptVisibilityFilter = (userId: string, now = new Date()) =
   };
 };
 
-const configureSelfDeliveryForReadyOrder = (order: any, partner: any) => {
-  const selfDeliveryUserIds = getActiveSelfDeliveryUserIds(partner);
+const configureSelfDeliveryForReadyOrder = async (order: any, partner: any) => {
+  const selfDeliveryUserIds = await getOnlineSelfDeliveryUserIds(partner);
 
   if (selfDeliveryUserIds.length === 0) {
     order.selfDelivery = {
@@ -1086,7 +1107,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     if (status === "READY" && previousStatus !== "READY") {
       const orderPartner = partner || await Partner.findById(order.partnerId);
       order.deliveryReadyAt = new Date();
-      configureSelfDeliveryForReadyOrder(order, orderPartner);
+      await configureSelfDeliveryForReadyOrder(order, orderPartner);
     }
     if (status === "REJECTED") {
       markAutoCancelled(order, "Restaurant rejected the order");

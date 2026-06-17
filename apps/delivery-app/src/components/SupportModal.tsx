@@ -29,6 +29,7 @@ type Mode = "main" | "faq" | "chat" | "report" | "tickets";
 
 interface Props {
   visible: boolean;
+  initialMode?: Mode;
   onClose: () => void;
 }
 
@@ -48,7 +49,7 @@ const FAQ_FALLBACK: FAQEntry[] = [
   { question: "Can I update my bank details?", answer: "Yes, go to Profile > edit payout details anytime." }
 ];
 
-export default function SupportModal({ visible, onClose }: Props) {
+export default function SupportModal({ visible, initialMode = "main", onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>("main");
   const [loading, setLoading] = useState(false);
@@ -65,7 +66,7 @@ export default function SupportModal({ visible, onClose }: Props) {
 
   useEffect(() => {
     if (visible) {
-      setMode("main");
+      setMode(initialMode);
       setActiveTicket(null);
       setSubject("");
       setMessage("");
@@ -81,7 +82,7 @@ export default function SupportModal({ visible, onClose }: Props) {
     } else {
       slideAnim.setValue(0);
     }
-  }, [visible]);
+  }, [visible, initialMode]);
 
   const loadFAQs = async () => {
     try {

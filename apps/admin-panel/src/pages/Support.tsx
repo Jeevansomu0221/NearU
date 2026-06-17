@@ -1,5 +1,5 @@
 import { Button, Card, Col, Empty, Input, List, Row, Select, Space, Tag, Typography, message } from "antd";
-import { CustomerServiceOutlined, ReloadOutlined, SendOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CustomerServiceOutlined, ReloadOutlined, SendOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import {
   getSupportTickets,
@@ -94,6 +94,10 @@ export default function Support() {
       setSending(false);
     }
   };
+
+  const isBankChangeRequest = selectedTicket?.metadata?.type === "PARTNER_BANK_CHANGE_REQUEST";
+  const bankChangeApplied = Boolean(selectedTicket?.metadata?.appliedAt);
+  const requestedBankDetails = selectedTicket?.metadata?.requestedBankDetails;
 
   return (
     <Row gutter={[16, 16]}>
@@ -199,6 +203,45 @@ export default function Support() {
                   <Typography.Text type="secondary">
                     {" "}({selectedTicket.orderId.status || "Unknown"} - Rs {selectedTicket.orderId.grandTotal || 0})
                   </Typography.Text>
+                </Card>
+              ) : null}
+
+              {isBankChangeRequest ? (
+                <Card size="small" style={{ background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                    <Space wrap>
+                      <Tag color={bankChangeApplied ? "green" : "orange"}>
+                        {bankChangeApplied ? "Payout updated" : "Payout change request"}
+                      </Tag>
+                      {selectedTicket.metadata?.appliedAt ? (
+                        <Typography.Text type="secondary">
+                          Applied {formatDate(selectedTicket.metadata.appliedAt)}
+                        </Typography.Text>
+                      ) : null}
+                    </Space>
+                    <div>
+                      <Typography.Text strong>New account holder: </Typography.Text>
+                      <Typography.Text>{requestedBankDetails?.accountHolderName || "Not provided"}</Typography.Text>
+                    </div>
+                    <div>
+                      <Typography.Text strong>New account number: </Typography.Text>
+                      <Typography.Text>{requestedBankDetails?.accountNumber || "Not provided"}</Typography.Text>
+                    </div>
+                    <div>
+                      <Typography.Text strong>New IFSC: </Typography.Text>
+                      <Typography.Text>{requestedBankDetails?.ifsc || "Not provided"}</Typography.Text>
+                    </div>
+                    {!bankChangeApplied ? (
+                      <Button
+                        type="primary"
+                        icon={<CheckCircleOutlined />}
+                        loading={sending}
+                        onClick={() => handleStatusChange("RESOLVED")}
+                      >
+                        Approve and update payout account
+                      </Button>
+                    ) : null}
+                  </Space>
                 </Card>
               ) : null}
 

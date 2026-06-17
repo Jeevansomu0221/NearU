@@ -1,5 +1,6 @@
 import { Response } from "express";
 import SupportTicket from "../models/SupportTicket.model";
+import Partner from "../models/Partner.model";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { errorResponse, successResponse } from "../utils/response";
 
@@ -43,6 +44,73 @@ const normalizeCategoryFilter = (value: unknown) => {
   return SUPPORT_CATEGORY_SET.has(value) ? value : undefined;
 };
 
+const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
+const normalizeBankChangeMetadata = (value: any, userId: string) => {
+  if (!value || value.type !== "PARTNER_BANK_CHANGE_REQUEST") return undefined;
+
+  const requestedBankDetails = value.requestedBankDetails || {};
+  const accountHolderName = String(requestedBankDetails.accountHolderName || "").trim();
+  const accountNumber = String(requestedBankDetails.accountNumber || "").replace(/\D/g, "");
+  const ifsc = String(requestedBankDetails.ifsc || "").trim().toUpperCase();
+
+  if (!accountHolderName || !/^[0-9]{6,20}$/.test(accountNumber) || !ifscRegex.test(ifsc)) {
+    return undefined;
+  }
+
+  return {
+    type: "PARTNER_BANK_CHANGE_REQUEST",
+    partnerId: value.partnerId ? String(value.partnerId) : undefined,
+    userId,
+    requestedBankDetails: {
+      accountHolderName,
+      accountNumber,
+      ifsc
+    },
+    appliedAt: undefined,
+    appliedBy: undefined
+  };
+};
+
+const applyPartnerBankChangeIfApproved = async (ticket: any, adminUserId?: string) => {
+  const metadata = ticket?.metadata;
+  if (!metadata || metadata.type !== "PARTNER_BANK_CHANGE_REQUEST" || metadata.appliedAt) return;
+
+  const requestedBankDetails = metadata.requestedBankDetails || {};
+  const accountHolderName = String(requestedBankDetails.accountHolderName || "").trim();
+  const accountNumber = String(requestedBankDetails.accountNumber || "").replace(/\D/g, "");
+  const ifsc = String(requestedBankDetails.ifsc || "").trim().toUpperCase();
+
+  if (!accountHolderName || !/^[0-9]{6,20}$/.test(accountNumber) || !ifscRegex.test(ifsc)) {
+    throw Object.assign(new Error("Bank change request is missing valid payout details"), { statusCode: 400 });
+  }
+
+  const partnerQuery = metadata.partnerId
+    ? { _id: metadata.partnerId }
+    : { userId: ticket.userId };
+
+  const partner = await Partner.findOne(partnerQuery);
+  if (!partner) {
+    throw Object.assign(new Error("Partner for this payout request was not found"), { statusCode: 404 });
+  }
+
+  partner.documents = {
+    ...(partner.documents || {}),
+    bankAccountHolderName: accountHolderName,
+    bankAccountNumber: accountNumber,
+    bankIfsc: ifsc
+  } as any;
+  await partner.save();
+
+  ticket.metadata = {
+    ...metadata,
+    partnerId: String(partner._id),
+    requestedBankDetails: { accountHolderName, accountNumber, ifsc },
+    appliedAt: new Date(),
+    appliedBy: adminUserId
+  };
+};
+
 const ensureCustomer = (req: AuthRequest, res: Response) => {
   if (!req.user) {
     errorResponse(res, "Unauthorized", 401);
@@ -81,7 +149,7 @@ export const createSupportTicket = async (req: AuthRequest, res: Response) => {
   if (!ensureCustomer(req, res)) return;
 
   try {
-    const { subject, message, category, orderId, priority } = req.body;
+    const { subject, message, category, orderId, priority, metadata } = req.body;
     const cleanSubject = String(subject || "").trim();
     const cleanMessage = String(message || "").trim();
     const cleanCategory = SUPPORT_CATEGORY_SET.has(category) ? category : "CUSTOMER_SUPPORT";
@@ -97,6 +165,7 @@ export const createSupportTicket = async (req: AuthRequest, res: Response) => {
       subject: cleanSubject,
       priority: priority || "NORMAL",
       status: "OPEN",
+      metadata: normalizeBankChangeMetadata(metadata, req.user!.id) || {},
       lastCustomerMessageAt: new Date(),
       messages: [{
         senderRole: "customer",
@@ -209,21 +278,26 @@ export const updateSupportTicketStatus = async (req: AuthRequest, res: Response)
       return errorResponse(res, "Invalid support ticket status", 400);
     }
 
-    const ticket = await SupportTicket.findByIdAndUpdate(
-      req.params.ticketId,
-      { status },
-      { new: true }
-    )
-      .populate("userId", "name phone email")
-      .populate("orderId", "_id status grandTotal createdAt");
+    const ticket = await SupportTicket.findById(req.params.ticketId);
 
     if (!ticket) {
       return errorResponse(res, "Support ticket not found", 404);
     }
 
-    return successResponse(res, ticket, "Support ticket status updated");
+    if (status === "RESOLVED") {
+      await applyPartnerBankChangeIfApproved(ticket, req.user?.id);
+    }
+
+    ticket.status = status;
+    await ticket.save();
+
+    const updatedTicket = await SupportTicket.findById(ticket._id)
+      .populate("userId", "name phone email")
+      .populate("orderId", "_id status grandTotal createdAt");
+
+    return successResponse(res, updatedTicket, "Support ticket status updated");
   } catch (error: any) {
     console.error("updateSupportTicketStatus error:", error);
-    return errorResponse(res, "Failed to update support ticket status");
+    return errorResponse(res, error.message || "Failed to update support ticket status", error.statusCode || 500);
   }
 };
