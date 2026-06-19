@@ -70,9 +70,27 @@ const ensureResources = (projectRoot, iconSource) => {
       throw new Error(`Notification icon source not found: ${iconPath}`);
     }
 
+    const ext = path.extname(iconPath) || ".png";
+    const iconFileName = `${ICON_RESOURCE}${ext}`;
+
+    // Copy PNG to both drawable/ and drawable-nodpi/ so the app logo
+    // always takes priority over any stale vector XML across all density buckets.
+    const drawablePath = path.join(resPath, "drawable");
+    fs.mkdirSync(drawablePath, { recursive: true });
+    fs.copyFileSync(iconPath, path.join(drawablePath, iconFileName));
+
     const drawableNoDpiPath = path.join(resPath, "drawable-nodpi");
     fs.mkdirSync(drawableNoDpiPath, { recursive: true });
-    fs.copyFileSync(iconPath, path.join(drawableNoDpiPath, `${ICON_RESOURCE}${path.extname(iconPath) || ".png"}`));
+    fs.copyFileSync(iconPath, path.join(drawableNoDpiPath, iconFileName));
+
+    // Also copy into every standard density bucket so the PNG is
+    // preferred regardless of the device's screen density.
+    for (const density of ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]) {
+      const densityDir = path.join(resPath, `drawable-${density}`);
+      fs.mkdirSync(densityDir, { recursive: true });
+      fs.copyFileSync(iconPath, path.join(densityDir, iconFileName));
+    }
+
     return;
   }
 
