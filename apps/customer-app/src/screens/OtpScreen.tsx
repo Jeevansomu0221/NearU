@@ -11,9 +11,8 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { verifyFirebaseOtp } from '../api/auth.api';
+import { verifyFirebaseOtp, persistAuthSession } from '../api/auth.api';
 import { getUserProfile } from '../api/user.api';
 import {
   clearFirebaseOtpSession,
@@ -182,13 +181,11 @@ export default function OtpScreen({ navigation, route }: Props) {
         return;
       }
 
-      await AsyncStorage.setItem('token', response.data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
-      if (response.data.refreshToken) {
-        await AsyncStorage.setItem('refreshToken', response.data.refreshToken);
-      } else {
-        await AsyncStorage.removeItem('refreshToken');
-      }
+      await persistAuthSession(
+        response.data.token,
+        response.data.refreshToken,
+        response.data.user
+      );
 
       registerForPushNotifications().catch((error) => {
         console.log("Failed to register push notifications:", error);

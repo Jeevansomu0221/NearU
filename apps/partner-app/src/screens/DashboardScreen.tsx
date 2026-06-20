@@ -64,9 +64,11 @@ export default function DashboardScreen({ navigation }: any) {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const phone = await AsyncStorage.getItem("phone");
-      const res = await api.get(`/partners/status/${phone}`);
+      const res = await api.get("/partners/my-status");
       const partnerData = res.data as { success: boolean; data: any };
+      if (!partnerData.success || !partnerData.data) {
+        throw new Error("Partner profile not found");
+      }
       setPartner(partnerData.data);
       setShopOpen(partnerData.data?.isOpen !== false);
 

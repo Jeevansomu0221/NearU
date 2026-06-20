@@ -1,6 +1,13 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DeviceEventEmitter, NativeModules, Platform } from "react-native";
+import {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken
+} from "../utils/authStorage";
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -93,7 +100,8 @@ const api = axios.create({
 });
 
 const clearSessionAndNotify = async () => {
-  await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+  await clearAuthTokens();
+  await AsyncStorage.removeItem("user");
   DeviceEventEmitter.emit("auth:expired");
 };
 
@@ -106,7 +114,7 @@ const refreshAccessToken = async () => {
 
   inFlightRefresh = (async () => {
     try {
-      const refreshToken = await AsyncStorage.getItem("refreshToken");
+      const refreshToken = await getRefreshToken();
       if (!refreshToken) return null;
 
       const response = await axios.post(
@@ -124,10 +132,8 @@ const refreshAccessToken = async () => {
       const nextRefreshToken = refreshData?.data?.refreshToken;
       if (!token) return null;
 
-      await AsyncStorage.multiSet([
-        ["token", token],
-        ["refreshToken", nextRefreshToken || refreshToken]
-      ]);
+      await setAccessToken(token);
+      await setRefreshToken(nextRefreshToken || refreshToken);
 
       return token;
     } catch {
@@ -148,7 +154,7 @@ api.interceptors.request.use(
     }
 
     try {
-      const token = await AsyncStorage.getItem("token");
+      const token = await getAccessToken();
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }

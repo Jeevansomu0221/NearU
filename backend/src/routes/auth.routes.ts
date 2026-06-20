@@ -46,10 +46,21 @@ const adminLoginLimiter = rateLimit({
   }
 });
 
+const refreshTokenLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many token refresh attempts. Please try again later."
+  }
+});
+
 router.post("/send-otp", sendOtpLimiter, sendOTP);
 router.post("/verify-otp", verifyOtpLimiter, verifyOTP);
 router.post("/admin-password-login", adminLoginLimiter, adminPasswordLogin);
-router.post("/refresh", refreshToken);
+router.post("/refresh", refreshTokenLimiter, refreshToken);
 router.post("/logout", authMiddleware, logout);
 
 export default router;

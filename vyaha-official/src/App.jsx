@@ -26,6 +26,11 @@ function App() {
           <Route path="/partner-policy" element={<LegalPage pageType="partnerPolicy" />} />
           <Route path="/delivery-policy" element={<LegalPage pageType="deliveryPolicy" />} />
           <Route path="/cookie-policy" element={<LegalPage pageType="cookie" />} />
+          <Route path="/acceptable-use" element={<LegalPage pageType="acceptableUse" />} />
+          <Route path="/payment-terms" element={<LegalPage pageType="paymentTerms" />} />
+          <Route path="/kyc-verification" element={<LegalPage pageType="kycVerification" />} />
+          <Route path="/marketing-consent" element={<LegalPage pageType="marketingConsent" />} />
+          <Route path="/data-retention" element={<LegalPage pageType="dataRetention" />} />
           <Route path="/delete-account" element={<LegalPage pageType="deleteAccount" />} />
           <Route path="/restaurants" element={<LegalPage pageType="restaurants" />} />
           <Route path="/apps" element={<LegalPage pageType="apps" />} />

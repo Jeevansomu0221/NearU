@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getAccessToken } from "../utils/authStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 
@@ -48,7 +49,7 @@ export default function PendingApprovalScreen({ navigation }: any) {
   const checkStatus = async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
-      const token = await AsyncStorage.getItem("token");
+      const token = await getAccessToken();
       const phone = await AsyncStorage.getItem("phone");
 
       if (!token || !phone) {

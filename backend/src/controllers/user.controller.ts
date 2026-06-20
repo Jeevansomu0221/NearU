@@ -502,14 +502,27 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    // Find all orders for this customer
-    const orders = await Order.find({ customerId: user.id })
+    // Find paginated orders for this customer
+    const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(String(req.query.limit || "30"), 10) || 30));
+    const skip = (page - 1) * limit;
+    const filter = { customerId: user.id };
+    const total = await Order.countDocuments(filter);
+
+    const orders = await Order.find(filter)
       .populate("partnerId", "restaurantName shopName phone")
       .populate("deliveryPartnerId", "name phone")
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
-    return successResponse(res, orders, "Orders retrieved successfully");
+    return successResponse(res, orders, "Orders retrieved successfully", 200, {
+      page,
+      limit,
+      total,
+      hasMore: skip + orders.length < total
+    });
   } catch (err: any) {
     console.error("getMyOrders error:", err);
     return errorResponse(res, "Failed to get orders");

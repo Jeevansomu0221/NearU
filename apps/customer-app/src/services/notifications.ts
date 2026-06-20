@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert, PermissionsAndroid, Platform } from "react-native";
 import api from "../api/client";
+import { getAccessToken } from "../utils/authStorage";
 
 const NOTIFICATION_APP = "customer";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:customer";
@@ -73,7 +74,7 @@ const hasNotificationPermission = async () => {
 };
 
 const postToken = async (token: string) => {
-  const authToken = await AsyncStorage.getItem("token");
+  const authToken = await getAccessToken();
   if (!authToken || !token) return;
 
   await api.post("/notifications/register-token", {
@@ -111,7 +112,7 @@ const showForegroundAlert = (navigationRef: any, remoteMessage: any) => {
 };
 
 export const registerForPushNotifications = async () => {
-  const token = await AsyncStorage.getItem("token");
+  const token = await getAccessToken();
   if (!token) return;
 
   setupBackgroundHandler();

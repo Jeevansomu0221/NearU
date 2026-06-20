@@ -1,7 +1,6 @@
 ﻿import { Router } from "express";
 import {
   submitPartnerProfile,
-  getPartnerStatus,
   getPendingPartners,
   updatePartnerStatus,
   getAllPartners,
@@ -29,7 +28,6 @@ const router = Router();
    PUBLIC ROUTES
 ====================================================== */
 router.post("/onboard", authMiddleware, submitPartnerProfile);
-router.get("/status/:phone", getPartnerStatus);
 
 /* ======================================================
    AUTHENTICATED ROUTES (customer OR partner)

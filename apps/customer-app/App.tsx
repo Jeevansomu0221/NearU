@@ -1,6 +1,7 @@
 import React from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import crashlytics from "@react-native-firebase/crashlytics";
 import AppNavigator from "./src/navigation/AppNavigator";
 import { CartProvider } from "./src/context/CartContext";
 import CustomAlert, { initCustomAlert } from "./src/components/CustomAlert";
@@ -12,6 +13,7 @@ const navigationRef = createNavigationContainerRef<any>();
 
 export default function App() {
   React.useEffect(() => {
+    crashlytics().setCrashlyticsCollectionEnabled(typeof __DEV__ === "undefined" || !__DEV__);
     registerForPushNotifications().catch((error) => {
       console.log("Failed to register push notifications:", error);
     });

@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getAccessToken } from "../utils/authStorage";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -96,7 +97,7 @@ export default function AppNavigator() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getAccessToken();
         const cachedUser = await AsyncStorage.getItem("user");
         if (!token) {
           setInitialRoute("Login");

@@ -1,8 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  removeRefreshToken,
+  setAccessToken,
+  setRefreshToken
+} from "./authStorage";
 
 export const AUTH_STORAGE_KEYS = [
-  "token",
-  "refreshToken",
   "phone",
   "userId",
   "partnerId",
@@ -18,26 +24,15 @@ export interface AuthData {
   user?: Record<string, unknown>;
 }
 
-export const getToken = async (): Promise<string | null> => {
-  try {
-    const token = await AsyncStorage.getItem("token");
-    return token;
-  } catch (error) {
-    console.error("Error getting token:", error);
-    return null;
-  }
-};
+export const getToken = async (): Promise<string | null> => getAccessToken();
 
 export const setToken = async (token: string): Promise<void> => {
-  try {
-    await AsyncStorage.setItem("token", token);
-  } catch (error) {
-    console.error("Error setting token:", error);
-  }
+  await setAccessToken(token);
 };
 
 export const clearAuthData = async (): Promise<void> => {
   try {
+    await clearAuthTokens();
     await AsyncStorage.multiRemove([...AUTH_STORAGE_KEYS]);
   } catch (error) {
     console.error("Error clearing auth data:", error);
@@ -52,12 +47,12 @@ export const getUserData = async (): Promise<{
 }> => {
   try {
     const [token, phone, userId, partnerId] = await Promise.all([
-      AsyncStorage.getItem("token"),
+      getAccessToken(),
       AsyncStorage.getItem("phone"),
       AsyncStorage.getItem("userId"),
       AsyncStorage.getItem("partnerId"),
     ]);
-    
+
     return { token, phone, userId, partnerId };
   } catch (error) {
     console.error("Error getting user data:", error);
@@ -65,24 +60,34 @@ export const getUserData = async (): Promise<{
   }
 };
 
-// Store all auth data after login
 export const storeAuthData = async (data: AuthData): Promise<void> => {
   try {
     const { token, refreshToken, phone, userId, partnerId, user } = data;
-    await AsyncStorage.setItem("token", token);
+    await setAccessToken(token);
     if (refreshToken) {
-      await AsyncStorage.setItem("refreshToken", refreshToken);
+      await setRefreshToken(refreshToken);
+    } else {
+      await removeRefreshToken();
     }
     await AsyncStorage.setItem("phone", phone);
     await AsyncStorage.setItem("userId", userId);
     if (partnerId) {
       await AsyncStorage.setItem("partnerId", partnerId);
+    } else {
+      await AsyncStorage.removeItem("partnerId");
     }
     if (user) {
       await AsyncStorage.setItem("user", JSON.stringify(user));
     }
-    console.log("✅ Auth data stored successfully");
   } catch (error) {
     console.error("Error storing auth data:", error);
   }
+};
+
+export {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken
 };

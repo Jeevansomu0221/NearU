@@ -675,34 +675,13 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
 };
 
 /**
- * GET PARTNER STATUS
+ * GET PARTNER STATUS (removed public phone lookup — use getMyStatus)
  */
-export const getPartnerStatus = async (req: Request, res: Response) => {
-  try {
-    const { phone } = req.params;
-    console.log("🔍 Checking partner status for phone:", phone);
-
-    const partner = await Partner.findOne({ phone });
-
-    if (!partner) {
-      return res.json({
-        success: false,
-        message: "No partner profile found"
-      });
-    }
-    
-    return res.json({
-      success: true,
-      data: partner
-    });
-  } catch (error: any) {
-    console.error("❌ Partner status check error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message
-    });
-  }
+export const getPartnerStatus = async (_req: Request, res: Response) => {
+  return res.status(410).json({
+    success: false,
+    message: "This endpoint has been removed. Use GET /api/partners/my-status with authentication."
+  });
 };
 
 /**

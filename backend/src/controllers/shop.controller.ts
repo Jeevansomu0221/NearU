@@ -3,6 +3,7 @@ import Partner from "../models/Partner.model";
 
 const DEFAULT_RADIUS_KM = 3;
 const MAX_RADIUS_KM = 10;
+const MAX_SHOPS_FALLBACK = 100;
 
 const parseCoordinate = (value: unknown) => {
   const parsed = Number(value);
@@ -18,12 +19,14 @@ const parseRadiusKm = (value: unknown) => {
   return Math.min(parsed, MAX_RADIUS_KM);
 };
 
-const findApprovedShops = () =>
+const findApprovedShops = (limit = MAX_SHOPS_FALLBACK) =>
   Partner.find({
     status: "APPROVED",
     hasCompletedSetup: true
   })
     .select("_id restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime")
+    .sort({ createdAt: -1 })
+    .limit(limit)
     .lean();
 
 const buildApprovedShopsFallback = async (radiusKm: number, message: string) => {
@@ -80,7 +83,8 @@ export const getShopsWithImages = async (req: Request, res: Response) => {
               closingTime: 1,
               distanceKm: { $round: [{ $divide: ["$distanceMeters", 1000] }, 1] }
             }
-          }
+          },
+          { $limit: MAX_SHOPS_FALLBACK }
         ]);
 
         if (shops.length === 0) {

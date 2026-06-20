@@ -188,6 +188,66 @@
   color: #e23744;
 }
 
+.app-brand-showcase {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0 32px;
+}
+
+.app-brand-showcase img {
+  height: 112px;
+  object-fit: contain;
+  width: 112px;
+}
+
+.app-brand-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 28px 0 36px;
+}
+
+.app-brand-grid--compact {
+  margin: 20px 0 28px;
+}
+
+.app-brand-tile {
+  align-items: center;
+  border: 1px solid rgba(20, 35, 28, 0.1);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.app-brand-tile img {
+  height: 96px;
+  object-fit: contain;
+  width: 96px;
+}
+
+.app-brand-tile span {
+  color: #4d5a54;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-brand-tile.vyaha-card {
+  background: linear-gradient(145deg, #fff7f8 0%, #ffffff 100%);
+}
+
+.app-brand-tile.partner-card {
+  background: linear-gradient(145deg, #f5f8ff 0%, #ffffff 100%);
+}
+
+.app-brand-tile.delivery-card {
+  background: linear-gradient(145deg, #f1fff6 0%, #ffffff 100%);
+}
+
 @media (max-width: 640px) {
   .legal-page-container {
     padding: 26px 18px 80px;
@@ -202,6 +262,10 @@
   }
 
   .policy-link-list {
+    grid-template-columns: 1fr;
+  }
+
+  .app-brand-grid {
     grid-template-columns: 1fr;
   }
 }

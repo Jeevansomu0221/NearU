@@ -42,6 +42,18 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
+      "@react-native-firebase/crashlytics",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minifyEnabled": true,
+            "shrinkResources": true
+          }
+        }
+      ],
       "../../plugins/with-vyaha-gradle-config",
       [
         "../../plugins/with-vyaha-android-notifications",

@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/vyaha-partner-app-icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -42,6 +42,18 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
+      "@react-native-firebase/crashlytics",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minifyEnabled": true,
+            "shrinkResources": true
+          }
+        }
+      ],
       "../../plugins/with-vyaha-gradle-config",
       [
         "../../plugins/with-vyaha-android-notifications",
@@ -72,10 +84,13 @@
       }
     },
     "updates": {
-  "url": "https://u.expo.dev/61203aa1-4f84-4edb-8e66-595df6a26a53",
-  "fallbackToCacheTimeout": 0,
-  "enabled": true
-},
-"owner": "jeevansomu"
+      "url": "https://u.expo.dev/61203aa1-4f84-4edb-8e66-595df6a26a53",
+      "fallbackToCacheTimeout": 0,
+      "enabled": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "owner": "jeevansomu"
   }
 }

@@ -74,7 +74,10 @@ app.use(rateLimit({
   max: config.rateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path.startsWith("/api/auth")
+  skip: (req) =>
+    req.path === "/api/auth/send-otp" ||
+    req.path === "/api/auth/verify-otp" ||
+    req.path === "/api/auth/admin-password-login"
 }));
 
 app.use("/api/menu", menuRoutes);
@@ -91,7 +94,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/legal", legalRoutes);
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", message: "Vyaha backend is running", env: config.nodeEnv });
+  res.json({ status: "ok", message: "Vyaha backend is running" });
 });
 
 app.use(errorMiddleware);

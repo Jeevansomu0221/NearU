@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { deleteAccount, logout } from "../api/auth.api";
+import { buildLegalUrl } from "../constants/legal";
 
 type MenuItem = {
   title: string;
@@ -34,8 +35,8 @@ type MenuSection = {
   items: MenuItem[];
 };
 
-const PRIVACY_URL = "https://vyaha-official.onrender.com/privacy";
-const TERMS_URL = "https://vyaha-official.onrender.com/terms";
+const PRIVACY_URL = buildLegalUrl("privacy");
+const TERMS_URL = buildLegalUrl("terms");
 
 export default function AccountProfileScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();

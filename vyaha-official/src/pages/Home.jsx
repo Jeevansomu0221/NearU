@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { vyahaLogos } from '../assets/logos';
 
 function Home() {
   return (
@@ -6,9 +7,14 @@ function Home() {
       <section className="hero-section">
         <div className="hero-overlay"></div>
         <div className="hero-content animate-rise">
-          <img className="hero-logo-image" src="/vyaha-logo.png" alt="Vyaha" />
-          <h1 className="hero-title">Your Hyperlocal Food Delivery App</h1>
-          <p className="hero-subtitle">Enjoy your favorite local dishes at genuine menu prices<br />with the Vyaha app</p>
+          <img className="hero-logo-image" src={vyahaLogos.hero} alt="Vyaha" />
+          <h1 className="hero-title">
+            Your Hyperlocal Food Delivery App
+          </h1>
+          <p className="hero-subtitle">
+            Enjoy your favorite local dishes at genuine menu prices<br />
+            with the Vyaha app
+          </p>
           <div className="hero-download-buttons">
             <Link to="/apps" className="store-badge">
               <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Vyaha Play Store release information" />
@@ -46,7 +52,7 @@ function Home() {
             <div className="phone-mockup-outline">
               <div className="phone-notch"></div>
               <div className="phone-screen">
-                <img src="/vyaha-logo.png" alt="Vyaha app preview" />
+                <img src={vyahaLogos.hero} alt="Vyaha app preview" />
                 <div className="phone-chip">Live order tracking</div>
                 <div className="phone-row"></div>
                 <div className="phone-row short"></div>
@@ -87,21 +93,21 @@ function Home() {
 
           <div className="apps-grid">
             <div className="app-card vyaha-card">
-              <img className="app-icon-image" src="/vyaha-customer-logo.png" alt="Vyaha customer app" />
+              <img className="app-icon-image" src={vyahaLogos.customer} alt="Vyaha customer app" />
               <span className="app-label">For customers</span>
               <h3>Discover nearby food without the price confusion.</h3>
               <p>Browse local restaurants, review clear totals, place orders, and track delivery from one simple app.</p>
               <Link to="/apps">Explore Customer App <span>&rarr;</span></Link>
             </div>
             <div className="app-card partner-card">
-              <img className="app-icon-image" src="/vyaha-partner-logo.png" alt="Vyaha partner app" />
+              <img className="app-icon-image" src={vyahaLogos.partner} alt="Vyaha partner app" />
               <span className="app-label">For restaurants</span>
               <h3>Run orders, menus, and growth from a cleaner workspace.</h3>
               <p>Accept orders, keep menus current, manage verification, and serve your neighborhood with fewer moving parts.</p>
               <Link to="/restaurants">Partner With Vyaha <span>&rarr;</span></Link>
             </div>
             <div className="app-card delivery-card">
-              <img className="app-icon-image" src="/vyaha-delivery-logo.png" alt="Vyaha delivery app" />
+              <img className="app-icon-image" src={vyahaLogos.delivery} alt="Vyaha delivery app" />
               <span className="app-label">For delivery partners</span>
               <h3>Accept local jobs and keep earnings easy to follow.</h3>
               <p>Go available, view nearby orders, update delivery status, and track work with a delivery-first app.</p>

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getAccessToken } from "../utils/authStorage";
 import api from "../api/client";
 import NewOrderBanner from "./NewOrderBanner";
 
@@ -48,7 +48,7 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
       return;
     }
 
-    const token = await AsyncStorage.getItem("token");
+    const token = await getAccessToken();
     if (!token) {
       setNewOrderAlert(null);
       return;

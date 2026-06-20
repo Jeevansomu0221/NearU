@@ -19,14 +19,24 @@ export default function OrdersScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const loadOrders = async () => {
+  const loadOrders = async (pageToLoad = 1, append = false) => {
     try {
-      setLoading(true);
-      const response = await getMyOrders();
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+
+      const response = await getMyOrders(pageToLoad, 30);
       
       if (response.success && response.data) {
-        setOrders(response.data);
+        setOrders((current) => (append ? [...current, ...response.data!] : response.data!));
+        setHasMore(response.pagination?.hasMore ?? false);
+        setPage(pageToLoad);
       } else {
         Alert.alert("Error", response.message || "Failed to load orders");
       }
@@ -36,16 +46,22 @@ export default function OrdersScreen({ navigation }: any) {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    loadOrders();
+    loadOrders(1, false);
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadOrders();
+    loadOrders(1, false);
+  };
+
+  const loadMoreOrders = () => {
+    if (loadingMore || loading || !hasMore) return;
+    loadOrders(page + 1, true);
   };
 
   const formatDate = (dateString: string) => {
@@ -195,6 +211,15 @@ export default function OrdersScreen({ navigation }: any) {
               colors={["#FF6B35"]}
             />
           }
+          onEndReached={showAllHistory ? loadMoreOrders : undefined}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <ActivityIndicator size="small" color="#FF6B35" />
+              </View>
+            ) : null
+          }
         />
       )}
     </View>
@@ -260,6 +285,10 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingBottom: 20,
+  },
+  loadingMoreContainer: {
+    paddingVertical: 16,
+    alignItems: "center",
   },
   historyHeader: {
     flexDirection: 'row',

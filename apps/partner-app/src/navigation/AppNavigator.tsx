@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getAccessToken } from "../utils/authStorage";
 import api, { bootstrapSessionRefresh } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { clearAuthData } from "../utils/storage";
@@ -22,6 +23,11 @@ import SettingsScreen from "../screens/SettingsScreen";
 import PaymentHistoryScreen from "../screens/PaymentHistoryScreen";
 
 const Stack = createNativeStackNavigator();
+const logNavDebug = (...args: unknown[]) => {
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log(...args);
+  }
+};
 
 // Define interfaces for API responses
 interface PartnerStatusData {
@@ -58,14 +64,14 @@ export default function AppNavigator() {
   const checkAuth = async () => {
     try {
       const [token, phone] = await Promise.all([
-        AsyncStorage.getItem("token"),
+        getAccessToken(),
         AsyncStorage.getItem("phone"),
       ]);
       
-      console.log("🔍 Auth check:", { hasToken: !!token, hasPhone: !!phone });
+      logNavDebug("🔍 Auth check:", { hasToken: !!token, hasPhone: !!phone });
       
       if (!token || !phone) {
-        console.log("📝 No auth data, redirecting to Login");
+        logNavDebug("📝 No auth data, redirecting to Login");
         setInitialRoute("Login");
         setLoading(false);
         return;
@@ -82,16 +88,16 @@ export default function AppNavigator() {
 
   const checkPartnerStatus = async () => {
     try {
-      console.log("🔍 Checking partner status...");
+      logNavDebug("🔍 Checking partner status...");
       
       const response = await api.get<PartnerStatusResponse>("/partners/my-status");
       const responseData = response.data;
       
-      console.log("✅ Partner status response:", responseData);
+      logNavDebug("✅ Partner status response:", responseData);
       
       // Check if the response indicates no partner found
       if (!responseData.success) {
-        console.log("📝 Partner not found - message:", responseData.message);
+        logNavDebug("📝 Partner not found - message:", responseData.message);
         // If partner not found, go to onboarding
         setInitialRoute("Onboarding");
         setLoading(false);
@@ -104,26 +110,26 @@ export default function AppNavigator() {
       // Determine initial route based on partner status
       switch (partnerData.status) {
         case "PENDING":
-          console.log("📝 Status: PENDING");
+          logNavDebug("📝 Status: PENDING");
           setInitialRoute("PendingApproval");
           break;
         case "APPROVED":
-          console.log("✅ Status: APPROVED", { 
+          logNavDebug("✅ Status: APPROVED", { 
             hasCompletedSetup: partnerData.hasCompletedSetup, 
             menuItemsCount: partnerData.menuItemsCount 
           });
           setInitialRoute("Dashboard");
           break;
         case "REJECTED":
-          console.log("❌ Status: REJECTED");
+          logNavDebug("❌ Status: REJECTED");
           setInitialRoute("Rejected");
           break;
         case "SUSPENDED":
-          console.log("⚠️ Status: SUSPENDED");
+          logNavDebug("⚠️ Status: SUSPENDED");
           setInitialRoute("Login");
           break;
         default:
-          console.log("❓ Unknown status:", partnerData.status);
+          logNavDebug("❓ Unknown status:", partnerData.status);
           setInitialRoute("Onboarding");
       }
     } catch (error: any) {
@@ -136,18 +142,18 @@ export default function AppNavigator() {
       
       // Handle specific error cases
       if (error.response?.status === 401) {
-        console.log("🔒 Unauthorized - clearing auth data");
+        logNavDebug("🔒 Unauthorized - clearing auth data");
         await clearAuthData();
         setInitialRoute("Login");
       } else if (error.response?.status === 404) {
-        console.log("📝 Partner not found - needs onboarding");
+        logNavDebug("📝 Partner not found - needs onboarding");
         // If partner not found (404), go to onboarding
         setInitialRoute("Onboarding");
       } else if (!error.response) {
-        console.log("🌐 Network error - keeping previous signed-in session");
+        logNavDebug("🌐 Network error - keeping previous signed-in session");
         setInitialRoute("Dashboard");
       } else {
-        console.log("⚠️ Other error, redirecting to Onboarding");
+        logNavDebug("⚠️ Other error, redirecting to Onboarding");
         setInitialRoute("Dashboard");
       }
     } finally {

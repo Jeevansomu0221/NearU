@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { vyahaLogos } from '../assets/logos';
 
 const socialLinks = [
   {
@@ -29,7 +30,7 @@ function Footer() {
       <div className="footer-container">
         <div className="footer-top">
           <Link className="footer-logo" to="/">
-            <img src="/vyaha-logo.png" alt="Vyaha" />
+            <img src={vyahaLogos.brand} alt="Vyaha" />
             <span>vyaha</span>
           </Link>
         </div>
@@ -51,12 +52,15 @@ function Footer() {
             <h4>Learn More</h4>
             <ul>
               <li><Link to="/policies">Guidelines and Policies</Link></li>
-              <li><a href="https://www.vyaha.com/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></li>
+              <li><Link to="/privacy">Privacy</Link></li>
               <li><Link to="/security">Security</Link></li>
-              <li><a href="https://www.vyaha.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></li>
+              <li><Link to="/terms">Terms of Service</Link></li>
               <li><Link to="/refunds">Cancellation and Refunds</Link></li>
+              <li><Link to="/payment-terms">Payment Terms</Link></li>
+              <li><Link to="/acceptable-use">Acceptable Use</Link></li>
               <li><Link to="/community-guidelines">Community Guidelines</Link></li>
               <li><Link to="/cookie-policy">Cookie Policy</Link></li>
+              <li><Link to="/data-retention">Data Retention</Link></li>
               <li><Link to="/delete-account">Delete Account</Link></li>
               <li><Link to="/support">Help and Support</Link></li>
             </ul>
@@ -94,7 +98,7 @@ function Footer() {
         </div>
 
         <div className="footer-bottom">
-          <p>By continuing past this page, you agree to our Terms of Service, Cookie Policy, Privacy Policy, and Content Policies. All trademarks are properties of their respective owners. © 2026 Vyaha. All rights reserved.</p>
+          <p>By continuing past this page, you agree to our Terms of Service, Privacy Policy, Cookie Policy, Payment Terms, and Content Policies. All trademarks are properties of their respective owners. © 2026 Vyaha. All rights reserved.</p>
         </div>
       </div>
     </footer>

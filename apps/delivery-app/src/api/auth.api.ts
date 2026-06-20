@@ -1,5 +1,6 @@
 import api, { ApiResponse } from "./client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearAuthTokens, setAccessToken, setRefreshToken, removeRefreshToken } from "../utils/authStorage";
 import { unregisterPushNotifications } from "../services/notifications";
 
 interface SendOtpResponse {
@@ -34,6 +35,22 @@ export const verifyFirebaseOtp = (
   return api.post("/auth/verify-otp", { phone, firebaseIdToken, role: "delivery" });
 };
 
+export const persistAuthSession = async (
+  token: string,
+  refreshToken?: string,
+  user?: Record<string, unknown>
+) => {
+  await setAccessToken(token);
+  if (refreshToken) {
+    await setRefreshToken(refreshToken);
+  } else {
+    await removeRefreshToken();
+  }
+  if (user) {
+    await AsyncStorage.setItem("user", JSON.stringify(user));
+  }
+};
+
 export const logout = async () => {
   try {
     await unregisterPushNotifications().catch(() => {});
@@ -41,7 +58,8 @@ export const logout = async () => {
   } catch (_error) {
     // best effort
   } finally {
-    await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+    await clearAuthTokens();
+    await AsyncStorage.removeItem("user");
   }
 };
 
@@ -51,6 +69,7 @@ export const deleteAccount = async () => {
     const response = await api.delete("/users/me");
     return response;
   } finally {
-    await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+    await clearAuthTokens();
+    await AsyncStorage.removeItem("user");
   }
 };

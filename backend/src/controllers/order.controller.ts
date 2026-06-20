@@ -28,6 +28,16 @@ const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const DELIVERY_FIRST_KM_FEE = 15;
 const DELIVERY_ADDITIONAL_KM_FEE = 10;
 const FOOD_GST_RATE = 0.05;
+
+const parseOrderPagination = (req: AuthRequest) => {
+  const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(String(req.query.limit || "30"), 10) || 30));
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit
+  };
+};
 const DELIVERY_GST_RATE = 0.18;
 const PLATFORM_FEE = 0;
 const AUTO_CANCEL_MESSAGE =
@@ -1421,12 +1431,17 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
       filter.customerId = user.id;
     }
 
+    const { page, limit, skip } = parseOrderPagination(req);
+    const total = await Order.countDocuments(filter);
+
     let orders;
     
     if (isPartnerOrdersRoute) {
       // For partners: don't show customer details, only delivery partner details
       orders = await Order.find(filter)
         .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
         .populate("partnerId", "restaurantName shopName phone")
         .populate("deliveryPartnerId", "name phone");
       
@@ -1441,6 +1456,8 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
       // Customer app order list and delivery partner lists
       orders = await Order.find(filter)
         .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
         .populate("customerId", "name phone")
         .populate({
           path: "partnerId",
@@ -1450,14 +1467,21 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
         .populate("deliveryPartnerId", "name phone");
     }
 
+    const pagination = {
+      page,
+      limit,
+      total,
+      hasMore: skip + orders.length < total
+    };
+
     if (isDeliveryOrdersRoute) {
       const deliveryOrders = await Promise.all(
         orders.map((order: any) => ensureDeliveryLocationForResponse(order.toObject ? order.toObject() : order))
       );
-      return successResponse(res, groupBundledDeliveryJobs(deliveryOrders));
+      return successResponse(res, groupBundledDeliveryJobs(deliveryOrders), "Orders retrieved successfully", 200, pagination);
     }
 
-    return successResponse(res, orders);
+    return successResponse(res, orders, "Orders retrieved successfully", 200, pagination);
   } catch (err: any) {
     console.error("getMyOrders error:", err);
     return errorResponse(res, "Failed to fetch orders");

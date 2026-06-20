@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "./client";
+import { clearAuthTokens, setAccessToken, setRefreshToken, removeRefreshToken } from "../utils/authStorage";
 
 export interface SendOtpResponse {
   success: boolean;
@@ -47,12 +48,25 @@ export const verifyFirebaseOtp = (phone: string, firebaseIdToken: string): Promi
   }) as Promise<VerifyOtpResponse>;
 };
 
+export const persistAuthSession = async (token: string, refreshToken?: string, user?: Record<string, unknown>) => {
+  await setAccessToken(token);
+  if (refreshToken) {
+    await setRefreshToken(refreshToken);
+  } else {
+    await removeRefreshToken();
+  }
+  if (user) {
+    await AsyncStorage.setItem("user", JSON.stringify(user));
+  }
+};
+
 export const logout = async () => {
   try {
     await api.post("/auth/logout");
   } catch (_error) {
     // best effort
   } finally {
-    await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+    await clearAuthTokens();
+    await AsyncStorage.removeItem("user");
   }
 };

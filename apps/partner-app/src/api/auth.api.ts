@@ -1,6 +1,10 @@
 import api from "./client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { registerForPushNotifications, unregisterPushNotifications } from "../services/notifications";
+import {
+  clearAuthData as clearStoredAuthData,
+  storeAuthData as persistStoredAuthData
+} from "../utils/storage";
 
 interface VerifyOtpPayload {
   token: string;
@@ -26,27 +30,15 @@ interface SendOtpResponse {
   data?: any;
 }
 
-interface AuthData {
-  token: string;
-  phone: string;
-  userId: string;
-  partnerId?: string;
-}
-
-export const storeAuthData = async (authData: AuthData) => {
-  await AsyncStorage.setItem("token", authData.token);
-  await AsyncStorage.setItem("phone", authData.phone);
-  await AsyncStorage.setItem("userId", authData.userId);
-
-  if (authData.partnerId) {
-    await AsyncStorage.setItem("partnerId", authData.partnerId);
-  } else {
-    await AsyncStorage.removeItem("partnerId");
-  }
-};
-
-export const clearAuthData = async () => {
-  await AsyncStorage.multiRemove(["token", "refreshToken", "phone", "userId", "partnerId", "user"]);
+const persistVerifiedSession = async (payload: VerifyOtpPayload) => {
+  await persistStoredAuthData({
+    token: payload.token,
+    refreshToken: payload.refreshToken,
+    phone: payload.user.phone,
+    userId: payload.user.id,
+    partnerId: payload.user.partnerId,
+    user: payload.user
+  });
 };
 
 export const sendOtp = async (phone: string, role: string) => {
@@ -65,19 +57,7 @@ export const verifyOtp = async (phone: string, otp: string, role: string) => {
     throw new Error(response.data?.message || "Invalid response from server");
   }
 
-  await storeAuthData({
-    token: payload.token,
-    phone: payload.user.phone,
-    userId: payload.user.id,
-    partnerId: payload.user.partnerId
-  });
-
-  await AsyncStorage.setItem("user", JSON.stringify(payload.user));
-  if (payload.refreshToken) {
-    await AsyncStorage.setItem("refreshToken", payload.refreshToken);
-  } else {
-    await AsyncStorage.removeItem("refreshToken");
-  }
+  await persistVerifiedSession(payload);
 
   registerForPushNotifications().catch((error) => {
     console.log("Failed to register push notifications:", error);
@@ -98,19 +78,7 @@ export const verifyFirebaseOtp = async (phone: string, firebaseIdToken: string, 
     throw new Error(response.data?.message || "Invalid response from server");
   }
 
-  await storeAuthData({
-    token: payload.token,
-    phone: payload.user.phone,
-    userId: payload.user.id,
-    partnerId: payload.user.partnerId
-  });
-
-  await AsyncStorage.setItem("user", JSON.stringify(payload.user));
-  if (payload.refreshToken) {
-    await AsyncStorage.setItem("refreshToken", payload.refreshToken);
-  } else {
-    await AsyncStorage.removeItem("refreshToken");
-  }
+  await persistVerifiedSession(payload);
 
   registerForPushNotifications().catch((error) => {
     console.log("Failed to register push notifications:", error);
@@ -120,7 +88,8 @@ export const verifyFirebaseOtp = async (phone: string, firebaseIdToken: string, 
 };
 
 export const getAuthToken = async (): Promise<string | null> => {
-  return AsyncStorage.getItem("token");
+  const { getAccessToken } = await import("../utils/authStorage");
+  return getAccessToken();
 };
 
 export const isAuthenticated = async (): Promise<boolean> => {
@@ -145,7 +114,7 @@ export const getCurrentUser = async () => {
 export const logout = async () => {
   try {
     await unregisterPushNotifications().catch(() => {});
-    await clearAuthData();
+    await clearStoredAuthData();
     return true;
   } catch {
     return false;
@@ -156,10 +125,12 @@ export const deleteAccount = async () => {
   try {
     await unregisterPushNotifications().catch(() => {});
     await api.delete("/users/me");
-    await clearAuthData();
+    await clearStoredAuthData();
     return true;
   } catch (error) {
-    await clearAuthData();
+    await clearStoredAuthData();
     throw error;
   }
 };
+
+export { clearStoredAuthData as clearAuthData, persistStoredAuthData as storeAuthData };

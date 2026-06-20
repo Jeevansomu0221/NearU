@@ -15,10 +15,11 @@ import { Ionicons } from "@expo/vector-icons";
 import api from "../api/client";
 import { deleteAccount, logout } from "../api/auth.api";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
+import { buildLegalUrl, OFFICIAL_SITE_URL } from "../constants/legal";
 
-const PARTNER_POLICY_URL = "https://www.vyaha.com/partner-policy";
-const TERMS_URL = "https://www.vyaha.com/terms";
-const DELETE_URL = "https://www.vyaha.com/delete-account";
+const PARTNER_POLICY_URL = `${OFFICIAL_SITE_URL}/partner-policy`;
+const TERMS_URL = buildLegalUrl("terms");
+const DELETE_URL = buildLegalUrl("delete-account");
 
 type SelfDeliveryPartner = {
   deliveryPartnerId?: string;

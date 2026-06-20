@@ -1,20 +1,35 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken
+} from "./authStorage";
 
 let memoryToken: string | null = null;
 
 export const setToken = async (token: string) => {
   memoryToken = token;
-  await AsyncStorage.setItem("token", token);
+  await setAccessToken(token);
 };
 
 export const getToken = async (): Promise<string | null> => {
   if (memoryToken) return memoryToken;
-  const token = await AsyncStorage.getItem("token");
-  memoryToken = token;
-  return token;
+  memoryToken = await getAccessToken();
+  return memoryToken;
 };
 
 export const clearToken = async () => {
   memoryToken = null;
-  await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+  await clearAuthTokens();
+  await AsyncStorage.multiRemove(["user"]);
+};
+
+export {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken
 };

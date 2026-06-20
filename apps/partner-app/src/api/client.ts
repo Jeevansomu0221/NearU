@@ -1,7 +1,13 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeModules, Platform } from "react-native";
-import { AUTH_STORAGE_KEYS } from "../utils/storage";
+import { clearAuthData } from "../utils/storage";
+import {
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken
+} from "../utils/authStorage";
 
 // Define generic API response type
 export interface ApiResponse<T = any> {
@@ -101,11 +107,11 @@ logDebug("Partner API fallback URLs:", API_BASE_URLS);
 
 const persistAuthPayload = async (payload: any) => {
   if (payload?.token) {
-    await AsyncStorage.setItem("token", payload.token);
+    await setAccessToken(payload.token);
   }
 
   if (payload?.refreshToken) {
-    await AsyncStorage.setItem("refreshToken", payload.refreshToken);
+    await setRefreshToken(payload.refreshToken);
   }
 
   if (payload?.user) {
@@ -123,7 +129,7 @@ const persistAuthPayload = async (payload: any) => {
 };
 
 const clearStoredSession = async () => {
-  await AsyncStorage.multiRemove([...AUTH_STORAGE_KEYS]);
+  await clearAuthData();
 };
 
 const decodeJwtExpiry = (token: string): number | null => {
@@ -152,7 +158,7 @@ const clearRefreshTimer = () => {
 
 export const scheduleProactiveRefresh = async (token?: string | null) => {
   clearRefreshTimer();
-  const currentToken = token ?? (await AsyncStorage.getItem("token"));
+  const currentToken = token ?? (await getAccessToken());
   if (!currentToken) return;
   const expiresAt = decodeJwtExpiry(currentToken);
   if (!expiresAt) return;
@@ -170,7 +176,7 @@ const refreshAccessToken = async () => {
   }
 
   inFlightRefresh = (async () => {
-  const savedRefreshToken = await AsyncStorage.getItem("refreshToken");
+  const savedRefreshToken = await getRefreshToken();
   if (!savedRefreshToken) {
     await clearStoredSession();
     return null;
@@ -212,7 +218,7 @@ const refreshAccessToken = async () => {
 };
 
 export const uploadMultipart = async <T = any>(path: string, formData: FormData): Promise<ApiResponse<T>> => {
-  let token = await AsyncStorage.getItem("token");
+  let token = await getAccessToken();
   let didRefresh = false;
 
   const makeRequest = async (baseUrl: string, authToken?: string | null) => {
@@ -280,7 +286,7 @@ api.interceptors.request.use(
         delete config.headers["content-type"];
       }
 
-      const token = await AsyncStorage.getItem("token");
+      const token = await getAccessToken();
       if (token) {
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${token}`;
@@ -298,7 +304,7 @@ api.interceptors.request.use(
 // Response interceptor
 api.interceptors.response.use(
   (response: any) => {
-    console.log(`✅ ${response.status} ${response.config.url}`);
+    logDebug(`✅ ${response.status} ${response.config.url}`);
     return response;
   },
   async (error: any) => {
@@ -308,7 +314,7 @@ api.interceptors.response.use(
     const isNetworkError = error.message === "Network Error" || (error.request && !error.response);
 
     if (isNetworkError && requestConfig && nextBaseUrl) {
-      console.log(`Trying fallback API base URL: ${nextBaseUrl}`);
+      logDebug(`Trying fallback API base URL: ${nextBaseUrl}`);
       requestConfig._baseUrlRetryIndex = currentRetryIndex + 1;
       requestConfig.baseURL = nextBaseUrl;
       api.defaults.baseURL = nextBaseUrl;
@@ -333,19 +339,18 @@ api.interceptors.response.use(
       const method = error.config?.method?.toUpperCase() || 'GET';
       
       if (url.includes('/partners/my-status') && error.response.status === 404) {
-        console.log(`📝 ${method} ${url}: Partner not found (404) - This is expected for new users`);
+        logDebug(`📝 ${method} ${url}: Partner not found (404) - This is expected for new users`);
         return Promise.resolve(error.response);
       }
       
-      console.error(`❌ API Error ${method} ${url}:`, {
+      logDebug(`❌ API Error ${method} ${url}:`, {
         status: error.response.status,
         statusText: error.response.statusText,
-        data: error.response.data,
       });
     } else if (error.request) {
-      console.error("🌐 Network error - No response received");
+      logDebug("🌐 Network error - No response received");
     } else {
-      console.error("🚫 Request setup error:", error.message);
+      logDebug("🚫 Request setup error:", error.message);
     }
     
     return Promise.reject(error);

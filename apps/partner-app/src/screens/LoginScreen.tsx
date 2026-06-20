@@ -13,8 +13,8 @@ import {
   ScrollView
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
+import { storeAuthData } from "../utils/storage";
 import {
   clearFirebaseOtpSession,
   confirmFirebaseOtp,
@@ -147,12 +147,12 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
-  const checkPartnerStatus = async (phoneNumber: string) => {
+  const checkPartnerStatus = async () => {
     try {
-      const res = await api.get(`/partners/status/${phoneNumber}`);
-      const responseData = res.data as { success: boolean; data?: any };
+      const res = await api.get("/partners/my-status");
+      const responseData = res.data as { success: boolean; data?: any; message?: string };
 
-      if (!responseData.success) {
+      if (!responseData.success || !responseData.data) {
         navigation.reset({
           index: 0,
           routes: [{ name: "Onboarding" }]
@@ -244,26 +244,20 @@ export default function LoginScreen({ navigation }: any) {
         throw new Error(data.message || "Invalid response from server");
       }
 
-      await AsyncStorage.setItem("token", payload.token);
-      await AsyncStorage.setItem("phone", phone);
-      await AsyncStorage.setItem("userId", payload.user.id);
-      await AsyncStorage.setItem("user", JSON.stringify(payload.user));
-      if (payload.user.partnerId) {
-        await AsyncStorage.setItem("partnerId", payload.user.partnerId);
-      } else {
-        await AsyncStorage.removeItem("partnerId");
-      }
-      if (payload.refreshToken) {
-        await AsyncStorage.setItem("refreshToken", payload.refreshToken);
-      } else {
-        await AsyncStorage.removeItem("refreshToken");
-      }
+      await storeAuthData({
+        token: payload.token,
+        refreshToken: payload.refreshToken,
+        phone,
+        userId: payload.user.id,
+        partnerId: payload.user.partnerId,
+        user: payload.user
+      });
 
       registerForPushNotifications().catch((error) => {
         console.log("Failed to register push notifications:", error);
       });
 
-      await checkPartnerStatus(phone);
+      await checkPartnerStatus();
     } catch (error: any) {
       console.error("OTP verification error:", error);
       lastSubmittedOtp.current = "";

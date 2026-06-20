@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAccessToken } from '../utils/authStorage';
 import { TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
@@ -176,7 +177,7 @@ export default function AppNavigator() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const token = await AsyncStorage.getItem('token');
+        const token = await getAccessToken();
         const userJson = await AsyncStorage.getItem('user');
 
         if (!token) {

@@ -9,7 +9,7 @@ import {
   ActivityIndicator
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { verifyFirebaseOtp } from "../api/auth.api";
+import { verifyFirebaseOtp, persistAuthSession } from "../api/auth.api";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import {
@@ -123,11 +123,11 @@ export default function OtpScreen({ route, navigation }: any) {
         return;
       }
 
-      await AsyncStorage.multiSet([
-        ["token", response.data.token],
-        ["refreshToken", response.data.refreshToken || ""],
-        ["user", JSON.stringify(response.data.user)]
-      ]);
+      await persistAuthSession(
+        response.data.token,
+        response.data.refreshToken,
+        response.data.user
+      );
 
       const notificationRegistration = registerForPushNotifications().catch((error) => {
         console.log("Failed to register push notifications:", error);

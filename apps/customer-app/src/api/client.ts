@@ -1,11 +1,24 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeModules, Platform } from "react-native";
+import {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken
+} from "../utils/authStorage";
 
 export interface ApiResponse<T = any> {
   success: boolean;
   message?: string;
   data?: T;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    hasMore: boolean;
+  };
   [key: string]: any;
 }
 
@@ -93,7 +106,7 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config: any) => {
     try {
-      const token = await AsyncStorage.getItem("token");
+      const token = await getAccessToken();
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -141,7 +154,7 @@ api.interceptors.response.use(
       )
     ) {
       try {
-        const refreshToken = await AsyncStorage.getItem("refreshToken");
+        const refreshToken = await getRefreshToken();
         if (!refreshToken) {
           throw new Error("Missing refresh token");
         }
@@ -164,10 +177,8 @@ api.interceptors.response.use(
           throw new Error("Refresh response did not include a token");
         }
 
-        await AsyncStorage.multiSet([
-          ["token", refreshedToken],
-          ["refreshToken", refreshedRefreshToken || refreshToken]
-        ]);
+        await setAccessToken(refreshedToken);
+        await setRefreshToken(refreshedRefreshToken || refreshToken);
         requestConfig.headers = {
           ...(requestConfig.headers || {}),
           Authorization: `Bearer ${refreshedToken}`
@@ -175,7 +186,8 @@ api.interceptors.response.use(
 
         return api.request(requestConfig);
       } catch (refreshError) {
-        await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+        await clearAuthTokens();
+        await AsyncStorage.removeItem("user");
         return Promise.reject(new Error("Your session expired. Please log in again."));
       }
     }

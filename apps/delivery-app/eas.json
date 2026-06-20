@@ -7,7 +7,8 @@
     "development": {
       "developmentClient": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com",
+        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
       },
       "android": {
         "buildType": "apk"
@@ -16,7 +17,8 @@
     "preview": {
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com",
+        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
       },
       "android": {
         "buildType": "apk"
@@ -26,7 +28,8 @@
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://vyaha-app-backend.onrender.com",
+        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
       },
       "android": {
         "buildType": "app-bundle"

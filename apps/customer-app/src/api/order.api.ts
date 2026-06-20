@@ -145,8 +145,8 @@ export const quoteOrderPricing = (
 /**
  * GET MY ORDERS
  */
-export const getMyOrders = (): Promise<ApiResponse<Order[]>> => {
-  return apiGet<Order[]>("/orders/my");
+export const getMyOrders = (page = 1, limit = 30): Promise<ApiResponse<Order[]>> => {
+  return apiGet<Order[]>("/orders/my", { params: { page, limit } });
 };
 
 /**
