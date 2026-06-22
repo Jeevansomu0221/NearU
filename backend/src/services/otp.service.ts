@@ -77,11 +77,25 @@ const markResendCooldown = (phone: string) => {
   });
 };
 
-const tryAutogenSms = async (phone: string, apiKey: string, templateName?: string) => {
-  const path = templateName
-    ? `SMS/${phone}/AUTOGEN/${encodeURIComponent(templateName)}`
-    : `SMS/${phone}/AUTOGEN`;
-  const response = await fetch(`https://2factor.in/API/V1/${apiKey}/${path}`, { method: "GET" });
+const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+const tryManualTemplateOtp = async (phone: string, apiKey: string, otp: string) => {
+  const templateName = encodeURIComponent(config.twofactorTemplateName);
+  const response = await fetch(`https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${otp}/${templateName}`, {
+    method: "GET"
+  });
+  const payload = (await response.json()) as TwoFactorResponse;
+
+  if (!response.ok || !isTwoFactorSuccess(payload)) {
+    throw new Error(`2Factor manual template SMS failed: ${JSON.stringify(payload)}`);
+  }
+};
+
+const tryAutogenSms = async (phone: string, apiKey: string, templateName: string) => {
+  const response = await fetch(
+    `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/AUTOGEN/${encodeURIComponent(templateName)}`,
+    { method: "GET" }
+  );
   const payload = (await response.json()) as TwoFactorResponse;
   const { details } = parseTwoFactorResponse(payload);
 
@@ -116,36 +130,50 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
     throw new Error("2Factor API key is not configured");
   }
 
-  const attempts: Array<() => Promise<void>> = [
-    async () => {
-      const sessionId = await tryAutogenSms(phone, apiKey, config.twofactorTemplateName);
-      await persistAutogenSession(phone, sessionId);
+  if (!config.twofactorSenderId || !config.twofactorTemplateName) {
+    throw new Error("2Factor sender ID and template name must be configured");
+  }
+
+  const otp = generateOtp();
+  const attempts: Array<{ label: string; run: () => Promise<void> }> = [
+    {
+      label: "TRANS_SMS_DLT",
+      run: async () => {
+        await tryTransSms(phone, apiKey, otp);
+        await persistManualOtpSession(phone, otp);
+      }
     },
-    async () => {
-      const sessionId = await tryAutogenSms(phone, apiKey);
-      await persistAutogenSession(phone, sessionId);
+    {
+      label: "MANUAL_TEMPLATE_SMS",
+      run: async () => {
+        await tryManualTemplateOtp(phone, apiKey, otp);
+        await persistManualOtpSession(phone, otp);
+      }
     },
-    async () => {
-      const otp = generateOtp();
-      await tryTransSms(phone, apiKey, otp);
-      await persistManualOtpSession(phone, otp);
+    {
+      label: "AUTOGEN_TEMPLATE",
+      run: async () => {
+        const sessionId = await tryAutogenSms(phone, apiKey, config.twofactorTemplateName);
+        await persistAutogenSession(phone, sessionId);
+      }
     }
   ];
 
   let lastError: Error | null = null;
   for (const attempt of attempts) {
     try {
-      await attempt();
+      await attempt.run();
       markResendCooldown(phone);
+      if (!config.isProduction) {
+        console.log(`[OTP:2factor] sent via ${attempt.label} to ${phone}`);
+      }
       return {
         provider: "2factor",
-        deliveryHint: "OTP sent via SMS from VYAHA."
+        deliveryHint: `OTP sent via SMS from ${config.twofactorSenderId}.`
       };
     } catch (error: any) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      if (!config.isProduction) {
-        console.log(`[OTP:2factor] attempt failed for ${phone}:`, lastError.message);
-      }
+      console.log(`[OTP:2factor] ${attempt.label} failed for ${phone}: ${lastError.message}`);
     }
   }
 
@@ -198,8 +226,6 @@ const verifyVia2Factor = async (phone: string, otp: string) => {
 
   return verified;
 };
-
-const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 const createMemoryRecord = (phone: string) => {
   const otp = generateOtp();
