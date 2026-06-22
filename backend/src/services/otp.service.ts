@@ -1,4 +1,5 @@
 import { config } from "../config/env";
+import OtpSession from "../models/OtpSession.model";
 
 type OtpProvider = "twilio" | "msg91" | "2factor" | "memory";
 type TwoFactorChannel = "sms" | "voice";
@@ -11,9 +12,6 @@ export type OtpSendResult = {
 
 type OtpRecord = {
   otp: string;
-  sessionId?: string;
-  twoFactorApiKey?: string;
-  twoFactorChannel?: TwoFactorChannel;
   expiresAt: number;
   attempts: number;
   resendAllowedAt: number;
@@ -26,7 +24,7 @@ type TwoFactorResponse = {
   details?: string;
 };
 
-const records = new Map<string, OtpRecord>();
+const memoryRecords = new Map<string, OtpRecord>();
 
 const getProvider = (): OtpProvider => {
   if (config.otpProvider === "twilio" || config.otpProvider === "msg91" || config.otpProvider === "2factor") {
@@ -56,6 +54,19 @@ const parseTwoFactorResponse = (payload: TwoFactorResponse) => {
   return { status, details };
 };
 
+const persistTwoFactorSession = async (phone: string, sessionId: string, channel: TwoFactorChannel) => {
+  const expiresAt = new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000);
+
+  await OtpSession.deleteMany({ phone });
+  await OtpSession.create({
+    phone,
+    sessionId,
+    channel,
+    attempts: 0,
+    expiresAt
+  });
+};
+
 const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
   const channel = getTwoFactorChannel();
   const apiKey = getTwoFactorApiKey(channel);
@@ -78,12 +89,11 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
     throw new Error(`2Factor ${channel} send failed: ${JSON.stringify(payload)}`);
   }
 
+  await persistTwoFactorSession(phone, details, channel);
+
   const now = Date.now();
-  records.set(phone, {
+  memoryRecords.set(phone, {
     otp: "",
-    sessionId: details,
-    twoFactorApiKey: apiKey,
-    twoFactorChannel: channel,
     attempts: 0,
     expiresAt: now + config.otpExpiryMinutes * 60 * 1000,
     resendAllowedAt: now + config.otpResendCooldownSeconds * 1000
@@ -99,41 +109,54 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
   };
 };
 
-const verifyVia2Factor = async (phone: string, otp: string) => {
-  const record = records.get(phone);
-  if (!record?.sessionId || !record.twoFactorApiKey) {
-    return false;
-  }
-
-  if (Date.now() > record.expiresAt) {
-    records.delete(phone);
-    return false;
-  }
-
-  if (record.attempts >= config.otpMaxAttempts) {
-    records.delete(phone);
-    return false;
-  }
-
-  record.attempts += 1;
-  records.set(phone, record);
-
-  const verifyPath =
-    record.twoFactorChannel === "voice"
-      ? `VOICE/VERIFY/${record.sessionId}/${otp}`
-      : `SMS/VERIFY/${record.sessionId}/${otp}`;
-  const response = await fetch(`https://2factor.in/API/V1/${record.twoFactorApiKey}/${verifyPath}`, {
+const verifyTwoFactorWithPath = async (apiKey: string, verifyPath: string) => {
+  const response = await fetch(`https://2factor.in/API/V1/${apiKey}/${verifyPath}`, {
     method: "GET"
   });
   const payload = (await response.json()) as TwoFactorResponse;
   const { status } = parseTwoFactorResponse(payload);
-  const verified = response.ok && status.toLowerCase() === "success";
+  return response.ok && status.toLowerCase() === "success";
+};
 
-  if (verified) {
-    records.delete(phone);
+const verifyVia2Factor = async (phone: string, otp: string) => {
+  const record = await OtpSession.findOne({
+    phone,
+    expiresAt: { $gt: new Date() }
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (!record?.sessionId) {
+    if (!config.isProduction) {
+      console.log(`[OTP:2factor] No persisted session for ${phone}`);
+    }
+    return false;
   }
 
-  return verified;
+  if (record.attempts >= config.otpMaxAttempts) {
+    await OtpSession.deleteMany({ phone });
+    return false;
+  }
+
+  await OtpSession.updateOne({ _id: record._id }, { $inc: { attempts: 1 } });
+
+  const channel = (record.channel as TwoFactorChannel) || "sms";
+  const apiKey = getTwoFactorApiKey(channel);
+  const sessionId = record.sessionId;
+  const verifyPaths = [
+    `SMS/VERIFY/${sessionId}/${otp}`,
+    ...(channel === "voice" ? [`VOICE/VERIFY/${sessionId}/${otp}`] : [])
+  ];
+
+  for (const verifyPath of verifyPaths) {
+    const verified = await verifyTwoFactorWithPath(apiKey, verifyPath);
+    if (verified) {
+      await OtpSession.deleteMany({ phone });
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
@@ -142,7 +165,7 @@ const createMemoryRecord = (phone: string) => {
   const otp = generateOtp();
   const now = Date.now();
 
-  records.set(phone, {
+  memoryRecords.set(phone, {
     otp,
     attempts: 0,
     expiresAt: now + config.otpExpiryMinutes * 60 * 1000,
@@ -154,11 +177,20 @@ const createMemoryRecord = (phone: string) => {
   }
 };
 
-const assertResendAllowed = (phone: string) => {
-  const record = records.get(phone);
-  if (record && record.resendAllowedAt > Date.now()) {
-    const waitSeconds = Math.ceil((record.resendAllowedAt - Date.now()) / 1000);
+const assertResendAllowed = async (phone: string) => {
+  const memoryRecord = memoryRecords.get(phone);
+  if (memoryRecord && memoryRecord.resendAllowedAt > Date.now()) {
+    const waitSeconds = Math.ceil((memoryRecord.resendAllowedAt - Date.now()) / 1000);
     throw new Error(`OTP resend available in ${waitSeconds}s`);
+  }
+
+  const persisted = await OtpSession.findOne({ phone }).sort({ createdAt: -1 }).lean();
+  if (persisted?.createdAt) {
+    const resendAllowedAt = new Date(persisted.createdAt).getTime() + config.otpResendCooldownSeconds * 1000;
+    if (resendAllowedAt > Date.now()) {
+      const waitSeconds = Math.ceil((resendAllowedAt - Date.now()) / 1000);
+      throw new Error(`OTP resend available in ${waitSeconds}s`);
+    }
   }
 };
 
@@ -249,7 +281,7 @@ const verifyViaMsg91 = async (phone: string, otp: string) => {
 
 export class OTPService {
   static async sendOTP(phone: string): Promise<OtpSendResult | void> {
-    assertResendAllowed(phone);
+    await assertResendAllowed(phone);
     const provider = getProvider();
 
     if (provider === "2factor") {
@@ -281,7 +313,7 @@ export class OTPService {
       return null;
     }
 
-    return records.get(phone)?.otp || null;
+    return memoryRecords.get(phone)?.otp || null;
   }
 
   static async verifyOTP(phone: string, otp: string): Promise<boolean> {
@@ -299,28 +331,28 @@ export class OTPService {
       return verifyViaMsg91(phone, otp);
     }
 
-    const record = records.get(phone);
+    const record = memoryRecords.get(phone);
     if (!record) {
       return false;
     }
 
     if (Date.now() > record.expiresAt) {
-      records.delete(phone);
+      memoryRecords.delete(phone);
       return false;
     }
 
     if (record.attempts >= config.otpMaxAttempts) {
-      records.delete(phone);
+      memoryRecords.delete(phone);
       return false;
     }
 
     record.attempts += 1;
     if (record.otp !== otp) {
-      records.set(phone, record);
+      memoryRecords.set(phone, record);
       return false;
     }
 
-    records.delete(phone);
+    memoryRecords.delete(phone);
     return true;
   }
 }
