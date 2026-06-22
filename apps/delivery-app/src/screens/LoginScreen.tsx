@@ -13,7 +13,7 @@ import {
   ScrollView,
   Linking
 } from "react-native";
-import { sendFirebaseOtp } from "../services/firebasePhoneAuth";
+import { sendOtpWithFallback } from "../services/otpAuthFlow";
 import { buildLegalUrl } from "../constants/legal";
 
 const TERMS_URL = buildLegalUrl("terms");
@@ -40,10 +40,10 @@ export default function LoginScreen({ navigation }: any) {
       setLoading(true);
       console.log("Sending OTP to:", phone, "with role: delivery");
       
-      await sendFirebaseOtp(phone);
+      const otpSession = await sendOtpWithFallback(phone);
       
       console.log("✅ OTP sent successfully");
-      navigation.navigate("Otp", { phone });
+      navigation.navigate("Otp", { phone, otpSession });
     } catch (error: any) {
       const detail = [
         error?.code ? `code=${error.code}` : "",

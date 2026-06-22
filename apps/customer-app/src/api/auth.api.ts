@@ -7,6 +7,11 @@ export interface SendOtpResponse {
   message: string;
   data?: {
     phone: string;
+    provider?: string;
+    channel?: "sms" | "voice";
+    deliveryHint?: string;
+    useFirebaseFallback?: boolean;
+    devOtp?: string;
   };
 }
 
@@ -25,27 +30,30 @@ export interface VerifyOtpResponse {
   };
 }
 
-export const sendOtp = (phone: string): Promise<SendOtpResponse> => {
-  return api.post("/auth/send-otp", {
+export const sendOtp = async (phone: string): Promise<SendOtpResponse> => {
+  const response = await api.post("/auth/send-otp", {
     phone,
     role: "customer"
-  }) as Promise<SendOtpResponse>;
+  });
+  return response.data as SendOtpResponse;
 };
 
-export const verifyOtp = (phone: string, otp: string): Promise<VerifyOtpResponse> => {
-  return api.post("/auth/verify-otp", {
+export const verifyOtp = async (phone: string, otp: string): Promise<VerifyOtpResponse> => {
+  const response = await api.post("/auth/verify-otp", {
     phone,
     otp,
     role: "customer"
-  }) as Promise<VerifyOtpResponse>;
+  });
+  return response.data as VerifyOtpResponse;
 };
 
-export const verifyFirebaseOtp = (phone: string, firebaseIdToken: string): Promise<VerifyOtpResponse> => {
-  return api.post("/auth/verify-otp", {
+export const verifyFirebaseOtp = async (phone: string, firebaseIdToken: string): Promise<VerifyOtpResponse> => {
+  const response = await api.post("/auth/verify-otp", {
     phone,
     firebaseIdToken,
     role: "customer"
-  }) as Promise<VerifyOtpResponse>;
+  });
+  return response.data as VerifyOtpResponse;
 };
 
 export const persistAuthSession = async (token: string, refreshToken?: string, user?: Record<string, unknown>) => {

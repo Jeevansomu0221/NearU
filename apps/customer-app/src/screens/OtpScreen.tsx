@@ -16,10 +16,9 @@ import { verifyFirebaseOtp, persistAuthSession } from '../api/auth.api';
 import { getUserProfile } from '../api/user.api';
 import {
   clearFirebaseOtpSession,
-  confirmFirebaseOtp,
   isFirebaseOtpSessionExpiredError,
-  sendFirebaseOtp
 } from '../services/firebasePhoneAuth';
+import { sendOtpWithFallback, verifyOtpSession, OtpSessionInfo } from '../services/otpAuthFlow';
 import { registerForPushNotifications } from '../services/notifications';
 import { buildLegalUrl } from '../constants/legal';
 
@@ -36,7 +35,8 @@ interface Props {
 }
 
 export default function OtpScreen({ navigation, route }: Props) {
-  const { phone } = route.params;
+  const { phone, otpSession: initialOtpSession } = route.params;
+  const [otpSession, setOtpSession] = useState<OtpSessionInfo>(initialOtpSession);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
@@ -173,8 +173,7 @@ export default function OtpScreen({ navigation, route }: Props) {
     setOtpError('');
     setLoading(true);
     try {
-      const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
-      const response = await verifyFirebaseOtp(phone, firebaseIdToken);
+      const response = await verifyOtpSession(phone, otp, otpSession);
 
       if (!response.success || !response.data?.token || !response.data?.user) {
         Alert.alert('Error', getOtpErrorMessage(response.message ? response : { message: 'Invalid OTP' }));
@@ -203,7 +202,7 @@ export default function OtpScreen({ navigation, route }: Props) {
       });
     } catch (error: any) {
       lastSubmittedOtp.current = '';
-      if (isFirebaseOtpSessionExpiredError(error)) {
+      if (otpSession.provider === 'firebase' && isFirebaseOtpSessionExpiredError(error)) {
         clearFirebaseOtpSession();
         setOtp('');
         setRequiresFreshOtp(true);
@@ -250,9 +249,14 @@ export default function OtpScreen({ navigation, route }: Props) {
       setOtpError('');
       setRequiresFreshOtp(false);
       lastSubmittedOtp.current = '';
-      await sendFirebaseOtp(phone);
+      const refreshedSession = await sendOtpWithFallback(phone);
+      setOtpSession(refreshedSession);
       setResendSeconds(RESEND_COOLDOWN_SECONDS);
-      Alert.alert('Fresh OTP Sent', 'Please use the newest SMS code. Older codes will stop working.');
+      const resendHint =
+        refreshedSession.channel === 'voice'
+          ? 'A fresh OTP call is on the way. Enter the code from the call.'
+          : 'Please use the newest SMS code. Older codes will stop working.';
+      Alert.alert('Fresh OTP Sent', resendHint);
     } catch {
       Alert.alert('Error', 'Could not resend OTP right now. Please wait a moment and try again.');
     } finally {

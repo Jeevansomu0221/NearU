@@ -13,7 +13,7 @@ import {
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { warmApi } from '../api/client';
-import { sendFirebaseOtp } from '../services/firebasePhoneAuth';
+import { sendOtpWithFallback, OtpSessionInfo } from '../services/otpAuthFlow';
 import { buildLegalUrl } from '../constants/legal';
 
 const TERMS_URL = buildLegalUrl("terms");
@@ -56,12 +56,11 @@ export default function LoginScreen({ navigation }: Props) {
     setLoading(true);
     try {
       void warmApi();
-      await sendFirebaseOtp(cleanedPhone);
+      const otpSession = await sendOtpWithFallback(cleanedPhone);
 
-      // Navigate to OTP screen with phone number ONLY
-      // Type is { phone: string } so only pass phone
       navigation.navigate('Otp', { 
-        phone: cleanedPhone
+        phone: cleanedPhone,
+        otpSession
       });
       
     } catch (error: any) {

@@ -2,12 +2,12 @@ import { NavigationContainer, createNavigationContainerRef } from "@react-naviga
 import { useEffect } from "react";
 import { StatusBar, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import crashlytics from "@react-native-firebase/crashlytics";
 import CustomAlert from "./src/components/CustomAlert";
 import PartnerOrderWatcher from "./src/components/PartnerOrderWatcher";
 import { PartnerThemeProvider, usePartnerTheme } from "./src/context/PartnerThemeContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import { registerForPushNotifications, setupNotificationHandlers } from "./src/services/notifications";
+import { initCrashlytics } from "./src/utils/crashlytics";
 
 const navigationRef = createNavigationContainerRef();
 
@@ -15,7 +15,7 @@ function PartnerAppContent() {
   const { theme, isDarkMode } = usePartnerTheme();
 
   useEffect(() => {
-    crashlytics().setCrashlyticsCollectionEnabled(typeof __DEV__ === "undefined" || !__DEV__);
+    void initCrashlytics();
     registerForPushNotifications().catch((error) => {
       console.log("Failed to register push notifications:", error);
     });

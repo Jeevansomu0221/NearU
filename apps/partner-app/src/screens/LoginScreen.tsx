@@ -17,10 +17,9 @@ import api from "../api/client";
 import { storeAuthData } from "../utils/storage";
 import {
   clearFirebaseOtpSession,
-  confirmFirebaseOtp,
-  isFirebaseOtpSessionExpiredError,
-  sendFirebaseOtp
+  isFirebaseOtpSessionExpiredError
 } from "../services/firebasePhoneAuth";
+import { sendOtpWithFallback, verifyOtpSession, OtpSessionInfo } from "../services/otpAuthFlow";
 import { registerForPushNotifications } from "../services/notifications";
 import { partnerTheme } from "../theme";
 import { buildLegalUrl } from "../constants/legal";
@@ -52,6 +51,7 @@ export default function LoginScreen({ navigation }: any) {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [otpSession, setOtpSession] = useState<OtpSessionInfo>({ provider: "firebase" });
   const lastSubmittedOtp = useRef("");
   const insets = useSafeAreaInsets();
 
@@ -132,12 +132,17 @@ export default function LoginScreen({ navigation }: any) {
       setOtp("");
       lastSubmittedOtp.current = "";
 
-      await sendFirebaseOtp(cleanedPhone);
+      const session = await sendOtpWithFallback(cleanedPhone, "partner");
+      setOtpSession(session);
 
       setStep("otp");
+      const deliveryHint =
+        session.channel === "voice"
+          ? "You will receive a phone call with your OTP."
+          : session.deliveryHint || "OTP sent. Enter the code below.";
       setFeedback({
         type: "success",
-        text: cleanedPhone === TEST_LOGIN_PHONE ? "Use test OTP 000000 to continue." : "OTP sent. Enter the code below."
+        text: cleanedPhone === TEST_LOGIN_PHONE ? "Use test OTP 000000 to continue." : deliveryHint
       });
     } catch (error: any) {
       console.error("Send OTP error:", error);
@@ -212,32 +217,29 @@ export default function LoginScreen({ navigation }: any) {
       setFeedback(null);
       lastSubmittedOtp.current = otp;
 
-      let verificationPayload: { phone: string; role: string; firebaseIdToken?: string; otp?: string };
-      try {
-        verificationPayload = {
-          phone,
-          firebaseIdToken: await confirmFirebaseOtp(otp, phone),
-          role: "partner"
-        };
-      } catch (firebaseError: any) {
-        if (phone === TEST_LOGIN_PHONE && otp === TEST_LOGIN_OTP) {
-          verificationPayload = { phone, otp, role: "partner" };
-        } else if (isFirebaseOtpSessionExpiredError(firebaseError)) {
-          clearFirebaseOtpSession();
-          setOtp("");
-          setFeedback({
-            type: "error",
-            text: "This OTP expired. Tap Resend OTP and use only the newest SMS code."
-          });
-          return;
-        } else {
-          throw firebaseError;
+      if (phone === TEST_LOGIN_PHONE && otp === TEST_LOGIN_OTP) {
+        const res = await api.post("/auth/verify-otp", { phone, otp, role: "partner" });
+        const data = res.data as AuthResponse;
+        const payload = data.data;
+        if (!data.success || !payload?.token || !payload.user) {
+          throw new Error(data.message || "Invalid response from server");
         }
+        await storeAuthData({
+          token: payload.token,
+          refreshToken: payload.refreshToken,
+          phone,
+          userId: payload.user.id,
+          partnerId: payload.user.partnerId,
+          user: payload.user
+        });
+        registerForPushNotifications().catch((error) => {
+          console.log("Failed to register push notifications:", error);
+        });
+        await checkPartnerStatus();
+        return;
       }
 
-      const res = await api.post("/auth/verify-otp", verificationPayload);
-
-      const data = res.data as AuthResponse;
+      const data = await verifyOtpSession(phone, otp, "partner", otpSession);
       const payload = data.data;
 
       if (!data.success || !payload?.token || !payload.user) {
@@ -259,6 +261,15 @@ export default function LoginScreen({ navigation }: any) {
 
       await checkPartnerStatus();
     } catch (error: any) {
+      if (otpSession.provider === "firebase" && isFirebaseOtpSessionExpiredError(error)) {
+        clearFirebaseOtpSession();
+        setOtp("");
+        setFeedback({
+          type: "error",
+          text: "This OTP expired. Tap Resend OTP and use only the newest SMS code."
+        });
+        return;
+      }
       console.error("OTP verification error:", error);
       lastSubmittedOtp.current = "";
       setFeedback({ type: "error", text: getOtpErrorMessage(error) });

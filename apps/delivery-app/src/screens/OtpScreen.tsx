@@ -9,20 +9,20 @@ import {
   ActivityIndicator
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { verifyFirebaseOtp, persistAuthSession } from "../api/auth.api";
+import { persistAuthSession } from "../api/auth.api";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import {
   clearFirebaseOtpSession,
-  confirmFirebaseOtp,
   isFirebaseOtpSessionExpiredError,
-  sendFirebaseOtp
 } from "../services/firebasePhoneAuth";
+import { sendOtpWithFallback, verifyOtpSession, OtpSessionInfo } from "../services/otpAuthFlow";
 import { registerForPushNotifications } from "../services/notifications";
 import { requestRiderLocationPermission } from "../utils/riderLocation";
 
 export default function OtpScreen({ route, navigation }: any) {
-  const { phone } = route.params;
+  const { phone, otpSession: initialOtpSession } = route.params;
+  const [otpSession, setOtpSession] = useState<OtpSessionInfo>(initialOtpSession);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(60);
@@ -115,8 +115,7 @@ export default function OtpScreen({ route, navigation }: any) {
 
     try {
       setLoading(true);
-      const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
-      const response = await verifyFirebaseOtp(phone, firebaseIdToken);
+      const response = await verifyOtpSession(phone, otp, otpSession);
 
       if (!response.success || !response.data?.token || !response.data?.user) {
         Alert.alert("Error", getOtpErrorMessage(response.message ? response : { message: "Invalid OTP" }));
@@ -149,7 +148,7 @@ export default function OtpScreen({ route, navigation }: any) {
         routes: [{ name: nextRoute }],
       });
     } catch (error: any) {
-      if (isFirebaseOtpSessionExpiredError(error)) {
+      if (otpSession.provider === "firebase" && isFirebaseOtpSessionExpiredError(error)) {
         clearFirebaseOtpSession();
         setOtp("");
         setRequiresFreshOtp(true);
@@ -172,7 +171,8 @@ export default function OtpScreen({ route, navigation }: any) {
       setCanResend(false);
       setOtp("");
       setRequiresFreshOtp(false);
-      await sendFirebaseOtp(phone);
+      const refreshedSession = await sendOtpWithFallback(phone);
+      setOtpSession(refreshedSession);
     } catch {
       Alert.alert("Error", "Could not resend OTP right now. Please wait a moment and try again.");
       setCanResend(true);

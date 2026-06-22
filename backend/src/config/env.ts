@@ -41,6 +41,13 @@ export const config = {
   msg91AuthKey: process.env.MSG91_AUTH_KEY || "",
   msg91TemplateId: process.env.MSG91_TEMPLATE_ID || "",
   msg91SenderId: process.env.MSG91_SENDER_ID || "",
+  twofactorApiKey: process.env.TWOFACTOR_API_KEY || "",
+  twofactorVoiceApiKey: process.env.TWOFACTOR_VOICE_API_KEY || "",
+  twofactorSenderId: process.env.TWOFACTOR_SENDER_ID || "",
+  twofactorTemplateName: process.env.TWOFACTOR_TEMPLATE_NAME || "",
+  twofactorDltEntityId: process.env.TWOFACTOR_DLT_ENTITY_ID || "",
+  twofactorOtpChannel: (process.env.TWOFACTOR_OTP_CHANNEL || "sms").trim().toLowerCase(),
+  otpFirebaseFallback: process.env.OTP_FIREBASE_FALLBACK !== "false",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",
   firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "",
   firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "",
@@ -88,6 +95,13 @@ export const validateEnv = (): void => {
 
     if (config.otpProvider === "msg91" && (!config.msg91AuthKey || !config.msg91TemplateId || !config.msg91SenderId)) {
       missing.push("MSG91_AUTH_KEY/MSG91_TEMPLATE_ID/MSG91_SENDER_ID");
+    }
+
+    if (
+      config.otpProvider === "2factor" &&
+      (!config.twofactorApiKey || !config.twofactorTemplateName || !config.twofactorSenderId)
+    ) {
+      missing.push("TWOFACTOR_API_KEY/TWOFACTOR_TEMPLATE_NAME/TWOFACTOR_SENDER_ID");
     }
 
     if (config.otpProvider === "firebase" && !config.firebaseProjectId && !config.firebaseServiceAccountPath && !config.firebaseServiceAccountJson) {

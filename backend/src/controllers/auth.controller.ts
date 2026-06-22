@@ -115,9 +115,28 @@ export const sendOTP = async (req: Request, res: Response) => {
       }
     }
 
-    await OTPService.sendOTP(phone);
+    const sendResult = await OTPService.sendOTP(phone);
 
-    const data: { phone: string; devOtp?: string } = { phone };
+    const data: {
+      phone: string;
+      provider?: string;
+      channel?: string;
+      deliveryHint?: string;
+      useFirebaseFallback?: boolean;
+      fallbackReason?: string;
+      devOtp?: string;
+    } = { phone };
+
+    if (sendResult?.provider) {
+      data.provider = sendResult.provider;
+    }
+    if (sendResult?.channel) {
+      data.channel = sendResult.channel;
+    }
+    if (sendResult?.deliveryHint) {
+      data.deliveryHint = sendResult.deliveryHint;
+    }
+
     const devOtp = OTPService.getDevOtp(phone);
     if (!config.isProduction && devOtp) {
       data.devOtp = devOtp;
@@ -125,7 +144,21 @@ export const sendOTP = async (req: Request, res: Response) => {
 
     return successResponse(res, data, "OTP sent successfully");
   } catch (error: any) {
-    return errorResponse(res, error.message || "Failed to send OTP", 400);
+    const message = error.message || "Failed to send OTP";
+
+    if (config.otpProvider === "2factor" && config.otpFirebaseFallback) {
+      return successResponse(
+        res,
+        {
+          phone: req.body.phone,
+          useFirebaseFallback: true,
+          fallbackReason: message
+        },
+        "Primary OTP provider unavailable. Use Firebase fallback."
+      );
+    }
+
+    return errorResponse(res, message, 400);
   }
 };
 

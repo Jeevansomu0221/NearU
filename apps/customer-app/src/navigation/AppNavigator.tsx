@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAccessToken } from '../utils/authStorage';
 import { TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import type { OtpSessionInfo } from '../services/otpAuthFlow';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
@@ -104,7 +105,7 @@ export interface OrderSummary {
 // Define stack param list - UPDATED (removed OrderSummary)
 export type RootStackParamList = {
   Login: undefined;
-  Otp: { phone: string };
+  Otp: { phone: string; otpSession: OtpSessionInfo };
   Home: undefined;
   ShopDetail: { 
     shopId: string;

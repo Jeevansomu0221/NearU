@@ -12,7 +12,27 @@ services:
       - key: PORT
         value: 5000
       - key: OTP_PROVIDER
-        value: firebase
+        value: 2factor
+      - key: OTP_FIREBASE_FALLBACK
+        value: "true"
+      - key: OTP_EXPIRY_MINUTES
+        value: "10"
+      - key: OTP_RESEND_COOLDOWN_SECONDS
+        value: "30"
+      - key: OTP_MAX_ATTEMPTS
+        value: "5"
+      - key: TWOFACTOR_API_KEY
+        sync: false
+      - key: TWOFACTOR_VOICE_API_KEY
+        sync: false
+      - key: TWOFACTOR_SENDER_ID
+        value: VYAHA
+      - key: TWOFACTOR_TEMPLATE_NAME
+        value: Vyaha_OTP_Login
+      - key: TWOFACTOR_DLT_ENTITY_ID
+        value: "1201178135264753827"
+      - key: TWOFACTOR_OTP_CHANNEL
+        value: sms
       - key: FIREBASE_PROJECT_ID
         value: vyaha-a24a7
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
