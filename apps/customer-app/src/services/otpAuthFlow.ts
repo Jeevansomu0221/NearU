@@ -5,18 +5,7 @@ export type OtpAuthProvider = "2factor" | "firebase";
 
 export type OtpSessionInfo = {
   provider: OtpAuthProvider;
-  channel?: "sms" | "voice";
   deliveryHint?: string;
-};
-
-const isNetworkError = (error: unknown) => {
-  const message = String((error as any)?.message || "").toLowerCase();
-  return (
-    message.includes("network") ||
-    message.includes("connect") ||
-    message.includes("server is taking longer") ||
-    message.includes("timeout")
-  );
 };
 
 export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo> => {
@@ -24,35 +13,20 @@ export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo
     const response = await sendOtp(phone);
     const payload = response.data ?? {};
 
-    if (!response.success) {
-      if (payload.useFirebaseFallback) {
-        await sendFirebaseOtp(phone);
-        return { provider: "firebase" };
-      }
-      throw new Error(response.message || "Failed to send OTP");
-    }
-
-    if (payload.useFirebaseFallback) {
-      await sendFirebaseOtp(phone);
-      return { provider: "firebase" };
-    }
-
-    if (payload.provider === "2factor") {
+    if (response.success && !payload.useFirebaseFallback) {
       return {
         provider: "2factor",
-        channel: payload.channel,
-        deliveryHint: payload.deliveryHint
+        deliveryHint: payload.deliveryHint || "OTP sent via SMS from VYAHA."
       };
     }
-
-    throw new Error(response.message || "OTP provider unavailable");
   } catch (error) {
-    if (isNetworkError(error)) {
-      await sendFirebaseOtp(phone);
-      return { provider: "firebase" };
+    if (__DEV__) {
+      console.log("[OTP] backend send failed, using Firebase:", error);
     }
-    throw error;
   }
+
+  await sendFirebaseOtp(phone);
+  return { provider: "firebase" };
 };
 
 export const verifyOtpSession = async (phone: string, otp: string, session: OtpSessionInfo) => {
@@ -63,7 +37,7 @@ export const verifyOtpSession = async (phone: string, otp: string, session: OtpS
         return response;
       }
     } catch {
-      // User may have received Firebase OTP if send timed out — try that next.
+      // User may have received Firebase OTP if SMS path fell back on send.
     }
 
     try {
@@ -76,7 +50,7 @@ export const verifyOtpSession = async (phone: string, otp: string, session: OtpS
       // fall through
     }
 
-    throw new Error("Invalid or expired OTP. Use the code from your latest SMS or call.");
+    throw new Error("Invalid or expired OTP. Please use the latest SMS code.");
   }
 
   const firebaseIdToken = await confirmFirebaseOtp(otp, phone);

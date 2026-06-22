@@ -120,7 +120,6 @@ export const sendOTP = async (req: Request, res: Response) => {
     const data: {
       phone: string;
       provider?: string;
-      channel?: string;
       deliveryHint?: string;
       useFirebaseFallback?: boolean;
       fallbackReason?: string;
@@ -129,9 +128,6 @@ export const sendOTP = async (req: Request, res: Response) => {
 
     if (sendResult?.provider) {
       data.provider = sendResult.provider;
-    }
-    if (sendResult?.channel) {
-      data.channel = sendResult.channel;
     }
     if (sendResult?.deliveryHint) {
       data.deliveryHint = sendResult.deliveryHint;

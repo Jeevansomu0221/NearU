@@ -252,11 +252,7 @@ export default function OtpScreen({ navigation, route }: Props) {
       const refreshedSession = await sendOtpWithFallback(phone);
       setOtpSession(refreshedSession);
       setResendSeconds(RESEND_COOLDOWN_SECONDS);
-      const resendHint =
-        refreshedSession.channel === 'voice'
-          ? 'A fresh OTP call is on the way. Enter the code from the call.'
-          : 'Please use the newest SMS code. Older codes will stop working.';
-      Alert.alert('Fresh OTP Sent', resendHint);
+      Alert.alert('Fresh OTP Sent', 'Please use the newest SMS code. Older codes will stop working.');
     } catch {
       Alert.alert('Error', 'Could not resend OTP right now. Please wait a moment and try again.');
     } finally {

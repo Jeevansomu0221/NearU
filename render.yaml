@@ -23,16 +23,12 @@ services:
         value: "5"
       - key: TWOFACTOR_API_KEY
         sync: false
-      - key: TWOFACTOR_VOICE_API_KEY
-        sync: false
       - key: TWOFACTOR_SENDER_ID
         value: VYAHA
       - key: TWOFACTOR_TEMPLATE_NAME
         value: Vyaha_OTP_Login
       - key: TWOFACTOR_DLT_ENTITY_ID
         value: "1201178135264753827"
-      - key: TWOFACTOR_OTP_CHANNEL
-        value: sms
       - key: FIREBASE_PROJECT_ID
         value: vyaha-a24a7
       - key: FIREBASE_SERVICE_ACCOUNT_JSON

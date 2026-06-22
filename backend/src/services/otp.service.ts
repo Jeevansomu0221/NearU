@@ -2,11 +2,9 @@ import { config } from "../config/env";
 import OtpSession from "../models/OtpSession.model";
 
 type OtpProvider = "twilio" | "msg91" | "2factor" | "memory";
-type TwoFactorChannel = "sms" | "voice";
 
 export type OtpSendResult = {
   provider: "2factor" | "memory";
-  channel?: TwoFactorChannel;
   deliveryHint?: string;
 };
 
@@ -34,63 +32,42 @@ const getProvider = (): OtpProvider => {
   return "memory";
 };
 
-const getTwoFactorChannel = (): TwoFactorChannel => {
-  if (config.twofactorOtpChannel === "voice") {
-    return "voice";
-  }
-  return "sms";
-};
-
-const getTwoFactorApiKey = (channel: TwoFactorChannel) => {
-  if (channel === "voice" && config.twofactorVoiceApiKey) {
-    return config.twofactorVoiceApiKey;
-  }
-  return config.twofactorApiKey;
-};
-
 const parseTwoFactorResponse = (payload: TwoFactorResponse) => {
   const status = String(payload.Status || payload.status || "").trim();
   const details = String(payload.Details || payload.details || "").trim();
   return { status, details };
 };
 
-const persistTwoFactorSession = async (phone: string, sessionId: string, channel: TwoFactorChannel) => {
-  const expiresAt = new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000);
+const isTwoFactorSuccess = (payload: TwoFactorResponse) => {
+  const { status } = parseTwoFactorResponse(payload);
+  return status.toLowerCase() === "success";
+};
 
+const persistAutogenSession = async (phone: string, sessionId: string) => {
+  const expiresAt = new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000);
   await OtpSession.deleteMany({ phone });
   await OtpSession.create({
     phone,
     sessionId,
-    channel,
+    manualOtp: "",
     attempts: 0,
     expiresAt
   });
 };
 
-const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
-  const channel = getTwoFactorChannel();
-  const apiKey = getTwoFactorApiKey(channel);
+const persistManualOtpSession = async (phone: string, otp: string) => {
+  const expiresAt = new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000);
+  await OtpSession.deleteMany({ phone });
+  await OtpSession.create({
+    phone,
+    sessionId: "",
+    manualOtp: otp,
+    attempts: 0,
+    expiresAt
+  });
+};
 
-  if (!apiKey) {
-    throw new Error("2Factor API key is not configured");
-  }
-
-  const templateName = encodeURIComponent(config.twofactorTemplateName);
-  const url =
-    channel === "voice"
-      ? `https://2factor.in/API/V1/${apiKey}/VOICE/${phone}/AUTOGEN`
-      : `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/AUTOGEN/${templateName}`;
-
-  const response = await fetch(url, { method: "GET" });
-  const payload = (await response.json()) as TwoFactorResponse;
-  const { status, details } = parseTwoFactorResponse(payload);
-
-  if (!response.ok || status.toLowerCase() !== "success" || !details) {
-    throw new Error(`2Factor ${channel} send failed: ${JSON.stringify(payload)}`);
-  }
-
-  await persistTwoFactorSession(phone, details, channel);
-
+const markResendCooldown = (phone: string) => {
   const now = Date.now();
   memoryRecords.set(phone, {
     otp: "",
@@ -98,24 +75,89 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
     expiresAt: now + config.otpExpiryMinutes * 60 * 1000,
     resendAllowedAt: now + config.otpResendCooldownSeconds * 1000
   });
-
-  return {
-    provider: "2factor",
-    channel,
-    deliveryHint:
-      channel === "voice"
-        ? "You will receive a phone call with your OTP."
-        : "OTP sent via SMS from VYAHA."
-  };
 };
 
-const verifyTwoFactorWithPath = async (apiKey: string, verifyPath: string) => {
-  const response = await fetch(`https://2factor.in/API/V1/${apiKey}/${verifyPath}`, {
+const tryAutogenSms = async (phone: string, apiKey: string, templateName?: string) => {
+  const path = templateName
+    ? `SMS/${phone}/AUTOGEN/${encodeURIComponent(templateName)}`
+    : `SMS/${phone}/AUTOGEN`;
+  const response = await fetch(`https://2factor.in/API/V1/${apiKey}/${path}`, { method: "GET" });
+  const payload = (await response.json()) as TwoFactorResponse;
+  const { details } = parseTwoFactorResponse(payload);
+
+  if (!response.ok || !isTwoFactorSuccess(payload) || !details) {
+    throw new Error(`2Factor AUTOGEN failed: ${JSON.stringify(payload)}`);
+  }
+
+  return details;
+};
+
+const tryTransSms = async (phone: string, apiKey: string, otp: string) => {
+  const params = new URLSearchParams({
+    module: "TRANS_SMS",
+    apikey: apiKey,
+    to: phone,
+    from: config.twofactorSenderId || "VYAHA",
+    templatename: config.twofactorTemplateName,
+    var1: otp
+  });
+
+  const response = await fetch(`https://2factor.in/API/R1/?${params.toString()}`, { method: "GET" });
+  const payload = (await response.json()) as TwoFactorResponse;
+
+  if (!response.ok || !isTwoFactorSuccess(payload)) {
+    throw new Error(`2Factor TRANS_SMS failed: ${JSON.stringify(payload)}`);
+  }
+};
+
+const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
+  const apiKey = config.twofactorApiKey;
+  if (!apiKey) {
+    throw new Error("2Factor API key is not configured");
+  }
+
+  const attempts: Array<() => Promise<void>> = [
+    async () => {
+      const sessionId = await tryAutogenSms(phone, apiKey, config.twofactorTemplateName);
+      await persistAutogenSession(phone, sessionId);
+    },
+    async () => {
+      const sessionId = await tryAutogenSms(phone, apiKey);
+      await persistAutogenSession(phone, sessionId);
+    },
+    async () => {
+      const otp = generateOtp();
+      await tryTransSms(phone, apiKey, otp);
+      await persistManualOtpSession(phone, otp);
+    }
+  ];
+
+  let lastError: Error | null = null;
+  for (const attempt of attempts) {
+    try {
+      await attempt();
+      markResendCooldown(phone);
+      return {
+        provider: "2factor",
+        deliveryHint: "OTP sent via SMS from VYAHA."
+      };
+    } catch (error: any) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (!config.isProduction) {
+        console.log(`[OTP:2factor] attempt failed for ${phone}:`, lastError.message);
+      }
+    }
+  }
+
+  throw lastError || new Error("2Factor SMS send failed");
+};
+
+const verifyTwoFactorSession = async (apiKey: string, sessionId: string, otp: string) => {
+  const response = await fetch(`https://2factor.in/API/V1/${apiKey}/SMS/VERIFY/${sessionId}/${otp}`, {
     method: "GET"
   });
   const payload = (await response.json()) as TwoFactorResponse;
-  const { status } = parseTwoFactorResponse(payload);
-  return response.ok && status.toLowerCase() === "success";
+  return response.ok && isTwoFactorSuccess(payload);
 };
 
 const verifyVia2Factor = async (phone: string, otp: string) => {
@@ -126,10 +168,7 @@ const verifyVia2Factor = async (phone: string, otp: string) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  if (!record?.sessionId) {
-    if (!config.isProduction) {
-      console.log(`[OTP:2factor] No persisted session for ${phone}`);
-    }
+  if (!record) {
     return false;
   }
 
@@ -140,23 +179,24 @@ const verifyVia2Factor = async (phone: string, otp: string) => {
 
   await OtpSession.updateOne({ _id: record._id }, { $inc: { attempts: 1 } });
 
-  const channel = (record.channel as TwoFactorChannel) || "sms";
-  const apiKey = getTwoFactorApiKey(channel);
-  const sessionId = record.sessionId;
-  const verifyPaths = [
-    `SMS/VERIFY/${sessionId}/${otp}`,
-    ...(channel === "voice" ? [`VOICE/VERIFY/${sessionId}/${otp}`] : [])
-  ];
-
-  for (const verifyPath of verifyPaths) {
-    const verified = await verifyTwoFactorWithPath(apiKey, verifyPath);
+  if (record.manualOtp) {
+    const verified = record.manualOtp === otp;
     if (verified) {
       await OtpSession.deleteMany({ phone });
-      return true;
     }
+    return verified;
   }
 
-  return false;
+  if (!record.sessionId) {
+    return false;
+  }
+
+  const verified = await verifyTwoFactorSession(config.twofactorApiKey, record.sessionId, otp);
+  if (verified) {
+    await OtpSession.deleteMany({ phone });
+  }
+
+  return verified;
 };
 
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();

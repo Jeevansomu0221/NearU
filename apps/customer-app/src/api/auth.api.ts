@@ -8,7 +8,6 @@ export interface SendOtpResponse {
   data?: {
     phone: string;
     provider?: string;
-    channel?: "sms" | "voice";
     deliveryHint?: string;
     useFirebaseFallback?: boolean;
     devOtp?: string;

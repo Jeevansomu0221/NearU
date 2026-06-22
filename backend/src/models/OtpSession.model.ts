@@ -9,12 +9,11 @@ const OtpSessionSchema = new Schema(
     },
     sessionId: {
       type: String,
-      required: true
+      default: ""
     },
-    channel: {
+    manualOtp: {
       type: String,
-      enum: ["sms", "voice"],
-      default: "sms"
+      default: ""
     },
     attempts: {
       type: Number,

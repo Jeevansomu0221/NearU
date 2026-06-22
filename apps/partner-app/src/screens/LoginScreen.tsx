@@ -136,13 +136,9 @@ export default function LoginScreen({ navigation }: any) {
       setOtpSession(session);
 
       setStep("otp");
-      const deliveryHint =
-        session.channel === "voice"
-          ? "You will receive a phone call with your OTP."
-          : session.deliveryHint || "OTP sent. Enter the code below.";
       setFeedback({
         type: "success",
-        text: cleanedPhone === TEST_LOGIN_PHONE ? "Use test OTP 000000 to continue." : deliveryHint
+        text: cleanedPhone === TEST_LOGIN_PHONE ? "Use test OTP 000000 to continue." : (session.deliveryHint || "OTP sent. Enter the code below.")
       });
     } catch (error: any) {
       console.error("Send OTP error:", error);
