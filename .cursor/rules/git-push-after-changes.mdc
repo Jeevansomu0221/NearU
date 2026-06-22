@@ -1,0 +1,17 @@
+---
+description: Push to git after every code change batch
+alwaysApply: true
+---
+
+# Git push after changes
+
+When you finish a batch of code changes for the user:
+
+1. Run `git status` and `git diff` to review what changed.
+2. **Commit** the changes with a clear message (user expects commits when implementing).
+3. **Push** to the remote immediately: `git push origin <current-branch>`.
+4. Tell the user the commit hash and that it was pushed.
+
+Do not leave implemented work only on disk — always push unless the user explicitly says not to push, or push would be destructive (e.g. force push to main without permission).
+
+Never commit `.env` files or other secrets (check `.gitignore`).
