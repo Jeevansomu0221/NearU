@@ -1,7 +1,7 @@
 import { sendOtp, verifyOtp, verifyFirebaseOtp } from "../api/auth.api";
 import { sendFirebaseOtp, confirmFirebaseOtp } from "./firebasePhoneAuth";
 
-export type OtpAuthProvider = "2factor" | "firebase";
+export type OtpAuthProvider = "2factor" | "msg91" | "firebase";
 
 export type OtpSessionInfo = {
   provider: OtpAuthProvider;
@@ -13,10 +13,10 @@ export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo
     const response = await sendOtp(phone);
     const payload = response.data ?? {};
 
-    if (response.success && !payload.useFirebaseFallback) {
+    if (response.success && !payload.useFirebaseFallback && (payload.provider === "2factor" || payload.provider === "msg91")) {
       return {
-        provider: "2factor",
-        deliveryHint: payload.deliveryHint || "OTP sent via SMS from VYAHA."
+        provider: payload.provider,
+        deliveryHint: payload.deliveryHint || "OTP sent via SMS."
       };
     }
   } catch (error) {
@@ -30,7 +30,7 @@ export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo
 };
 
 export const verifyOtpSession = async (phone: string, otp: string, session: OtpSessionInfo) => {
-  if (session.provider === "2factor") {
+  if (session.provider === "2factor" || session.provider === "msg91") {
     try {
       const response = await verifyOtp(phone, otp);
       if (response.success && response.data?.token && response.data?.user) {

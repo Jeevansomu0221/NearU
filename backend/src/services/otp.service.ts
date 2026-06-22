@@ -4,7 +4,7 @@ import OtpSession from "../models/OtpSession.model";
 type OtpProvider = "twilio" | "msg91" | "2factor" | "memory";
 
 export type OtpSendResult = {
-  provider: "2factor" | "memory";
+  provider: "2factor" | "msg91" | "memory";
   deliveryHint?: string;
 };
 
@@ -307,25 +307,40 @@ const verifyViaTwilioVerify = async (phone: string, otp: string) => {
   return payload.status === "approved";
 };
 
-const sendViaMsg91 = async (phone: string) => {
+const sendViaMsg91 = async (phone: string): Promise<OtpSendResult> => {
+  const body: Record<string, string | number> = {
+    mobile: `91${phone}`,
+    template_id: config.msg91TemplateId,
+    sender: config.msg91SenderId,
+    otp_expiry: config.otpExpiryMinutes
+  };
+
+  if (config.msg91DltTemplateId) {
+    body.DLT_TE_ID = config.msg91DltTemplateId;
+  }
+  if (config.msg91PeId) {
+    body.PE_ID = config.msg91PeId;
+  }
+
   const response = await fetch("https://control.msg91.com/api/v5/otp", {
     method: "POST",
     headers: {
       authkey: config.msg91AuthKey,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      mobile: `91${phone}`,
-      template_id: config.msg91TemplateId,
-      authkey: config.msg91AuthKey,
-      sender: config.msg91SenderId
-    })
+    body: JSON.stringify(body)
   });
 
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`MSG91 send failed: ${details}`);
+  const payload = (await response.json()) as { type?: string; message?: string };
+  if (!response.ok || payload.type === "error") {
+    throw new Error(`MSG91 send failed: ${JSON.stringify(payload)}`);
   }
+
+  markResendCooldown(phone);
+  return {
+    provider: "msg91",
+    deliveryHint: `OTP sent via SMS from ${config.msg91SenderId}.`
+  };
 };
 
 const verifyViaMsg91 = async (phone: string, otp: string) => {
@@ -336,12 +351,15 @@ const verifyViaMsg91 = async (phone: string, otp: string) => {
   });
 
   const response = await fetch(`https://control.msg91.com/api/v5/otp/verify?${params.toString()}`);
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`MSG91 verify failed: ${details}`);
+  const payload = (await response.json()) as { type?: string; message?: string };
+
+  if (!response.ok || payload.type === "error") {
+    if (!config.isProduction) {
+      console.log(`[OTP:msg91] verify failed for ${phone}: ${JSON.stringify(payload)}`);
+    }
+    return false;
   }
 
-  const payload = (await response.json()) as { type?: string; message?: string };
   return payload.type === "success" || Boolean(payload.message?.toLowerCase().includes("verified"));
 };
 
@@ -361,9 +379,7 @@ export class OTPService {
     }
 
     if (provider === "msg91") {
-      await sendViaMsg91(phone);
-      createMemoryRecord(phone);
-      return;
+      return sendViaMsg91(phone);
     }
 
     if (config.isProduction) {

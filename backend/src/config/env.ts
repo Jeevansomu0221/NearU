@@ -41,6 +41,8 @@ export const config = {
   msg91AuthKey: process.env.MSG91_AUTH_KEY || "",
   msg91TemplateId: process.env.MSG91_TEMPLATE_ID || "",
   msg91SenderId: process.env.MSG91_SENDER_ID || "",
+  msg91DltTemplateId: process.env.MSG91_DLT_TEMPLATE_ID || "",
+  msg91PeId: process.env.MSG91_PE_ID || "",
   twofactorApiKey: process.env.TWOFACTOR_API_KEY || "",
   twofactorSenderId: process.env.TWOFACTOR_SENDER_ID || "",
   twofactorTemplateName: process.env.TWOFACTOR_TEMPLATE_NAME || "",

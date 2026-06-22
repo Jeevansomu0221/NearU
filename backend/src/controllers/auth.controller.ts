@@ -142,7 +142,7 @@ export const sendOTP = async (req: Request, res: Response) => {
   } catch (error: any) {
     const message = error.message || "Failed to send OTP";
 
-    if (config.otpProvider === "2factor" && config.otpFirebaseFallback) {
+    if ((config.otpProvider === "2factor" || config.otpProvider === "msg91") && config.otpFirebaseFallback) {
       return successResponse(
         res,
         {

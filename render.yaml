@@ -12,7 +12,7 @@ services:
       - key: PORT
         value: 5000
       - key: OTP_PROVIDER
-        value: 2factor
+        value: msg91
       - key: OTP_FIREBASE_FALLBACK
         value: "true"
       - key: OTP_EXPIRY_MINUTES
@@ -21,6 +21,16 @@ services:
         value: "30"
       - key: OTP_MAX_ATTEMPTS
         value: "5"
+      - key: MSG91_AUTH_KEY
+        sync: false
+      - key: MSG91_TEMPLATE_ID
+        sync: false
+      - key: MSG91_SENDER_ID
+        value: VYAHA
+      - key: MSG91_DLT_TEMPLATE_ID
+        sync: false
+      - key: MSG91_PE_ID
+        value: "1201178135264753827"
       - key: TWOFACTOR_API_KEY
         sync: false
       - key: TWOFACTOR_SENDER_ID
