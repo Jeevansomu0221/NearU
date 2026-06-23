@@ -18,6 +18,8 @@ import {
   notifyPartnerDeliveryStatus,
   notifyPartnerNewOrder
 } from "../services/notification.service";
+import { assertRiderCanAcceptJobs, isCashDepositOverdue, getCashDueToPlatform } from "../services/cashDeposit.service";
+import { isUpiAtDeliveryMethod } from "../services/deliveryPayment.service";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
@@ -840,7 +842,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     }
 
     // Validate payment method
-    const validPaymentMethods = ["RAZORPAY", "CASH_ON_DELIVERY", "CARD", "UPI", "WALLET"];
+    const validPaymentMethods = ["RAZORPAY", "CASH_ON_DELIVERY", "UPI_AT_DELIVERY", "CARD", "UPI", "WALLET"];
     if (!validPaymentMethods.includes(paymentMethod)) {
       return errorResponse(res, `Invalid payment method. Valid methods: ${validPaymentMethods.join(", ")}`, 400);
     }
@@ -901,17 +903,14 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     // Determine payment status based on payment method
     let paymentStatus: string;
-    if (paymentMethod === "CASH_ON_DELIVERY") {
-      // For COD orders, payment will be collected on delivery
+    if (paymentMethod === "CASH_ON_DELIVERY" || paymentMethod === "UPI_AT_DELIVERY") {
       paymentStatus = "PAYMENT_PENDING_DELIVERY";
     } else {
-      // For online payments, payment is pending
       paymentStatus = "PENDING";
     }
 
-    // Determine initial order status
-    // COD orders start as CONFIRMED, online payments start as PENDING
-    const initialStatus = paymentMethod === "CASH_ON_DELIVERY" ? "CONFIRMED" : "PENDING";
+    const initialStatus =
+      paymentMethod === "CASH_ON_DELIVERY" || paymentMethod === "UPI_AT_DELIVERY" ? "CONFIRMED" : "PENDING";
 
     // Create the main order
     const order = new Order({
@@ -1279,8 +1278,19 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     }
 
     const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
+    const upiAtDeliveryOrders = deliveryOrders.filter((deliveryOrder: any) =>
+      isUpiAtDeliveryMethod(deliveryOrder.paymentMethod)
+    );
     const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
     const codCollectedAmount = status === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
+
+    if (status === "DELIVERED" && upiAtDeliveryOrders.length > 0) {
+      const unpaidUpiOrders = upiAtDeliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID");
+      if (unpaidUpiOrders.length > 0) {
+        return errorResponse(res, "Customer UPI payment is not received yet. Ask them to scan the QR and wait for confirmation.", 400);
+      }
+    }
+
     if (status === "DELIVERED" && totalCodAmount > 0) {
       if (!Number.isFinite(codCollectedAmount) || codCollectedAmount < totalCodAmount) {
         return errorResponse(res, `Collect Rs ${totalCodAmount} before marking this delivery as delivered`, 400);
@@ -1303,6 +1313,13 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
         if (
           deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
+          deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY"
+        ) {
+          deliveryOrder.paymentStatus = "PAID";
+        }
+
+        if (
+          isUpiAtDeliveryMethod(deliveryOrder.paymentMethod) &&
           deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY"
         ) {
           deliveryOrder.paymentStatus = "PAID";
@@ -1352,16 +1369,24 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
         deliveryIncrement.cashBalance = createdCashLedgerAmount;
       }
 
-      await DeliveryPartner.updateOne(
-        { _id: deliveryPartner._id },
-        {
-          $inc: deliveryIncrement,
-          $set: {
-            lastCashActivityAt: createdCashLedgerAmount > 0 ? new Date() : deliveryPartner.lastCashActivityAt,
-            lastCashActivityType: createdCashLedgerAmount > 0 ? "COD_COLLECTED" : deliveryPartner.lastCashActivityType
-          }
-        }
-      );
+      const partnerUpdate: Record<string, unknown> = {
+        $inc: deliveryIncrement
+      };
+
+      if (createdCashLedgerAmount > 0) {
+        partnerUpdate.$set = {
+          lastCashActivityAt: new Date(),
+          lastCashActivityType: "COD_COLLECTED",
+          cashDepositDueAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        };
+      } else if (deliveryPartner.lastCashActivityAt) {
+        partnerUpdate.$set = {
+          lastCashActivityAt: deliveryPartner.lastCashActivityAt,
+          lastCashActivityType: deliveryPartner.lastCashActivityType
+        };
+      }
+
+      await DeliveryPartner.updateOne({ _id: deliveryPartner._id }, partnerUpdate);
     }
 
     void Promise.all(
@@ -1737,6 +1762,14 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
       return successResponse(res, [], "You are currently marked unavailable for delivery jobs");
     }
 
+    if (isCashDepositOverdue(deliveryPartner)) {
+      return successResponse(
+        res,
+        [],
+        `Deposit Rs ${getCashDueToPlatform(deliveryPartner)} to Vyaha within 24 hours of collecting cash to accept new jobs.`
+      );
+    }
+
     const deliveryUserId = idString(deliveryPartner.userId) || user.id;
     const deliveryUserObjectId = new mongoose.Types.ObjectId(deliveryUserId);
 
@@ -1834,13 +1867,22 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const deliveryPartner = await resolveDeliveryPartnerForUser(user, "userId status isAvailable");
+    const deliveryPartner = await resolveDeliveryPartnerForUser(user, "userId status isAvailable cashBalance pendingDepositAmount cashDepositDueAt");
     const acceptStatuses = ["ACTIVE", "VERIFIED"];
     if (!deliveryPartner || !acceptStatuses.includes(deliveryPartner.status)) {
       return errorResponse(res, "Delivery partner is not eligible to accept jobs", 403);
     }
     if (deliveryPartner.isAvailable === false) {
       return errorResponse(res, "You are currently marked unavailable for delivery jobs", 403);
+    }
+
+    try {
+      assertRiderCanAcceptJobs(deliveryPartner);
+    } catch (error: any) {
+      return errorResponse(res, error.message || "Cash deposit overdue", 403, {
+        code: "CASH_DEPOSIT_OVERDUE",
+        cashDueToPlatform: getCashDueToPlatform(deliveryPartner)
+      });
     }
 
     const deliveryUserId = idString(deliveryPartner.userId) || user.id;

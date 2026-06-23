@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import CashLedgerEntry from "../models/CashLedgerEntry.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
+import { getCashDueToPlatform } from "../services/cashDeposit.service";
 
 interface AuthRequest extends Request {
   user?: {
@@ -197,6 +198,9 @@ export const verifyCashDeposit = async (req: AuthRequest, res: Response) => {
     deliveryPartner.pendingDepositAmount = Math.max(Number(deliveryPartner.pendingDepositAmount || 0) - amount, 0);
     deliveryPartner.lastCashActivityAt = now;
     deliveryPartner.lastCashActivityType = "CASH_DEPOSIT_VERIFIED";
+    if (getCashDueToPlatform(deliveryPartner) <= 0) {
+      deliveryPartner.cashDepositDueAt = undefined;
+    }
     await deliveryPartner.save();
 
     res.json({

@@ -91,13 +91,14 @@ export default function PaymentScreen({ route, navigation }: any) {
   const { items, clear } = useCart();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("CASH_ON_DELIVERY");
+  const [paymentMethod, setPaymentMethod] = useState("UPI_AT_DELIVERY");
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
   const [successOrders, setSuccessOrders] = useState<any[] | null>(null);
 
   const paymentMethods = [
-    { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
-    { id: "RAZORPAY", name: "Online Payment", icon: "UPI" }
+    { id: "UPI_AT_DELIVERY", name: "UPI at Delivery", icon: "UPI" },
+    { id: "CASH_ON_DELIVERY", name: "Cash at Delivery", icon: "Cash" },
+    { id: "RAZORPAY", name: "Online Payment", icon: "Card" }
   ];
 
   const groupedShops = useMemo<CheckoutGroup[]>(() => {
@@ -340,7 +341,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         const paidOrders = await placeOnlineOrders();
         handleSuccessfulCheckout(paidOrders);
       } else {
-        const createdOrders = await placeOrders("CASH_ON_DELIVERY");
+        const createdOrders = await placeOrders(paymentMethod);
         handleSuccessfulCheckout(createdOrders);
       }
     } catch (error: any) {
@@ -389,7 +390,11 @@ export default function PaymentScreen({ route, navigation }: any) {
         <View style={styles.methodBody}>
           <Text style={styles.methodName}>{method?.name}</Text>
           <Text style={styles.methodHint}>
-            {paymentMethod === "CASH_ON_DELIVERY" ? "Pay when your order arrives" : "Pay securely with UPI, card, wallet, or netbanking"}
+            {paymentMethod === "CASH_ON_DELIVERY"
+              ? "Pay cash when the order arrives"
+              : paymentMethod === "UPI_AT_DELIVERY"
+                ? "Scan rider QR and pay by UPI at your doorstep"
+                : "Pay securely with UPI, card, wallet, or netbanking"}
           </Text>
         </View>
         <TouchableOpacity onPress={() => setShowPaymentMethods(true)}>
@@ -501,8 +506,13 @@ export default function PaymentScreen({ route, navigation }: any) {
 
         {paymentMethod === "CASH_ON_DELIVERY" ? (
           <View style={styles.infoSection}>
-            <Text style={styles.infoTitle}>Cash on delivery</Text>
+            <Text style={styles.infoTitle}>Cash at delivery</Text>
             <Text style={styles.infoText}>Pay cash when the order reaches you. Keeping change ready helps with a faster handoff.</Text>
+          </View>
+        ) : paymentMethod === "UPI_AT_DELIVERY" ? (
+          <View style={styles.infoSection}>
+            <Text style={styles.infoTitle}>UPI at delivery</Text>
+            <Text style={styles.infoText}>The delivery partner will show a Vyaha QR code at your door. Pay the exact order amount by UPI before handoff.</Text>
           </View>
         ) : (
           <View style={styles.infoSection}>
@@ -526,7 +536,7 @@ export default function PaymentScreen({ route, navigation }: any) {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.payButtonText}>
-              {paymentMethod === "CASH_ON_DELIVERY" ? "Place Order" : "Pay Securely"}
+              {paymentMethod === "RAZORPAY" ? "Pay Securely" : "Place Order"}
             </Text>
           )}
         </TouchableOpacity>
@@ -574,7 +584,11 @@ export default function PaymentScreen({ route, navigation }: any) {
                 <View style={styles.methodInfo}>
                   <Text style={styles.methodOptionName}>{method.name}</Text>
                   <Text style={styles.methodDescription}>
-                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "UPI, card, wallet, and netbanking via Razorpay"}
+                    {method.id === "CASH_ON_DELIVERY"
+                      ? "Pay cash when the order arrives"
+                      : method.id === "UPI_AT_DELIVERY"
+                        ? "Scan rider QR and pay by UPI at delivery"
+                        : "UPI, card, wallet, and netbanking via Razorpay"}
                   </Text>
                 </View>
                 {paymentMethod === method.id ? <Text style={styles.selectedIndicator}>Selected</Text> : null}

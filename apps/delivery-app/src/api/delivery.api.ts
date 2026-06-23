@@ -247,6 +247,29 @@ export const submitCashDeposit = (payload: {
   return apiPost<CashLedgerEntry>("/delivery/cash-deposits", payload);
 };
 
+export interface DeliveryQrInfo {
+  alreadyPaid: boolean;
+  amount: number;
+  imageUrl: string;
+  razorpayQrId: string;
+  expiresAt?: string | null;
+  paidAt?: string | null;
+  paymentId?: string;
+  paymentStatus?: string;
+}
+
+export const getDeliveryQr = (orderId: string): Promise<ApiResponse<DeliveryQrInfo>> => {
+  return apiGet<DeliveryQrInfo>(`/delivery/orders/${orderId}/delivery-qr`);
+};
+
+export const getDeliveryPaymentStatus = (
+  orderId: string
+): Promise<ApiResponse<{ paid: boolean; amount: number; paymentId?: string; paymentStatus?: string }>> => {
+  return apiGet<{ paid: boolean; amount: number; paymentId?: string; paymentStatus?: string }>(
+    `/delivery/orders/${orderId}/delivery-payment-status`
+  );
+};
+
 // =================== LOCATION UPDATES ===================
 
 /**

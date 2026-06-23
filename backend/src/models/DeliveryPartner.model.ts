@@ -50,6 +50,7 @@ export interface IDeliveryPartner extends Document {
   totalEarnings: number;
   cashBalance: number;
   pendingDepositAmount: number;
+  cashDepositDueAt?: Date;
   lastCashActivityAt?: Date;
   lastCashActivityType?: string;
   currentLocation?: {
@@ -188,6 +189,10 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
       type: Number,
       default: 0,
       min: 0
+    },
+    cashDepositDueAt: {
+      type: Date,
+      default: null
     },
     lastCashActivityAt: {
       type: Date,

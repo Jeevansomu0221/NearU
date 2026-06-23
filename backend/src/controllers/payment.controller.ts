@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from "../utils/response";
 import { PaymentService } from "../services/payment.service";
 import { config } from "../config/env";
 import { notifyPartnerNewOrder, notifyPaymentConfirmed } from "../services/notification.service";
+import { markOrdersPaidFromDeliveryQr } from "../services/deliveryPayment.service";
 
 export const createPaymentOrder = async (req: AuthRequest, res: Response) => {
   try {
@@ -157,6 +158,20 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
       const orderId = notes?.orderId;
       if (orderId) {
         await Order.findByIdAndUpdate(orderId, { paymentStatus: "FAILED" });
+      }
+    }
+
+    if (event.event === "qr_code.credited") {
+      const paymentEntity = event.payload?.payment?.entity;
+      const qrEntity = event.payload?.qr_code?.entity;
+      const orderIds = String(qrEntity?.notes?.orderIds || paymentEntity?.notes?.orderIds || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      if (orderIds.length > 0) {
+        const orders = await Order.find({ _id: { $in: orderIds } });
+        await markOrdersPaidFromDeliveryQr(orders as any, paymentEntity?.id || "");
       }
     }
 

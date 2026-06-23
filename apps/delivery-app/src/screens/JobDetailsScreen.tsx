@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,14 +9,18 @@ import {
   Alert,
   Linking,
   Modal,
-  Platform
+  Platform,
+  Image
 } from "react-native";
 import { 
   acceptJob,
   getJobDetails, 
   markAsPickedUp, 
   markAsDelivered,
-  DeliveryOrder 
+  getDeliveryQr,
+  getDeliveryPaymentStatus,
+  DeliveryOrder,
+  DeliveryQrInfo
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
@@ -67,6 +71,11 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(!initialJob);
   const [updating, setUpdating] = useState(false);
   const [cashConfirmVisible, setCashConfirmVisible] = useState(false);
+  const [upiQrVisible, setUpiQrVisible] = useState(false);
+  const [upiQrData, setUpiQrData] = useState<DeliveryQrInfo | null>(null);
+  const [upiPaymentReceived, setUpiPaymentReceived] = useState(false);
+  const [checkingUpiPayment, setCheckingUpiPayment] = useState(false);
+  const upiPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [statusModal, setStatusModal] = useState<{
     title: string;
     message: string;
@@ -79,6 +88,76 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     loadJobDetails();
     getCurrentRiderLocation({ showDeniedAlert: false }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (upiPollRef.current) {
+        clearInterval(upiPollRef.current);
+      }
+    };
+  }, []);
+
+  const stopUpiPolling = () => {
+    if (upiPollRef.current) {
+      clearInterval(upiPollRef.current);
+      upiPollRef.current = null;
+    }
+  };
+
+  const refreshUpiPaymentStatus = async () => {
+    if (!orderId) {
+      return false;
+    }
+
+    try {
+      setCheckingUpiPayment(true);
+      const response = await getDeliveryPaymentStatus(orderId);
+      if (response.success && response.data?.paid) {
+        setUpiPaymentReceived(true);
+        setJob((current) => (current ? { ...current, paymentStatus: "PAID" } : current));
+        stopUpiPolling();
+        return true;
+      }
+    } catch (error) {
+      console.error("Failed to check UPI payment status:", error);
+    } finally {
+      setCheckingUpiPayment(false);
+    }
+
+    return false;
+  };
+
+  const openUpiQrModal = async () => {
+    try {
+      setUpdating(true);
+      const response = await getDeliveryQr(orderId);
+      if (!response.success || !response.data) {
+        Alert.alert("Error", response.message || "Could not load delivery QR");
+        return;
+      }
+
+      setUpiQrData(response.data);
+      setUpiPaymentReceived(Boolean(response.data.alreadyPaid || response.data.paymentStatus === "PAID"));
+      setUpiQrVisible(true);
+
+      if (!response.data.alreadyPaid) {
+        stopUpiPolling();
+        upiPollRef.current = setInterval(() => {
+          void refreshUpiPaymentStatus();
+        }, 3000);
+      }
+    } catch (error) {
+      console.error("Failed to open delivery QR:", error);
+      Alert.alert("Error", "Could not load delivery QR");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const closeUpiQrModal = () => {
+    stopUpiPolling();
+    setUpiQrVisible(false);
+  };
 
   const returnToJobs = () => {
     if (navigation.canGoBack?.()) {
@@ -377,10 +456,15 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const handleDeliver = async () => {
     if (job?.paymentMethod === "CASH_ON_DELIVERY") {
       setCashConfirmVisible(true);
-    } else {
-      // For pre-paid orders, just confirm delivery
-      await confirmDelivery();
+      return;
     }
+
+    if (job?.paymentMethod === "UPI_AT_DELIVERY") {
+      await openUpiQrModal();
+      return;
+    }
+
+    await confirmDelivery();
   };
 
   const confirmDelivery = async (collectedAmount?: number) => {
@@ -614,9 +698,13 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             <Text style={styles.paymentLabel}>Payment Method:</Text>
             <Text style={[
               styles.paymentValue,
-              job.paymentMethod === "CASH_ON_DELIVERY" ? styles.codText : styles.paidText
+              job.paymentMethod === "CASH_ON_DELIVERY" || job.paymentMethod === "UPI_AT_DELIVERY" ? styles.codText : styles.paidText
             ]}>
-              {job.paymentMethod === "CASH_ON_DELIVERY" ? "💰 Cash on Delivery" : "✅ Online Paid"}
+              {job.paymentMethod === "CASH_ON_DELIVERY"
+                ? "💰 Cash on Delivery"
+                : job.paymentMethod === "UPI_AT_DELIVERY"
+                  ? "📱 UPI at Delivery"
+                  : "✅ Online Paid"}
             </Text>
           </View>
           
@@ -625,6 +713,15 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               <Ionicons name="cash" size={24} color="#4CAF50" />
               <Text style={styles.amountText}>
                 Collect ₹{job.grandTotal} on delivery
+              </Text>
+            </View>
+          )}
+
+          {job.paymentMethod === "UPI_AT_DELIVERY" && (
+            <View style={styles.amountCard}>
+              <Ionicons name="qr-code" size={24} color="#1976D2" />
+              <Text style={styles.amountText}>
+                Show Vyaha QR for ₹{job.grandTotal} before handoff
               </Text>
             </View>
           )}
@@ -725,9 +822,11 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               <>
                 <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
                 <Text style={styles.actionButtonText}>
-                  {job.paymentMethod === "CASH_ON_DELIVERY" 
-                    ? "Collect Cash & Mark Delivered" 
-                    : "Mark as Delivered"}
+                  {job.paymentMethod === "CASH_ON_DELIVERY"
+                    ? "Collect Cash & Mark Delivered"
+                    : job.paymentMethod === "UPI_AT_DELIVERY"
+                      ? "Show UPI QR & Deliver"
+                      : "Mark as Delivered"}
                 </Text>
               </>
             )}
@@ -735,7 +834,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           <Text style={styles.actionHint}>
             {job.paymentMethod === "CASH_ON_DELIVERY"
               ? `Collect ₹${job.grandTotal} from customer before marking as delivered`
-              : "Click after delivering to the customer"}
+              : job.paymentMethod === "UPI_AT_DELIVERY"
+                ? "Ask customer to scan the Vyaha QR and pay before you hand over the order"
+                : "Click after delivering to the customer"}
           </Text>
         </View>
       )}
@@ -763,6 +864,48 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                 disabled={updating}
               >
                 {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Collected</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={upiQrVisible} transparent animationType="fade" onRequestClose={closeUpiQrModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={[styles.confirmIcon, { backgroundColor: "#1976D2" }]}>
+              <Ionicons name="qr-code-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.confirmTitle}>Customer UPI payment</Text>
+            <Text style={styles.confirmText}>
+              Ask the customer to scan this Vyaha QR and pay Rs {upiQrData?.amount || job.grandTotal}. Do not hand over the order until payment is confirmed.
+            </Text>
+            {upiQrData?.imageUrl ? (
+              <Image source={{ uri: upiQrData.imageUrl }} style={styles.qrImage} resizeMode="contain" />
+            ) : null}
+            <Text style={styles.qrStatusText}>
+              {upiPaymentReceived ? "Payment received. You can complete delivery." : "Waiting for UPI payment..."}
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity style={styles.confirmSecondary} onPress={closeUpiQrModal} disabled={updating}>
+                <Text style={styles.confirmSecondaryText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmSecondary}
+                onPress={() => void refreshUpiPaymentStatus()}
+                disabled={checkingUpiPayment}
+              >
+                {checkingUpiPayment ? <ActivityIndicator color="#1976D2" /> : <Text style={styles.confirmSecondaryText}>Refresh</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmPrimary, !upiPaymentReceived && styles.confirmPrimaryDisabled]}
+                onPress={() => {
+                  closeUpiQrModal();
+                  void confirmDelivery();
+                }}
+                disabled={updating || !upiPaymentReceived}
+              >
+                {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Delivered</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -1212,6 +1355,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     backgroundColor: "#4CAF50"
+  },
+  confirmPrimaryDisabled: {
+    opacity: 0.5
+  },
+  qrImage: {
+    width: 220,
+    height: 220,
+    marginTop: 16,
+    alignSelf: "center",
+    backgroundColor: "#FFFFFF"
+  },
+  qrStatusText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#334155",
+    textAlign: "center"
   },
   confirmSingleAction: {
     width: "100%",
