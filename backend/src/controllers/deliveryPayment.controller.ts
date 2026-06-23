@@ -4,7 +4,7 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 import { successResponse, errorResponse } from "../utils/response";
 import {
   ensureDeliveryQrForOrders,
-  isUpiAtDeliveryMethod,
+  isCodAwaitingPayment,
   syncDeliveryPaymentForOrders
 } from "../services/deliveryPayment.service";
 
@@ -42,9 +42,9 @@ export const getDeliveryQr = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized - Not assigned to this delivery job", 401);
     }
 
-    const hasUpiAtDelivery = orders.some((order) => isUpiAtDeliveryMethod(order.paymentMethod));
-    if (!hasUpiAtDelivery) {
-      return errorResponse(res, "This delivery does not use UPI at delivery", 400);
+    const hasCodPaymentPending = orders.some((order) => isCodAwaitingPayment(order));
+    if (!hasCodPaymentPending) {
+      return errorResponse(res, "This order is not a cash-on-delivery order awaiting payment", 400);
     }
 
     const qr = await ensureDeliveryQrForOrders(orders as any);
@@ -54,7 +54,7 @@ export const getDeliveryQr = async (req: AuthRequest, res: Response) => {
         ...qr,
         paymentStatus: qr.alreadyPaid ? "PAID" : "PAYMENT_PENDING_DELIVERY"
       },
-      qr.alreadyPaid ? "Delivery payment already received" : "Delivery QR generated"
+      qr.alreadyPaid ? "Vyaha payment already received" : "Vyaha QR ready for customer"
     );
   } catch (error: any) {
     return errorResponse(res, error.message || "Failed to create delivery QR");

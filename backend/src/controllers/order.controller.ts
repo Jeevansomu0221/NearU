@@ -19,7 +19,7 @@ import {
   notifyPartnerNewOrder
 } from "../services/notification.service";
 import { assertRiderCanAcceptJobs, isCashDepositOverdue, getCashDueToPlatform } from "../services/cashDeposit.service";
-import { isUpiAtDeliveryMethod } from "../services/deliveryPayment.service";
+import { isOrderPaidViaDeliveryQr } from "../services/deliveryPayment.service";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
@@ -842,7 +842,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     }
 
     // Validate payment method
-    const validPaymentMethods = ["RAZORPAY", "CASH_ON_DELIVERY", "UPI_AT_DELIVERY", "CARD", "UPI", "WALLET"];
+    const validPaymentMethods = ["RAZORPAY", "CASH_ON_DELIVERY", "CARD", "UPI", "WALLET"];
     if (!validPaymentMethods.includes(paymentMethod)) {
       return errorResponse(res, `Invalid payment method. Valid methods: ${validPaymentMethods.join(", ")}`, 400);
     }
@@ -903,14 +903,13 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     // Determine payment status based on payment method
     let paymentStatus: string;
-    if (paymentMethod === "CASH_ON_DELIVERY" || paymentMethod === "UPI_AT_DELIVERY") {
+    if (paymentMethod === "CASH_ON_DELIVERY") {
       paymentStatus = "PAYMENT_PENDING_DELIVERY";
     } else {
       paymentStatus = "PENDING";
     }
 
-    const initialStatus =
-      paymentMethod === "CASH_ON_DELIVERY" || paymentMethod === "UPI_AT_DELIVERY" ? "CONFIRMED" : "PENDING";
+    const initialStatus = paymentMethod === "CASH_ON_DELIVERY" ? "CONFIRMED" : "PENDING";
 
     // Create the main order
     const order = new Order({
@@ -1278,22 +1277,17 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     }
 
     const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
-    const upiAtDeliveryOrders = deliveryOrders.filter((deliveryOrder: any) =>
-      isUpiAtDeliveryMethod(deliveryOrder.paymentMethod)
-    );
-    const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
+    const unpaidCodOrders = codOrders.filter((deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID");
+    const totalCodAmount = unpaidCodOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
     const codCollectedAmount = status === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
 
-    if (status === "DELIVERED" && upiAtDeliveryOrders.length > 0) {
-      const unpaidUpiOrders = upiAtDeliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID");
-      if (unpaidUpiOrders.length > 0) {
-        return errorResponse(res, "Customer UPI payment is not received yet. Ask them to scan the QR and wait for confirmation.", 400);
-      }
-    }
-
-    if (status === "DELIVERED" && totalCodAmount > 0) {
+    if (status === "DELIVERED" && unpaidCodOrders.length > 0) {
       if (!Number.isFinite(codCollectedAmount) || codCollectedAmount < totalCodAmount) {
-        return errorResponse(res, `Collect Rs ${totalCodAmount} before marking this delivery as delivered`, 400);
+        return errorResponse(
+          res,
+          `Collect Rs ${totalCodAmount} in cash, or show the Vyaha QR if the customer pays by UPI.`,
+          400
+        );
       }
     }
 
@@ -1318,18 +1312,13 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
           deliveryOrder.paymentStatus = "PAID";
         }
 
-        if (
-          isUpiAtDeliveryMethod(deliveryOrder.paymentMethod) &&
-          deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY"
-        ) {
-          deliveryOrder.paymentStatus = "PAID";
-        }
-
         const orderCodAmount = Number(deliveryOrder.grandTotal || 0);
+        const paidViaVyahaQr = isOrderPaidViaDeliveryQr(deliveryOrder);
         if (
           deliveryPartner &&
           deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
           orderCodAmount > 0 &&
+          !paidViaVyahaQr &&
           !deliveryOrder.codCollection?.cashLedgerEntryId
         ) {
           const cashLedgerEntry = await CashLedgerEntry.create({

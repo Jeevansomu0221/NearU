@@ -76,11 +76,18 @@ export const PaymentService = {
       id?: string;
       image_url?: string;
       close_by?: number;
-      error?: { description?: string };
+      error?: { description?: string; reason?: string; code?: string };
     };
 
     if (!response.ok || !payload.id || !payload.image_url) {
-      throw new Error(payload.error?.description || "Failed to create delivery QR code");
+      const razorpayMessage =
+        payload.error?.description ||
+        payload.error?.reason ||
+        (payload.error?.code ? `Razorpay error: ${payload.error.code}` : "");
+      throw new Error(
+        razorpayMessage ||
+          "Failed to create Vyaha QR. Ask admin to enable Razorpay QR Codes on the merchant account."
+      );
     }
 
     return payload as { id: string; image_url: string; close_by?: number };

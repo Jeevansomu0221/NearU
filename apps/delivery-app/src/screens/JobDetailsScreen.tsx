@@ -71,6 +71,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(!initialJob);
   const [updating, setUpdating] = useState(false);
   const [cashConfirmVisible, setCashConfirmVisible] = useState(false);
+  const [codPaymentChoiceVisible, setCodPaymentChoiceVisible] = useState(false);
   const [upiQrVisible, setUpiQrVisible] = useState(false);
   const [upiQrData, setUpiQrData] = useState<DeliveryQrInfo | null>(null);
   const [upiPaymentReceived, setUpiPaymentReceived] = useState(false);
@@ -132,7 +133,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       setUpdating(true);
       const response = await getDeliveryQr(orderId);
       if (!response.success || !response.data) {
-        Alert.alert("Error", response.message || "Could not load delivery QR");
+        Alert.alert("Could not load Vyaha QR", response.message || "Please try again or collect cash.");
         return;
       }
 
@@ -146,9 +147,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           void refreshUpiPaymentStatus();
         }, 3000);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to open delivery QR:", error);
-      Alert.alert("Error", "Could not load delivery QR");
+      Alert.alert(
+        "Could not load Vyaha QR",
+        error?.message || "Please try again, or collect cash from the customer."
+      );
     } finally {
       setUpdating(false);
     }
@@ -454,13 +458,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   };
 
   const handleDeliver = async () => {
-    if (job?.paymentMethod === "CASH_ON_DELIVERY") {
-      setCashConfirmVisible(true);
-      return;
-    }
-
-    if (job?.paymentMethod === "UPI_AT_DELIVERY") {
-      await openUpiQrModal();
+    if (job?.paymentMethod === "CASH_ON_DELIVERY" || job?.paymentMethod === "UPI_AT_DELIVERY") {
+      if (job.paymentMethod === "UPI_AT_DELIVERY") {
+        await openUpiQrModal();
+        return;
+      }
+      setCodPaymentChoiceVisible(true);
       return;
     }
 
@@ -708,20 +711,13 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             </Text>
           </View>
           
-          {job.paymentMethod === "CASH_ON_DELIVERY" && (
+          {(job.paymentMethod === "CASH_ON_DELIVERY" || job.paymentMethod === "UPI_AT_DELIVERY") && (
             <View style={styles.amountCard}>
-              <Ionicons name="cash" size={24} color="#4CAF50" />
+              <Ionicons name={job.paymentMethod === "UPI_AT_DELIVERY" ? "qr-code" : "cash"} size={24} color={job.paymentMethod === "UPI_AT_DELIVERY" ? "#1976D2" : "#4CAF50"} />
               <Text style={styles.amountText}>
-                Collect ₹{job.grandTotal} on delivery
-              </Text>
-            </View>
-          )}
-
-          {job.paymentMethod === "UPI_AT_DELIVERY" && (
-            <View style={styles.amountCard}>
-              <Ionicons name="qr-code" size={24} color="#1976D2" />
-              <Text style={styles.amountText}>
-                Show Vyaha QR for ₹{job.grandTotal} before handoff
+                {job.paymentMethod === "UPI_AT_DELIVERY"
+                  ? `Show Vyaha QR for ₹${job.grandTotal} before handoff`
+                  : `Collect ₹${job.grandTotal} in cash, or show Vyaha QR if customer pays by UPI`}
               </Text>
             </View>
           )}
@@ -822,18 +818,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               <>
                 <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
                 <Text style={styles.actionButtonText}>
-                  {job.paymentMethod === "CASH_ON_DELIVERY"
-                    ? "Collect Cash & Mark Delivered"
-                    : job.paymentMethod === "UPI_AT_DELIVERY"
-                      ? "Show UPI QR & Deliver"
-                      : "Mark as Delivered"}
+                  {job.paymentMethod === "CASH_ON_DELIVERY" || job.paymentMethod === "UPI_AT_DELIVERY"
+                    ? "Collect Payment & Deliver"
+                    : "Mark as Delivered"}
                 </Text>
               </>
             )}
           </TouchableOpacity>
           <Text style={styles.actionHint}>
             {job.paymentMethod === "CASH_ON_DELIVERY"
-              ? `Collect ₹${job.grandTotal} from customer before marking as delivered`
+              ? `Collect ₹${job.grandTotal} in cash, or show the Vyaha QR if the customer pays by UPI`
               : job.paymentMethod === "UPI_AT_DELIVERY"
                 ? "Ask customer to scan the Vyaha QR and pay before you hand over the order"
                 : "Click after delivering to the customer"}
@@ -842,6 +836,49 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       )}
 
       <View style={styles.spacer} />
+
+      <Modal visible={codPaymentChoiceVisible} transparent animationType="fade" onRequestClose={() => setCodPaymentChoiceVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={[styles.confirmIcon, { backgroundColor: "#FF9800" }]}>
+              <Ionicons name="wallet-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.confirmTitle}>How is the customer paying?</Text>
+            <Text style={styles.confirmText}>
+              Order total is Rs {job.grandTotal}. Collect cash from the customer, or show the Vyaha QR if they want to pay by UPI.
+            </Text>
+            <View style={styles.codChoiceActions}>
+              <TouchableOpacity
+                style={styles.codChoiceButton}
+                onPress={() => {
+                  setCodPaymentChoiceVisible(false);
+                  setCashConfirmVisible(true);
+                }}
+                disabled={updating}
+              >
+                <Ionicons name="cash-outline" size={22} color="#2E7D32" />
+                <Text style={styles.codChoiceButtonTitle}>Cash received</Text>
+                <Text style={styles.codChoiceButtonHint}>Customer paid in notes/coins</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.codChoiceButton, styles.codChoiceButtonQr]}
+                onPress={() => {
+                  setCodPaymentChoiceVisible(false);
+                  void openUpiQrModal();
+                }}
+                disabled={updating}
+              >
+                <Ionicons name="qr-code-outline" size={22} color="#1976D2" />
+                <Text style={styles.codChoiceButtonTitle}>Show Vyaha QR</Text>
+                <Text style={styles.codChoiceButtonHint}>Customer pays by UPI to Vyaha</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.noLocationDismiss} onPress={() => setCodPaymentChoiceVisible(false)}>
+              <Text style={styles.noLocationDismissText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={cashConfirmVisible} transparent animationType="fade" onRequestClose={() => setCashConfirmVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -876,9 +913,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             <View style={[styles.confirmIcon, { backgroundColor: "#1976D2" }]}>
               <Ionicons name="qr-code-outline" size={28} color="#FFFFFF" />
             </View>
-            <Text style={styles.confirmTitle}>Customer UPI payment</Text>
+            <Text style={styles.confirmTitle}>Vyaha UPI payment</Text>
             <Text style={styles.confirmText}>
-              Ask the customer to scan this Vyaha QR and pay Rs {upiQrData?.amount || job.grandTotal}. Do not hand over the order until payment is confirmed.
+              Show this Vyaha QR to the customer. They pay Rs {upiQrData?.amount || job.grandTotal} to Vyaha — not to your personal UPI. Do not hand over the order until payment is confirmed.
             </Text>
             {upiQrData?.imageUrl ? (
               <Image source={{ uri: upiQrData.imageUrl }} style={styles.qrImage} resizeMode="contain" />
@@ -1430,5 +1467,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     color: "#667085"
+  },
+  codChoiceActions: {
+    width: "100%",
+    marginTop: 18,
+    gap: 10
+  },
+  codChoiceButton: {
+    width: "100%",
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    backgroundColor: "#E8F5E9",
+    borderWidth: 1,
+    borderColor: "#C8E6C9"
+  },
+  codChoiceButtonQr: {
+    backgroundColor: "#E3F2FD",
+    borderColor: "#BBDEFB"
+  },
+  codChoiceButtonTitle: {
+    marginTop: 8,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1F2937"
+  },
+  codChoiceButtonHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#667085",
+    textAlign: "center"
   }
 });

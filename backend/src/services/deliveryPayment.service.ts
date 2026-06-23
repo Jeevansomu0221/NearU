@@ -18,10 +18,14 @@ type DeliveryQrOrder = {
   save: () => Promise<unknown>;
 };
 
-const isPayAtDeliveryMethod = (paymentMethod?: string) =>
+const isCodOrder = (paymentMethod?: string) =>
   paymentMethod === "CASH_ON_DELIVERY" || paymentMethod === "UPI_AT_DELIVERY";
 
-export const isUpiAtDeliveryMethod = (paymentMethod?: string) => paymentMethod === "UPI_AT_DELIVERY";
+export const isCodAwaitingPayment = (order: { paymentMethod?: string; paymentStatus?: string }) =>
+  isCodOrder(order.paymentMethod) && order.paymentStatus !== "PAID";
+
+export const isOrderPaidViaDeliveryQr = (order: { deliveryQr?: { paymentId?: string; paidAt?: unknown } | null }) =>
+  Boolean(order.deliveryQr?.paymentId && order.deliveryQr?.paidAt);
 
 export const markOrdersPaidFromDeliveryQr = async (
   orders: DeliveryQrOrder[],
@@ -29,11 +33,12 @@ export const markOrdersPaidFromDeliveryQr = async (
 ) => {
   const now = new Date();
   for (const order of orders) {
-    if (!isUpiAtDeliveryMethod(order.paymentMethod)) {
+    if (!isCodOrder(order.paymentMethod)) {
       continue;
     }
 
     order.paymentStatus = "PAID";
+    order.paymentId = paymentId;
     order.deliveryQr = {
       ...(order.deliveryQr || {}),
       razorpayQrId: order.deliveryQr?.razorpayQrId || "",
@@ -49,14 +54,14 @@ export const markOrdersPaidFromDeliveryQr = async (
 };
 
 export const ensureDeliveryQrForOrders = async (orders: DeliveryQrOrder[]) => {
-  const upiOrders = orders.filter((order) => isUpiAtDeliveryMethod(order.paymentMethod));
-  if (!upiOrders.length) {
-    throw new Error("This order does not require UPI payment at delivery");
+  const codOrders = orders.filter((order) => isCodAwaitingPayment(order));
+  if (!codOrders.length) {
+    throw new Error("This order is not awaiting cash-on-delivery payment");
   }
 
-  const unpaidOrders = upiOrders.filter((order) => order.paymentStatus !== "PAID");
+  const unpaidOrders = codOrders.filter((order) => order.paymentStatus !== "PAID");
   if (!unpaidOrders.length) {
-    const paidOrder = upiOrders[0];
+    const paidOrder = codOrders[0];
     return {
       alreadyPaid: true,
       amount: Number(paidOrder.grandTotal || 0),
@@ -101,10 +106,10 @@ export const ensureDeliveryQrForOrders = async (orders: DeliveryQrOrder[]) => {
   const orderIds = unpaidOrders.map((order) => String(order._id)).join(",");
   const qr = await PaymentService.createDeliveryQr({
     amountPaise: Math.round(amount * 100),
-    description: `Vyaha delivery payment for ${unpaidOrders.length} order(s)`,
+    description: `Vyaha COD UPI payment for ${unpaidOrders.length} order(s)`,
     notes: {
       orderIds,
-      purpose: "UPI_AT_DELIVERY"
+      purpose: "COD_UPI_AT_DOORSTEP"
     }
   });
 
@@ -134,33 +139,31 @@ export const ensureDeliveryQrForOrders = async (orders: DeliveryQrOrder[]) => {
 };
 
 export const syncDeliveryPaymentForOrders = async (orders: DeliveryQrOrder[]) => {
-  const upiOrders = orders.filter((order) => isUpiAtDeliveryMethod(order.paymentMethod));
-  if (!upiOrders.length) {
-    return { paid: false, amount: 0 };
+  const codOrders = orders.filter((order) => isCodOrder(order.paymentMethod));
+  if (!codOrders.length) {
+    return { paid: false, amount: 0, paymentId: "" };
   }
 
-  if (upiOrders.every((order) => order.paymentStatus === "PAID")) {
+  if (codOrders.every((order) => order.paymentStatus === "PAID")) {
     return {
       paid: true,
-      amount: upiOrders.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0),
-      paymentId: upiOrders[0].deliveryQr?.paymentId || upiOrders[0].paymentId || ""
+      amount: codOrders.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0),
+      paymentId: codOrders[0].deliveryQr?.paymentId || codOrders[0].paymentId || ""
     };
   }
 
-  const qrId = upiOrders.find((order) => order.deliveryQr?.razorpayQrId)?.deliveryQr?.razorpayQrId;
+  const qrId = codOrders.find((order) => order.deliveryQr?.razorpayQrId)?.deliveryQr?.razorpayQrId;
   if (!qrId) {
-    return { paid: false, amount: 0 };
+    return { paid: false, amount: 0, paymentId: "" };
   }
 
   const synced = await PaymentService.syncDeliveryQrPayment(qrId);
   if (synced?.paid) {
     await markOrdersPaidFromDeliveryQr(
-      upiOrders.filter((order) => order.paymentStatus !== "PAID"),
+      codOrders.filter((order) => order.paymentStatus !== "PAID"),
       synced.paymentId || ""
     );
   }
 
   return synced;
 };
-
-export { isPayAtDeliveryMethod };
