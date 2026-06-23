@@ -32,7 +32,10 @@
         "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "buildArtifactPaths": [
+          "android/app/build/outputs/mapping/release/mapping.txt"
+        ]
       }
     }
   },
