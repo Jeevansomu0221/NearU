@@ -1,7 +1,7 @@
-import api from "../api/client";
+import { sendOtp, verifyOtp, verifyFirebaseOtp } from "../api/auth.api";
 import { sendFirebaseOtp, confirmFirebaseOtp } from "./firebasePhoneAuth";
 
-export type OtpAuthProvider = "2factor" | "msg91" | "firebase";
+export type OtpAuthProvider = "2factor" | "firebase";
 
 export type OtpSessionInfo = {
   provider: OtpAuthProvider;
@@ -9,54 +9,37 @@ export type OtpSessionInfo = {
 };
 
 export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo> => {
-  try {
-    const body = await api.post("/auth/send-otp", { phone, role: "delivery" });
-    const payload = body?.data ?? {};
+  const response = await sendOtp(phone);
+  const payload = response.data ?? {};
 
-    if (body?.success && !payload.useFirebaseFallback && (payload.provider === "2factor" || payload.provider === "msg91")) {
-      return {
-        provider: payload.provider,
-        deliveryHint: payload.deliveryHint || "OTP sent via SMS."
-      };
-    }
-  } catch (error) {
-    if (__DEV__) {
-      console.log("[OTP] backend send failed, using Firebase:", error);
-    }
+  if (response.success && payload.provider === "2factor") {
+    return {
+      provider: "2factor",
+      deliveryHint: payload.deliveryHint || "OTP sent via SMS."
+    };
   }
 
-  await sendFirebaseOtp(phone);
-  return { provider: "firebase" };
+  if (response.success && payload.useFirebaseFallback) {
+    await sendFirebaseOtp(phone);
+    return { provider: "firebase" };
+  }
+
+  throw new Error(response.message || "Failed to send OTP");
 };
 
 export const verifyOtpSession = async (phone: string, otp: string, session: OtpSessionInfo) => {
-  if (session.provider === "2factor" || session.provider === "msg91") {
-    try {
-      const body = await api.post("/auth/verify-otp", { phone, otp, role: "delivery" });
-      if (body?.success && body?.data?.token) {
-        return body;
-      }
-    } catch {
-      // try Firebase OTP below
+  if (session.provider === "2factor") {
+    const response = await verifyOtp(phone, otp);
+    if (!response.success || !response.data?.token || !response.data?.user) {
+      throw new Error(response.message || "Invalid or expired OTP");
     }
-
-    try {
-      const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
-      const body = await api.post("/auth/verify-otp", { phone, firebaseIdToken, role: "delivery" });
-      if (body?.success && body?.data?.token) {
-        return body;
-      }
-    } catch {
-      // fall through
-    }
-
-    throw new Error("Invalid or expired OTP. Please use the latest SMS code.");
+    return response;
   }
 
   const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
-  const body = await api.post("/auth/verify-otp", { phone, firebaseIdToken, role: "delivery" });
-  if (!body?.success || !body?.data?.token) {
-    throw new Error(body?.message || "Invalid OTP");
+  const response = await verifyFirebaseOtp(phone, firebaseIdToken);
+  if (!response.success || !response.data?.token || !response.data?.user) {
+    throw new Error(response.message || "Invalid OTP");
   }
-  return body;
+  return response;
 };

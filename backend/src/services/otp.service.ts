@@ -1,10 +1,10 @@
 import { config } from "../config/env";
 import OtpSession from "../models/OtpSession.model";
 
-type OtpProvider = "twilio" | "msg91" | "2factor" | "memory";
+type OtpProvider = "twilio" | "2factor" | "memory";
 
 export type OtpSendResult = {
-  provider: "2factor" | "msg91" | "memory";
+  provider: "2factor" | "memory";
   deliveryHint?: string;
 };
 
@@ -25,7 +25,7 @@ type TwoFactorResponse = {
 const memoryRecords = new Map<string, OtpRecord>();
 
 const getProvider = (): OtpProvider => {
-  if (config.otpProvider === "twilio" || config.otpProvider === "msg91" || config.otpProvider === "2factor") {
+  if (config.otpProvider === "twilio" || config.otpProvider === "2factor") {
     return config.otpProvider;
   }
 
@@ -307,62 +307,6 @@ const verifyViaTwilioVerify = async (phone: string, otp: string) => {
   return payload.status === "approved";
 };
 
-const sendViaMsg91 = async (phone: string): Promise<OtpSendResult> => {
-  const body: Record<string, string | number> = {
-    mobile: `91${phone}`,
-    template_id: config.msg91TemplateId,
-    sender: config.msg91SenderId,
-    otp_expiry: config.otpExpiryMinutes
-  };
-
-  if (config.msg91DltTemplateId) {
-    body.DLT_TE_ID = config.msg91DltTemplateId;
-  }
-  if (config.msg91PeId) {
-    body.PE_ID = config.msg91PeId;
-  }
-
-  const response = await fetch("https://control.msg91.com/api/v5/otp", {
-    method: "POST",
-    headers: {
-      authkey: config.msg91AuthKey,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-
-  const payload = (await response.json()) as { type?: string; message?: string };
-  if (!response.ok || payload.type === "error") {
-    throw new Error(`MSG91 send failed: ${JSON.stringify(payload)}`);
-  }
-
-  markResendCooldown(phone);
-  return {
-    provider: "msg91",
-    deliveryHint: `OTP sent via SMS from ${config.msg91SenderId}.`
-  };
-};
-
-const verifyViaMsg91 = async (phone: string, otp: string) => {
-  const params = new URLSearchParams({
-    authkey: config.msg91AuthKey,
-    mobile: `91${phone}`,
-    otp
-  });
-
-  const response = await fetch(`https://control.msg91.com/api/v5/otp/verify?${params.toString()}`);
-  const payload = (await response.json()) as { type?: string; message?: string };
-
-  if (!response.ok || payload.type === "error") {
-    if (!config.isProduction) {
-      console.log(`[OTP:msg91] verify failed for ${phone}: ${JSON.stringify(payload)}`);
-    }
-    return false;
-  }
-
-  return payload.type === "success" || Boolean(payload.message?.toLowerCase().includes("verified"));
-};
-
 export class OTPService {
   static async sendOTP(phone: string): Promise<OtpSendResult | void> {
     await assertResendAllowed(phone);
@@ -376,10 +320,6 @@ export class OTPService {
       await sendViaTwilioVerify(phone);
       createMemoryRecord(phone);
       return;
-    }
-
-    if (provider === "msg91") {
-      return sendViaMsg91(phone);
     }
 
     if (config.isProduction) {
@@ -407,10 +347,6 @@ export class OTPService {
 
     if (provider === "twilio") {
       return verifyViaTwilioVerify(phone, otp);
-    }
-
-    if (provider === "msg91") {
-      return verifyViaMsg91(phone, otp);
     }
 
     const record = memoryRecords.get(phone);

@@ -38,11 +38,6 @@ export const config = {
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || "",
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || "",
   twilioVerifyServiceSid: process.env.TWILIO_VERIFY_SERVICE_SID || "",
-  msg91AuthKey: process.env.MSG91_AUTH_KEY || "",
-  msg91TemplateId: process.env.MSG91_TEMPLATE_ID || "",
-  msg91SenderId: process.env.MSG91_SENDER_ID || "",
-  msg91DltTemplateId: process.env.MSG91_DLT_TEMPLATE_ID || "",
-  msg91PeId: process.env.MSG91_PE_ID || "",
   twofactorApiKey: process.env.TWOFACTOR_API_KEY || "",
   twofactorSenderId: process.env.TWOFACTOR_SENDER_ID || "",
   twofactorTemplateName: process.env.TWOFACTOR_TEMPLATE_NAME || "",
@@ -91,10 +86,6 @@ export const validateEnv = (): void => {
 
     if (config.otpProvider === "twilio" && (!config.twilioAccountSid || !config.twilioAuthToken || !config.twilioVerifyServiceSid)) {
       missing.push("TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_VERIFY_SERVICE_SID");
-    }
-
-    if (config.otpProvider === "msg91" && (!config.msg91AuthKey || !config.msg91TemplateId || !config.msg91SenderId)) {
-      missing.push("MSG91_AUTH_KEY/MSG91_TEMPLATE_ID/MSG91_SENDER_ID");
     }
 
     if (
