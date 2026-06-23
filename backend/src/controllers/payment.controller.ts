@@ -134,22 +134,34 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
     }
 
     const event = JSON.parse(payload.toString("utf-8"));
+    const parseCodOrderIds = (notes?: Record<string, string>) =>
+      String(notes?.orderIds || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+
     if (event.event === "payment.captured") {
       const notes = event.payload?.payment?.entity?.notes;
       const paymentEntity = event.payload?.payment?.entity;
-      const orderId = notes?.orderId;
+      const codOrderIds = parseCodOrderIds(notes);
 
-      if (orderId) {
-        await Order.findByIdAndUpdate(orderId, {
-          paymentStatus: "PAID",
-          paymentMethod: "RAZORPAY",
-          paymentId: paymentEntity?.id,
-          razorpayPaymentId: paymentEntity?.id,
-          status: "CONFIRMED"
-        });
-        void notifyPaymentConfirmed(orderId).catch((error) => {
-          console.error("Failed to notify partner from payment webhook:", error);
-        });
+      if (notes?.purpose === "COD_UPI_AT_DOORSTEP" && codOrderIds.length > 0) {
+        const orders = await Order.find({ _id: { $in: codOrderIds } });
+        await markOrdersPaidFromDeliveryQr(orders as any, paymentEntity?.id || "");
+      } else {
+        const orderId = notes?.orderId;
+        if (orderId) {
+          await Order.findByIdAndUpdate(orderId, {
+            paymentStatus: "PAID",
+            paymentMethod: "RAZORPAY",
+            paymentId: paymentEntity?.id,
+            razorpayPaymentId: paymentEntity?.id,
+            status: "CONFIRMED"
+          });
+          void notifyPaymentConfirmed(orderId).catch((error) => {
+            console.error("Failed to notify partner from payment webhook:", error);
+          });
+        }
       }
     }
 
@@ -158,6 +170,17 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
       const orderId = notes?.orderId;
       if (orderId) {
         await Order.findByIdAndUpdate(orderId, { paymentStatus: "FAILED" });
+      }
+    }
+
+    if (event.event === "payment_link.paid") {
+      const linkEntity = event.payload?.payment_link?.entity;
+      const paymentEntity = event.payload?.payment?.entity;
+      const orderIds = parseCodOrderIds(linkEntity?.notes || paymentEntity?.notes);
+
+      if (orderIds.length > 0) {
+        const orders = await Order.find({ _id: { $in: orderIds } });
+        await markOrdersPaidFromDeliveryQr(orders as any, paymentEntity?.id || "");
       }
     }
 

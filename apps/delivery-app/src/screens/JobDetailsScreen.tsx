@@ -23,6 +23,7 @@ import {
   DeliveryQrInfo
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
+import QRCode from "react-native-qrcode-svg";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
 import { getCurrentRiderLocation } from "../utils/riderLocation";
 
@@ -64,6 +65,11 @@ type NoLocationModalState = {
   contactPhone?: string;
   destinationLabel?: string;
 };
+
+const getPaymentQrValue = (data?: DeliveryQrInfo | null) => data?.paymentLinkUrl || data?.imageUrl || "";
+
+const isDirectImageUrl = (url: string) =>
+  /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url) || /\/image/i.test(url);
 
 export default function JobDetailsScreen({ route, navigation }: Props) {
   const { orderId, job: initialJob } = route.params;
@@ -915,11 +921,24 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             </View>
             <Text style={styles.confirmTitle}>Vyaha UPI payment</Text>
             <Text style={styles.confirmText}>
-              Show this Vyaha QR to the customer. They pay Rs {upiQrData?.amount || job.grandTotal} to Vyaha — not to your personal UPI. Do not hand over the order until payment is confirmed.
+              Ask the customer to scan this QR with any UPI app. They pay Rs {upiQrData?.amount || job.grandTotal} to Vyaha on the Razorpay page — not to your personal UPI. Do not hand over the order until payment is confirmed.
             </Text>
-            {upiQrData?.imageUrl ? (
-              <Image source={{ uri: upiQrData.imageUrl }} style={styles.qrImage} resizeMode="contain" />
-            ) : null}
+            {(() => {
+              const qrValue = getPaymentQrValue(upiQrData);
+              if (!qrValue) {
+                return null;
+              }
+
+              if (isDirectImageUrl(qrValue)) {
+                return <Image source={{ uri: qrValue }} style={styles.qrImage} resizeMode="contain" />;
+              }
+
+              return (
+                <View style={styles.qrImageWrap}>
+                  <QRCode value={qrValue} size={220} />
+                </View>
+              );
+            })()}
             <Text style={styles.qrStatusText}>
               {upiPaymentReceived ? "Payment received. You can complete delivery." : "Waiting for UPI payment..."}
             </Text>
@@ -1402,6 +1421,15 @@ const styles = StyleSheet.create({
     marginTop: 16,
     alignSelf: "center",
     backgroundColor: "#FFFFFF"
+  },
+  qrImageWrap: {
+    marginTop: 16,
+    padding: 12,
+    alignSelf: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0"
   },
   qrStatusText: {
     marginTop: 12,

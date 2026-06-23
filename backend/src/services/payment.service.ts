@@ -40,6 +40,107 @@ export const PaymentService = {
     });
   },
 
+  createCodPaymentLink: async ({
+    amountPaise,
+    description,
+    notes = {},
+    expireBySeconds = 2 * 60 * 60
+  }: {
+    amountPaise: number;
+    description: string;
+    notes?: Record<string, string>;
+    expireBySeconds?: number;
+  }) => {
+    const keyId = config.razorpayKeyId || process.env.RAZORPAY_KEY_ID || "";
+    const keySecret = config.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || "";
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+    const expire_by = Math.floor(Date.now() / 1000) + expireBySeconds;
+
+    const response = await fetch("https://api.razorpay.com/v1/payment_links", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        amount: amountPaise,
+        currency: "INR",
+        accept_partial: false,
+        description,
+        reminder_enable: false,
+        notes,
+        expire_by
+      })
+    });
+
+    const payload = (await response.json()) as {
+      id?: string;
+      short_url?: string;
+      expire_by?: number;
+      error?: { description?: string; reason?: string; code?: string };
+    };
+
+    if (!response.ok || !payload.id || !payload.short_url) {
+      const razorpayMessage =
+        payload.error?.description ||
+        payload.error?.reason ||
+        (payload.error?.code ? `Razorpay error: ${payload.error.code}` : "");
+      throw new Error(razorpayMessage || "Failed to create Vyaha payment link");
+    }
+
+    return {
+      id: payload.id,
+      short_url: payload.short_url,
+      expire_by: payload.expire_by || expire_by
+    };
+  },
+
+  syncPaymentLinkPayment: async (paymentLinkId: string) => {
+    const keyId = config.razorpayKeyId || process.env.RAZORPAY_KEY_ID || "";
+    const keySecret = config.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || "";
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+
+    const linkResponse = await fetch(`https://api.razorpay.com/v1/payment_links/${paymentLinkId}`, {
+      headers: { Authorization: `Basic ${auth}` }
+    });
+
+    const linkPayload = (await linkResponse.json()) as {
+      status?: string;
+      amount?: number;
+      short_url?: string;
+    };
+
+    if (!linkResponse.ok || linkPayload.status !== "paid") {
+      return { paid: false, amount: 0, paymentId: "", paymentLinkUrl: linkPayload.short_url || "" };
+    }
+
+    const paymentsResponse = await fetch(
+      `https://api.razorpay.com/v1/payment_links/${paymentLinkId}/payments?count=5`,
+      { headers: { Authorization: `Basic ${auth}` } }
+    );
+
+    const paymentsPayload = (await paymentsResponse.json()) as {
+      items?: Array<{ status?: string; id?: string; amount?: number }>;
+    };
+
+    const captured = (paymentsPayload.items || []).find((item) => item.status === "captured");
+
+    return {
+      paid: true,
+      paymentId: captured?.id || "",
+      amount: Number(captured?.amount || linkPayload.amount || 0) / 100,
+      paymentLinkUrl: linkPayload.short_url || ""
+    };
+  },
+
+  syncCodDeliveryPayment: async (referenceId: string) => {
+    if (referenceId.startsWith("plink_")) {
+      return PaymentService.syncPaymentLinkPayment(referenceId);
+    }
+
+    return PaymentService.syncDeliveryQrPayment(referenceId);
+  },
+
   createDeliveryQr: async ({
     amountPaise,
     description,
@@ -109,19 +210,19 @@ export const PaymentService = {
     };
 
     if (!response.ok) {
-      return { paid: false, amount: 0, paymentId: "", imageUrl: "" };
+      return { paid: false, amount: 0, paymentId: "", paymentLinkUrl: "" };
     }
 
     const captured = (payload.items || []).find((item) => item.status === "captured");
     if (!captured) {
-      return { paid: false, amount: 0, paymentId: "", imageUrl: "" };
+      return { paid: false, amount: 0, paymentId: "", paymentLinkUrl: "" };
     }
 
     return {
       paid: true,
       paymentId: captured.id || "",
       amount: Number(captured.amount || 0) / 100,
-      imageUrl: ""
+      paymentLinkUrl: ""
     };
   },
 

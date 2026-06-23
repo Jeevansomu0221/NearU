@@ -54,7 +54,7 @@ export const getDeliveryQr = async (req: AuthRequest, res: Response) => {
         ...qr,
         paymentStatus: qr.alreadyPaid ? "PAID" : "PAYMENT_PENDING_DELIVERY"
       },
-      qr.alreadyPaid ? "Vyaha payment already received" : "Vyaha QR ready for customer"
+      qr.alreadyPaid ? "Vyaha payment already received" : "Vyaha payment link ready for customer"
     );
   } catch (error: any) {
     return errorResponse(res, error.message || "Failed to create delivery QR");

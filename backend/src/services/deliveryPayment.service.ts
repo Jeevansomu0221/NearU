@@ -53,6 +53,25 @@ export const markOrdersPaidFromDeliveryQr = async (
   }
 };
 
+const buildDeliveryPaymentResponse = (input: {
+  alreadyPaid: boolean;
+  amount: number;
+  paymentLinkUrl: string;
+  razorpayQrId: string;
+  expiresAt: Date | null;
+  paidAt: Date | null;
+  paymentId: string;
+}) => ({
+  alreadyPaid: input.alreadyPaid,
+  amount: input.amount,
+  paymentLinkUrl: input.paymentLinkUrl,
+  imageUrl: input.paymentLinkUrl,
+  razorpayQrId: input.razorpayQrId,
+  expiresAt: input.expiresAt,
+  paidAt: input.paidAt,
+  paymentId: input.paymentId
+});
+
 export const ensureDeliveryQrForOrders = async (orders: DeliveryQrOrder[]) => {
   const codOrders = orders.filter((order) => isCodAwaitingPayment(order));
   if (!codOrders.length) {
@@ -62,62 +81,69 @@ export const ensureDeliveryQrForOrders = async (orders: DeliveryQrOrder[]) => {
   const unpaidOrders = codOrders.filter((order) => order.paymentStatus !== "PAID");
   if (!unpaidOrders.length) {
     const paidOrder = codOrders[0];
-    return {
+    const paymentLinkUrl = paidOrder.deliveryQr?.imageUrl || "";
+    return buildDeliveryPaymentResponse({
       alreadyPaid: true,
       amount: Number(paidOrder.grandTotal || 0),
-      imageUrl: paidOrder.deliveryQr?.imageUrl || "",
+      paymentLinkUrl,
       razorpayQrId: paidOrder.deliveryQr?.razorpayQrId || "",
       expiresAt: paidOrder.deliveryQr?.expiresAt || null,
       paidAt: paidOrder.deliveryQr?.paidAt || null,
       paymentId: paidOrder.deliveryQr?.paymentId || paidOrder.paymentId || ""
-    };
+    });
   }
 
-  const existingQrId = unpaidOrders.find((order) => order.deliveryQr?.razorpayQrId)?.deliveryQr?.razorpayQrId;
-  if (existingQrId) {
-    const synced = await PaymentService.syncDeliveryQrPayment(existingQrId);
+  const existingLinkId = unpaidOrders.find((order) => order.deliveryQr?.razorpayQrId)?.deliveryQr?.razorpayQrId;
+  if (existingLinkId) {
+    const synced = await PaymentService.syncCodDeliveryPayment(existingLinkId);
     if (synced?.paid) {
       await markOrdersPaidFromDeliveryQr(unpaidOrders, synced.paymentId || "");
       const paidOrder = unpaidOrders[0];
-      return {
+      return buildDeliveryPaymentResponse({
         alreadyPaid: true,
         amount: synced.amount || Number(paidOrder.grandTotal || 0),
-        imageUrl: paidOrder.deliveryQr?.imageUrl || synced.imageUrl || "",
-        razorpayQrId: existingQrId,
+        paymentLinkUrl: synced.paymentLinkUrl || paidOrder.deliveryQr?.imageUrl || "",
+        razorpayQrId: existingLinkId,
         expiresAt: paidOrder.deliveryQr?.expiresAt || null,
         paidAt: new Date(),
         paymentId: synced.paymentId || ""
-      };
+      });
     }
 
-    const anchor = unpaidOrders.find((order) => order.deliveryQr?.razorpayQrId === existingQrId) || unpaidOrders[0];
-    return {
+    const anchor = unpaidOrders.find((order) => order.deliveryQr?.razorpayQrId === existingLinkId) || unpaidOrders[0];
+    const paymentLinkUrl = anchor.deliveryQr?.imageUrl || synced.paymentLinkUrl || "";
+    return buildDeliveryPaymentResponse({
       alreadyPaid: false,
-      amount: Number(anchor.deliveryQr?.amount || unpaidOrders.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0)),
-      imageUrl: anchor.deliveryQr?.imageUrl || "",
-      razorpayQrId: existingQrId,
+      amount: Number(
+        anchor.deliveryQr?.amount || unpaidOrders.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0)
+      ),
+      paymentLinkUrl,
+      razorpayQrId: existingLinkId,
       expiresAt: anchor.deliveryQr?.expiresAt || null,
       paidAt: null,
       paymentId: ""
-    };
+    });
   }
 
   const amount = unpaidOrders.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0);
   const orderIds = unpaidOrders.map((order) => String(order._id)).join(",");
-  const qr = await PaymentService.createDeliveryQr({
+  const paymentLink = await PaymentService.createCodPaymentLink({
     amountPaise: Math.round(amount * 100),
-    description: `Vyaha COD UPI payment for ${unpaidOrders.length} order(s)`,
+    description: `Vyaha COD payment for ${unpaidOrders.length} order(s)`,
     notes: {
       orderIds,
       purpose: "COD_UPI_AT_DOORSTEP"
     }
   });
 
-  const expiresAt = qr.close_by ? new Date(qr.close_by * 1000) : new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const expiresAt = paymentLink.expire_by
+    ? new Date(paymentLink.expire_by * 1000)
+    : new Date(Date.now() + 2 * 60 * 60 * 1000);
+
   for (const order of unpaidOrders) {
     order.deliveryQr = {
-      razorpayQrId: qr.id,
-      imageUrl: qr.image_url,
+      razorpayQrId: paymentLink.id,
+      imageUrl: paymentLink.short_url,
       amount,
       createdAt: new Date(),
       expiresAt,
@@ -127,37 +153,38 @@ export const ensureDeliveryQrForOrders = async (orders: DeliveryQrOrder[]) => {
     await order.save();
   }
 
-  return {
+  return buildDeliveryPaymentResponse({
     alreadyPaid: false,
     amount,
-    imageUrl: qr.image_url,
-    razorpayQrId: qr.id,
+    paymentLinkUrl: paymentLink.short_url,
+    razorpayQrId: paymentLink.id,
     expiresAt,
     paidAt: null,
     paymentId: ""
-  };
+  });
 };
 
 export const syncDeliveryPaymentForOrders = async (orders: DeliveryQrOrder[]) => {
   const codOrders = orders.filter((order) => isCodOrder(order.paymentMethod));
   if (!codOrders.length) {
-    return { paid: false, amount: 0, paymentId: "" };
+    return { paid: false, amount: 0, paymentId: "", paymentLinkUrl: "" };
   }
 
   if (codOrders.every((order) => order.paymentStatus === "PAID")) {
     return {
       paid: true,
       amount: codOrders.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0),
-      paymentId: codOrders[0].deliveryQr?.paymentId || codOrders[0].paymentId || ""
+      paymentId: codOrders[0].deliveryQr?.paymentId || codOrders[0].paymentId || "",
+      paymentLinkUrl: codOrders[0].deliveryQr?.imageUrl || ""
     };
   }
 
-  const qrId = codOrders.find((order) => order.deliveryQr?.razorpayQrId)?.deliveryQr?.razorpayQrId;
-  if (!qrId) {
-    return { paid: false, amount: 0, paymentId: "" };
+  const referenceId = codOrders.find((order) => order.deliveryQr?.razorpayQrId)?.deliveryQr?.razorpayQrId;
+  if (!referenceId) {
+    return { paid: false, amount: 0, paymentId: "", paymentLinkUrl: "" };
   }
 
-  const synced = await PaymentService.syncDeliveryQrPayment(qrId);
+  const synced = await PaymentService.syncCodDeliveryPayment(referenceId);
   if (synced?.paid) {
     await markOrdersPaidFromDeliveryQr(
       codOrders.filter((order) => order.paymentStatus !== "PAID"),
