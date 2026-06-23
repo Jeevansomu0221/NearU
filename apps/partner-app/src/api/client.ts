@@ -21,6 +21,8 @@ const DEV_LAN_HOST = "10.3.8.130";
 const ANDROID_EMULATOR_HOST = "10.0.2.2";
 const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
 const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
+const PRODUCTION_HEALTH_URL = "https://vyaha-app-backend.onrender.com/health";
+const API_TIMEOUT_MS = 60000;
 const isDev = typeof __DEV__ !== "undefined" && __DEV__;
 
 const logDebug = (...args: any[]) => {
@@ -95,7 +97,7 @@ const isFormDataPayload = (value: any) => {
 
 const api = axios.create({
   baseURL: API_BASE_URLS[0],
-  timeout: 15000,
+  timeout: API_TIMEOUT_MS,
   headers: {
     "Content-Type": "application/json",
     "Accept": "application/json",
@@ -311,7 +313,11 @@ api.interceptors.response.use(
     const requestConfig = error.config;
     const currentRetryIndex = requestConfig?._baseUrlRetryIndex || 0;
     const nextBaseUrl = API_BASE_URLS[currentRetryIndex + 1];
-    const isNetworkError = error.message === "Network Error" || (error.request && !error.response);
+    const isTimeoutError =
+      error.code === "ECONNABORTED" ||
+      String(error.message || "").toLowerCase().includes("timeout");
+    const isNetworkError =
+      error.message === "Network Error" || isTimeoutError || (error.request && !error.response);
 
     if (isNetworkError && requestConfig && nextBaseUrl) {
       logDebug(`Trying fallback API base URL: ${nextBaseUrl}`);
@@ -319,6 +325,12 @@ api.interceptors.response.use(
       requestConfig.baseURL = nextBaseUrl;
       api.defaults.baseURL = nextBaseUrl;
       return api.request(requestConfig);
+    }
+
+    if (isNetworkError) {
+      return Promise.reject(
+        new Error("The server is taking longer than usual. Please wait a moment and try again.")
+      );
     }
 
     if (error.response?.status === 401 && requestConfig && !requestConfig._tokenRefreshRetry && !requestConfig.url?.includes("/auth/refresh")) {
@@ -353,9 +365,17 @@ api.interceptors.response.use(
       logDebug("🚫 Request setup error:", error.message);
     }
     
-    return Promise.reject(error);
+    return Promise.reject(error.response?.data || error);
   }
 );
+
+export const warmApi = async () => {
+  try {
+    await axios.get(PRODUCTION_HEALTH_URL, { timeout: API_TIMEOUT_MS });
+  } catch (error) {
+    console.warn("Backend warmup failed:", error);
+  }
+};
 
 export default api;
 

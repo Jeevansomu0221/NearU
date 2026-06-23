@@ -15,7 +15,7 @@ function PartnerAppContent() {
   const { theme, isDarkMode } = usePartnerTheme();
 
   useEffect(() => {
-    void initCrashlytics();
+    initCrashlytics().catch(() => {});
     registerForPushNotifications().catch((error) => {
       console.log("Failed to register push notifications:", error);
     });

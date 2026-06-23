@@ -13,7 +13,7 @@ import {
   ScrollView
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import api from "../api/client";
+import api, { warmApi } from "../api/client";
 import { storeAuthData } from "../utils/storage";
 import {
   clearFirebaseOtpSession,
@@ -91,7 +91,15 @@ export default function LoginScreen({ navigation }: any) {
       return "Too many OTP requests. Please wait a few minutes and try again.";
     }
 
-    if (code.includes("invalid-verification-code") || message.includes("invalid")) {
+    if (
+      message.includes("network error") ||
+      message.includes("taking longer than usual") ||
+      message.includes("timeout")
+    ) {
+      return "Cannot reach server. Please check your internet and try again.";
+    }
+
+    if (code.includes("invalid-verification-code") || message.includes("invalid or expired otp")) {
       return "That code does not look right. Please check the SMS and try again.";
     }
 
@@ -132,6 +140,7 @@ export default function LoginScreen({ navigation }: any) {
       setOtp("");
       lastSubmittedOtp.current = "";
 
+      void warmApi();
       const session = await sendOtpWithFallback(cleanedPhone, "partner");
       setOtpSession(session);
 

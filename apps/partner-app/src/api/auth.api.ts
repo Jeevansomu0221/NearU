@@ -46,45 +46,61 @@ export const sendOtp = async (phone: string, role: string) => {
 };
 
 export const verifyOtp = async (phone: string, otp: string, role: string) => {
-  const response = await api.post<VerifyOtpResponse>("/auth/verify-otp", {
-    phone,
-    otp,
-    role
-  });
+  try {
+    const response = await api.post<VerifyOtpResponse>("/auth/verify-otp", {
+      phone,
+      otp,
+      role
+    });
 
-  const payload = response.data?.data;
-  if (!response.data?.success || !payload?.token || !payload?.user) {
-    throw new Error(response.data?.message || "Invalid response from server");
+    const payload = response.data?.data;
+    if (!response.data?.success || !payload?.token || !payload?.user) {
+      throw new Error(response.data?.message || "Invalid response from server");
+    }
+
+    await persistVerifiedSession(payload);
+
+    registerForPushNotifications().catch((error) => {
+      console.log("Failed to register push notifications:", error);
+    });
+
+    return payload;
+  } catch (error: any) {
+    const message =
+      (typeof error?.message === "string" && error.message) ||
+      (typeof error?.response?.data?.message === "string" && error.response.data.message) ||
+      "Invalid or expired OTP";
+    throw new Error(message);
   }
-
-  await persistVerifiedSession(payload);
-
-  registerForPushNotifications().catch((error) => {
-    console.log("Failed to register push notifications:", error);
-  });
-
-  return payload;
 };
 
 export const verifyFirebaseOtp = async (phone: string, firebaseIdToken: string, role: string) => {
-  const response = await api.post<VerifyOtpResponse>("/auth/verify-otp", {
-    phone,
-    firebaseIdToken,
-    role
-  });
+  try {
+    const response = await api.post<VerifyOtpResponse>("/auth/verify-otp", {
+      phone,
+      firebaseIdToken,
+      role
+    });
 
-  const payload = response.data?.data;
-  if (!response.data?.success || !payload?.token || !payload?.user) {
-    throw new Error(response.data?.message || "Invalid response from server");
+    const payload = response.data?.data;
+    if (!response.data?.success || !payload?.token || !payload?.user) {
+      throw new Error(response.data?.message || "Invalid response from server");
+    }
+
+    await persistVerifiedSession(payload);
+
+    registerForPushNotifications().catch((error) => {
+      console.log("Failed to register push notifications:", error);
+    });
+
+    return payload;
+  } catch (error: any) {
+    const message =
+      (typeof error?.message === "string" && error.message) ||
+      (typeof error?.response?.data?.message === "string" && error.response.data.message) ||
+      "Invalid OTP";
+    throw new Error(message);
   }
-
-  await persistVerifiedSession(payload);
-
-  registerForPushNotifications().catch((error) => {
-    console.log("Failed to register push notifications:", error);
-  });
-
-  return payload;
 };
 
 export const getAuthToken = async (): Promise<string | null> => {

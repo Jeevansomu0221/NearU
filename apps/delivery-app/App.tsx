@@ -12,7 +12,7 @@ const navigationRef = createNavigationContainerRef<any>();
 
 export default function App() {
   React.useEffect(() => {
-    void initCrashlytics();
+    initCrashlytics().catch(() => {});
     registerForPushNotifications().catch((error) => {
       console.log("Failed to register push notifications:", error);
     });

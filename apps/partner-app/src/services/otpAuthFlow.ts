@@ -1,5 +1,4 @@
-import { sendOtp } from "../api/auth.api";
-import api from "../api/client";
+import { sendOtp, verifyOtp, verifyFirebaseOtp } from "../api/auth.api";
 import { sendFirebaseOtp, confirmFirebaseOtp } from "./firebasePhoneAuth";
 
 export type OtpAuthProvider = "2factor" | "firebase";
@@ -40,9 +39,32 @@ const toErrorMessage = (error: unknown, fallback = "Failed to send OTP") => {
   return fallback;
 };
 
+const isRetryableNetworkError = (error: unknown) => {
+  const message = toErrorMessage(error, "").toLowerCase();
+  return (
+    message.includes("network error") ||
+    message.includes("timeout") ||
+    message.includes("taking longer than usual")
+  );
+};
+
+const withNetworkRetry = async <T>(action: () => Promise<T>, label: string) => {
+  try {
+    return await action();
+  } catch (error) {
+    if (!isRetryableNetworkError(error)) {
+      throw error;
+    }
+
+    logOtp(`${label}-retry`, toErrorMessage(error));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return action();
+  }
+};
+
 export const sendOtpWithFallback = async (phone: string, role: string): Promise<OtpSessionInfo> => {
   try {
-    const axiosResponse = await sendOtp(phone, role);
+    const axiosResponse = await withNetworkRetry(() => sendOtp(phone, role), "send-otp");
     const body = axiosResponse.data;
     const payload = body?.data ?? {};
 
@@ -90,19 +112,20 @@ export const verifyOtpSession = async (
   session: OtpSessionInfo
 ) => {
   if (session.provider === "2factor") {
-    const response = await api.post("/auth/verify-otp", { phone, otp, role });
-    const body = response.data;
-    if (!body?.success || !body?.data?.token) {
-      throw new Error(body?.message || "Invalid or expired OTP");
-    }
-    return body;
+    const payload = await withNetworkRetry(() => verifyOtp(phone, otp, role), "verify-otp");
+    return {
+      success: true,
+      data: payload
+    };
   }
 
   const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
-  const response = await api.post("/auth/verify-otp", { phone, firebaseIdToken, role });
-  const body = response.data;
-  if (!body?.success || !body?.data?.token) {
-    throw new Error(body?.message || "Invalid OTP");
-  }
-  return body;
+  const payload = await withNetworkRetry(
+    () => verifyFirebaseOtp(phone, firebaseIdToken, role),
+    "verify-firebase-otp"
+  );
+  return {
+    success: true,
+    data: payload
+  };
 };
