@@ -1,18 +1,34 @@
-export const getPaymentLinkValue = (paymentLinkUrl?: string, imageUrl?: string) =>
-  paymentLinkUrl || imageUrl || "";
+export type DeliveryQrType = "upi_qr" | "payment_link";
 
-const isDirectImageUrl = (url: string) =>
-  /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url) || /\/image/i.test(url);
+export const getPaymentQrImageUrl = (
+  qrType: DeliveryQrType | undefined,
+  imageUrl?: string,
+  paymentLinkUrl?: string
+) => {
+  if (qrType === "upi_qr" && imageUrl) {
+    return imageUrl;
+  }
 
-export const getPaymentQrImageUrl = (paymentLinkUrl?: string, imageUrl?: string, size = 220) => {
-  const value = getPaymentLinkValue(paymentLinkUrl, imageUrl);
-  if (!value) {
+  if (qrType === "payment_link") {
     return "";
   }
 
-  if (isDirectImageUrl(value)) {
-    return value;
+  // Legacy orders stored before qrType existed.
+  if (imageUrl && !paymentLinkUrl) {
+    return imageUrl;
   }
 
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}`;
+  if (imageUrl && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(imageUrl)) {
+    return imageUrl;
+  }
+
+  return "";
+};
+
+export const getPaymentLinkUrl = (qrType: DeliveryQrType | undefined, paymentLinkUrl?: string, imageUrl?: string) => {
+  if (qrType === "payment_link") {
+    return paymentLinkUrl || imageUrl || "";
+  }
+
+  return paymentLinkUrl || "";
 };

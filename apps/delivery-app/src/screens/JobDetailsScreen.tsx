@@ -24,7 +24,7 @@ import {
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
-import { getPaymentQrImageUrl } from "../utils/paymentQr";
+import { getPaymentLinkUrl, getPaymentQrImageUrl } from "../utils/paymentQr";
 import { getCurrentRiderLocation } from "../utils/riderLocation";
 
 interface Props {
@@ -916,15 +916,39 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             </View>
             <Text style={styles.confirmTitle}>Vyaha UPI payment</Text>
             <Text style={styles.confirmText}>
-              Ask the customer to scan this QR with any UPI app. They pay Rs {upiQrData?.amount || job.grandTotal} to Vyaha on the Razorpay page — not to your personal UPI. Do not hand over the order until payment is confirmed.
+              {upiQrData?.qrType === "payment_link"
+                ? `Direct UPI scan is not available on this account yet. Ask the customer to open the Vyaha payment page and pay Rs ${upiQrData?.amount || job.grandTotal}.`
+                : `Ask the customer to scan this QR with PhonePe, Google Pay, Paytm, or any UPI app. They pay Rs ${upiQrData?.amount || job.grandTotal} to Vyaha — not to your personal UPI.`}{" "}
+              Do not hand over the order until payment is confirmed.
             </Text>
             {(() => {
-              const qrImageUrl = getPaymentQrImageUrl(upiQrData?.paymentLinkUrl, upiQrData?.imageUrl);
-              if (!qrImageUrl) {
-                return null;
+              const qrImageUrl = getPaymentQrImageUrl(
+                upiQrData?.qrType,
+                upiQrData?.imageUrl,
+                upiQrData?.paymentLinkUrl
+              );
+              if (qrImageUrl) {
+                return <Image source={{ uri: qrImageUrl }} style={styles.qrImage} resizeMode="contain" />;
               }
 
-              return <Image source={{ uri: qrImageUrl }} style={styles.qrImage} resizeMode="contain" />;
+              const paymentLinkUrl = getPaymentLinkUrl(
+                upiQrData?.qrType,
+                upiQrData?.paymentLinkUrl,
+                upiQrData?.imageUrl
+              );
+              if (paymentLinkUrl) {
+                return (
+                  <TouchableOpacity
+                    style={styles.openPaymentLinkButton}
+                    onPress={() => void Linking.openURL(paymentLinkUrl)}
+                  >
+                    <Ionicons name="open-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.openPaymentLinkText}>Open Vyaha payment page</Text>
+                  </TouchableOpacity>
+                );
+              }
+
+              return null;
             })()}
             <Text style={styles.qrStatusText}>
               {upiPaymentReceived ? "Payment received. You can complete delivery." : "Waiting for UPI payment..."}
@@ -1408,6 +1432,23 @@ const styles = StyleSheet.create({
     marginTop: 16,
     alignSelf: "center",
     backgroundColor: "#FFFFFF"
+  },
+  openPaymentLinkButton: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    alignSelf: "center",
+    backgroundColor: "#1976D2",
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 14
+  },
+  openPaymentLinkText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800"
   },
   qrStatusText: {
     marginTop: 12,

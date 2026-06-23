@@ -243,6 +243,11 @@ const OrderSchema = new Schema({
     paymentId: {
       type: String,
       default: ""
+    },
+    qrType: {
+      type: String,
+      enum: ["upi_qr", "payment_link"],
+      default: "upi_qr"
     }
   },
 

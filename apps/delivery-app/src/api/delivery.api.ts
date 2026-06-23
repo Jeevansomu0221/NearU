@@ -250,6 +250,7 @@ export const submitCashDeposit = (payload: {
 export interface DeliveryQrInfo {
   alreadyPaid: boolean;
   amount: number;
+  qrType?: "upi_qr" | "payment_link";
   paymentLinkUrl?: string;
   imageUrl: string;
   razorpayQrId: string;
