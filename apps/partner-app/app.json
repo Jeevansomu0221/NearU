@@ -55,6 +55,7 @@
         }
       ],
       "../../plugins/with-vyaha-gradle-config",
+      "../../plugins/with-vyaha-android-proguard",
       [
         "../../plugins/with-vyaha-android-notifications",
         {
