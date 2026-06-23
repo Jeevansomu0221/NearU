@@ -36,29 +36,26 @@ export interface VerifyOtpResponse {
 }
 
 export const sendOtp = async (phone: string): Promise<SendOtpResponse> => {
-  const response = await api.post("/auth/send-otp", {
+  return api.post("/auth/send-otp", {
     phone,
     role: "customer"
   });
-  return response.data as SendOtpResponse;
 };
 
 export const verifyOtp = async (phone: string, otp: string): Promise<VerifyOtpResponse> => {
-  const response = await api.post("/auth/verify-otp", {
+  return api.post("/auth/verify-otp", {
     phone,
     otp,
     role: "customer"
   });
-  return response.data as VerifyOtpResponse;
 };
 
 export const verifyFirebaseOtp = async (phone: string, firebaseIdToken: string): Promise<VerifyOtpResponse> => {
-  const response = await api.post("/auth/verify-otp", {
+  return api.post("/auth/verify-otp", {
     phone,
     firebaseIdToken,
     role: "customer"
   });
-  return response.data as VerifyOtpResponse;
 };
 
 export const persistAuthSession = async (token: string, refreshToken?: string, user?: Record<string, unknown>) => {

@@ -1,4 +1,4 @@
-import { sendOtp, verifyOtp, verifyFirebaseOtp } from "../api/auth.api";
+import { sendOtp, verifyOtp, verifyFirebaseOtp, SendOtpResponse } from "../api/auth.api";
 import { sendFirebaseOtp, confirmFirebaseOtp } from "./firebasePhoneAuth";
 
 export type OtpAuthProvider = "2factor" | "firebase";
@@ -39,10 +39,38 @@ const toErrorMessage = (error: unknown, fallback = "Failed to send OTP") => {
   return fallback;
 };
 
+const normalizeSendOtpResponse = (raw: SendOtpResponse | Record<string, unknown>) => {
+  if (typeof (raw as SendOtpResponse).success === "boolean") {
+    const response = raw as SendOtpResponse;
+    return {
+      success: response.success,
+      message: response.message || "",
+      data: response.data ?? {}
+    };
+  }
+
+  // Backward compatibility if inner payload was returned by mistake.
+  const inner = raw as SendOtpResponse["data"];
+  if (inner?.provider || inner?.useFirebaseFallback || inner?.phone) {
+    return {
+      success: true,
+      message: "OTP sent successfully",
+      data: inner
+    };
+  }
+
+  return {
+    success: false,
+    message: "Failed to send OTP",
+    data: {}
+  };
+};
+
 export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo> => {
   try {
-    const response = await sendOtp(phone);
-    const payload = response.data ?? {};
+    const rawResponse = await sendOtp(phone);
+    const response = normalizeSendOtpResponse(rawResponse as SendOtpResponse);
+    const payload = response.data;
 
     logOtp("backend-response", {
       success: response.success,
