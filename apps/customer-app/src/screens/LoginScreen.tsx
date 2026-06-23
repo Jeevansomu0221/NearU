@@ -31,14 +31,22 @@ export default function LoginScreen({ navigation }: Props) {
 
   const getSendOtpErrorMessage = (error: any) => {
     const code = String(error?.code || '').toLowerCase();
-    const message = String(error?.message || '').toLowerCase();
+    const message = String(error?.message || error?.response?.data?.message || '').trim();
 
-    if (code.includes('too-many-requests') || message.includes('too many')) {
+    if (code.includes('too-many-requests') || message.toLowerCase().includes('too many')) {
       return 'Too many OTP requests. Please wait a few minutes and try again.';
     }
 
-    if (message.includes('network')) {
-      return 'Cannot connect to server. Please check your internet connection.';
+    if (
+      message.toLowerCase().includes('network') ||
+      message.toLowerCase().includes('server is taking longer') ||
+      message.toLowerCase().includes('cannot connect')
+    ) {
+      return message || 'Cannot connect to server. Please check your internet connection.';
+    }
+
+    if (message) {
+      return message;
     }
 
     return 'Could not send OTP right now. Please try again.';
@@ -64,6 +72,7 @@ export default function LoginScreen({ navigation }: Props) {
       });
       
     } catch (error: any) {
+      console.error('[OTP] Login send failed:', error);
       Alert.alert('Error', getSendOtpErrorMessage(error));
     } finally {
       setLoading(false);

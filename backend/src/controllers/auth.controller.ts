@@ -124,6 +124,7 @@ export const sendOTP = async (req: Request, res: Response) => {
       useFirebaseFallback?: boolean;
       fallbackReason?: string;
       devOtp?: string;
+      otpDebug?: ReturnType<typeof OTPService.getLastSendDebug>;
     } = { phone };
 
     if (sendResult?.provider) {
@@ -138,24 +139,57 @@ export const sendOTP = async (req: Request, res: Response) => {
       data.devOtp = devOtp;
     }
 
+    if (config.otpDebug) {
+      data.otpDebug = OTPService.getLastSendDebug();
+    }
+
     return successResponse(res, data, "OTP sent successfully");
   } catch (error: any) {
     const message = error.message || "Failed to send OTP";
+    const otpDebug = config.otpDebug ? OTPService.getLastSendDebug() : null;
 
-    if (config.otpProvider === "2factor" && config.otpFirebaseFallback) {
+    console.error("[OTP] send failed:", message, otpDebug || "");
+
+    const canUseFirebaseFallback =
+      config.otpFirebaseFallback &&
+      config.otpProvider !== "firebase" &&
+      Boolean(config.firebaseProjectId || config.firebaseServiceAccountJson || config.firebaseServiceAccountPath);
+
+    if (canUseFirebaseFallback) {
       return successResponse(
         res,
         {
           phone: req.body.phone,
           useFirebaseFallback: true,
-          fallbackReason: message
+          fallbackReason: message,
+          ...(otpDebug ? { otpDebug } : {})
         },
         "Primary OTP provider unavailable. Use Firebase fallback."
       );
     }
 
-    return errorResponse(res, message, 400);
+    return errorResponse(res, message, 400, otpDebug ? { otpDebug } : null);
   }
+};
+
+export const getOtpConfig = async (_req: Request, res: Response) => {
+  return successResponse(
+    res,
+    {
+      provider: config.otpProvider || "(not set)",
+      firebaseFallback: config.otpFirebaseFallback,
+      otpDebug: config.otpDebug,
+      twofactorConfigured: Boolean(
+        config.twofactorApiKey && config.twofactorSenderId && config.twofactorTemplateName
+      ),
+      twofactorSenderId: config.twofactorSenderId || "(not set)",
+      twofactorTemplateName: config.twofactorTemplateName || "(not set)",
+      firebaseConfigured: Boolean(
+        config.firebaseProjectId || config.firebaseServiceAccountJson || config.firebaseServiceAccountPath
+      )
+    },
+    "OTP configuration"
+  );
 };
 
 export const verifyOTP = async (req: Request, res: Response) => {

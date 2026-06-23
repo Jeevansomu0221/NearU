@@ -1,5 +1,12 @@
 import { config } from "../config/env";
 import OtpSession from "../models/OtpSession.model";
+import {
+  buildOtpDebugPayload,
+  finishOtpSendTrace,
+  getLastOtpSendTrace,
+  recordOtpAttempt,
+  startOtpSendTrace
+} from "../utils/otpDebug";
 
 type OtpProvider = "twilio" | "2factor" | "memory";
 
@@ -125,13 +132,20 @@ const tryTransSms = async (phone: string, apiKey: string, otp: string) => {
 };
 
 const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
+  const trace = startOtpSendTrace(phone, "2factor");
   const apiKey = config.twofactorApiKey;
   if (!apiKey) {
-    throw new Error("2Factor API key is not configured");
+    const message = "2Factor API key is not configured";
+    recordOtpAttempt(trace, { label: "CONFIG", ok: false, detail: message });
+    finishOtpSendTrace(trace, "failed", message);
+    throw new Error(message);
   }
 
   if (!config.twofactorSenderId || !config.twofactorTemplateName) {
-    throw new Error("2Factor sender ID and template name must be configured");
+    const message = "2Factor sender ID and template name must be configured";
+    recordOtpAttempt(trace, { label: "CONFIG", ok: false, detail: message });
+    finishOtpSendTrace(trace, "failed", message);
+    throw new Error(message);
   }
 
   const otp = generateOtp();
@@ -164,20 +178,21 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
     try {
       await attempt.run();
       markResendCooldown(phone);
-      if (!config.isProduction) {
-        console.log(`[OTP:2factor] sent via ${attempt.label} to ${phone}`);
-      }
+      recordOtpAttempt(trace, { label: attempt.label, ok: true, detail: "sent" });
+      finishOtpSendTrace(trace, "sent");
       return {
         provider: "2factor",
         deliveryHint: `OTP sent via SMS from ${config.twofactorSenderId}.`
       };
     } catch (error: any) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      console.log(`[OTP:2factor] ${attempt.label} failed for ${phone}: ${lastError.message}`);
+      recordOtpAttempt(trace, { label: attempt.label, ok: false, detail: lastError.message });
     }
   }
 
-  throw lastError || new Error("2Factor SMS send failed");
+  const message = lastError?.message || "2Factor SMS send failed";
+  finishOtpSendTrace(trace, "failed", message);
+  throw lastError || new Error(message);
 };
 
 const verifyTwoFactorSession = async (apiKey: string, sessionId: string, otp: string) => {
@@ -308,6 +323,10 @@ const verifyViaTwilioVerify = async (phone: string, otp: string) => {
 };
 
 export class OTPService {
+  static getLastSendDebug() {
+    return buildOtpDebugPayload(getLastOtpSendTrace());
+  }
+
   static async sendOTP(phone: string): Promise<OtpSendResult | void> {
     await assertResendAllowed(phone);
     const provider = getProvider();

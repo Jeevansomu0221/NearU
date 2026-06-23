@@ -10,6 +10,12 @@ export interface SendOtpResponse {
     provider?: string;
     deliveryHint?: string;
     useFirebaseFallback?: boolean;
+    fallbackReason?: string;
+    otpDebug?: {
+      traceId?: string;
+      attempts?: Array<{ label: string; ok: boolean; detail: string }>;
+      error?: string;
+    };
     devOtp?: string;
   };
 }

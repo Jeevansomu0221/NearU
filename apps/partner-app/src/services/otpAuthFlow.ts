@@ -9,24 +9,78 @@ export type OtpSessionInfo = {
   deliveryHint?: string;
 };
 
+type OtpDebugPayload = {
+  traceId?: string;
+  attempts?: Array<{ label: string; ok: boolean; detail: string }>;
+  error?: string;
+};
+
+const logOtp = (step: string, detail?: unknown) => {
+  console.log(`[OTP] ${step}`, detail ?? "");
+};
+
+const formatOtpDebug = (otpDebug?: OtpDebugPayload | null) => {
+  if (!otpDebug?.attempts?.length) {
+    return "";
+  }
+
+  const attempts = otpDebug.attempts.map((attempt) => `${attempt.label}=${attempt.ok ? "ok" : attempt.detail}`).join("; ");
+  return `trace=${otpDebug.traceId || "n/a"} ${attempts}`;
+};
+
+const toErrorMessage = (error: unknown, fallback = "Failed to send OTP") => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object" && typeof (error as { message?: string }).message === "string") {
+    return (error as { message: string }).message;
+  }
+
+  return fallback;
+};
+
 export const sendOtpWithFallback = async (phone: string, role: string): Promise<OtpSessionInfo> => {
-  const response = await sendOtp(phone, role);
-  const body = response.data;
-  const payload = body?.data ?? {};
+  try {
+    const axiosResponse = await sendOtp(phone, role);
+    const body = axiosResponse.data;
+    const payload = body?.data ?? {};
 
-  if (body?.success && payload.provider === "2factor") {
-    return {
-      provider: "2factor",
-      deliveryHint: payload.deliveryHint || "OTP sent via SMS."
-    };
+    logOtp("backend-response", {
+      success: body?.success,
+      provider: payload.provider,
+      useFirebaseFallback: payload.useFirebaseFallback,
+      fallbackReason: payload.fallbackReason,
+      otpDebug: payload.otpDebug
+    });
+
+    if (body?.success && payload.provider === "2factor") {
+      return {
+        provider: "2factor",
+        deliveryHint: payload.deliveryHint || "OTP sent via SMS."
+      };
+    }
+
+    if (body?.success && payload.useFirebaseFallback) {
+      logOtp("firebase-fallback-start", payload.fallbackReason || formatOtpDebug(payload.otpDebug));
+      try {
+        await sendFirebaseOtp(phone);
+        return { provider: "firebase" };
+      } catch (firebaseError) {
+        const debug = formatOtpDebug(payload.otpDebug);
+        const reason = payload.fallbackReason || "2factor unavailable";
+        throw new Error(
+          `2factor failed (${reason}). Firebase backup failed: ${toErrorMessage(firebaseError)}${debug ? `. Debug: ${debug}` : ""}`
+        );
+      }
+    }
+
+    const debug = formatOtpDebug(payload.otpDebug);
+    throw new Error(`${body?.message || "Failed to send OTP"}${debug ? `. Debug: ${debug}` : ""}`);
+  } catch (error) {
+    logOtp("send-failed", error);
+    throw new Error(toErrorMessage(error));
   }
-
-  if (body?.success && payload.useFirebaseFallback) {
-    await sendFirebaseOtp(phone);
-    return { provider: "firebase" };
-  }
-
-  throw new Error(body?.message || "Failed to send OTP");
 };
 
 export const verifyOtpSession = async (

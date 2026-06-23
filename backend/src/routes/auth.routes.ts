@@ -1,7 +1,7 @@
 import { Router } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { authMiddleware } from "../middlewares/auth.middleware";
-import { adminPasswordLogin, logout, refreshToken, sendOTP, verifyOTP } from "../controllers/auth.controller";
+import { adminPasswordLogin, getOtpConfig, logout, refreshToken, sendOTP, verifyOTP } from "../controllers/auth.controller";
 
 const router = Router();
 
@@ -57,6 +57,7 @@ const refreshTokenLimiter = rateLimit({
   }
 });
 
+router.get("/otp-config", getOtpConfig);
 router.post("/send-otp", sendOtpLimiter, sendOTP);
 router.post("/verify-otp", verifyOtpLimiter, verifyOTP);
 router.post("/admin-password-login", adminLoginLimiter, adminPasswordLogin);

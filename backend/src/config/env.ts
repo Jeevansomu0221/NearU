@@ -43,6 +43,7 @@ export const config = {
   twofactorTemplateName: process.env.TWOFACTOR_TEMPLATE_NAME || "",
   twofactorDltEntityId: process.env.TWOFACTOR_DLT_ENTITY_ID || "",
   otpFirebaseFallback: process.env.OTP_FIREBASE_FALLBACK !== "false",
+  otpDebug: process.env.OTP_DEBUG === "true",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",
   firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "",
   firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "",
