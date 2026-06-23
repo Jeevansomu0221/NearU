@@ -22,10 +22,6 @@ import {
   getMyCashLedger,
   submitCashDeposit
 } from "../controllers/cash.controller";
-import {
-  getDeliveryQr,
-  getDeliveryPaymentStatus
-} from "../controllers/deliveryPayment.controller";
 import { roleMiddleware } from "../middlewares/role.middleware";
 
 const router = express.Router();
@@ -56,8 +52,6 @@ router.post("/:orderId/accept", acceptDeliveryJob);
 // =================== MY ORDERS ===================
 router.get("/my-orders", getMyOrders);
 router.get("/orders/:orderId", getOrderDetails);
-router.get("/orders/:orderId/delivery-qr", getDeliveryQr);
-router.get("/orders/:orderId/delivery-payment-status", getDeliveryPaymentStatus);
 
 // =================== ORDER STATUS UPDATES ===================
 router.patch("/:orderId/status", updateDeliveryStatus);

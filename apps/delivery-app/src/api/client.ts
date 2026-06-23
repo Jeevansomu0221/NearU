@@ -256,11 +256,6 @@ const extractData = <T>(response: any): ApiResponse<T> => {
   };
 };
 
-const getApiErrorMessage = (error: any, fallback = "Request failed") =>
-  error?.message ||
-  error?.response?.data?.message ||
-  (typeof error === "string" ? error : fallback);
-
 export const apiGet = async <T = any>(url: string, config?: any): Promise<ApiResponse<T>> => {
   try {
     const response = await api.get(url, config);
@@ -268,7 +263,7 @@ export const apiGet = async <T = any>(url: string, config?: any): Promise<ApiRes
   } catch (error: any) {
     return {
       success: false,
-      message: getApiErrorMessage(error),
+      message: error.message || "Request failed",
       ...error
     };
   }

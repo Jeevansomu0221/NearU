@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,22 +9,17 @@ import {
   Alert,
   Linking,
   Modal,
-  Platform,
-  Image
+  Platform
 } from "react-native";
 import { 
   acceptJob,
   getJobDetails, 
   markAsPickedUp, 
   markAsDelivered,
-  getDeliveryQr,
-  getDeliveryPaymentStatus,
-  DeliveryOrder,
-  DeliveryQrInfo
+  DeliveryOrder 
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
-import { getPaymentLinkUrl, getPaymentQrImageUrl } from "../utils/paymentQr";
 import { getCurrentRiderLocation } from "../utils/riderLocation";
 
 interface Props {
@@ -72,12 +67,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(!initialJob);
   const [updating, setUpdating] = useState(false);
   const [cashConfirmVisible, setCashConfirmVisible] = useState(false);
-  const [codPaymentChoiceVisible, setCodPaymentChoiceVisible] = useState(false);
-  const [upiQrVisible, setUpiQrVisible] = useState(false);
-  const [upiQrData, setUpiQrData] = useState<DeliveryQrInfo | null>(null);
-  const [upiPaymentReceived, setUpiPaymentReceived] = useState(false);
-  const [checkingUpiPayment, setCheckingUpiPayment] = useState(false);
-  const upiPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [statusModal, setStatusModal] = useState<{
     title: string;
     message: string;
@@ -90,79 +79,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     loadJobDetails();
     getCurrentRiderLocation({ showDeniedAlert: false }).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    return () => {
-      if (upiPollRef.current) {
-        clearInterval(upiPollRef.current);
-      }
-    };
-  }, []);
-
-  const stopUpiPolling = () => {
-    if (upiPollRef.current) {
-      clearInterval(upiPollRef.current);
-      upiPollRef.current = null;
-    }
-  };
-
-  const refreshUpiPaymentStatus = async () => {
-    if (!orderId) {
-      return false;
-    }
-
-    try {
-      setCheckingUpiPayment(true);
-      const response = await getDeliveryPaymentStatus(orderId);
-      if (response.success && response.data?.paid) {
-        setUpiPaymentReceived(true);
-        setJob((current) => (current ? { ...current, paymentStatus: "PAID" } : current));
-        stopUpiPolling();
-        return true;
-      }
-    } catch (error) {
-      console.error("Failed to check UPI payment status:", error);
-    } finally {
-      setCheckingUpiPayment(false);
-    }
-
-    return false;
-  };
-
-  const openUpiQrModal = async () => {
-    try {
-      setUpdating(true);
-      const response = await getDeliveryQr(orderId);
-      if (!response.success || !response.data) {
-        Alert.alert("Could not load Vyaha QR", response.message || "Please try again or collect cash.");
-        return;
-      }
-
-      setUpiQrData(response.data);
-      setUpiPaymentReceived(Boolean(response.data.alreadyPaid || response.data.paymentStatus === "PAID"));
-      setUpiQrVisible(true);
-
-      if (!response.data.alreadyPaid) {
-        stopUpiPolling();
-        upiPollRef.current = setInterval(() => {
-          void refreshUpiPaymentStatus();
-        }, 3000);
-      }
-    } catch (error: any) {
-      console.error("Failed to open delivery QR:", error);
-      Alert.alert(
-        "Could not load Vyaha QR",
-        error?.message || "Please try again, or collect cash from the customer."
-      );
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const closeUpiQrModal = () => {
-    stopUpiPolling();
-    setUpiQrVisible(false);
-  };
 
   const returnToJobs = () => {
     if (navigation.canGoBack?.()) {
@@ -459,16 +375,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   };
 
   const handleDeliver = async () => {
-    if (job?.paymentMethod === "CASH_ON_DELIVERY" || job?.paymentMethod === "UPI_AT_DELIVERY") {
-      if (job.paymentMethod === "UPI_AT_DELIVERY") {
-        await openUpiQrModal();
-        return;
-      }
-      setCodPaymentChoiceVisible(true);
-      return;
+    if (job?.paymentMethod === "CASH_ON_DELIVERY") {
+      setCashConfirmVisible(true);
+    } else {
+      // For pre-paid orders, just confirm delivery
+      await confirmDelivery();
     }
-
-    await confirmDelivery();
   };
 
   const confirmDelivery = async (collectedAmount?: number) => {
@@ -702,23 +614,17 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             <Text style={styles.paymentLabel}>Payment Method:</Text>
             <Text style={[
               styles.paymentValue,
-              job.paymentMethod === "CASH_ON_DELIVERY" || job.paymentMethod === "UPI_AT_DELIVERY" ? styles.codText : styles.paidText
+              job.paymentMethod === "CASH_ON_DELIVERY" ? styles.codText : styles.paidText
             ]}>
-              {job.paymentMethod === "CASH_ON_DELIVERY"
-                ? "💰 Cash on Delivery"
-                : job.paymentMethod === "UPI_AT_DELIVERY"
-                  ? "📱 UPI at Delivery"
-                  : "✅ Online Paid"}
+              {job.paymentMethod === "CASH_ON_DELIVERY" ? "💰 Cash on Delivery" : "✅ Online Paid"}
             </Text>
           </View>
           
-          {(job.paymentMethod === "CASH_ON_DELIVERY" || job.paymentMethod === "UPI_AT_DELIVERY") && (
+          {job.paymentMethod === "CASH_ON_DELIVERY" && (
             <View style={styles.amountCard}>
-              <Ionicons name={job.paymentMethod === "UPI_AT_DELIVERY" ? "qr-code" : "cash"} size={24} color={job.paymentMethod === "UPI_AT_DELIVERY" ? "#1976D2" : "#4CAF50"} />
+              <Ionicons name="cash" size={24} color="#4CAF50" />
               <Text style={styles.amountText}>
-                {job.paymentMethod === "UPI_AT_DELIVERY"
-                  ? `Show Vyaha QR for ₹${job.grandTotal} before handoff`
-                  : `Collect ₹${job.grandTotal} in cash, or show Vyaha QR if customer pays by UPI`}
+                Collect ₹{job.grandTotal} on delivery
               </Text>
             </View>
           )}
@@ -819,8 +725,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               <>
                 <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
                 <Text style={styles.actionButtonText}>
-                  {job.paymentMethod === "CASH_ON_DELIVERY" || job.paymentMethod === "UPI_AT_DELIVERY"
-                    ? "Collect Payment & Deliver"
+                  {job.paymentMethod === "CASH_ON_DELIVERY" 
+                    ? "Collect Cash & Mark Delivered" 
                     : "Mark as Delivered"}
                 </Text>
               </>
@@ -828,58 +734,13 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           </TouchableOpacity>
           <Text style={styles.actionHint}>
             {job.paymentMethod === "CASH_ON_DELIVERY"
-              ? `Collect ₹${job.grandTotal} in cash, or show the Vyaha QR if the customer pays by UPI`
-              : job.paymentMethod === "UPI_AT_DELIVERY"
-                ? "Ask customer to scan the Vyaha QR and pay before you hand over the order"
-                : "Click after delivering to the customer"}
+              ? `Collect ₹${job.grandTotal} from customer before marking as delivered`
+              : "Click after delivering to the customer"}
           </Text>
         </View>
       )}
 
       <View style={styles.spacer} />
-
-      <Modal visible={codPaymentChoiceVisible} transparent animationType="fade" onRequestClose={() => setCodPaymentChoiceVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmCard}>
-            <View style={[styles.confirmIcon, { backgroundColor: "#FF9800" }]}>
-              <Ionicons name="wallet-outline" size={28} color="#FFFFFF" />
-            </View>
-            <Text style={styles.confirmTitle}>How is the customer paying?</Text>
-            <Text style={styles.confirmText}>
-              Order total is Rs {job.grandTotal}. Collect cash from the customer, or show the Vyaha QR if they want to pay by UPI.
-            </Text>
-            <View style={styles.codChoiceActions}>
-              <TouchableOpacity
-                style={styles.codChoiceButton}
-                onPress={() => {
-                  setCodPaymentChoiceVisible(false);
-                  setCashConfirmVisible(true);
-                }}
-                disabled={updating}
-              >
-                <Ionicons name="cash-outline" size={22} color="#2E7D32" />
-                <Text style={styles.codChoiceButtonTitle}>Cash received</Text>
-                <Text style={styles.codChoiceButtonHint}>Customer paid in notes/coins</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.codChoiceButton, styles.codChoiceButtonQr]}
-                onPress={() => {
-                  setCodPaymentChoiceVisible(false);
-                  void openUpiQrModal();
-                }}
-                disabled={updating}
-              >
-                <Ionicons name="qr-code-outline" size={22} color="#1976D2" />
-                <Text style={styles.codChoiceButtonTitle}>Show Vyaha QR</Text>
-                <Text style={styles.codChoiceButtonHint}>Customer pays by UPI to Vyaha</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={styles.noLocationDismiss} onPress={() => setCodPaymentChoiceVisible(false)}>
-              <Text style={styles.noLocationDismissText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       <Modal visible={cashConfirmVisible} transparent animationType="fade" onRequestClose={() => setCashConfirmVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -902,77 +763,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                 disabled={updating}
               >
                 {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Collected</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={upiQrVisible} transparent animationType="fade" onRequestClose={closeUpiQrModal}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmCard}>
-            <View style={[styles.confirmIcon, { backgroundColor: "#1976D2" }]}>
-              <Ionicons name="qr-code-outline" size={28} color="#FFFFFF" />
-            </View>
-            <Text style={styles.confirmTitle}>Vyaha UPI payment</Text>
-            <Text style={styles.confirmText}>
-              {upiQrData?.qrType === "payment_link"
-                ? `Direct UPI scan is not available on this account yet. Ask the customer to open the Vyaha payment page and pay Rs ${upiQrData?.amount || job.grandTotal}.`
-                : `Ask the customer to scan this QR with PhonePe, Google Pay, Paytm, or any UPI app. They pay Rs ${upiQrData?.amount || job.grandTotal} to Vyaha — not to your personal UPI.`}{" "}
-              Do not hand over the order until payment is confirmed.
-            </Text>
-            {(() => {
-              const qrImageUrl = getPaymentQrImageUrl(
-                upiQrData?.qrType,
-                upiQrData?.imageUrl,
-                upiQrData?.paymentLinkUrl
-              );
-              if (qrImageUrl) {
-                return <Image source={{ uri: qrImageUrl }} style={styles.qrImage} resizeMode="contain" />;
-              }
-
-              const paymentLinkUrl = getPaymentLinkUrl(
-                upiQrData?.qrType,
-                upiQrData?.paymentLinkUrl,
-                upiQrData?.imageUrl
-              );
-              if (paymentLinkUrl) {
-                return (
-                  <TouchableOpacity
-                    style={styles.openPaymentLinkButton}
-                    onPress={() => void Linking.openURL(paymentLinkUrl)}
-                  >
-                    <Ionicons name="open-outline" size={18} color="#FFFFFF" />
-                    <Text style={styles.openPaymentLinkText}>Open Vyaha payment page</Text>
-                  </TouchableOpacity>
-                );
-              }
-
-              return null;
-            })()}
-            <Text style={styles.qrStatusText}>
-              {upiPaymentReceived ? "Payment received. You can complete delivery." : "Waiting for UPI payment..."}
-            </Text>
-            <View style={styles.confirmActions}>
-              <TouchableOpacity style={styles.confirmSecondary} onPress={closeUpiQrModal} disabled={updating}>
-                <Text style={styles.confirmSecondaryText}>Close</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmSecondary}
-                onPress={() => void refreshUpiPaymentStatus()}
-                disabled={checkingUpiPayment}
-              >
-                {checkingUpiPayment ? <ActivityIndicator color="#1976D2" /> : <Text style={styles.confirmSecondaryText}>Refresh</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.confirmPrimary, !upiPaymentReceived && styles.confirmPrimaryDisabled]}
-                onPress={() => {
-                  closeUpiQrModal();
-                  void confirmDelivery();
-                }}
-                disabled={updating || !upiPaymentReceived}
-              >
-                {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Delivered</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -1423,40 +1213,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#4CAF50"
   },
-  confirmPrimaryDisabled: {
-    opacity: 0.5
-  },
-  qrImage: {
-    width: 220,
-    height: 220,
-    marginTop: 16,
-    alignSelf: "center",
-    backgroundColor: "#FFFFFF"
-  },
-  openPaymentLinkButton: {
-    marginTop: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    alignSelf: "center",
-    backgroundColor: "#1976D2",
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 14
-  },
-  openPaymentLinkText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  qrStatusText: {
-    marginTop: 12,
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#334155",
-    textAlign: "center"
-  },
   confirmSingleAction: {
     width: "100%",
     marginTop: 20,
@@ -1514,36 +1270,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     color: "#667085"
-  },
-  codChoiceActions: {
-    width: "100%",
-    marginTop: 18,
-    gap: 10
-  },
-  codChoiceButton: {
-    width: "100%",
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    alignItems: "center",
-    backgroundColor: "#E8F5E9",
-    borderWidth: 1,
-    borderColor: "#C8E6C9"
-  },
-  codChoiceButtonQr: {
-    backgroundColor: "#E3F2FD",
-    borderColor: "#BBDEFB"
-  },
-  codChoiceButtonTitle: {
-    marginTop: 8,
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#1F2937"
-  },
-  codChoiceButtonHint: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#667085",
-    textAlign: "center"
   }
 });

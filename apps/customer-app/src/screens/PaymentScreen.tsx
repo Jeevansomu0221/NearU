@@ -96,8 +96,8 @@ export default function PaymentScreen({ route, navigation }: any) {
   const [successOrders, setSuccessOrders] = useState<any[] | null>(null);
 
   const paymentMethods = [
-    { id: "CASH_ON_DELIVERY", name: "Cash on Delivery", icon: "Cash" },
-    { id: "RAZORPAY", name: "Online Payment", icon: "Card" }
+    { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
+    { id: "RAZORPAY", name: "Online Payment", icon: "UPI" }
   ];
 
   const groupedShops = useMemo<CheckoutGroup[]>(() => {
@@ -340,7 +340,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         const paidOrders = await placeOnlineOrders();
         handleSuccessfulCheckout(paidOrders);
       } else {
-        const createdOrders = await placeOrders(paymentMethod);
+        const createdOrders = await placeOrders("CASH_ON_DELIVERY");
         handleSuccessfulCheckout(createdOrders);
       }
     } catch (error: any) {
@@ -389,9 +389,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         <View style={styles.methodBody}>
           <Text style={styles.methodName}>{method?.name}</Text>
           <Text style={styles.methodHint}>
-            {paymentMethod === "CASH_ON_DELIVERY"
-              ? "Pay cash or UPI to the rider when your order arrives"
-              : "Pay securely with UPI, card, wallet, or netbanking"}
+            {paymentMethod === "CASH_ON_DELIVERY" ? "Pay when your order arrives" : "Pay securely with UPI, card, wallet, or netbanking"}
           </Text>
         </View>
         <TouchableOpacity onPress={() => setShowPaymentMethods(true)}>
@@ -504,9 +502,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         {paymentMethod === "CASH_ON_DELIVERY" ? (
           <View style={styles.infoSection}>
             <Text style={styles.infoTitle}>Cash on delivery</Text>
-            <Text style={styles.infoText}>
-              Pay when the order reaches you — in cash or by UPI. If you prefer UPI, ask the rider for the Vyaha QR and pay the exact order amount before handoff.
-            </Text>
+            <Text style={styles.infoText}>Pay cash when the order reaches you. Keeping change ready helps with a faster handoff.</Text>
           </View>
         ) : (
           <View style={styles.infoSection}>
@@ -530,7 +526,7 @@ export default function PaymentScreen({ route, navigation }: any) {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.payButtonText}>
-              {paymentMethod === "RAZORPAY" ? "Pay Securely" : "Place Order"}
+              {paymentMethod === "CASH_ON_DELIVERY" ? "Place Order" : "Pay Securely"}
             </Text>
           )}
         </TouchableOpacity>
@@ -578,9 +574,7 @@ export default function PaymentScreen({ route, navigation }: any) {
                 <View style={styles.methodInfo}>
                   <Text style={styles.methodOptionName}>{method.name}</Text>
                   <Text style={styles.methodDescription}>
-                    {method.id === "CASH_ON_DELIVERY"
-                      ? "Pay cash or UPI to the rider at delivery"
-                      : "UPI, card, wallet, and netbanking via Razorpay"}
+                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "UPI, card, wallet, and netbanking via Razorpay"}
                   </Text>
                 </View>
                 {paymentMethod === method.id ? <Text style={styles.selectedIndicator}>Selected</Text> : null}

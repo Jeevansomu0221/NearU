@@ -188,7 +188,7 @@ const OrderSchema = new Schema({
 
   paymentMethod: {
     type: String,
-    enum: ["RAZORPAY", "CASH_ON_DELIVERY", "UPI_AT_DELIVERY", "CARD", "UPI", "WALLET"],
+    enum: ["RAZORPAY", "CASH_ON_DELIVERY", "CARD", "UPI", "WALLET"],
     default: "RAZORPAY"
   },
 
@@ -215,40 +215,6 @@ const OrderSchema = new Schema({
 
   razorpaySignature: {
     type: String,  // Razorpay signature for verification
-  },
-
-  deliveryQr: {
-    razorpayQrId: {
-      type: String,
-      default: ""
-    },
-    imageUrl: {
-      type: String,
-      default: ""
-    },
-    amount: {
-      type: Number,
-      default: 0,
-      min: 0
-    },
-    createdAt: {
-      type: Date
-    },
-    expiresAt: {
-      type: Date
-    },
-    paidAt: {
-      type: Date
-    },
-    paymentId: {
-      type: String,
-      default: ""
-    },
-    qrType: {
-      type: String,
-      enum: ["upi_qr", "payment_link"],
-      default: "upi_qr"
-    }
   },
 
   // Order Status - UPDATED TO INCLUDE "PENDING"
