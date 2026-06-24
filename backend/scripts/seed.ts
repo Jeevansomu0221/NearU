@@ -58,24 +58,33 @@ const seedDatabase = async () => {
     ]);
     console.log('✅ Created test users');
 
-    // Create test partner
+    // Create test partner — Karachi Bakery, Hyderabad
     const partner = await Partner.create({
+      ownerName: 'Bakery Owner',
+      restaurantName: 'Karachi Bakery',
       userId: users[1]._id,
-      shopName: 'Sunrise Bakery Cafe',
-      description: 'Fresh bakery items, snacks, and daily specials',
+      shopName: 'Karachi Bakery',
+      shopDescription: "Hyderabad's iconic bakery — Osmania biscuits, fruit biscuits and plum cake",
       category: 'bakery',
-      address: '18 Lake View Road, Indiranagar, Bengaluru',
+      address: {
+        state: 'Telangana',
+        city: 'Hyderabad',
+        pincode: '500001',
+        area: 'Nampally',
+        colony: 'Moazzam Jahi Market',
+        roadStreet: 'Mozamjahi Market Road',
+        nearbyPlaces: ['Nampally Railway Station']
+      },
       location: {
         type: 'Point',
-        coordinates: [77.5946, 12.9716] // Bangalore coordinates
+        coordinates: [78.4656, 17.3850]
       },
       phone: '9876543211',
-      isActive: true,
       isOpen: true,
       openingTime: '07:00',
-      closingTime: '21:00',
-      deliveryRadius: 5,
-      rating: 4.5
+      closingTime: '22:00',
+      rating: 4.7,
+      status: 'APPROVED'
     });
     console.log('✅ Created test partner');
 
@@ -83,39 +92,43 @@ const seedDatabase = async () => {
     await MenuItem.insertMany([
       {
         partnerId: partner._id,
-        name: 'Butter Croissant',
-        description: 'Fresh butter croissant',
-        price: 60,
-        category: 'snack',
+        name: 'Osmania Biscuit (250g)',
+        description: 'Iconic Hyderabadi tea biscuit',
+        price: 90,
+        category: 'Biscuits',
         preparationTime: 5,
-        isVeg: true
+        isVegetarian: true,
+        imageUrl: 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&w=900&q=80'
       },
       {
         partnerId: partner._id,
-        name: 'Chocolate Muffin',
-        description: 'Chocolate chip muffin',
-        price: 80,
-        category: 'dessert',
+        name: 'Fruit Biscuit (250g)',
+        description: 'Famous fruit biscuit with tutti-frutti',
+        price: 100,
+        category: 'Biscuits',
         preparationTime: 5,
-        isVeg: true
+        isVegetarian: true,
+        imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=900&q=80'
       },
       {
         partnerId: partner._id,
-        name: 'Garlic Bread',
-        description: 'Fresh garlic bread with herbs',
-        price: 120,
-        category: 'main',
-        preparationTime: 10,
-        isVeg: true
+        name: 'Dilkhush',
+        description: 'Sweet coconut-filled puff pastry',
+        price: 35,
+        category: 'Puffs',
+        preparationTime: 6,
+        isVegetarian: true,
+        imageUrl: 'https://images.unsplash.com/photo-1625944525533-473f1bb3bc76?auto=format&fit=crop&w=900&q=80'
       },
       {
         partnerId: partner._id,
-        name: 'Chicken Sandwich',
-        description: 'Grilled chicken sandwich',
-        price: 150,
-        category: 'main',
-        preparationTime: 15,
-        isVeg: false
+        name: 'Plum Cake (500g)',
+        description: 'Rich fruit and nut cake',
+        price: 280,
+        category: 'Cakes',
+        preparationTime: 5,
+        isVegetarian: true,
+        imageUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=900&q=80'
       }
     ]);
     console.log('✅ Created menu items');
@@ -125,23 +138,23 @@ const seedDatabase = async () => {
       orderType: 'SHOP',
       customerId: users[0]._id,
       partnerId: partner._id,
-      deliveryAddress: '456 Another Street, Bangalore',
+      deliveryAddress: 'Flat 4B, Westend Colony, Bandlaguda Jagir, Hyderabad',
       note: 'Please deliver quickly',
       items: [
         {
-          name: 'Butter Croissant',
+          name: 'Osmania Biscuit (250g)',
           quantity: 2,
-          price: 60
+          price: 90
         },
         {
-          name: 'Chocolate Muffin',
-          quantity: 1,
-          price: 80
+          name: 'Dilkhush',
+          quantity: 3,
+          price: 35
         }
       ],
-      itemTotal: 200,
+      itemTotal: 285,
       deliveryFee: 30,
-      grandTotal: 230,
+      grandTotal: 315,
       status: 'DELIVERED',
       paymentStatus: 'PAID'
     });
@@ -153,8 +166,8 @@ const seedDatabase = async () => {
     console.log('2. Partner - Phone: 9876543211, Password: (any OTP)');
     console.log('3. Delivery - Phone: 9876543212, Password: (any OTP)');
     console.log('4. Admin - Phone: 9876543213, Password: (any OTP)');
-    console.log('\n🏪 Test Shop: Sunrise Bakery Cafe (Bakery)');
-    console.log('\n📍 Location: Indiranagar, Bengaluru coordinates');
+    console.log('\n🏪 Test Shop: Karachi Bakery (Bakery)');
+    console.log('\n📍 Location: Nampally, Hyderabad');
 
     process.exit(0);
 

@@ -99,7 +99,13 @@ const shopPlaceholders: Record<string, string> = {
   "fast-food":
     "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=240&q=80",
   sweets:
-    "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=240&q=80"
+    "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=240&q=80",
+  juice:
+    "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?auto=format&fit=crop&w=240&q=80",
+  "ice-creams":
+    "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=240&q=80",
+  grocery:
+    "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=240&q=80"
 };
 
 const extractShops = (response: any): Shop[] => Array.isArray(response?.data) ? response.data : [];

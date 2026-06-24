@@ -36,15 +36,40 @@ type MockOrderPlan = {
   paymentMethod: "RAZORPAY" | "CASH_ON_DELIVERY" | "UPI";
 };
 
-const MENU_IMAGE_URLS = {
-  sweets: "https://images.unsplash.com/photo-1605197183305-6ce593f789ec",
-  bakery: "https://images.unsplash.com/photo-1509440159596-0249088772ff",
-  juice: "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b",
-  grocery: "https://images.unsplash.com/photo-1542838132-92c53300491e",
-  iceCream: "https://images.unsplash.com/photo-1563805042-7684c019e1cb"
+type PartnerCatalogEntry = {
+  restaurantName: string;
+  legacyNames: string[];
+  phoneEnv: string;
+  shopDescription: string;
+  category: string;
+  rating: number;
+  ratingCount: number;
+  openingTime: string;
+  closingTime: string;
+  distanceKm: number;
+  bearingDegrees: number;
+  address: AddressSeed;
 };
 
 const image = (url: string) => `${url}?auto=format&fit=crop&w=900&q=80`;
+
+const BIRYANI_ITEM_IMAGES = [
+  "https://images.unsplash.com/photo-1563379091339-03246963d51a",
+  "https://images.unsplash.com/photo-1599043513900-ed6fe01d3833",
+  "https://images.unsplash.com/photo-1630383249896-424e482df921",
+  "https://images.unsplash.com/photo-1601050690597-df0568f70950",
+  "https://images.unsplash.com/photo-1603133872878-684f208fb84b",
+  "https://images.unsplash.com/photo-1546833999-b9f581a1996d",
+  "https://images.unsplash.com/photo-1589302168068-964664d93dc0",
+  "https://images.unsplash.com/photo-1604908176997-4317c7eaeb9b",
+  "https://images.unsplash.com/photo-1601050690117-8b3b8f567f1f",
+  "https://images.unsplash.com/photo-1512058564366-18510be2db19",
+  "https://images.unsplash.com/photo-1596797038530-2c107aa1e2fd",
+  "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445",
+  "https://images.unsplash.com/photo-1498654896293-37aacf113fd9",
+  "https://images.unsplash.com/photo-1482049016688-2d3e1b311543",
+  "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f"
+].map(image);
 
 const SWEETS_ITEM_IMAGES = [
   "https://images.unsplash.com/photo-1605197183305-6ce593f789ec",
@@ -100,22 +125,22 @@ const JUICE_ITEM_IMAGES = [
   "https://images.unsplash.com/photo-1490474418585-ba9bad8fd0ea"
 ].map(image);
 
-const GROCERY_ITEM_IMAGES = [
-  "https://images.unsplash.com/photo-1586201375761-83865001e31c",
-  "https://images.unsplash.com/photo-1612257999756-ffc50b9a038f",
-  "https://images.unsplash.com/photo-1604329760661-e71dc83f8f26",
-  "https://images.unsplash.com/photo-1587049352846-4a222e784d38",
-  "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b",
-  "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5",
-  "https://images.unsplash.com/photo-1518110925495-5fe2fda0442c",
-  "https://images.unsplash.com/photo-1615485500704-8e990f9900f7",
-  "https://images.unsplash.com/photo-1596040033229-a9821ebd058d",
-  "https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d",
-  "https://images.unsplash.com/photo-1563636619-e9143da7973b",
-  "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e",
-  "https://images.unsplash.com/photo-1566478989037-eec170784d0b",
-  "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80",
-  "https://images.unsplash.com/photo-1556228720-195a672e8a03"
+const FASTFOOD_ITEM_IMAGES = [
+  "https://images.unsplash.com/photo-1568901346375-23c9450c58cd",
+  "https://images.unsplash.com/photo-1550317138-10000687a72b",
+  "https://images.unsplash.com/photo-1626700051175-6818013e1d4f",
+  "https://images.unsplash.com/photo-1565299507177-b0ac66763828",
+  "https://images.unsplash.com/photo-1573080496219-bb080dd4f877",
+  "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5",
+  "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445",
+  "https://images.unsplash.com/photo-1625938145744-36f3a4ca3f5f",
+  "https://images.unsplash.com/photo-1517701604599-bb29b565090c",
+  "https://images.unsplash.com/photo-1564355808539-22fda35bed7e",
+  "https://images.unsplash.com/photo-1513104890138-7c749659a591",
+  "https://images.unsplash.com/photo-1550547660-d9450f859349",
+  "https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5",
+  "https://images.unsplash.com/photo-1606755962773-d324e0a13086",
+  "https://images.unsplash.com/photo-1525059696084-b0ee060f9c64"
 ].map(image);
 
 const ICE_CREAM_ITEM_IMAGES = [
@@ -136,27 +161,17 @@ const ICE_CREAM_ITEM_IMAGES = [
   "https://images.unsplash.com/photo-1586195831800-24f14c992cea"
 ].map(image);
 
-const RAJA_ITEM_IMAGES = [
-  "https://images.unsplash.com/photo-1630383249896-424e482df921",
-  "https://images.unsplash.com/photo-1626500155537-93690a4f4937",
-  "https://images.unsplash.com/photo-1589302168068-964664d93dc0",
-  "https://images.unsplash.com/photo-1601050690597-df0568f70950",
-  "https://images.unsplash.com/photo-1482049016688-2d3e1b311543",
-  "https://images.unsplash.com/photo-1498654896293-37aacf113fd9",
-  "https://images.unsplash.com/photo-1512058564366-18510be2db19",
-  "https://images.unsplash.com/photo-1603133872878-684f208fb84b",
-  "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f",
-  "https://images.unsplash.com/photo-1563379091339-03246963d51a",
-  "https://images.unsplash.com/photo-1599043513900-ed6fe01d3833",
-  "https://images.unsplash.com/photo-1596797038530-2c107aa1e2fd",
-  "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841",
-  "https://images.unsplash.com/photo-1604908176997-4317c7eaeb9b",
-  "https://images.unsplash.com/photo-1601050690117-8b3b8f567f1f",
-  "https://images.unsplash.com/photo-1546833999-b9f581a1996d"
-].map(image);
-
 const PARTNER_IMAGES: Record<string, { shopImageUrl: string; bannerImageUrl: string; restaurantPhotosUrls: string[] }> = {
-  "Krishna sweets": {
+  "Paradise Biryani": {
+    shopImageUrl: image("https://images.unsplash.com/photo-1563379091339-03246963d51a"),
+    bannerImageUrl: image("https://images.unsplash.com/photo-1599043513900-ed6fe01d3833"),
+    restaurantPhotosUrls: [
+      image("https://images.unsplash.com/photo-1546833999-b9f581a1996d"),
+      image("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4"),
+      image("https://images.unsplash.com/photo-1559339352-11d035aa65de")
+    ]
+  },
+  "Pulla Reddy Sweets": {
     shopImageUrl: image("https://images.unsplash.com/photo-1605197183305-6ce593f789ec"),
     bannerImageUrl: image("https://images.unsplash.com/photo-1551024506-0bccd828d307"),
     restaurantPhotosUrls: [
@@ -165,16 +180,16 @@ const PARTNER_IMAGES: Record<string, { shopImageUrl: string; bannerImageUrl: str
       image("https://images.unsplash.com/photo-1495147466023-ac5c588e2e94")
     ]
   },
-  "Nandini Bakery": {
-    shopImageUrl: image("https://images.unsplash.com/photo-1554118811-1e0d58224f24"),
+  "Karachi Bakery": {
+    shopImageUrl: image("https://images.unsplash.com/photo-1509440159596-0249088772ff"),
     bannerImageUrl: image("https://images.unsplash.com/photo-1514933651103-005eec06c04b"),
     restaurantPhotosUrls: [
       image("https://images.unsplash.com/photo-1517433670267-08bbd4be890f"),
-      image("https://images.unsplash.com/photo-1534432182912-63863115e106"),
+      image("https://images.unsplash.com/photo-1555507036-ab1f4038808a"),
       image("https://images.unsplash.com/photo-1555396273-367ea4eb4db5")
     ]
   },
-  "Btech juices": {
+  "Sree Krishna Juice Point": {
     shopImageUrl: image("https://images.unsplash.com/photo-1621506289937-a8e4df240d0b"),
     bannerImageUrl: image("https://images.unsplash.com/photo-1546173159-315724a31696"),
     restaurantPhotosUrls: [
@@ -183,16 +198,16 @@ const PARTNER_IMAGES: Record<string, { shopImageUrl: string; bannerImageUrl: str
       image("https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd")
     ]
   },
-  "Ram grocery": {
-    shopImageUrl: image("https://images.unsplash.com/photo-1542838132-92c53300491e"),
-    bannerImageUrl: image("https://images.unsplash.com/photo-1578916171728-46686eac8d58"),
+  "Louis Burger": {
+    shopImageUrl: image("https://images.unsplash.com/photo-1568901346375-23c9450c58cd"),
+    bannerImageUrl: image("https://images.unsplash.com/photo-1513104890138-7c749659a591"),
     restaurantPhotosUrls: [
-      image("https://images.unsplash.com/photo-1583258292688-d0213dc5a3a8"),
-      image("https://images.unsplash.com/photo-1542838132-92c53300491e"),
-      image("https://images.unsplash.com/photo-1578916171728-46686eac8d58")
+      image("https://images.unsplash.com/photo-1550547660-d9450f859349"),
+      image("https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5"),
+      image("https://images.unsplash.com/photo-1573080496219-bb080dd4f877")
     ]
   },
-  "Amool icecream": {
+  "Naturals Ice Cream": {
     shopImageUrl: image("https://images.unsplash.com/photo-1563805042-7684c019e1cb"),
     bannerImageUrl: image("https://images.unsplash.com/photo-1501443762994-82bd5dace89a"),
     restaurantPhotosUrls: [
@@ -203,117 +218,383 @@ const PARTNER_IMAGES: Record<string, { shopImageUrl: string; bannerImageUrl: str
   }
 };
 
+const PARADISE_BIRYANI_ITEMS: MenuSeed[] = [
+  { name: "Chicken Dum Biryani", description: "Hyderabadi dum biryani with tender chicken and aromatic basmati rice", price: 249, category: "Biryani", isVegetarian: false, preparationTime: 25, imageUrl: BIRYANI_ITEM_IMAGES[0] },
+  { name: "Mutton Dum Biryani", description: "Slow-cooked mutton biryani with saffron and fried onions", price: 329, category: "Biryani", isVegetarian: false, preparationTime: 28, imageUrl: BIRYANI_ITEM_IMAGES[1] },
+  { name: "Boneless Chicken Biryani", description: "Juicy boneless chicken layered with fragrant rice", price: 279, category: "Biryani", isVegetarian: false, preparationTime: 22, imageUrl: BIRYANI_ITEM_IMAGES[2] },
+  { name: "Veg Dum Biryani", description: "Mixed vegetables dum-cooked with Hyderabadi spices", price: 199, category: "Biryani", isVegetarian: true, preparationTime: 20, imageUrl: BIRYANI_ITEM_IMAGES[3] },
+  { name: "Paneer Biryani", description: "Cottage cheese biryani with mint and fried onions", price: 219, category: "Biryani", isVegetarian: true, preparationTime: 20, imageUrl: BIRYANI_ITEM_IMAGES[4] },
+  { name: "Chicken 65", description: "Spicy deep-fried chicken bites — Hyderabad street classic", price: 249, category: "Starters", isVegetarian: false, preparationTime: 15, imageUrl: BIRYANI_ITEM_IMAGES[5] },
+  { name: "Apollo Fish", description: "Crispy Apollo-style fish fry with house masala", price: 299, category: "Starters", isVegetarian: false, preparationTime: 16, imageUrl: BIRYANI_ITEM_IMAGES[6] },
+  { name: "Mirchi Ka Salan", description: "Green chilli curry served with biryani — Hyderabadi staple", price: 89, category: "Sides", isVegetarian: true, preparationTime: 10, imageUrl: BIRYANI_ITEM_IMAGES[7] },
+  { name: "Raita", description: "Cooling onion-tomato curd raita", price: 49, category: "Sides", isVegetarian: true, preparationTime: 5, imageUrl: BIRYANI_ITEM_IMAGES[8] },
+  { name: "Double Ka Meetha", description: "Bread pudding dessert with dry fruits and rabri", price: 99, category: "Desserts", isVegetarian: true, preparationTime: 8, imageUrl: BIRYANI_ITEM_IMAGES[9] },
+  { name: "Qubani Ka Meetha", description: "Apricot dessert topped with cream — Nizami classic", price: 119, category: "Desserts", isVegetarian: true, preparationTime: 8, imageUrl: BIRYANI_ITEM_IMAGES[10] },
+  { name: "Chicken Fry Piece Biryani", description: "Biryani topped with crispy chicken fry pieces", price: 269, category: "Biryani", isVegetarian: false, preparationTime: 24, imageUrl: BIRYANI_ITEM_IMAGES[11] },
+  { name: "Egg Biryani", description: "Boiled eggs layered in spiced dum biryani", price: 179, category: "Biryani", isVegetarian: false, preparationTime: 18, imageUrl: BIRYANI_ITEM_IMAGES[12] },
+  { name: "Talawa Gosht", description: "Pan-fried mutton chunks with Hyderabadi spices", price: 349, category: "Curries", isVegetarian: false, preparationTime: 22, imageUrl: BIRYANI_ITEM_IMAGES[13] },
+  { name: "Roomali Roti", description: "Thin hand-tossed roti, perfect with curries", price: 35, category: "Breads", isVegetarian: true, preparationTime: 6, imageUrl: BIRYANI_ITEM_IMAGES[14] }
+];
+
+const PULLA_REDDY_SWEETS_ITEMS: MenuSeed[] = [
+  { name: "Pootharekulu", description: "Paper-thin sweet rolls with sugar and ghee — Andhra specialty", price: 180, category: "Festival Specials", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[0] },
+  { name: "Kaju Katli", description: "Diamond-cut cashew fudge with silver varq", price: 240, category: "Dry Sweets", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[1] },
+  { name: "Mysore Pak", description: "Ghee-rich gram flour sweet, melt-in-mouth texture", price: 140, category: "Milk Sweets", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[2] },
+  { name: "Motichoor Laddu", description: "Fine boondi laddus with cardamom and saffron", price: 120, category: "Milk Sweets", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[3] },
+  { name: "Gulab Jamun", description: "Soft khoya dumplings in rose-cardamom syrup", price: 90, category: "Milk Sweets", isVegetarian: true, preparationTime: 6, imageUrl: SWEETS_ITEM_IMAGES[4] },
+  { name: "Rasmalai", description: "Chenna patties soaked in chilled saffron milk", price: 130, category: "Milk Sweets", isVegetarian: true, preparationTime: 6, imageUrl: SWEETS_ITEM_IMAGES[5] },
+  { name: "Jalebi", description: "Crispy spirals dipped in saffron sugar syrup", price: 80, category: "Festival Specials", isVegetarian: true, preparationTime: 7, imageUrl: SWEETS_ITEM_IMAGES[6] },
+  { name: "Badam Halwa", description: "Warm almond halwa with ghee and saffron strands", price: 180, category: "Festival Specials", isVegetarian: true, preparationTime: 8, imageUrl: SWEETS_ITEM_IMAGES[7] },
+  { name: "Dry Fruit Barfi", description: "Rich barfi with cashew, almond and pistachio", price: 260, category: "Dry Sweets", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[8] },
+  { name: "Ghee Jangiri", description: "South Indian jangiri fried in ghee and soaked in syrup", price: 120, category: "Festival Specials", isVegetarian: true, preparationTime: 7, imageUrl: SWEETS_ITEM_IMAGES[9] },
+  { name: "Soan Papdi", description: "Flaky cube sweet with roasted besan and ghee", price: 105, category: "Dry Sweets", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[10] },
+  { name: "Coconut Barfi", description: "Fresh coconut fudge with mild cardamom", price: 100, category: "Dry Sweets", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[11] },
+  { name: "Boondi Laddu", description: "Temple-style laddu with crunchy boondi", price: 110, category: "Milk Sweets", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[12] },
+  { name: "Milk Peda", description: "Soft milk peda with cardamom and pistachio", price: 115, category: "Milk Sweets", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[13] },
+  { name: "Special Mixture", description: "Crunchy namkeen mix with nuts and curry leaves", price: 95, category: "Namkeen", isVegetarian: true, preparationTime: 5, imageUrl: SWEETS_ITEM_IMAGES[14] }
+];
+
+const KARACHI_BAKERY_ITEMS: MenuSeed[] = [
+  { name: "Osmania Biscuit (250g)", description: "Iconic Hyderabadi tea biscuit — slightly sweet, buttery", price: 120, category: "Biscuits", isVegetarian: true, preparationTime: 5, imageUrl: BAKERY_ITEM_IMAGES[0] },
+  { name: "Fruit Biscuit (250g)", description: "Karachi Bakery's famous fruit biscuit with tutti-frutti", price: 130, category: "Biscuits", isVegetarian: true, preparationTime: 5, imageUrl: BAKERY_ITEM_IMAGES[1] },
+  { name: "Khara Biscuit (250g)", description: "Savory spiced biscuit, perfect with chai", price: 110, category: "Biscuits", isVegetarian: true, preparationTime: 5, imageUrl: BAKERY_ITEM_IMAGES[2] },
+  { name: "Dilkhush", description: "Sweet coconut-filled puff pastry — Karachi Bakery classic", price: 45, category: "Puffs", isVegetarian: true, preparationTime: 6, imageUrl: BAKERY_ITEM_IMAGES[3] },
+  { name: "Plum Cake (500g)", description: "Rich fruit and nut cake — year-round bestseller", price: 350, category: "Cakes", isVegetarian: true, preparationTime: 5, imageUrl: BAKERY_ITEM_IMAGES[4] },
+  { name: "Butter Croissant", description: "Flaky French croissant baked fresh every morning", price: 75, category: "Breads", isVegetarian: true, preparationTime: 6, imageUrl: BAKERY_ITEM_IMAGES[5] },
+  { name: "Veg Puff", description: "Crisp puff with spiced potato and peas filling", price: 35, category: "Puffs", isVegetarian: true, preparationTime: 6, imageUrl: BAKERY_ITEM_IMAGES[6] },
+  { name: "Egg Puff", description: "Golden puff with boiled egg and onion masala", price: 45, category: "Puffs", isVegetarian: false, preparationTime: 6, imageUrl: BAKERY_ITEM_IMAGES[7] },
+  { name: "Chocolate Muffin", description: "Moist chocolate muffin with choco chips", price: 60, category: "Cakes", isVegetarian: true, preparationTime: 5, imageUrl: BAKERY_ITEM_IMAGES[8] },
+  { name: "Black Forest Pastry", description: "Chocolate sponge with cream and cherries", price: 90, category: "Pastries", isVegetarian: true, preparationTime: 6, imageUrl: BAKERY_ITEM_IMAGES[9] },
+  { name: "Pineapple Pastry", description: "Light sponge with fresh pineapple cream", price: 85, category: "Pastries", isVegetarian: true, preparationTime: 6, imageUrl: BAKERY_ITEM_IMAGES[10] },
+  { name: "Jeera Cookies", description: "Crisp cumin cookies baked with butter", price: 65, category: "Cookies", isVegetarian: true, preparationTime: 5, imageUrl: BAKERY_ITEM_IMAGES[11] },
+  { name: "Cream Bun", description: "Soft bun filled with sweet vanilla cream", price: 40, category: "Buns", isVegetarian: true, preparationTime: 5, imageUrl: BAKERY_ITEM_IMAGES[12] },
+  { name: "Milk Bread Loaf", description: "Soft daily bread loaf for sandwiches and toast", price: 55, category: "Breads", isVegetarian: true, preparationTime: 5, imageUrl: BAKERY_ITEM_IMAGES[13] },
+  { name: "Veg Grilled Sandwich", description: "Grilled sandwich with vegetables and cheese", price: 95, category: "Hots", isVegetarian: true, preparationTime: 10, imageUrl: BAKERY_ITEM_IMAGES[14] }
+];
+
+const SREE_KRISHNA_JUICE_ITEMS: MenuSeed[] = [
+  { name: "Fresh Mosambi Juice", description: "Sweet lime juice squeezed to order", price: 70, category: "Fresh Juice", isVegetarian: true, preparationTime: 5, imageUrl: JUICE_ITEM_IMAGES[0] },
+  { name: "Sugarcane Juice", description: "Chilled ganne ka ras with ginger and lemon", price: 40, category: "Fresh Juice", isVegetarian: true, preparationTime: 5, imageUrl: JUICE_ITEM_IMAGES[1] },
+  { name: "Watermelon Juice", description: "Cooling watermelon juice, no added sugar", price: 60, category: "Fresh Juice", isVegetarian: true, preparationTime: 5, imageUrl: JUICE_ITEM_IMAGES[2] },
+  { name: "Pomegranate Juice", description: "Fresh anar juice — antioxidant rich", price: 120, category: "Fresh Juice", isVegetarian: true, preparationTime: 7, imageUrl: JUICE_ITEM_IMAGES[3] },
+  { name: "Badam Milk", description: "Chilled almond milk with saffron and nuts", price: 80, category: "Milkshakes", isVegetarian: true, preparationTime: 6, imageUrl: JUICE_ITEM_IMAGES[4] },
+  { name: "Mango Shake", description: "Seasonal mango milkshake with Alphonso pulp", price: 110, category: "Milkshakes", isVegetarian: true, preparationTime: 6, imageUrl: JUICE_ITEM_IMAGES[5] },
+  { name: "Banana Shake", description: "Thick banana milkshake with chilled milk", price: 80, category: "Milkshakes", isVegetarian: true, preparationTime: 5, imageUrl: JUICE_ITEM_IMAGES[6] },
+  { name: "Oreo Shake", description: "Crushed Oreo blended with vanilla ice cream", price: 130, category: "Milkshakes", isVegetarian: true, preparationTime: 6, imageUrl: JUICE_ITEM_IMAGES[7] },
+  { name: "Chocolate Shake", description: "Thick chocolate shake with cocoa and ice cream", price: 120, category: "Milkshakes", isVegetarian: true, preparationTime: 6, imageUrl: JUICE_ITEM_IMAGES[8] },
+  { name: "Apple Beetroot Carrot Juice", description: "ABC immunity booster juice", price: 130, category: "Fresh Juice", isVegetarian: true, preparationTime: 7, imageUrl: JUICE_ITEM_IMAGES[9] },
+  { name: "Lime Mint Cooler", description: "Refreshing lime and mint soda cooler", price: 70, category: "Mocktails", isVegetarian: true, preparationTime: 5, imageUrl: JUICE_ITEM_IMAGES[10] },
+  { name: "Blue Lagoon", description: "Fizzy blue lagoon mocktail with lemon", price: 100, category: "Mocktails", isVegetarian: true, preparationTime: 5, imageUrl: JUICE_ITEM_IMAGES[11] },
+  { name: "Avocado Smoothie", description: "Creamy avocado smoothie with honey", price: 150, category: "Smoothies", isVegetarian: true, preparationTime: 7, imageUrl: JUICE_ITEM_IMAGES[12] },
+  { name: "Mixed Fruit Bowl", description: "Seasonal fruits — apple, banana, papaya and melon", price: 100, category: "Fruit Bowls", isVegetarian: true, preparationTime: 6, imageUrl: JUICE_ITEM_IMAGES[13] },
+  { name: "Pineapple Juice", description: "Tangy pineapple juice with a pinch of salt", price: 75, category: "Fresh Juice", isVegetarian: true, preparationTime: 5, imageUrl: JUICE_ITEM_IMAGES[14] }
+];
+
+const LOUIS_BURGER_ITEMS: MenuSeed[] = [
+  { name: "Classic Chicken Burger", description: "Grilled chicken patty with lettuce, mayo and cheese", price: 149, category: "Burgers", isVegetarian: false, preparationTime: 12, imageUrl: FASTFOOD_ITEM_IMAGES[0] },
+  { name: "Peri Peri Chicken Burger", description: "Spicy peri peri chicken with jalapeños and sauce", price: 179, category: "Burgers", isVegetarian: false, preparationTime: 14, imageUrl: FASTFOOD_ITEM_IMAGES[1] },
+  { name: "Veg Supreme Burger", description: "Crispy veg patty with onion rings and special sauce", price: 129, category: "Burgers", isVegetarian: true, preparationTime: 12, imageUrl: FASTFOOD_ITEM_IMAGES[2] },
+  { name: "BBQ Chicken Wrap", description: "Smoky BBQ chicken wrapped in soft tortilla", price: 159, category: "Wraps", isVegetarian: false, preparationTime: 11, imageUrl: FASTFOOD_ITEM_IMAGES[3] },
+  { name: "Paneer Tikka Wrap", description: "Grilled paneer tikka with mint chutney", price: 149, category: "Wraps", isVegetarian: true, preparationTime: 10, imageUrl: FASTFOOD_ITEM_IMAGES[4] },
+  { name: "Peri Peri Fries", description: "Crispy fries tossed in peri peri seasoning", price: 109, category: "Sides", isVegetarian: true, preparationTime: 8, imageUrl: FASTFOOD_ITEM_IMAGES[5] },
+  { name: "Loaded Cheese Fries", description: "Fries topped with melted cheese and jalapeños", price: 139, category: "Sides", isVegetarian: true, preparationTime: 9, imageUrl: FASTFOOD_ITEM_IMAGES[6] },
+  { name: "Chicken Wings (6 pcs)", description: "Crispy wings with choice of hot or BBQ sauce", price: 199, category: "Snacks", isVegetarian: false, preparationTime: 16, imageUrl: FASTFOOD_ITEM_IMAGES[7] },
+  { name: "Veg Nuggets (8 pcs)", description: "Golden fried veggie nuggets with dip", price: 119, category: "Snacks", isVegetarian: true, preparationTime: 10, imageUrl: FASTFOOD_ITEM_IMAGES[8] },
+  { name: "Cold Coffee", description: "Chilled creamy coffee with ice cream", price: 99, category: "Beverages", isVegetarian: true, preparationTime: 5, imageUrl: FASTFOOD_ITEM_IMAGES[9] },
+  { name: "Brownie Sundae", description: "Warm chocolate brownie with vanilla ice cream", price: 149, category: "Desserts", isVegetarian: true, preparationTime: 7, imageUrl: FASTFOOD_ITEM_IMAGES[10] },
+  { name: "Margherita Pizza", description: "Thin crust pizza with mozzarella and basil", price: 199, category: "Pizza", isVegetarian: true, preparationTime: 18, imageUrl: FASTFOOD_ITEM_IMAGES[11] },
+  { name: "Chicken Pepperoni Pizza", description: "Loaded pizza with chicken pepperoni and cheese", price: 279, category: "Pizza", isVegetarian: false, preparationTime: 20, imageUrl: FASTFOOD_ITEM_IMAGES[12] },
+  { name: "Garlic Bread (4 pcs)", description: "Toasted garlic bread with herbs and butter", price: 89, category: "Sides", isVegetarian: true, preparationTime: 8, imageUrl: FASTFOOD_ITEM_IMAGES[13] },
+  { name: "Chocolate Thick Shake", description: "Rich chocolate shake topped with whipped cream", price: 129, category: "Beverages", isVegetarian: true, preparationTime: 6, imageUrl: FASTFOOD_ITEM_IMAGES[14] }
+];
+
+const NATURALS_ICECREAM_ITEMS: MenuSeed[] = [
+  { name: "Tender Coconut", description: "Fresh tender coconut ice cream — Naturals signature", price: 70, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[0] },
+  { name: "Sitaphal (Custard Apple)", description: "Creamy sitaphal ice cream with real fruit pulp", price: 80, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[1] },
+  { name: "Butterscotch Scoop", description: "Butterscotch ice cream with crunchy praline", price: 75, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[2] },
+  { name: "Mango Scoop", description: "Alphonso mango ice cream — seasonal favourite", price: 80, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[3] },
+  { name: "Chocolate Scoop", description: "Rich Belgian chocolate ice cream", price: 70, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[4] },
+  { name: "Anjeer (Fig) Scoop", description: "Fig ice cream with real anjeer pieces", price: 85, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[5] },
+  { name: "Kulfi Stick", description: "Traditional malai kulfi on stick", price: 50, category: "Kulfi", isVegetarian: true, preparationTime: 3, imageUrl: ICE_CREAM_ITEM_IMAGES[6] },
+  { name: "Pista Kulfi", description: "Pistachio-flavoured dense kulfi", price: 60, category: "Kulfi", isVegetarian: true, preparationTime: 3, imageUrl: ICE_CREAM_ITEM_IMAGES[7] },
+  { name: "Fruit Overload Sundae", description: "Mixed seasonal fruits with vanilla ice cream", price: 150, category: "Sundaes", isVegetarian: true, preparationTime: 7, imageUrl: ICE_CREAM_ITEM_IMAGES[8] },
+  { name: "Brownie Sundae", description: "Warm brownie topped with ice cream and chocolate sauce", price: 170, category: "Sundaes", isVegetarian: true, preparationTime: 8, imageUrl: ICE_CREAM_ITEM_IMAGES[9] },
+  { name: "Vanilla Family Pack (500ml)", description: "Take-home vanilla ice cream tub", price: 180, category: "Family Packs", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[10] },
+  { name: "Mango Family Pack (500ml)", description: "Take-home mango ice cream tub", price: 210, category: "Family Packs", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[11] },
+  { name: "Cold Coffee Shake", description: "Cold coffee blended with vanilla ice cream", price: 120, category: "Shakes", isVegetarian: true, preparationTime: 6, imageUrl: ICE_CREAM_ITEM_IMAGES[12] },
+  { name: "Choco Bar", description: "Chocolate-coated vanilla ice cream bar", price: 45, category: "Bars", isVegetarian: true, preparationTime: 3, imageUrl: ICE_CREAM_ITEM_IMAGES[13] },
+  { name: "Jackfruit Scoop", description: "Unique jackfruit ice cream with real fruit", price: 80, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: ICE_CREAM_ITEM_IMAGES[14] }
+];
+
+const AFFORDABLE_PRICES: Record<string, Record<string, number>> = {
+  "Paradise Biryani": {
+    "Chicken Dum Biryani": 199,
+    "Mutton Dum Biryani": 279,
+    "Boneless Chicken Biryani": 219,
+    "Veg Dum Biryani": 149,
+    "Paneer Biryani": 169,
+    "Chicken 65": 199,
+    "Apollo Fish": 249,
+    "Mirchi Ka Salan": 49,
+    "Raita": 35,
+    "Double Ka Meetha": 79,
+    "Qubani Ka Meetha": 99,
+    "Chicken Fry Piece Biryani": 219,
+    "Egg Biryani": 149,
+    "Talawa Gosht": 299,
+    "Roomali Roti": 25
+  },
+  "Pulla Reddy Sweets": {
+    "Pootharekulu": 120,
+    "Kaju Katli": 60,
+    "Mysore Pak": 35,
+    "Motichoor Laddu": 25,
+    "Gulab Jamun": 25,
+    "Rasmalai": 45,
+    "Jalebi": 20,
+    "Badam Halwa": 50,
+    "Dry Fruit Barfi": 65,
+    "Ghee Jangiri": 25,
+    "Soan Papdi": 25,
+    "Coconut Barfi": 25,
+    "Boondi Laddu": 20,
+    "Milk Peda": 25,
+    "Special Mixture": 30
+  },
+  "Karachi Bakery": {
+    "Osmania Biscuit (250g)": 90,
+    "Fruit Biscuit (250g)": 100,
+    "Khara Biscuit (250g)": 85,
+    "Dilkhush": 35,
+    "Plum Cake (500g)": 280,
+    "Butter Croissant": 30,
+    "Veg Puff": 15,
+    "Egg Puff": 20,
+    "Chocolate Muffin": 25,
+    "Black Forest Pastry": 40,
+    "Pineapple Pastry": 35,
+    "Jeera Cookies": 25,
+    "Cream Bun": 15,
+    "Milk Bread Loaf": 20,
+    "Veg Grilled Sandwich": 40
+  },
+  "Sree Krishna Juice Point": {
+    "Fresh Mosambi Juice": 25,
+    "Sugarcane Juice": 20,
+    "Watermelon Juice": 20,
+    "Pomegranate Juice": 50,
+    "Badam Milk": 40,
+    "Mango Shake": 45,
+    "Banana Shake": 30,
+    "Oreo Shake": 55,
+    "Chocolate Shake": 50,
+    "Apple Beetroot Carrot Juice": 50,
+    "Lime Mint Cooler": 20,
+    "Blue Lagoon": 35,
+    "Avocado Smoothie": 60,
+    "Mixed Fruit Bowl": 40,
+    "Pineapple Juice": 25
+  },
+  "Louis Burger": {
+    "Classic Chicken Burger": 129,
+    "Peri Peri Chicken Burger": 149,
+    "Veg Supreme Burger": 99,
+    "BBQ Chicken Wrap": 129,
+    "Paneer Tikka Wrap": 119,
+    "Peri Peri Fries": 79,
+    "Loaded Cheese Fries": 99,
+    "Chicken Wings (6 pcs)": 169,
+    "Veg Nuggets (8 pcs)": 89,
+    "Cold Coffee": 69,
+    "Brownie Sundae": 119,
+    "Margherita Pizza": 149,
+    "Chicken Pepperoni Pizza": 199,
+    "Garlic Bread (4 pcs)": 59,
+    "Chocolate Thick Shake": 89
+  },
+  "Naturals Ice Cream": {
+    "Tender Coconut": 60,
+    "Sitaphal (Custard Apple)": 70,
+    "Butterscotch Scoop": 55,
+    "Mango Scoop": 65,
+    "Chocolate Scoop": 55,
+    "Anjeer (Fig) Scoop": 70,
+    "Kulfi Stick": 40,
+    "Pista Kulfi": 50,
+    "Fruit Overload Sundae": 120,
+    "Brownie Sundae": 140,
+    "Vanilla Family Pack (500ml)": 160,
+    "Mango Family Pack (500ml)": 180,
+    "Cold Coffee Shake": 90,
+    "Choco Bar": 35,
+    "Jackfruit Scoop": 65
+  }
+};
+
+const PARTNER_CATALOG: PartnerCatalogEntry[] = [
+  {
+    restaurantName: "Paradise Biryani",
+    legacyNames: ["Raja cloud"],
+    phoneEnv: "RAJA_CLOUD_PHONE",
+    shopDescription: "Legendary Hyderabadi biryani since 1953 — dum biryani, kebabs and Nizami desserts",
+    category: "cloud-kitchen",
+    rating: 4.6,
+    ratingCount: 2840,
+    openingTime: "11:00",
+    closingTime: "23:00",
+    distanceKm: 0.5,
+    bearingDegrees: 35,
+    address: {
+      state: "Telangana",
+      city: "Hyderabad",
+      pincode: "500028",
+      area: "Secunderabad",
+      colony: "Paradise Circle",
+      roadStreet: "SD Road, Near Paradise Junction",
+      nearbyPlaces: ["Paradise Metro Station", "Ranigunj"]
+    }
+  },
+  {
+    restaurantName: "Pulla Reddy Sweets",
+    legacyNames: ["Krishna sweets"],
+    phoneEnv: "KRISHNA_SWEETS_PHONE",
+    shopDescription: "Authentic Andhra sweets — Pootharekulu, Kaju Katli and festival specials",
+    category: "sweets",
+    rating: 4.5,
+    ratingCount: 1520,
+    openingTime: "08:00",
+    closingTime: "22:00",
+    distanceKm: 1,
+    bearingDegrees: 90,
+    address: {
+      state: "Telangana",
+      city: "Hyderabad",
+      pincode: "500034",
+      area: "Banjara Hills",
+      colony: "Road No. 12",
+      roadStreet: "Banjara Hills Main Road",
+      nearbyPlaces: ["GVK One Mall", "Jalagam Vengal Rao Park"]
+    }
+  },
+  {
+    restaurantName: "Karachi Bakery",
+    legacyNames: ["Nandini Bakery"],
+    phoneEnv: "NANDINI_BAKERY_PHONE",
+    shopDescription: "Hyderabad's iconic bakery — Osmania biscuits, fruit biscuits and plum cake",
+    category: "bakery",
+    rating: 4.7,
+    ratingCount: 4200,
+    openingTime: "07:00",
+    closingTime: "22:00",
+    distanceKm: 1.5,
+    bearingDegrees: 135,
+    address: {
+      state: "Telangana",
+      city: "Hyderabad",
+      pincode: "500001",
+      area: "Nampally",
+      colony: "Moazzam Jahi Market",
+      roadStreet: "Mozamjahi Market Road",
+      nearbyPlaces: ["Nampally Railway Station", "Charminar (2 km)"]
+    }
+  },
+  {
+    restaurantName: "Sree Krishna Juice Point",
+    legacyNames: ["Btech juices"],
+    phoneEnv: "BTECH_JUICES_PHONE",
+    shopDescription: "Fresh fruit juices, sugarcane, badam milk and thick shakes",
+    category: "juice",
+    rating: 4.3,
+    ratingCount: 680,
+    openingTime: "09:00",
+    closingTime: "22:00",
+    distanceKm: 2,
+    bearingDegrees: 180,
+    address: {
+      state: "Telangana",
+      city: "Hyderabad",
+      pincode: "500072",
+      area: "Kukatpally",
+      colony: "KPHB Colony",
+      roadStreet: "KPHB 4th Phase Main Road",
+      nearbyPlaces: ["KPHB Metro Station", "Forum Sujana Mall"]
+    }
+  },
+  {
+    restaurantName: "Louis Burger",
+    legacyNames: ["Ram grocery"],
+    phoneEnv: "RAM_GROCERY_PHONE",
+    shopDescription: "Gourmet burgers, wraps, wings and pizzas — Hyderabad's favourite cloud kitchen",
+    category: "fast-food",
+    rating: 4.4,
+    ratingCount: 2100,
+    openingTime: "11:00",
+    closingTime: "23:30",
+    distanceKm: 2.5,
+    bearingDegrees: 225,
+    address: {
+      state: "Telangana",
+      city: "Hyderabad",
+      pincode: "500032",
+      area: "Gachibowli",
+      colony: "DLF Cyber City",
+      roadStreet: "Gachibowli Main Road",
+      nearbyPlaces: ["DLF Cyber Towers", "IKEA Hyderabad"]
+    }
+  },
+  {
+    restaurantName: "Naturals Ice Cream",
+    legacyNames: ["Amool icecream"],
+    phoneEnv: "AMOOL_ICECREAM_PHONE",
+    shopDescription: "Fresh fruit ice creams — tender coconut, sitaphal, mango and more",
+    category: "ice-creams",
+    rating: 4.5,
+    ratingCount: 1890,
+    openingTime: "10:00",
+    closingTime: "23:00",
+    distanceKm: 2.8,
+    bearingDegrees: 300,
+    address: {
+      state: "Telangana",
+      city: "Hyderabad",
+      pincode: "500081",
+      area: "Madhapur",
+      colony: "Hitech City",
+      roadStreet: "Mindspace Road",
+      nearbyPlaces: ["Inorbit Mall", "Durgam Cheruvu"]
+    }
+  }
+];
+
+const MENU_BY_PARTNER: Record<string, { items: MenuSeed[]; images: string[] }> = {
+  "Paradise Biryani": { items: PARADISE_BIRYANI_ITEMS, images: BIRYANI_ITEM_IMAGES },
+  "Pulla Reddy Sweets": { items: PULLA_REDDY_SWEETS_ITEMS, images: SWEETS_ITEM_IMAGES },
+  "Karachi Bakery": { items: KARACHI_BAKERY_ITEMS, images: BAKERY_ITEM_IMAGES },
+  "Sree Krishna Juice Point": { items: SREE_KRISHNA_JUICE_ITEMS, images: JUICE_ITEM_IMAGES },
+  "Louis Burger": { items: LOUIS_BURGER_ITEMS, images: FASTFOOD_ITEM_IMAGES },
+  "Naturals Ice Cream": { items: NATURALS_ICECREAM_ITEMS, images: ICE_CREAM_ITEM_IMAGES }
+};
+
+const LEGACY_MENU_ITEMS_TO_REMOVE: Record<string, string[]> = {
+  "Louis Burger": [
+    "Sona Masoori Rice 1 kg", "Toor Dal 1 kg", "Urad Dal 500 g", "Sugar 1 kg",
+    "Aashirvaad Atta 5 kg", "Sunflower Oil 1 L", "Tata Salt 1 kg",
+    "Classic Veg Burger", "Chicken Zinger Burger", "Paneer Wrap", "Chicken Roll"
+  ],
+  "Pulla Reddy Sweets": [
+    "Butter Croissant", "Chocolate Muffin", "Red Velvet Pastry", "Black Forest Slice",
+    "Veg Sandwich", "Blueberry Cheesecake Jar"
+  ],
+  "Paradise Biryani": [
+    "Plain Dosa", "Masala Dosa", "Idly (2 pcs)", "Ghee Podi Idly", "Maggie Masala"
+  ]
+};
+
 const withItemImages = (items: MenuSeed[], imageUrls: string[]) =>
   items.map((item, index) => ({
     ...item,
     imageUrl: imageUrls[index] || item.imageUrl
   }));
-
-const AFFORDABLE_PRICES: Record<string, Record<string, number>> = {
-  "Raja cloud": {
-    "Plain Dosa": 25,
-    "Masala Dosa": 35,
-    "Idly (2 pcs)": 20,
-    "Ghee Podi Idly": 30,
-    "Bread Omelette": 30,
-    "Egg Fry (2 Eggs)": 35,
-    "Veg Fried Rice": 50,
-    "Egg Fried Rice": 55,
-    "Chicken Fried Rice": 75,
-    "Veg Biryani": 65,
-    "Chicken Dum Biryani": 90,
-    "Jeera Rice": 40,
-    "Maggie Masala": 25,
-    "Paneer Butter Masala": 75,
-    "Chicken Curry": 85,
-    "Curd Rice": 35
-  },
-  "Krishna sweets": {
-    "Mysore Pak": 35,
-    "Kaju Katli": 60,
-    "Badam Halwa": 50,
-    "Motichoor Laddu": 25,
-    "Boondi Laddu": 20,
-    "Gulab Jamun": 25,
-    "Rasgulla": 25,
-    "Rasmalai": 45,
-    "Jalebi": 20,
-    "Milk Peda": 25,
-    "Soan Papdi": 25,
-    "Dry Fruit Barfi": 65,
-    "Coconut Barfi": 25,
-    "Ghee Jangiri": 25,
-    "Special Mixture": 30
-  },
-  "Nandini Bakery": {
-    "Milk Bread Loaf": 20,
-    "Whole Wheat Bread": 25,
-    "Butter Croissant": 30,
-    "Veg Puff": 15,
-    "Paneer Puff": 20,
-    "Egg Puff": 20,
-    "Chocolate Muffin": 25,
-    "Vanilla Cupcake": 20,
-    "Black Forest Pastry": 40,
-    "Pineapple Pastry": 35,
-    "Plum Cake Slice": 30,
-    "Jeera Cookies": 25,
-    "Choco Chip Cookies": 30,
-    "Cream Bun": 15,
-    "Veg Grilled Sandwich": 40
-  },
-  "Btech juices": {
-    "Fresh Mosambi Juice": 25,
-    "Orange Juice": 30,
-    "Watermelon Juice": 20,
-    "Pineapple Juice": 25,
-    "Pomegranate Juice": 50,
-    "Mango Shake": 45,
-    "Banana Shake": 30,
-    "Strawberry Shake": 45,
-    "Chocolate Shake": 50,
-    "Oreo Shake": 55,
-    "Avocado Smoothie": 60,
-    "Apple Beetroot Carrot Juice": 50,
-    "Lime Mint Cooler": 20,
-    "Blue Lagoon": 35,
-    "Mixed Fruit Bowl": 40
-  },
-  "Ram grocery": {
-    "Sona Masoori Rice 1 kg": 45,
-    "Toor Dal 1 kg": 75,
-    "Urad Dal 500 g": 45,
-    "Sugar 1 kg": 35,
-    "Aashirvaad Atta 5 kg": 99,
-    "Sunflower Oil 1 L": 95,
-    "Tata Salt 1 kg": 20,
-    "Turmeric Powder 200 g": 30,
-    "Red Chilli Powder 200 g": 35,
-    "Amul Butter 100 g": 40,
-    "Curd 500 g": 25,
-    "Good Day Cookies": 15,
-    "Lays Classic Salted": 10,
-    "Dishwash Bar": 10,
-    "Toothpaste 100 g": 35
-  },
-  "Amool icecream": {
-    "Vanilla Scoop": 20,
-    "Chocolate Scoop": 25,
-    "Strawberry Scoop": 25,
-    "Butterscotch Scoop": 30,
-    "Black Currant Scoop": 30,
-    "Mango Cup": 20,
-    "Pista Cup": 20,
-    "Choco Bar": 15,
-    "Kulfi Stick": 15,
-    "Vanilla Family Pack": 80,
-    "Chocolate Family Pack": 90,
-    "Fruit Overload Sundae": 60,
-    "Brownie Sundae": 70,
-    "Cold Coffee Shake": 45,
-    "Chocolate Thick Shake": 55
-  }
-};
 
 const withAffordablePrices = (restaurantName: string, items: MenuSeed[]) =>
   items.map((item) => ({
@@ -324,241 +605,7 @@ const withAffordablePrices = (restaurantName: string, items: MenuSeed[]) =>
 const prepareMenu = (restaurantName: string, items: MenuSeed[], imageUrls: string[]) =>
   withAffordablePrices(restaurantName, withItemImages(items, imageUrls));
 
-const FASTFOOD_TEST_ITEMS: MenuSeed[] = [
-  { name: "Classic Veg Burger", description: "Crispy veg patty, lettuce and mayo", price: 129, category: "Burgers", isVegetarian: true, preparationTime: 12, imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd" },
-  { name: "Chicken Zinger Burger", description: "Crunchy chicken fillet with spicy sauce", price: 169, category: "Burgers", isVegetarian: false, preparationTime: 14, imageUrl: "https://images.unsplash.com/photo-1550317138-10000687a72b" },
-  { name: "Paneer Wrap", description: "Grilled paneer with onions and mint dip", price: 149, category: "Wraps", isVegetarian: true, preparationTime: 10, imageUrl: "https://images.unsplash.com/photo-1626700051175-6818013e1d4f" },
-  { name: "Chicken Roll", description: "Juicy chicken strips in flaky roll", price: 159, category: "Wraps", isVegetarian: false, preparationTime: 11, imageUrl: "https://images.unsplash.com/photo-1565299507177-b0ac66763828" },
-  { name: "Peri Peri Fries", description: "Crispy fries tossed with peri peri seasoning", price: 109, category: "Sides", isVegetarian: true, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877" },
-  { name: "Loaded Cheese Fries", description: "Fries topped with cheese and jalapenos", price: 139, category: "Sides", isVegetarian: true, preparationTime: 9, imageUrl: "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5" },
-  { name: "Crispy Chicken Wings", description: "Hot and crunchy wings with dip", price: 199, category: "Snacks", isVegetarian: false, preparationTime: 16, imageUrl: "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445" },
-  { name: "Veg Nuggets", description: "Golden fried veggie nuggets", price: 119, category: "Snacks", isVegetarian: true, preparationTime: 10, imageUrl: "https://images.unsplash.com/photo-1625938145744-36f3a4ca3f5f" },
-  { name: "Cold Coffee", description: "Chilled creamy coffee", price: 99, category: "Beverages", isVegetarian: true, preparationTime: 5, imageUrl: "https://images.unsplash.com/photo-1517701604599-bb29b565090c" },
-  { name: "Brownie Sundae", description: "Warm brownie with vanilla scoop", price: 149, category: "Desserts", isVegetarian: true, preparationTime: 7, imageUrl: "https://images.unsplash.com/photo-1564355808539-22fda35bed7e" }
-];
-
-const TEST_RES1_ITEMS: MenuSeed[] = [
-  { name: "Butter Croissant", description: "Fresh flaky croissant", price: 69, category: "Bakery", isVegetarian: true, preparationTime: 6, imageUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff" },
-  { name: "Chocolate Muffin", description: "Moist muffin with chocolate chips", price: 79, category: "Bakery", isVegetarian: true, preparationTime: 6, imageUrl: "https://images.unsplash.com/photo-1606313564200-e75d5e30476c" },
-  { name: "Red Velvet Pastry", description: "Cream layered red velvet pastry", price: 109, category: "Cakes", isVegetarian: true, preparationTime: 7, imageUrl: "https://images.unsplash.com/photo-1578985545062-69928b1d9587" },
-  { name: "Black Forest Slice", description: "Chocolate sponge with cherries", price: 119, category: "Cakes", isVegetarian: true, preparationTime: 7, imageUrl: "https://images.unsplash.com/photo-1464306076886-da185f6a9d05" },
-  { name: "Veg Puff", description: "Spiced potato filling in puff pastry", price: 49, category: "Snacks", isVegetarian: true, preparationTime: 5, imageUrl: "https://images.unsplash.com/photo-1625944525533-473f1bb3bc76" },
-  { name: "Paneer Puff", description: "Paneer masala baked puff", price: 59, category: "Snacks", isVegetarian: true, preparationTime: 6, imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356fbe" },
-  { name: "Garlic Bread", description: "Toasted garlic bread with herbs", price: 89, category: "Sides", isVegetarian: true, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1619531038896-b0e2eb7f7f4d" },
-  { name: "Veg Sandwich", description: "Loaded grilled veggie sandwich", price: 99, category: "Sandwiches", isVegetarian: true, preparationTime: 10, imageUrl: "https://images.unsplash.com/photo-1528736235302-52922df5c122" },
-  { name: "Cold Coffee", description: "Creamy cold coffee", price: 89, category: "Beverages", isVegetarian: true, preparationTime: 5, imageUrl: "https://images.unsplash.com/photo-1517701604599-bb29b565090c" },
-  { name: "Blueberry Cheesecake Jar", description: "Creamy cheesecake in a jar", price: 129, category: "Desserts", isVegetarian: true, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1533134242443-d4fd215305ad" }
-];
-
-const RAJA_CLOUD_KITCHEN_ITEMS: MenuSeed[] = [
-  { name: "Plain Dosa", description: "Crispy dosa with chutney and sambar", price: 79, category: "Breakfast", isVegetarian: true, preparationTime: 10, imageUrl: "https://images.unsplash.com/photo-1630383249896-424e482df921" },
-  { name: "Masala Dosa", description: "Dosa stuffed with spiced potato masala", price: 99, category: "Breakfast", isVegetarian: true, preparationTime: 12, imageUrl: "https://images.unsplash.com/photo-1626500155537-93690a4f4937" },
-  { name: "Idly (2 pcs)", description: "Soft steamed idly served hot", price: 59, category: "Breakfast", isVegetarian: true, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1589302168068-964664d93dc0" },
-  { name: "Ghee Podi Idly", description: "Mini idly tossed with ghee and podi", price: 89, category: "Breakfast", isVegetarian: true, preparationTime: 9, imageUrl: "https://images.unsplash.com/photo-1601050690597-df0568f70950" },
-  { name: "Bread Omelette", description: "Street-style bread omelette with masala", price: 69, category: "Egg Specials", isVegetarian: false, preparationTime: 9, imageUrl: "https://images.unsplash.com/photo-1482049016688-2d3e1b311543" },
-  { name: "Egg Fry (2 Eggs)", description: "Pan-fried eggs with onion and chili", price: 79, category: "Egg Specials", isVegetarian: false, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1498654896293-37aacf113fd9" },
-  { name: "Veg Fried Rice", description: "Classic Indo-Chinese veg fried rice", price: 119, category: "Rice", isVegetarian: true, preparationTime: 12, imageUrl: "https://images.unsplash.com/photo-1512058564366-18510be2db19" },
-  { name: "Egg Fried Rice", description: "Fried rice with eggs and spring onion", price: 129, category: "Rice", isVegetarian: false, preparationTime: 13, imageUrl: "https://images.unsplash.com/photo-1603133872878-684f208fb84b" },
-  { name: "Chicken Fried Rice", description: "Smoky fried rice with juicy chicken", price: 159, category: "Rice", isVegetarian: false, preparationTime: 14, imageUrl: "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f" },
-  { name: "Veg Biryani", description: "Aromatic dum biryani with mixed vegetables", price: 149, category: "Biryani", isVegetarian: true, preparationTime: 18, imageUrl: "https://images.unsplash.com/photo-1563379091339-03246963d51a" },
-  { name: "Chicken Dum Biryani", description: "Spicy chicken dum biryani", price: 199, category: "Biryani", isVegetarian: false, preparationTime: 20, imageUrl: "https://images.unsplash.com/photo-1599043513900-ed6fe01d3833" },
-  { name: "Jeera Rice", description: "Steamed jeera rice with ghee aroma", price: 99, category: "Rice", isVegetarian: true, preparationTime: 10, imageUrl: "https://images.unsplash.com/photo-1512058564366-18510be2db19" },
-  { name: "Maggie Masala", description: "Classic masala maggie with veggies", price: 69, category: "Snacks", isVegetarian: true, preparationTime: 7, imageUrl: "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841" },
-  { name: "Paneer Butter Masala", description: "Creamy paneer curry with rich gravy", price: 179, category: "Curries", isVegetarian: true, preparationTime: 16, imageUrl: "https://images.unsplash.com/photo-1604908176997-4317c7eaeb9b" },
-  { name: "Chicken Curry", description: "Homestyle spicy chicken curry", price: 189, category: "Curries", isVegetarian: false, preparationTime: 17, imageUrl: "https://images.unsplash.com/photo-1601050690117-8b3b8f567f1f" },
-  { name: "Curd Rice", description: "Cooling curd rice tempered with mustard", price: 89, category: "Rice", isVegetarian: true, preparationTime: 8, imageUrl: "https://images.unsplash.com/photo-1596797038530-2c107aa1e2fd" }
-];
-
-const KRISHNA_SWEETS_ITEMS: MenuSeed[] = [
-  { name: "Mysore Pak", description: "Ghee-rich gram flour sweet cut into soft pieces", price: 140, category: "Milk Sweets", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Kaju Katli", description: "Thin cashew fudge slices finished with silver varq", price: 240, category: "Dry Sweets", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Badam Halwa", description: "Warm almond halwa cooked with ghee and saffron", price: 180, category: "Festival Specials", isVegetarian: true, preparationTime: 8, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Motichoor Laddu", description: "Fine boondi laddus with cardamom aroma", price: 120, category: "Milk Sweets", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Boondi Laddu", description: "Classic temple-style laddu with crunchy boondi", price: 110, category: "Milk Sweets", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Gulab Jamun", description: "Soft khoya dumplings soaked in rose syrup", price: 90, category: "Milk Sweets", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Rasgulla", description: "Spongy chenna balls in light sugar syrup", price: 95, category: "Milk Sweets", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Rasmalai", description: "Chenna patties soaked in chilled saffron milk", price: 130, category: "Milk Sweets", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Jalebi", description: "Crispy spirals dipped in saffron sugar syrup", price: 80, category: "Festival Specials", isVegetarian: true, preparationTime: 7, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Milk Peda", description: "Soft milk peda with cardamom and pistachio", price: 115, category: "Milk Sweets", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Soan Papdi", description: "Flaky cube sweet with roasted besan and ghee", price: 105, category: "Dry Sweets", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Dry Fruit Barfi", description: "Rich barfi packed with cashew, almond and pista", price: 260, category: "Dry Sweets", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Coconut Barfi", description: "Fresh coconut fudge with mild cardamom", price: 100, category: "Dry Sweets", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Ghee Jangiri", description: "South Indian jangiri fried in ghee and soaked in syrup", price: 120, category: "Festival Specials", isVegetarian: true, preparationTime: 7, imageUrl: MENU_IMAGE_URLS.sweets },
-  { name: "Special Mixture", description: "Crunchy namkeen mix with nuts and curry leaves", price: 95, category: "Namkeen", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.sweets }
-];
-
-const NANDINI_BAKERY_ITEMS: MenuSeed[] = [
-  { name: "Milk Bread Loaf", description: "Soft daily bread loaf for sandwiches and toast", price: 55, category: "Breads", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Whole Wheat Bread", description: "Fresh wheat bread loaf with soft slices", price: 65, category: "Breads", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Butter Croissant", description: "Flaky butter croissant baked fresh", price: 75, category: "Breads", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Veg Puff", description: "Crisp puff stuffed with spiced vegetable masala", price: 35, category: "Puffs", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Paneer Puff", description: "Golden puff with paneer and mild spices", price: 45, category: "Puffs", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Egg Puff", description: "Flaky puff filled with boiled egg and masala", price: 45, category: "Puffs", isVegetarian: false, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Chocolate Muffin", description: "Moist chocolate muffin with choco chips", price: 60, category: "Cakes", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Vanilla Cupcake", description: "Soft vanilla cupcake with buttercream swirl", price: 50, category: "Cakes", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Black Forest Pastry", description: "Chocolate sponge layered with cream and cherries", price: 90, category: "Pastries", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Pineapple Pastry", description: "Light sponge pastry with pineapple cream", price: 85, category: "Pastries", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Plum Cake Slice", description: "Rich fruit cake slice with nuts and raisins", price: 70, category: "Cakes", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Jeera Cookies", description: "Crisp cumin cookies baked with butter", price: 65, category: "Cookies", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Choco Chip Cookies", description: "Crunchy cookies loaded with chocolate chips", price: 80, category: "Cookies", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Cream Bun", description: "Soft bun filled with sweet vanilla cream", price: 40, category: "Buns", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.bakery },
-  { name: "Veg Grilled Sandwich", description: "Grilled bakery sandwich with vegetables and cheese", price: 95, category: "Hots", isVegetarian: true, preparationTime: 10, imageUrl: MENU_IMAGE_URLS.bakery }
-];
-
-const BTECH_JUICES_ITEMS: MenuSeed[] = [
-  { name: "Fresh Mosambi Juice", description: "Freshly squeezed sweet lime juice", price: 70, category: "Fresh Juice", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Orange Juice", description: "Fresh orange juice served chilled", price: 80, category: "Fresh Juice", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Watermelon Juice", description: "Cooling watermelon juice with no added color", price: 60, category: "Fresh Juice", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Pineapple Juice", description: "Tangy pineapple juice with a hint of salt", price: 75, category: "Fresh Juice", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Pomegranate Juice", description: "Rich anar juice made from fresh fruit", price: 120, category: "Fresh Juice", isVegetarian: true, preparationTime: 7, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Mango Shake", description: "Creamy mango milkshake with seasonal mango pulp", price: 110, category: "Milkshakes", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Banana Shake", description: "Thick banana milkshake with chilled milk", price: 80, category: "Milkshakes", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Strawberry Shake", description: "Sweet strawberry milkshake with cream finish", price: 115, category: "Milkshakes", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Chocolate Shake", description: "Thick chocolate shake with cocoa and ice cream", price: 120, category: "Milkshakes", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Oreo Shake", description: "Crushed Oreo shake with vanilla ice cream", price: 130, category: "Milkshakes", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Avocado Smoothie", description: "Creamy avocado smoothie with honey", price: 150, category: "Smoothies", isVegetarian: true, preparationTime: 7, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Apple Beetroot Carrot Juice", description: "ABC immunity juice with apple, beetroot and carrot", price: 130, category: "Fresh Juice", isVegetarian: true, preparationTime: 7, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Lime Mint Cooler", description: "Refreshing lime, mint and soda cooler", price: 70, category: "Mocktails", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Blue Lagoon", description: "Fizzy blue lagoon mocktail with lemon", price: 100, category: "Mocktails", isVegetarian: true, preparationTime: 5, imageUrl: MENU_IMAGE_URLS.juice },
-  { name: "Mixed Fruit Bowl", description: "Seasonal fruit bowl with apple, banana and melon", price: 100, category: "Fruit Bowls", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.juice }
-];
-
-const RAM_GROCERY_ITEMS: MenuSeed[] = [
-  { name: "Sona Masoori Rice 1 kg", description: "Everyday sona masoori rice pack", price: 68, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Toor Dal 1 kg", description: "Premium toor dal for daily cooking", price: 145, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Urad Dal 500 g", description: "Cleaned urad dal for dosa, idli and curries", price: 85, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Sugar 1 kg", description: "Refined white sugar pack", price: 48, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Aashirvaad Atta 5 kg", description: "Whole wheat atta family pack", price: 260, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Sunflower Oil 1 L", description: "Refined sunflower oil pouch", price: 145, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Tata Salt 1 kg", description: "Iodized salt for everyday cooking", price: 28, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Turmeric Powder 200 g", description: "Ground turmeric powder pack", price: 55, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Red Chilli Powder 200 g", description: "Spicy red chilli powder pack", price: 65, category: "Staples", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Amul Butter 100 g", description: "Salted table butter pack", price: 58, category: "Dairy", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Curd 500 g", description: "Fresh packaged curd", price: 45, category: "Dairy", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Good Day Cookies", description: "Butter cookies family pack", price: 35, category: "Snacks", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Lays Classic Salted", description: "Classic salted potato chips pack", price: 20, category: "Snacks", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Dishwash Bar", description: "Lemon dishwash cleaning bar", price: 25, category: "Household", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery },
-  { name: "Toothpaste 100 g", description: "Daily-use toothpaste tube", price: 60, category: "Personal Care", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.grocery }
-];
-
-const AMOOL_ICECREAM_ITEMS: MenuSeed[] = [
-  { name: "Vanilla Scoop", description: "Classic vanilla ice cream scoop", price: 60, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Chocolate Scoop", description: "Rich chocolate ice cream scoop", price: 70, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Strawberry Scoop", description: "Creamy strawberry ice cream scoop", price: 70, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Butterscotch Scoop", description: "Butterscotch ice cream with crunchy praline", price: 75, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Black Currant Scoop", description: "Tangy black currant ice cream scoop", price: 80, category: "Scoops", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Mango Cup", description: "Mango ice cream cup for single serve", price: 55, category: "Cups", isVegetarian: true, preparationTime: 3, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Pista Cup", description: "Pista flavored ice cream cup", price: 60, category: "Cups", isVegetarian: true, preparationTime: 3, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Choco Bar", description: "Chocolate coated vanilla ice cream bar", price: 45, category: "Cups", isVegetarian: true, preparationTime: 3, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Kulfi Stick", description: "Traditional malai kulfi on stick", price: 50, category: "Cups", isVegetarian: true, preparationTime: 3, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Vanilla Family Pack", description: "Vanilla ice cream family pack", price: 180, category: "Family Packs", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Chocolate Family Pack", description: "Chocolate ice cream family pack", price: 210, category: "Family Packs", isVegetarian: true, preparationTime: 4, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Fruit Overload Sundae", description: "Mixed fruit sundae with vanilla ice cream", price: 150, category: "Sundaes", isVegetarian: true, preparationTime: 7, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Brownie Sundae", description: "Chocolate brownie topped with ice cream and sauce", price: 170, category: "Sundaes", isVegetarian: true, preparationTime: 8, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Cold Coffee Shake", description: "Cold coffee blended with vanilla ice cream", price: 120, category: "Shakes", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.iceCream },
-  { name: "Chocolate Thick Shake", description: "Thick chocolate shake with ice cream", price: 140, category: "Shakes", isVegetarian: true, preparationTime: 6, imageUrl: MENU_IMAGE_URLS.iceCream }
-];
-
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const MOCK_PARTNER_LOCATIONS: Array<{
-  restaurantName: string;
-  phoneEnv: string;
-  distanceKm: number;
-  bearingDegrees: number;
-  address: AddressSeed;
-}> = [
-  {
-    restaurantName: "Raja cloud",
-    phoneEnv: "RAJA_CLOUD_PHONE",
-    distanceKm: 0.5,
-    bearingDegrees: 35,
-    address: {
-      state: "Telangana",
-      city: "Hyderabad",
-      pincode: "500086",
-      area: "Bandlaguda Jagir",
-      colony: "Westend Colony",
-      roadStreet: "Road No. 1",
-      nearbyPlaces: ["Near Westend Colony Park", "Bandlaguda Jagir Main Road"]
-    }
-  },
-  {
-    restaurantName: "Krishna sweets",
-    phoneEnv: "KRISHNA_SWEETS_PHONE",
-    distanceKm: 1,
-    bearingDegrees: 90,
-    address: {
-      state: "Telangana",
-      city: "Hyderabad",
-      pincode: "500086",
-      area: "Bandlaguda Jagir",
-      colony: "Westend Colony",
-      roadStreet: "Road No. 3",
-      nearbyPlaces: ["Near Westend Colony Masjid", "Bandlaguda Jagir Main Road"]
-    }
-  },
-  {
-    restaurantName: "Nandini Bakery",
-    phoneEnv: "NANDINI_BAKERY_PHONE",
-    distanceKm: 1.5,
-    bearingDegrees: 135,
-    address: {
-      state: "Telangana",
-      city: "Hyderabad",
-      pincode: "500086",
-      area: "Bandlaguda Jagir",
-      colony: "Keerthi Richmond Villas",
-      roadStreet: "Richmond Villas Road",
-      nearbyPlaces: ["Near Keerthi Richmond Villas", "Bandlaguda Jagir"]
-    }
-  },
-  {
-    restaurantName: "Btech juices",
-    phoneEnv: "BTECH_JUICES_PHONE",
-    distanceKm: 2,
-    bearingDegrees: 180,
-    address: {
-      state: "Telangana",
-      city: "Hyderabad",
-      pincode: "500086",
-      area: "Bandlaguda Jagir",
-      colony: "Kismatpur Road",
-      roadStreet: "Kali Mandir Road",
-      nearbyPlaces: ["Near Kali Mandir Road", "Bandlaguda Jagir"]
-    }
-  },
-  {
-    restaurantName: "Ram grocery",
-    phoneEnv: "RAM_GROCERY_PHONE",
-    distanceKm: 2.5,
-    bearingDegrees: 225,
-    address: {
-      state: "Telangana",
-      city: "Hyderabad",
-      pincode: "500086",
-      area: "Bandlaguda Jagir",
-      colony: "Janachaitanya Colony",
-      roadStreet: "Janachaitanya Colony Road",
-      nearbyPlaces: ["Near Janachaitanya Colony Gate", "Bandlaguda Jagir"]
-    }
-  },
-  {
-    restaurantName: "Amool icecream",
-    phoneEnv: "AMOOL_ICECREAM_PHONE",
-    distanceKm: 2.8,
-    bearingDegrees: 300,
-    address: {
-      state: "Telangana",
-      city: "Hyderabad",
-      pincode: "500086",
-      area: "Bandlaguda Jagir",
-      colony: "Sun City",
-      roadStreet: "Sun City Road",
-      nearbyPlaces: ["Near Sun City Road", "Bandlaguda Jagir"]
-    }
-  }
-];
 
 const DEFAULT_CLUSTER_CENTER = {
   longitude: 78.3896,
@@ -585,15 +632,27 @@ const MOCK_ORDER_PLANS: MockOrderPlan[] = [
   { status: "CANCELLED", daysAgo: 6, itemOffset: 1, quantities: [1], paymentMethod: "CASH_ON_DELIVERY" }
 ];
 
-const findMockPartner = async (phone: string | null, restaurantName: string) => {
+const findPartnerByName = async (name: string) =>
+  Partner.findOne({
+    restaurantName: { $regex: new RegExp(`^${escapeRegex(name)}$`, "i") }
+  });
+
+const findMockPartner = async (entry: PartnerCatalogEntry) => {
+  const phone = process.env[entry.phoneEnv] || null;
   if (phone) {
     const partnerByPhone = await Partner.findOne({ phone });
     if (partnerByPhone) return partnerByPhone;
   }
 
-  return Partner.findOne({
-    restaurantName: { $regex: new RegExp(`^${escapeRegex(restaurantName)}$`, "i") }
-  });
+  const partnerByCurrentName = await findPartnerByName(entry.restaurantName);
+  if (partnerByCurrentName) return partnerByCurrentName;
+
+  for (const legacyName of entry.legacyNames) {
+    const partnerByLegacyName = await findPartnerByName(legacyName);
+    if (partnerByLegacyName) return partnerByLegacyName;
+  }
+
+  return null;
 };
 
 const hasUsableCoordinates = (coordinates: unknown): coordinates is [number, number] => {
@@ -625,15 +684,11 @@ const coordinatesAtDistance = (
 const googleMapsLinkFor = ([longitude, latitude]: [number, number]) =>
   `https://www.google.com/maps?q=${latitude},${longitude}`;
 
-const upsertMenuForPartner = async (
-  phone: string | null,
-  restaurantName: string,
-  items: MenuSeed[]
-) => {
-  const partner = await findMockPartner(phone, restaurantName);
+const upsertMenuForPartner = async (entry: PartnerCatalogEntry, items: MenuSeed[]) => {
+  const partner = await findMockPartner(entry);
 
   if (!partner) {
-    console.log(`Partner not found for ${restaurantName} (${phone || "no-phone"})`);
+    console.log(`Partner not found for ${entry.restaurantName} (${process.env[entry.phoneEnv] || "no-phone"})`);
     return;
   }
 
@@ -663,47 +718,67 @@ const upsertMenuForPartner = async (
   partner.hasCompletedSetup = true;
   await partner.save();
 
-  console.log(`Added/updated ${items.length} menu items for existing partner ${partner.restaurantName || restaurantName} (${partner._id})`);
+  console.log(`Added/updated ${items.length} menu items for ${partner.restaurantName || entry.restaurantName} (${partner._id})`);
 };
 
-const removeLegacySeedItemsForPartner = async (restaurantName: string, items: MenuSeed[]) => {
-  const partner = await Partner.findOne({
-    restaurantName: { $regex: new RegExp(`^${escapeRegex(restaurantName)}$`, "i") }
-  });
-
-  if (!partner) return;
+const removeStaleMenuItems = async (entry: PartnerCatalogEntry, itemNames: string[]) => {
+  const partner = await findMockPartner(entry);
+  if (!partner || itemNames.length === 0) return;
 
   const result = await MenuItem.deleteMany({
     partnerId: partner._id,
-    name: { $in: items.map((item) => item.name) }
+    name: { $in: itemNames }
   });
 
   if (result.deletedCount) {
     partner.menuItemsCount = await MenuItem.countDocuments({ partnerId: partner._id });
     await partner.save();
-    console.log(`Removed ${result.deletedCount} legacy test items from ${partner.restaurantName}`);
+    console.log(`Removed ${result.deletedCount} stale items from ${partner.restaurantName}`);
   }
 };
 
+const updatePartnerProfile = async (entry: PartnerCatalogEntry) => {
+  const partner = await findMockPartner(entry);
+  if (!partner) {
+    console.log(`Partner not found while updating profile for ${entry.restaurantName}`);
+    return;
+  }
+
+  partner.restaurantName = entry.restaurantName;
+  partner.shopName = entry.restaurantName;
+  partner.shopDescription = entry.shopDescription;
+  partner.category = entry.category as any;
+  partner.rating = entry.rating;
+  partner.ratingCount = entry.ratingCount;
+  partner.openingTime = entry.openingTime;
+  partner.closingTime = entry.closingTime;
+  partner.isOpen = true;
+  partner.status = partner.status === "PENDING" ? "APPROVED" : partner.status;
+  partner.hasCompletedSetup = true;
+  await partner.save();
+
+  console.log(`Updated profile for ${entry.restaurantName}`);
+};
+
 const updateMockPartnerAddresses = async () => {
-  const anchorSeed = MOCK_PARTNER_LOCATIONS[0];
-  const anchorPartner = await findMockPartner(process.env[anchorSeed.phoneEnv] || null, anchorSeed.restaurantName);
+  const anchorEntry = PARTNER_CATALOG[0];
+  const anchorPartner = await findMockPartner(anchorEntry);
   const anchorCoordinates = (anchorPartner as any)?.location?.coordinates;
   const origin = hasUsableCoordinates(anchorCoordinates)
     ? { longitude: Number(anchorCoordinates[0]), latitude: Number(anchorCoordinates[1]) }
     : DEFAULT_CLUSTER_CENTER;
 
-  for (const seed of MOCK_PARTNER_LOCATIONS) {
-    const partner = await findMockPartner(process.env[seed.phoneEnv] || null, seed.restaurantName);
+  for (const entry of PARTNER_CATALOG) {
+    const partner = await findMockPartner(entry);
 
     if (!partner) {
-      console.log(`Partner not found while updating mock address for ${seed.restaurantName}`);
+      console.log(`Partner not found while updating address for ${entry.restaurantName}`);
       continue;
     }
 
-    const coordinates = coordinatesAtDistance(origin, seed.distanceKm, seed.bearingDegrees);
+    const coordinates = coordinatesAtDistance(origin, entry.distanceKm, entry.bearingDegrees);
     (partner as any).address = {
-      ...seed.address,
+      ...entry.address,
       googleMapsLink: googleMapsLinkFor(coordinates)
     };
     (partner as any).location = {
@@ -713,9 +788,7 @@ const updateMockPartnerAddresses = async () => {
     partner.hasCompletedSetup = true;
     await partner.save();
 
-    console.log(
-      `Updated mock address/location for ${partner.restaurantName || seed.restaurantName} (~${seed.distanceKm} km)`
-    );
+    console.log(`Updated address/location for ${partner.restaurantName} (~${entry.distanceKm} km)`);
   }
 };
 
@@ -739,11 +812,11 @@ const ensureMockCustomer = async () => {
     {
       $setOnInsert: {
         phone: MOCK_CUSTOMER_PHONE,
-        name: "Mock Customer",
+        name: "Rahul Reddy",
         role: "customer",
-        email: "mock.customer@nearu.local",
+        email: "rahul.reddy@nearu.local",
         address: {
-          recipientName: "Mock Customer",
+          recipientName: "Rahul Reddy",
           houseFlatDoorNo: "12-2",
           streetRoadName: "Westend Colony Road",
           city: "Hyderabad",
@@ -763,11 +836,11 @@ const seedMockOrdersForPartners = async () => {
   const partnerIds: any[] = [];
   const ordersToInsert: any[] = [];
 
-  for (const [partnerIndex, seed] of MOCK_PARTNER_LOCATIONS.entries()) {
-    const partner = await findMockPartner(process.env[seed.phoneEnv] || null, seed.restaurantName);
+  for (const [partnerIndex, entry] of PARTNER_CATALOG.entries()) {
+    const partner = await findMockPartner(entry);
 
     if (!partner) {
-      console.log(`Partner not found while seeding mock orders for ${seed.restaurantName}`);
+      console.log(`Partner not found while seeding mock orders for ${entry.restaurantName}`);
       continue;
     }
 
@@ -777,7 +850,7 @@ const seedMockOrdersForPartners = async () => {
       .lean();
 
     if (menuItems.length === 0) {
-      console.log(`No menu items found while seeding mock orders for ${partner.restaurantName || seed.restaurantName}`);
+      console.log(`No menu items found while seeding mock orders for ${partner.restaurantName}`);
       continue;
     }
 
@@ -809,7 +882,7 @@ const seedMockOrdersForPartners = async () => {
         orderType: "SHOP",
         customerId: customer._id,
         partnerId: partner._id,
-        deliveryAddress: `Mock address ${partnerIndex + 1}, Bandlaguda Jagir, Hyderabad`,
+        deliveryAddress: `Flat 4B, Westend Colony, Bandlaguda Jagir, Hyderabad`,
         deliveryLocation: {
           type: "Point",
           coordinates: deliveryCoordinates
@@ -846,10 +919,7 @@ const updatePartnerImages = async (restaurantName: string) => {
   const images = PARTNER_IMAGES[restaurantName];
   if (!images) return;
 
-  const partner = await Partner.findOne({
-    restaurantName: { $regex: new RegExp(`^${escapeRegex(restaurantName)}$`, "i") }
-  });
-
+  const partner = await findPartnerByName(restaurantName);
   if (!partner) {
     console.log(`Partner not found while updating images for ${restaurantName}`);
     return;
@@ -864,7 +934,7 @@ const updatePartnerImages = async (restaurantName: string) => {
   };
   await partner.save();
 
-  console.log(`Updated shop and restaurant photos for ${partner.restaurantName || restaurantName}`);
+  console.log(`Updated shop and restaurant photos for ${partner.restaurantName}`);
 };
 
 const run = async () => {
@@ -877,28 +947,32 @@ const run = async () => {
     await mongoose.connect(mongoURI);
     console.log("Connected to MongoDB");
 
-    await removeLegacySeedItemsForPartner("Ram grocery", FASTFOOD_TEST_ITEMS);
-    await removeLegacySeedItemsForPartner("Krishna sweets", TEST_RES1_ITEMS);
-    await upsertMenuForPartner(process.env.RAJA_CLOUD_PHONE || null, "Raja cloud", prepareMenu("Raja cloud", RAJA_CLOUD_KITCHEN_ITEMS, RAJA_ITEM_IMAGES));
-    await upsertMenuForPartner(process.env.KRISHNA_SWEETS_PHONE || null, "Krishna sweets", prepareMenu("Krishna sweets", KRISHNA_SWEETS_ITEMS, SWEETS_ITEM_IMAGES));
-    await upsertMenuForPartner(process.env.NANDINI_BAKERY_PHONE || null, "Nandini Bakery", prepareMenu("Nandini Bakery", NANDINI_BAKERY_ITEMS, BAKERY_ITEM_IMAGES));
-    await upsertMenuForPartner(process.env.BTECH_JUICES_PHONE || null, "Btech juices", prepareMenu("Btech juices", BTECH_JUICES_ITEMS, JUICE_ITEM_IMAGES));
-    await upsertMenuForPartner(process.env.RAM_GROCERY_PHONE || null, "Ram grocery", prepareMenu("Ram grocery", RAM_GROCERY_ITEMS, GROCERY_ITEM_IMAGES));
-    await upsertMenuForPartner(process.env.AMOOL_ICECREAM_PHONE || null, "Amool icecream", prepareMenu("Amool icecream", AMOOL_ICECREAM_ITEMS, ICE_CREAM_ITEM_IMAGES));
+    for (const entry of PARTNER_CATALOG) {
+      await updatePartnerProfile(entry);
+
+      const staleItems = LEGACY_MENU_ITEMS_TO_REMOVE[entry.restaurantName] || [];
+      if (staleItems.length > 0) {
+        await removeStaleMenuItems(entry, staleItems);
+      }
+
+      const menuConfig = MENU_BY_PARTNER[entry.restaurantName];
+      if (menuConfig) {
+        const menu = prepareMenu(entry.restaurantName, menuConfig.items, menuConfig.images);
+        await upsertMenuForPartner(entry, menu);
+      }
+    }
 
     await updateMockPartnerAddresses();
     await seedMockOrdersForPartners();
 
-    await updatePartnerImages("Krishna sweets");
-    await updatePartnerImages("Nandini Bakery");
-    await updatePartnerImages("Btech juices");
-    await updatePartnerImages("Ram grocery");
-    await updatePartnerImages("Amool icecream");
+    for (const entry of PARTNER_CATALOG) {
+      await updatePartnerImages(entry.restaurantName);
+    }
 
-    console.log("Mock partner menu seeding complete");
+    console.log("Hyderabad partner data seeding complete");
     process.exit(0);
   } catch (error) {
-    console.error("Failed to seed mock partner menus:", error);
+    console.error("Failed to seed Hyderabad partner data:", error);
     process.exit(1);
   }
 };

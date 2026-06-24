@@ -113,24 +113,24 @@ async function seedDatabase() {
     ]);
     console.log('✅ Created 4 test users');
 
-    // Create test partner
+    // Create test partner — Karachi Bakery, Hyderabad
     const partner = await Partner.create({
       userId: users[1]._id,
-      shopName: 'Sunrise Bakery Cafe',
-      description: 'Fresh bakery items, snacks, and daily specials',
+      shopName: 'Karachi Bakery',
+      description: "Hyderabad's iconic bakery — Osmania biscuits and plum cake",
       category: 'bakery',
-      address: '18 Lake View Road, Indiranagar, Bengaluru',
+      address: 'Mozamjahi Market Road, Nampally, Hyderabad',
       location: {
         type: 'Point',
-        coordinates: [77.5946, 12.9716] // Bangalore coordinates
+        coordinates: [78.4656, 17.3850]
       },
       phone: '9876543211',
       isActive: true,
       isOpen: true,
       openingTime: '07:00',
-      closingTime: '21:00',
+      closingTime: '22:00',
       deliveryRadius: 5,
-      rating: 4.5
+      rating: 4.7
     });
     console.log('✅ Created test partner shop');
 
@@ -138,29 +138,29 @@ async function seedDatabase() {
     await MenuItem.insertMany([
       {
         partnerId: partner._id,
-        name: 'Butter Croissant',
-        description: 'Fresh butter croissant',
-        price: 60,
+        name: 'Osmania Biscuit (250g)',
+        description: 'Iconic Hyderabadi tea biscuit',
+        price: 90,
         category: 'snack',
         preparationTime: 5,
         isVeg: true
       },
       {
         partnerId: partner._id,
-        name: 'Chocolate Muffin',
-        description: 'Chocolate chip muffin',
-        price: 80,
-        category: 'dessert',
+        name: 'Fruit Biscuit (250g)',
+        description: 'Famous fruit biscuit with tutti-frutti',
+        price: 100,
+        category: 'snack',
         preparationTime: 5,
         isVeg: true
       },
       {
         partnerId: partner._id,
-        name: 'Garlic Bread',
-        description: 'Fresh garlic bread with herbs',
-        price: 120,
-        category: 'main',
-        preparationTime: 10,
+        name: 'Dilkhush',
+        description: 'Sweet coconut-filled puff pastry',
+        price: 35,
+        category: 'snack',
+        preparationTime: 6,
         isVeg: true
       }
     ]);
@@ -172,8 +172,8 @@ async function seedDatabase() {
     console.log('Partner: 9876543211 (any OTP)');
     console.log('Delivery: 9876543212 (any OTP)');
     console.log('Admin: 9876543213 (any OTP)');
-    console.log('\n🏪 Test Shop: Sunrise Bakery Cafe');
-    console.log('📍 Location: Indiranagar, Bengaluru coordinates');
+    console.log('\n🏪 Test Shop: Karachi Bakery');
+    console.log('📍 Location: Nampally, Hyderabad');
 
     process.exit(0);
 
