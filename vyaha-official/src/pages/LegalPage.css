@@ -120,6 +120,15 @@
   text-decoration: none;
 }
 
+.legal-content h2 {
+  font-size: 1.45rem;
+  color: #1c1c1c;
+  margin-top: 42px;
+  margin-bottom: 14px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
 .legal-content h3 {
   font-size: 1.28rem;
   color: #1c1c1c;

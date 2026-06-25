@@ -53,8 +53,11 @@ function Footer() {
             <ul>
               <li><Link to="/policies">Guidelines and Policies</Link></li>
               <li><Link to="/privacy">Privacy</Link></li>
-              <li><Link to="/security">Security</Link></li>
               <li><Link to="/terms">Terms of Service</Link></li>
+              <li><Link to="/api-policy">API Policy</Link></li>
+              <li><Link to="/corporate-social-responsibility">CSR</Link></li>
+              <li><Link to="/license">License and Registration</Link></li>
+              <li><Link to="/security">Security</Link></li>
               <li><Link to="/refunds">Cancellation and Refunds</Link></li>
               <li><Link to="/payment-terms">Payment Terms</Link></li>
               <li><Link to="/acceptable-use">Acceptable Use</Link></li>

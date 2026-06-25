@@ -36,6 +36,9 @@ function App() {
           <Route path="/apps" element={<LegalPage pageType="apps" />} />
           <Route path="/consulting" element={<LegalPage pageType="consulting" />} />
           <Route path="/delivery" element={<LegalPage pageType="delivery" />} />
+          <Route path="/license" element={<LegalPage pageType="license" />} />
+          <Route path="/api-policy" element={<LegalPage pageType="apiPolicy" />} />
+          <Route path="/corporate-social-responsibility" element={<LegalPage pageType="csr" />} />
         </Routes>
         <Footer />
       </div>

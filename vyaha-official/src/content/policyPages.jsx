@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { vyahaLogos } from '../assets/logos';
-import { effectiveDate, businessName, legalContacts, governingLaw, registeredOffice } from './legalConfig';
+import { effectiveDate, businessName, legalContacts, governingLaw, registeredOffice, legalEntityName, gstin, serviceAreasFormatted } from './legalConfig';
 import {
   AppBrandGrid,
   ContactBlock,
@@ -11,38 +11,27 @@ import {
   PolicyIntro,
   PolicyNote,
 } from './policyComponents';
+import { TermsContent } from './policies/terms';
+import { PrivacyContent } from './policies/privacy';
+import { PoliciesHubContent } from './policies/policiesHub';
+import { SecurityContent } from './policies/security';
+import { LicenseContent } from './policies/license';
+import { ApiPolicyContent } from './policies/apiPolicy';
+import { CsrContent } from './policies/csr';
 
 export const pageData = {
   policies: {
     title: 'Guidelines and Policies',
-    content: (
-      <>
-        <PolicyIntro>
-          Vyaha is a local food ordering and delivery platform for customers, restaurants, delivery partners, and internal operations teams. These policies explain how the platform should be used, how information is handled, and the standards expected across the Vyaha network.
-        </PolicyIntro>
-        <LegalEntityBlock />
-        <ContactBlock />
-        <h3>Policy Hub</h3>
-        <PolicyHubLinks />
-        <h3>Core Principles</h3>
-        <ul>
-          <li>Use accurate account, order, restaurant, payout, and delivery information.</li>
-          <li>Treat customers, restaurant staff, delivery partners, and Vyaha teams with respect.</li>
-          <li>Do not misuse orders, payments, promotions, ratings, documents, or app access.</li>
-          <li>Share only content, images, documents, and business information you have the right to use.</li>
-          <li>Report fraud, safety concerns, and security issues promptly.</li>
-        </ul>
-      </>
-    ),
+    content: <PoliciesHubContent />,
   },
   about: {
     title: 'About Vyaha',
     content: (
       <>
         <PolicyIntro>
-          Vyaha connects nearby customers with local restaurants through ordering, delivery coordination, partner operations, and admin tools.
+          Vyaha connects nearby customers in Hyderabad with local restaurants and vendors through ordering, delivery coordination, partner operations, and admin tools.
         </PolicyIntro>
-        <p>Our focus is simple local ordering for customers, practical order management for restaurants, and reliable job handling for delivery partners.</p>
+        <p>Our focus is affordable local ordering for customers, practical order management for restaurants, and reliable job handling for delivery partners — with lower platform commission than typical aggregators and genuine in-restaurant menu pricing where possible.</p>
         <h3>What Vyaha Covers</h3>
         <ul>
           <li>Customers ordering food and local essentials.</li>
@@ -77,14 +66,16 @@ export const pageData = {
     title: 'Partner With Us',
     content: (
       <>
-        <PolicyIntro>Partner with Vyaha to receive online orders, manage your menu, and serve more local customers.</PolicyIntro>
+        <PolicyIntro>Partner with Vyaha to receive online orders, manage your menu, and serve more local customers in Hyderabad.</PolicyIntro>
         <div className="app-brand-showcase">
           <img src={vyahaLogos.partner} alt="Vyaha restaurant partner app logo" />
         </div>
         <h3>Why Partner With Vyaha?</h3>
         <ul>
           <li>Online order management through the restaurant partner app.</li>
-          <li>Local customer discovery and marketing opportunities.</li>
+          <li>Local customer discovery in Hyderabad neighborhoods.</li>
+          <li>Genuine menu pricing without unnecessary markup on listed items.</li>
+          <li>Low platform commission agreed at onboarding — designed to keep more revenue with local vendors.</li>
           <li>Menu, pricing, availability, and order status controls.</li>
           <li>Delivery coordination and admin support.</li>
           <li>Transparent business information and payout support.</li>
@@ -139,239 +130,15 @@ export const pageData = {
   },
   privacy: {
     title: 'Privacy Policy',
-    content: (
-      <>
-        <p><strong>Effective date:</strong> {effectiveDate}</p>
-        <PolicyIntro>
-          This Privacy Policy (&quot;Policy&quot;) describes how {businessName} collects, uses, stores, shares, and protects personal data when you use the Vyaha website, customer app, restaurant partner app, delivery partner app, admin panel, APIs, and related services (collectively, the &quot;Platform&quot;).
-        </PolicyIntro>
-        <PolicyNote>
-          <strong>Your consent:</strong> By creating an account, placing an order, onboarding as a partner, or otherwise using the Platform, you agree to this Policy and the processing described here, subject to applicable law. If you do not agree, please do not use the Platform.
-        </PolicyNote>
-        <LegalEntityBlock />
-        <ContactBlock />
-        <h3>1. Scope and Role</h3>
-        <p>
-          Vyaha acts as a data fiduciary for personal data processed through its platform, subject to applicable Indian law including the Digital Personal Data Protection Act, 2023 (DPDP Act), the Information Technology Act, 2000, and the Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011, where applicable.
-        </p>
-        <h3>2. Personal Data We Collect</h3>
-        <p><strong>Account data:</strong> name, phone number, email address, role, login status, OTP verification records, and account preferences.</p>
-        <p><strong>Customer data:</strong> delivery address, saved profile details, cart items, order history, delivery notes, payment method labels, support messages, refund requests, ratings, and complaint records.</p>
-        <p><strong>Restaurant partner data:</strong> restaurant name, owner or manager details, address, menu items, pricing, images, GST details where applicable, bank details, FSSAI or other license details, verification documents, payout records, and order activity.</p>
-        <p><strong>Delivery partner data:</strong> name, phone number, vehicle type, driving license where applicable, identity documents, bank details, availability status, assigned jobs, live or recent GPS location, delivery status, earnings records, and COD reconciliation data.</p>
-        <p><strong>Device and usage data:</strong> device type, operating system, app version, IP address, crash logs, session data, approximate region, notification tokens, and interactions with our apps or website.</p>
-        <p><strong>Support and fraud data:</strong> call notes, chat transcripts, dispute evidence, investigation records, and security incident logs where relevant.</p>
-        <h3>3. How We Use Personal Data</h3>
-        <ul>
-          <li>Create, verify, secure, and manage user accounts.</li>
-          <li>Process orders, assign restaurants and delivery partners, provide live status updates, and complete deliveries.</li>
-          <li>Process payments, COD records, refunds, payouts, invoices, and reconciliation.</li>
-          <li>Verify restaurant and delivery partner onboarding documents.</li>
-          <li>Provide customer support, fraud prevention, safety checks, dispute handling, and platform enforcement.</li>
-          <li>Improve app performance, delivery accuracy, analytics, reliability, and product design.</li>
-          <li>Send service updates, order alerts, security messages, support replies, and promotional communications where permitted by law and user choice.</li>
-          <li>Meet legal, tax, audit, regulatory, and law-enforcement obligations.</li>
-        </ul>
-        <h3>4. Location Data and Device Permissions</h3>
-        <p>
-          Vyaha uses location data to improve address accuracy, show nearby restaurants or delivery jobs, calculate delivery distance, assign available delivery partners, track active deliveries, and support safety or fraud investigations. Customer location may be collected when you search, save an address, or place an order. Delivery partner location may be collected in real time while they are online, available, or handling an active job, depending on app permissions and platform settings. Turning off required permissions may limit ordering, job assignment, or live tracking features.
-        </p>
-        <h3>5. Legal Basis and Consent</h3>
-        <p>
-          We process personal data where necessary to provide the service you request, comply with law, pursue legitimate business interests such as fraud prevention and service improvement, or based on consent where required, including for certain marketing communications and optional permissions.
-        </p>
-        <h3>6. Sharing of Personal Data</h3>
-        <p>
-          Vyaha does not sell personal data. We may share limited data with restaurants, delivery partners, payment gateways such as Razorpay, cloud hosting providers, map providers, SMS and notification providers, analytics and crash reporting tools such as Firebase, support vendors, professional advisors, and government or law-enforcement authorities where legally required. Restaurants and delivery partners receive only the data needed to prepare, hand over, or deliver an order.
-        </p>
-        <h3>7. Payment Information</h3>
-        <p>
-          Online payments are processed through third-party payment providers. Vyaha does not store full card numbers, CVV values, UPI PINs, or other sensitive payment authentication credentials on its own servers. Payment references, order IDs, method labels, transaction status, and reconciliation records may be stored for support, accounting, and legal compliance.
-        </p>
-        <h3>8. Cookies, SDKs, and Analytics</h3>
-        <p>
-          Our website and apps may use cookies, local storage, pixels, SDKs, and similar technologies for login sessions, security, preferences, analytics, crash reporting, and campaign measurement. See our <Link to="/cookie-policy">Cookie Policy</Link> for details and choices.
-        </p>
-        <h3>9. Marketing Communications</h3>
-        <p>
-          We may send promotional messages by SMS, push notification, email, or in-app alerts where permitted. You can opt out of non-essential promotional messages through app settings where available or by emailing <MailLink email={legalContacts.privacy} />. Service messages about orders, security, payouts, or account activity may still be sent.
-        </p>
-        <h3>10. Data Retention</h3>
-        <p>
-          We retain personal data only for as long as needed for the purposes described in this policy, unless a longer period is required by law. See our <Link to="/data-retention">Data Retention Policy</Link> for category-wise retention periods.
-        </p>
-        <h3>11. Your Rights</h3>
-        <p>Subject to applicable law, you may have the right to:</p>
-        <ul>
-          <li>Request access to personal data we hold about you.</li>
-          <li>Request correction of inaccurate or incomplete personal data.</li>
-          <li>Request erasure of personal data through our <Link to="/delete-account">account deletion process</Link>, subject to legal retention requirements.</li>
-          <li>Withdraw consent where processing is consent-based, without affecting prior lawful processing.</li>
-          <li>Raise a grievance with our grievance officer.</li>
-          <li>Nominate another person to exercise your rights in the event of death or incapacity, where applicable under the DPDP Act.</li>
-        </ul>
-        <h3>12. Grievance Officer</h3>
-        <p>
-          For privacy-related complaints or requests under applicable Indian law, contact our grievance officer using the details below.
-        </p>
-        <GrievanceOfficerBlock />
-        <h3>13. Links to Other Websites and Services</h3>
-        <p>
-          The Platform may contain links to restaurant websites, payment providers, maps, app stores, social media pages, or other third-party services. Their privacy practices are governed by their own policies, not this Policy. We encourage you to review third-party privacy notices before sharing information with them.
-        </p>
-        <h3>14. Cross-Border Processing</h3>
-        <p>
-          Personal data is primarily processed in India. If data is processed or stored outside India through cloud or service providers such as Firebase, Google Cloud, or other hosting partners, we take reasonable steps to require appropriate safeguards consistent with applicable law.
-        </p>
-        <h3>15. Children</h3>
-        <p>
-          Vyaha is not directed at children under 18. Users under 18 should use the platform only with parent or guardian supervision and only where lawful in their location.
-        </p>
-        <h3>16. Security</h3>
-        <p>
-          We use reasonable technical and organizational safeguards to protect personal data. See our <Link to="/security">Security Policy</Link> for more detail. No method of transmission or storage is completely secure.
-        </p>
-        <h3>17. Changes To This Policy</h3>
-        <p>
-          We may update this policy when products, laws, or operations change. Updated versions will be posted on this page with a revised effective date. Material changes may also be notified through the app or by email where appropriate.
-        </p>
-        <h3>18. Contact</h3>
-        <p>
-          Privacy questions: <MailLink email={legalContacts.privacy} /> or <MailLink email={legalContacts.support} />.
-        </p>
-      </>
-    ),
+    content: <PrivacyContent />,
   },
   security: {
-    title: 'Security Policy',
-    content: (
-      <>
-        <p><strong>Effective date:</strong> {effectiveDate}</p>
-        <PolicyIntro>
-          Vyaha works to protect customer accounts, restaurant operations, delivery activity, payments, documents, and admin tools through reasonable security practices.
-        </PolicyIntro>
-        <ContactBlock />
-        <h3>1. Account Protection</h3>
-        <ul>
-          <li>OTP-based authentication and token-based sessions are used for platform access.</li>
-          <li>Users must keep phones, OTPs, devices, and app sessions secure.</li>
-          <li>Never share OTPs, payment passwords, or account access with anyone claiming to represent Vyaha.</li>
-          <li>Report suspected account takeover immediately to <MailLink email={legalContacts.security} />.</li>
-        </ul>
-        <h3>2. Data Protection</h3>
-        <p>
-          We use encrypted communication channels where appropriate, access controls, role-based authorization, secure cloud storage practices, monitoring, backups, and limited internal access based on operational need.
-        </p>
-        <h3>3. Payments and Payouts</h3>
-        <p>
-          Online payments are handled through trusted payment providers. Bank and payout information is restricted to authorized processes and teams. COD activity, refunds, and payout records may be reviewed for fraud prevention and reconciliation.
-        </p>
-        <h3>4. Admin and Partner Controls</h3>
-        <p>
-          Restaurant approvals, delivery partner verification, order assignment, and admin actions are protected through role-based access. Admin tools must be used only by authorized personnel for legitimate platform operations.
-        </p>
-        <h3>5. Incident Response</h3>
-        <p>
-          If we become aware of a security incident affecting user data, we investigate promptly, take containment steps, and notify affected users or authorities where required by law.
-        </p>
-        <h3>6. Responsible Disclosure</h3>
-        <p>
-          If you discover a vulnerability, do not exploit it, access another person&apos;s data, disrupt services, or publicly disclose the issue before we have had a reasonable opportunity to investigate. Good-faith reports that follow these rules will not be pursued as unauthorized access.
-        </p>
-        <h3>7. Report A Security Issue</h3>
-        <p>
-          Email <MailLink email={legalContacts.security} /> with a clear description, affected URL or app screen, steps to reproduce, screenshots if safe, and your contact details.
-        </p>
-      </>
-    ),
+    title: 'Security',
+    content: <SecurityContent />,
   },
   terms: {
     title: 'Terms of Service',
-    content: (
-      <>
-        <p><strong>Effective date:</strong> {effectiveDate}</p>
-        <PolicyIntro>
-          These Terms govern use of Vyaha&apos;s website, customer app, restaurant partner app, delivery partner app, admin panel, APIs, and related services. By creating an account, placing an order, accepting a partner agreement, or otherwise using Vyaha, you agree to these Terms and the policies linked below.
-        </PolicyIntro>
-        <LegalEntityBlock />
-        <ContactBlock />
-        <h3>1. Eligibility</h3>
-        <p>
-          You must be legally capable of entering a binding contract, or use Vyaha under appropriate parent or guardian supervision. Restaurant and delivery partners must provide truthful registration, verification, tax, payout, and operational details. You must not use Vyaha if you are barred from doing so under applicable law.
-        </p>
-        <h3>2. Intermediary Status</h3>
-        <p>
-          Vyaha operates as an intermediary technology platform under the Information Technology Act, 2000 and the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, where applicable. Vyaha does not prepare food, own restaurant inventory, or employ delivery partners unless expressly stated in a separate written agreement. Restaurants are responsible for food preparation, menu accuracy, packaging, labeling, and compliance with applicable food laws. Delivery partners are responsible for lawful delivery conduct, road safety, and handling of orders assigned to them.
-        </p>
-        <h3>3. User Accounts</h3>
-        <p>
-          You are responsible for accurate information, account activity, device security, OTP confidentiality, and immediate reporting of unauthorized access. Vyaha may suspend, restrict, or terminate accounts involved in fraud, abuse, safety risks, repeated policy violations, chargeback abuse, promotion misuse, or legal issues.
-        </p>
-        <h3>4. Orders, Delivery, and Food Disclosures</h3>
-        <ul>
-          <li>Order acceptance, preparation, availability, pricing, delivery estimates, fees, and item substitutions may vary by restaurant and location.</li>
-          <li>Delivery times shown in the app are estimates only and may change due to restaurant load, distance, weather, traffic, partner availability, or operational constraints.</li>
-          <li>Restaurants are responsible for ingredient information, allergen disclosures where applicable, and food safety standards. Customers with allergies or dietary restrictions must review menu details carefully and contact the restaurant through support where needed. Vyaha does not guarantee allergen-free preparation unless expressly stated by the restaurant.</li>
-          <li>Food quality, taste, temperature, and freshness complaints are reviewed case by case under our <Link to="/refunds">Cancellation and Refund Policy</Link>.</li>
-        </ul>
-        <h3>5. Payments, Wallets, and Promotions</h3>
-        <p>
-          Vyaha may support cash on delivery, UPI, online payment, wallet credits, or other methods shown at checkout. You agree to pay item prices, taxes, delivery fees, platform fees, packing fees, and any applicable charges shown before order confirmation. Promotions, coupons, and referral benefits are subject to separate rules and may be reversed in cases of misuse. Payment failures, mismatches, suspected fraud, or chargebacks may delay, cancel, or reverse orders, refunds, or account benefits.
-        </p>
-        <p>See our <Link to="/payment-terms">Payment Terms</Link> for additional payment rules.</p>
-        <h3>6. Cancellations and Refunds</h3>
-        <p>
-          Cancellations and refunds are handled under our <Link to="/refunds">Cancellation and Refund Policy</Link>. Vyaha may review order status, restaurant preparation stage, delivery assignment, payment records, and customer evidence before approving a refund or credit.
-        </p>
-        <h3>7. Acceptable Use</h3>
-        <p>
-          You must not misuse the platform. Detailed rules are in our <Link to="/acceptable-use">Acceptable Use Policy</Link> and <Link to="/community-guidelines">Community and Content Guidelines</Link>.
-        </p>
-        <h3>8. Partner Terms</h3>
-        <p>
-          Restaurant partners are also bound by the <Link to="/partner-policy">Restaurant Partner Policy</Link>. Delivery partners are also bound by the <Link to="/delivery-policy">Delivery Partner Policy</Link> and independent contractor terms described there.
-        </p>
-        <h3>9. Intellectual Property</h3>
-        <p>
-          Vyaha&apos;s brand, software, designs, content, and platform materials belong to Vyaha or its licensors. Partners remain responsible for rights in uploaded restaurant names, menu images, logos, descriptions, and business materials.
-        </p>
-        <h3>10. Disclaimers</h3>
-        <p>
-          The platform is provided on an &quot;as available&quot; basis. To the maximum extent permitted by law, Vyaha disclaims warranties not required by applicable consumer protection law, including implied warranties of merchantability or fitness for a particular purpose.
-        </p>
-        <h3>11. Limitation of Liability</h3>
-        <p>
-          To the maximum extent permitted by law, Vyaha is not liable for indirect, incidental, special, consequential, punitive, or loss-of-profit damages arising from use of the platform. Nothing in these Terms limits rights that cannot be limited under applicable law, including rights available to consumers under the Consumer Protection Act, 2019 and related rules.
-        </p>
-        <h3>12. Indemnity</h3>
-        <p>
-          Partners and users who cause loss to Vyaha through fraud, unlawful conduct, false documents, IP infringement, or breach of these Terms may be responsible for resulting claims, losses, and reasonable costs, subject to applicable law.
-        </p>
-        <h3>13. Dispute Resolution and Governing Law</h3>
-        <p>
-          These Terms are governed by the {governingLaw}. Courts at {registeredOffice.city}, {registeredOffice.state} will have jurisdiction, subject to mandatory consumer forum rights where applicable. Before filing a claim, users are encouraged to contact <MailLink email={legalContacts.support} /> so we can attempt good-faith resolution within a reasonable period.
-        </p>
-        <p>
-          Nothing in these Terms prevents you from approaching the appropriate consumer dispute redressal forum under the Consumer Protection Act, 2019 where you qualify as a consumer under applicable law.
-        </p>
-        <h3>14. Force Majeure</h3>
-        <p>
-          Vyaha is not responsible for delays or failures caused by events outside reasonable control, including natural disasters, strikes, network outages, payment gateway failures, government actions, or severe weather affecting restaurants or delivery operations.
-        </p>
-        <h3>15. Severability and Assignment</h3>
-        <p>
-          If any part of these Terms is held invalid or unenforceable, the remaining provisions remain in effect. Vyaha may assign or transfer its rights and obligations under these Terms as part of a merger, acquisition, restructuring, or asset sale, subject to applicable law. You may not assign your rights without Vyaha&apos;s prior written consent.
-        </p>
-        <h3>16. Changes</h3>
-        <p>
-          We may update these Terms from time to time. Continued use after the effective date of an update means you accept the revised Terms, unless applicable law requires explicit consent.
-        </p>
-        <h3>17. Contact</h3>
-        <p>
-          Questions about these Terms: <MailLink email={legalContacts.support} />.
-        </p>
-      </>
-    ),
+    content: <TermsContent />,
   },
   refunds: {
     title: 'Cancellation and Refund Policy',
@@ -497,7 +264,7 @@ export const pageData = {
         </p>
         <h3>7. Commission, Payouts, and Deductions</h3>
         <p>
-          Payouts may be adjusted for agreed commissions, taxes, refunds, cancellations, penalties, COD reconciliation, promotions, payment gateway charges, and other agreed fees. Current commission and payout terms are shared during onboarding or in partner dashboards. Vyaha may hold or review payouts for fraud, disputes, chargebacks, or verification issues.
+          Vyaha uses a low-commission, local-vendor-first model. Commission rates, delivery fee sharing, and payout terms are agreed during onboarding or shown in partner dashboards. Rates may vary by restaurant category, order volume, and location within Hyderabad. Payouts may be adjusted for agreed commissions, taxes, refunds, cancellations, penalties, COD reconciliation, promotions, payment gateway charges, and other agreed fees. Vyaha may hold or review payouts for fraud, disputes, chargebacks, or verification issues.
         </p>
         <h3>8. Intellectual Property</h3>
         <p>
@@ -877,7 +644,7 @@ export const pageData = {
     title: 'For Delivery Partners',
     content: (
       <>
-        <PolicyIntro>Join Vyaha as a delivery partner and earn by completing local delivery jobs.</PolicyIntro>
+        <PolicyIntro>Join Vyaha as a delivery partner and earn by completing local delivery jobs in Hyderabad.</PolicyIntro>
         <div className="app-brand-showcase">
           <img src={vyahaLogos.delivery} alt="Vyaha delivery partner app logo" />
         </div>
@@ -899,5 +666,17 @@ export const pageData = {
         <Link className="cta-button" to="/delivery-policy">Become a Delivery Partner</Link>
       </>
     ),
+  },
+  license: {
+    title: 'License, Registration and Certificate',
+    content: <LicenseContent />,
+  },
+  apiPolicy: {
+    title: 'API Policy',
+    content: <ApiPolicyContent />,
+  },
+  csr: {
+    title: 'Corporate Social Responsibility',
+    content: <CsrContent />,
   },
 };
