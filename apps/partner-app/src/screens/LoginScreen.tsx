@@ -24,26 +24,8 @@ import { registerForPushNotifications } from "../services/notifications";
 import { partnerTheme } from "../theme";
 import { buildLegalUrl } from "../constants/legal";
 
-const TEST_LOGIN_PHONE = "1010101010";
-const TEST_LOGIN_OTP = "000000";
 const TERMS_URL = buildLegalUrl("terms");
 const PRIVACY_URL = buildLegalUrl("privacy");
-
-interface AuthResponse {
-  success: boolean;
-  data?: {
-    token: string;
-    refreshToken?: string;
-    user: {
-      id: string;
-      phone: string;
-      name: string;
-      role: string;
-      partnerId?: string;
-    };
-  };
-  message?: string;
-}
 
 export default function LoginScreen({ navigation }: any) {
   const [phone, setPhone] = useState("");
@@ -147,7 +129,7 @@ export default function LoginScreen({ navigation }: any) {
       setStep("otp");
       setFeedback({
         type: "success",
-        text: cleanedPhone === TEST_LOGIN_PHONE ? "Use test OTP 000000 to continue." : (session.deliveryHint || "OTP sent. Enter the code below.")
+        text: session.deliveryHint || "OTP sent. Enter the code below."
       });
     } catch (error: any) {
       console.error("Send OTP error:", error);
@@ -221,28 +203,6 @@ export default function LoginScreen({ navigation }: any) {
       setLoading(true);
       setFeedback(null);
       lastSubmittedOtp.current = otp;
-
-      if (phone === TEST_LOGIN_PHONE && otp === TEST_LOGIN_OTP) {
-        const res = await api.post("/auth/verify-otp", { phone, otp, role: "partner" });
-        const data = res.data as AuthResponse;
-        const payload = data.data;
-        if (!data.success || !payload?.token || !payload.user) {
-          throw new Error(data.message || "Invalid response from server");
-        }
-        await storeAuthData({
-          token: payload.token,
-          refreshToken: payload.refreshToken,
-          phone,
-          userId: payload.user.id,
-          partnerId: payload.user.partnerId,
-          user: payload.user
-        });
-        registerForPushNotifications().catch((error) => {
-          console.log("Failed to register push notifications:", error);
-        });
-        await checkPartnerStatus();
-        return;
-      }
 
       const data = await verifyOtpSession(phone, otp, "partner", otpSession);
       const payload = data.data;

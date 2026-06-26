@@ -1,6 +1,13 @@
 import { sendOtp, verifyOtp, verifyFirebaseOtp, SendOtpResponse } from "../api/auth.api";
 import { sendFirebaseOtp, confirmFirebaseOtp } from "./firebasePhoneAuth";
 
+export const TEST_LOGIN_PHONE = "1010101010";
+export const TEST_LOGIN_OTP = "000000";
+
+export const isTestLoginPhone = (phone: string) => phone.replace(/\D/g, "") === TEST_LOGIN_PHONE;
+export const isTestOtpLogin = (phone: string, otp: string) =>
+  isTestLoginPhone(phone) && otp === TEST_LOGIN_OTP;
+
 export type OtpAuthProvider = "2factor" | "firebase";
 
 export type OtpSessionInfo = {
@@ -67,6 +74,15 @@ const normalizeSendOtpResponse = (raw: SendOtpResponse | Record<string, unknown>
 };
 
 export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo> => {
+  const cleanedPhone = phone.replace(/\D/g, "");
+
+  if (isTestLoginPhone(cleanedPhone)) {
+    return {
+      provider: "2factor",
+      deliveryHint: `Use test OTP ${TEST_LOGIN_OTP} to continue.`
+    };
+  }
+
   try {
     const rawResponse = await sendOtp(phone);
     const response = normalizeSendOtpResponse(rawResponse as SendOtpResponse);
@@ -84,6 +100,13 @@ export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo
       return {
         provider: "2factor",
         deliveryHint: payload.deliveryHint || "OTP sent via SMS."
+      };
+    }
+
+    if (response.success && (payload.provider === "memory" || payload.deliveryHint?.includes("test OTP"))) {
+      return {
+        provider: "2factor",
+        deliveryHint: payload.deliveryHint || `Use test OTP ${TEST_LOGIN_OTP} to continue.`
       };
     }
 
@@ -110,6 +133,14 @@ export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo
 };
 
 export const verifyOtpSession = async (phone: string, otp: string, session: OtpSessionInfo) => {
+  if (isTestOtpLogin(phone, otp)) {
+    const response = await verifyOtp(phone, otp);
+    if (!response.success || !response.data?.token || !response.data?.user) {
+      throw new Error(response.message || "Invalid or expired OTP");
+    }
+    return response;
+  }
+
   if (session.provider === "2factor") {
     const response = await verifyOtp(phone, otp);
     if (!response.success || !response.data?.token || !response.data?.user) {

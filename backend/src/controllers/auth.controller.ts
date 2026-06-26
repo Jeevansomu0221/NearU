@@ -16,6 +16,9 @@ const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD || "";
 const ADMIN_PHONE = process.env.ADMIN_PANEL_PHONE || "";
 const TEST_LOGIN_PHONE = process.env.TEST_LOGIN_PHONE || "1010101010";
 const TEST_LOGIN_OTP = process.env.TEST_LOGIN_OTP || "000000";
+const isTestLoginPhone = (phone: string) => phone === TEST_LOGIN_PHONE;
+const isTestOtpLogin = (phone: string, otp?: string) =>
+  isTestLoginPhone(phone) && otp === TEST_LOGIN_OTP;
 
 const idsMatch = (left?: unknown, right?: unknown) =>
   Boolean(left && right && left.toString() === right.toString());
@@ -115,6 +118,18 @@ export const sendOTP = async (req: Request, res: Response) => {
       }
     }
 
+    if (isTestLoginPhone(phone)) {
+      return successResponse(
+        res,
+        {
+          phone,
+          provider: "memory",
+          deliveryHint: `Use test OTP ${TEST_LOGIN_OTP} to continue.`
+        },
+        "OTP sent successfully"
+      );
+    }
+
     const sendResult = await OTPService.sendOTP(phone);
 
     const data: {
@@ -208,11 +223,9 @@ export const verifyOTP = async (req: Request, res: Response) => {
       return errorResponse(res, "Invalid role", 400);
     }
 
-    const isTestOtpLogin = phone === TEST_LOGIN_PHONE && otp === TEST_LOGIN_OTP;
-
     if (firebaseIdToken) {
       await verifyFirebasePhoneToken(firebaseIdToken, phone);
-    } else if (!isTestOtpLogin) {
+    } else if (!isTestOtpLogin(phone, otp)) {
       const isOtpValid = await OTPService.verifyOTP(phone, otp);
       if (!isOtpValid) {
         return errorResponse(res, "Invalid or expired OTP", 400);
@@ -358,8 +371,11 @@ export const logout = async (req: AuthRequest, res: Response) => {
     }
 
     const notificationToken = typeof req.body?.notificationToken === "string" ? req.body.notificationToken.trim() : "";
+    const userRecord = await User.findById(req.user.id).select("phone").lean();
+    const isTestUser = userRecord?.phone === TEST_LOGIN_PHONE;
+
     await User.findByIdAndUpdate(req.user.id, {
-      $inc: { sessionVersion: 1 },
+      ...(isTestUser ? {} : { $inc: { sessionVersion: 1 } }),
       ...(notificationToken ? { $pull: { notificationTokens: { token: notificationToken } } } : {})
     });
     return successResponse(res, null, "Logged out successfully");
