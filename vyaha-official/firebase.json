@@ -3,7 +3,9 @@
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
+      { "source": "/order", "destination": "/order/index.html" },
       { "source": "/order/**", "destination": "/order/index.html" },
+      { "source": "/business", "destination": "/business/index.html" },
       { "source": "/business/**", "destination": "/business/index.html" },
       { "source": "**", "destination": "/index.html" }
     ],
@@ -16,6 +18,7 @@
         "source": "/business/**",
         "headers": [{ "key": "Cache-Control", "value": "public,max-age=300" }]
       }
-    ]
+    ],
+    "predeploy": ["npm run build:site"]
   }
 }

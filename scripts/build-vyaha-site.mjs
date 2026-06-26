@@ -18,16 +18,23 @@ const run = (cwd, cmd) => {
 };
 
 const dist = path.join(root, "vyaha-official", "dist");
+const marketingDist = path.join(root, "vyaha-official", ".build-marketing");
+
 rmSync(dist, { recursive: true, force: true });
-mkdirSync(dist, { recursive: true });
+rmSync(marketingDist, { recursive: true, force: true });
 
 run(path.join(root, "packages", "api-client"), "npm run build");
+
 run(path.join(root, "vyaha-official"), "npm run build");
+cpSync(path.join(root, "vyaha-official", "dist"), marketingDist, { recursive: true });
+
 run(path.join(root, "apps", "customer-web"), "npm run build");
 run(path.join(root, "apps", "partner-web"), "npm run build");
 
-cpSync(path.join(root, "vyaha-official", "dist"), dist, { recursive: true });
+mkdirSync(dist, { recursive: true });
+cpSync(marketingDist, dist, { recursive: true });
 cpSync(path.join(root, "apps", "customer-web", "dist"), path.join(dist, "order"), { recursive: true });
 cpSync(path.join(root, "apps", "partner-web", "dist"), path.join(dist, "business"), { recursive: true });
+rmSync(marketingDist, { recursive: true, force: true });
 
 console.log("\nUnified site ready at vyaha-official/dist");
