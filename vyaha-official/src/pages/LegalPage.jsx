@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { vyahaLogos } from '../assets/logos';
 import { effectiveDate } from '../content/legalConfig';
 import { pageData } from '../content/policyPages';
+import PolicySidebar, { PolicyMobileNav } from '../components/PolicySidebar';
 import './LegalPage.css';
 
 function LegalPage({ pageType }) {
@@ -23,13 +24,23 @@ function LegalPage({ pageType }) {
           <span>Vyaha</span>
         </Link>
       </div>
-      <div className="legal-header">
-        <Link className="policy-back-link" to="/policies">Guidelines and Policies</Link>
-        <h1>{data.title}</h1>
-        <p>Last updated: {effectiveDate}</p>
-      </div>
-      <div className="legal-content">
-        {data.content}
+
+      <div className="legal-page-layout">
+        <PolicySidebar activePageType={pageType} />
+
+        <div className="legal-page-main">
+          <PolicyMobileNav activePageType={pageType} />
+
+          <div className="legal-header">
+            <Link className="policy-back-link" to="/policies">Guidelines and Policies</Link>
+            <h1>{data.title}</h1>
+            <p>Last updated: {effectiveDate}</p>
+          </div>
+
+          <div className="legal-content">
+            {data.content}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
 .legal-page-container {
-  max-width: 920px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 34px 24px 110px;
-  min-height: calc(100vh - 300px); /* Account for footer */
+  min-height: calc(100vh - 300px);
   background: white;
 }
 
@@ -74,6 +74,102 @@
 
 .policy-back-link:hover {
   text-decoration: underline;
+}
+
+.legal-page-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.legal-page-main {
+  min-width: 0;
+}
+
+.policy-sidebar {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding-right: 8px;
+  border-right: 1px solid #eeeeee;
+}
+
+.policy-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.policy-sidebar-section-title {
+  color: #686b78;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.policy-sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.policy-sidebar-list li {
+  margin-bottom: 2px;
+}
+
+.policy-sidebar-link {
+  border-radius: 6px;
+  color: #3d4152;
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.35;
+  padding: 8px 10px;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.policy-sidebar-link:hover {
+  background: #fff5f5;
+  color: #e23744;
+  text-decoration: none;
+}
+
+.policy-sidebar-link--active {
+  background: #fff0f1;
+  color: #e23744;
+  font-weight: 700;
+}
+
+.policy-mobile-nav {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.policy-mobile-nav-label {
+  color: #686b78;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.policy-mobile-nav-select {
+  appearance: none;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23686b78' d='M6 8 0 0h12z'/%3E%3C/svg%3E") no-repeat right 14px center;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  color: #1c1c1c;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 12px 36px 12px 14px;
+  width: 100%;
 }
 
 .policy-intro {
@@ -255,6 +351,21 @@
 
 .app-brand-tile.delivery-card {
   background: linear-gradient(145deg, #f1fff6 0%, #ffffff 100%);
+}
+
+@media (max-width: 960px) {
+  .legal-page-layout {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .policy-sidebar {
+    display: none;
+  }
+
+  .policy-mobile-nav {
+    display: flex;
+  }
 }
 
 @media (max-width: 640px) {
