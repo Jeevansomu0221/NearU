@@ -1,0 +1,149 @@
+:root {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+}
+
+.partner-app {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.partner-app[data-theme="dark"] {
+  --bg: #121212;
+  --card: #1e1e1e;
+  --text: #f5f5f5;
+  --muted: #a0a0a0;
+  --primary: #ff8a5c;
+  --border: #333;
+}
+
+.partner-app[data-theme="light"] {
+  --bg: #f6f3ef;
+  --card: #fff;
+  --text: #1f1f1f;
+  --muted: #6b6b6b;
+  --primary: #ff6b35;
+  --border: #e8dfd7;
+}
+
+.partner-header {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.partner-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: calc(100vh - 57px);
+}
+
+.partner-nav {
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  background: var(--card);
+}
+
+.partner-nav a {
+  display: block;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.partner-nav a.active {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.partner-main {
+  padding: 20px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn.secondary {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.field input,
+.field select,
+.field textarea {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: left;
+}
+
+.alert-banner {
+  background: #fff4e8;
+  color: #8a4b12;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 900px) {
+  .partner-layout {
+    grid-template-columns: 1fr;
+  }
+  .partner-nav {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .partner-nav a {
+    white-space: nowrap;
+  }
+}

@@ -1,0 +1,25 @@
+import { apiGet, apiPost, apiPut, apiPatch, apiDelete, uploadMultipart } from "./client.js";
+export const getMyStatus = () => apiGet("/partners/my-status");
+export const getPartnerProfile = () => apiGet("/partners/profile");
+export const updatePartnerProfile = (payload) => apiPut("/partners/profile", payload);
+export const getOnboardingDraft = () => apiGet("/partners/onboarding-draft");
+export const saveOnboardingDraft = (draft) => apiPut("/partners/onboarding-draft", { draft });
+export const submitOnboarding = (data) => apiPost("/partners/onboard", data);
+export const completeSetup = () => apiPost("/partners/complete-setup");
+export const getPartnerMenuItems = () => apiGet("/partners/menu");
+export const createMenuItem = (data) => apiPost("/partners/menu", data);
+export const updateMenuItem = (id, data) => apiPut(`/partners/menu/${id}`, data);
+export const toggleMenuAvailability = (id, isAvailable) => apiPatch(`/partners/menu/${id}/availability`, { isAvailable });
+export const deleteMenuItem = (id) => apiDelete(`/partners/menu/${id}`);
+export const updateShopStatus = (isOpen) => apiPut("/partners/shop-status", { isOpen });
+export const getPartnerStats = () => apiGet("/partners/stats");
+export const getPartnerWallet = () => apiGet("/partners/wallet");
+export const getMySubOrders = () => apiGet("/partners/suborders");
+export const acceptSubOrder = (subOrderId, price) => apiPost(`/partners/suborders/${subOrderId}/accept`, { price });
+export const rejectSubOrder = (subOrderId) => apiPost(`/partners/suborders/${subOrderId}/reject`);
+export const uploadImage = (file, folder = "nearu-app") => {
+    const formData = new FormData();
+    formData.append("image", file);
+    formData.append("folder", folder);
+    return uploadMultipart("/upload/image", formData);
+};

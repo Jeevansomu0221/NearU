@@ -1,0 +1,12 @@
+import { apiGet, apiPut, apiPost, apiDelete } from "./client.js";
+export const getUserProfile = () => apiGet("/users/profile");
+export const updateUserProfile = (profileData) => apiPut("/users/profile", profileData);
+export const updateUserAddress = (addressData) => apiPut("/users/address", addressData);
+export const getSavedAddresses = () => apiGet("/users/addresses");
+export const addAddress = (addressData) => apiPost("/users/addresses", addressData);
+export const setDefaultAddress = (addressId) => apiPut(`/users/address/${addressId}/default`);
+export const deleteAddress = (addressId) => apiDelete(`/users/address/${addressId}`);
+export const getMyFavorites = () => apiGet("/users/favorites");
+export const addFavoriteRestaurant = (partnerId) => apiPost(`/users/favorites/restaurants/${partnerId}`);
+export const removeFavoriteRestaurant = (partnerId) => apiDelete(`/users/favorites/restaurants/${partnerId}`);
+export const deleteMyAccount = () => apiDelete("/users/me");

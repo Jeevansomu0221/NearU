@@ -1,0 +1,14 @@
+export declare const getAccessToken: () => Promise<string | null>;
+export declare const getRefreshToken: () => Promise<string | null>;
+export declare const setAccessToken: (token: string) => Promise<void>;
+export declare const setRefreshToken: (token: string) => Promise<void>;
+export declare const removeRefreshToken: () => Promise<void>;
+export declare const clearAuthTokens: () => Promise<void>;
+export declare const getStoredUser: () => Record<string, unknown> | null;
+export declare const setStoredUser: (user: Record<string, unknown>) => void;
+export declare const clearStoredUser: () => void;
+export declare const getStoredPhone: () => string | null;
+export declare const setStoredPhone: (phone: string) => void;
+export declare const clearStoredPhone: () => void;
+export declare const clearAuthData: () => Promise<void>;
+//# sourceMappingURL=storage.d.ts.map

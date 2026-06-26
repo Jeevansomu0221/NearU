@@ -1,0 +1,25 @@
+{
+  "name": "@vyaha/api-client",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "axios": "^1.16.1",
+    "firebase": "^11.6.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

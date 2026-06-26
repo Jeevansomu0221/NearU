@@ -16,6 +16,7 @@ function Home() {
             with the Vyaha app
           </p>
           <div className="hero-download-buttons">
+            <a href="/order/" className="cta-button hero-order-button">Order on Web</a>
             <Link to="/apps" className="store-badge">
               <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Vyaha Play Store release information" />
             </Link>
@@ -98,6 +99,7 @@ function Home() {
               <h3>Discover nearby food without the price confusion.</h3>
               <p>Browse local restaurants, review clear totals, place orders, and track delivery from one simple app.</p>
               <Link to="/apps">Explore Customer App <span>&rarr;</span></Link>
+              <a href="/order/" className="inline-web-link">Order on web</a>
             </div>
             <div className="app-card partner-card">
               <img className="app-icon-image" src={vyahaLogos.partner} alt="Vyaha partner app" />
@@ -105,6 +107,7 @@ function Home() {
               <h3>Run orders, menus, and growth from a cleaner workspace.</h3>
               <p>Accept orders, keep menus current, manage verification, and serve your neighborhood with fewer moving parts.</p>
               <Link to="/restaurants">Partner With Vyaha <span>&rarr;</span></Link>
+              <a href="/business/login" className="inline-web-link">Open partner portal</a>
             </div>
             <div className="app-card delivery-card">
               <img className="app-icon-image" src={vyahaLogos.delivery} alt="Vyaha delivery app" />

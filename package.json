@@ -1,0 +1,16 @@
+{
+  "name": "nearu",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/customer-web",
+    "apps/partner-web"
+  ],
+  "scripts": {
+    "dev:customer-web": "npm run dev -w customer-web",
+    "dev:partner-web": "npm run dev -w partner-web",
+    "build:customer-web": "npm run build -w customer-web",
+    "build:partner-web": "npm run build -w partner-web",
+    "build:api-client": "npm run build -w @vyaha/api-client"
+  }
+}

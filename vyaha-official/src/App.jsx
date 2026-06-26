@@ -3,6 +3,7 @@ import './App.css';
 
 import Home from './pages/Home';
 import Footer from './components/Footer';
+import SiteNav from './components/SiteNav';
 
 import LegalPage from './pages/LegalPage';
 
@@ -10,6 +11,7 @@ function App() {
   return (
     <BrowserRouter>
       <div className="app-container">
+        <SiteNav />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/policies" element={<LegalPage pageType="policies" />} />

@@ -88,7 +88,7 @@ export const pageData = {
           <li>Complete verification and begin accepting orders.</li>
         </ol>
         <p>By onboarding, you agree to the <Link to="/partner-policy">Restaurant Partner Policy</Link>, <Link to="/terms">Terms of Service</Link>, and <Link to="/privacy">Privacy Policy</Link>.</p>
-        <button type="button" className="cta-button">Start Partnering</button>
+        <a className="cta-button" href="/business/login">Start Partnering</a>
       </>
     ),
   },
@@ -599,6 +599,7 @@ export const pageData = {
           <li>Business insights, promotions, and payout support as features become available.</li>
         </ul>
         <Link className="cta-button" to="/partner">Register Your Restaurant</Link>
+        <a className="cta-button secondary-cta" href="/business/login">Open Partner Portal</a>
       </>
     ),
   },
@@ -611,9 +612,11 @@ export const pageData = {
         <h3>Customer App</h3>
         <p>Order from nearby restaurants, manage profile and address details, track orders, choose COD or supported online payments, and contact support.</p>
         <Link className="cta-button" to="/apps">View Customer App Access</Link>
+        <a className="cta-button secondary-cta" href="/order/">Order on Web</a>
         <h3>Restaurant Partner App</h3>
         <p>Manage onboarding, documents, menu items, order status, customer orders, and restaurant operations.</p>
         <Link className="cta-button" to="/restaurants">View Partner App Access</Link>
+        <a className="cta-button secondary-cta" href="/business/login">Open Partner Portal</a>
         <h3>Delivery Partner App</h3>
         <p>Complete verification, go available, view jobs, accept deliveries, update status, manage profile, and track earnings.</p>
         <Link className="cta-button" to="/delivery">View Delivery App Access</Link>
