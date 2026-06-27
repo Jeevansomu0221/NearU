@@ -3,7 +3,7 @@
     "name": "Vyaha",
     "slug": "vyaha-customer",
     "scheme": "vyaha-customer",
-    "version": "1.0.10",
+    "version": "1.0.11",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,11 +14,39 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "tez",
+          "gpay",
+          "phonepe",
+          "paytmmp",
+          "paytm",
+          "bhim",
+          "amazonpay",
+          "whatsapp",
+          "navi",
+          "supermoney",
+          "credpay",
+          "mobikwik",
+          "freecharge",
+          "myairtel",
+          "slice-upi",
+          "jupiter",
+          "payzapp",
+          "kiwi",
+          "in.fampay.app",
+          "popclubapp",
+          "sbiyono",
+          "myjio",
+          "bobupi",
+          "groww"
+        ]
+      }
     },
     "android": {
       "package": "com.vyaha.customer",
-      "versionCode": 23,
+      "versionCode": 25,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
@@ -70,7 +98,8 @@
         {
           "locationWhenInUsePermission": "Vyaha uses your location while you are using the app to show restaurants and shops within 3 km of you."
         }
-      ]
+      ],
+      "../../plugins/with-vyaha-upi-intent"
     ],
     "extra": {
       "eas": {

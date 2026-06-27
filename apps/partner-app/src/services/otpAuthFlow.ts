@@ -120,6 +120,13 @@ export const sendOtpWithFallback = async (phone: string, role: string): Promise<
       }
     }
 
+    if (body?.success) {
+      return {
+        provider: "2factor",
+        deliveryHint: payload.deliveryHint || body.message || "OTP sent via SMS."
+      };
+    }
+
     const debug = formatOtpDebug(payload.otpDebug);
     throw new Error(`${body?.message || "Failed to send OTP"}${debug ? `. Debug: ${debug}` : ""}`);
   } catch (error) {

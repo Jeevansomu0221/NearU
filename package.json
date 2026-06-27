@@ -9,8 +9,15 @@
   "scripts": {
     "dev:customer-web": "npm run dev -w customer-web",
     "dev:partner-web": "npm run dev -w partner-web",
+    "dev:official": "npm run dev --prefix vyaha-official",
+    "predev:web": "node scripts/kill-web-ports.mjs",
+    "dev:web": "concurrently -n customer,partner,official -c orange,blue,green \"npm run dev -w customer-web\" \"npm run dev -w partner-web\" \"npm run dev --prefix vyaha-official\"",
+    "stop:web": "node scripts/kill-web-ports.mjs",
     "build:customer-web": "npm run build -w customer-web",
     "build:partner-web": "npm run build -w partner-web",
     "build:api-client": "npm run build -w @vyaha/api-client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.3"
   }
 }

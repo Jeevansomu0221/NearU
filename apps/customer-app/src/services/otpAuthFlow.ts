@@ -124,6 +124,13 @@ export const sendOtpWithFallback = async (phone: string): Promise<OtpSessionInfo
       }
     }
 
+    if (response.success) {
+      return {
+        provider: "2factor",
+        deliveryHint: payload.deliveryHint || response.message || "OTP sent via SMS."
+      };
+    }
+
     const debug = formatOtpDebug(payload.otpDebug);
     throw new Error(`${response.message || "Failed to send OTP"}${debug ? `. Debug: ${debug}` : ""}`);
   } catch (error) {

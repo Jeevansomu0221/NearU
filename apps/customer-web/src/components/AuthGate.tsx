@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import {
+  clearAuthData,
   getAccessToken,
   getStoredUser,
   getUserProfile,
@@ -22,6 +23,20 @@ export const useBoot = () => {
   return ctx;
 };
 
+const withTimeout = async <T,>(promise: Promise<T>, ms = 5000): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Session check timed out")), ms);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
 export function BootGate({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
@@ -37,7 +52,7 @@ export function BootGate({ children }: { children: ReactNode }) {
       }
       setAuthed(true);
       try {
-        const res = await getUserProfile();
+        const res = await withTimeout(getUserProfile());
         if (res.success && res.data) {
           setProfileComplete(isCustomerProfileComplete(res.data));
         } else {
@@ -45,8 +60,9 @@ export function BootGate({ children }: { children: ReactNode }) {
           setProfileComplete(cached ? isCustomerProfileComplete(cached as never) : false);
         }
       } catch {
-        const cached = getStoredUser();
-        setProfileComplete(cached ? isCustomerProfileComplete(cached as never) : true);
+        await clearAuthData();
+        setAuthed(false);
+        setProfileComplete(false);
       } finally {
         setReady(true);
       }

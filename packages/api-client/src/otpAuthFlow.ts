@@ -63,6 +63,13 @@ export const sendOtpWithFallback = async (phone: string, role: UserRole): Promis
       return { provider: "firebase" };
     }
 
+    if (response.success) {
+      return {
+        provider: "2factor",
+        deliveryHint: payload.deliveryHint || response.message || "OTP sent via SMS."
+      };
+    }
+
     throw new Error(response.message || "Failed to send OTP");
   } catch (error) {
     throw new Error(toErrorMessage(error));

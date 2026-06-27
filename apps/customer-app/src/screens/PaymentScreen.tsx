@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -10,11 +10,18 @@ import {
   Modal
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import RazorpayCheckout from "react-native-razorpay";
 import { useCart } from "../context/CartContext";
 import { cancelOrder, createShopOrder } from "../api/order.api";
 import { createRazorpayOrder, verifyPayment } from "../api/payment.api";
 import SuccessCelebration from "../components/SuccessCelebration";
+import UpiAppPicker from "../components/UpiAppPicker";
+import {
+  getInstalledUpiApps,
+  openUpiIntentPayment,
+  resolvePreferredUpiApp,
+  savePreferredUpiApp,
+  type UpiApp
+} from "../utils/upiPayment";
 
 interface CheckoutGroup {
   shopId: string;
@@ -93,12 +100,42 @@ export default function PaymentScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH_ON_DELIVERY");
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
+  const [showUpiPicker, setShowUpiPicker] = useState(false);
+  const [upiApps, setUpiApps] = useState<UpiApp[]>([]);
+  const [selectedUpiApp, setSelectedUpiApp] = useState<UpiApp | null>(null);
+  const [loadingUpiApps, setLoadingUpiApps] = useState(false);
   const [successOrders, setSuccessOrders] = useState<any[] | null>(null);
 
   const paymentMethods = [
     { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
-    { id: "RAZORPAY", name: "Online Payment", icon: "UPI" }
+    { id: "RAZORPAY", name: "UPI Payment", icon: "UPI" }
   ];
+
+  useEffect(() => {
+    if (paymentMethod !== "RAZORPAY") return;
+
+    let cancelled = false;
+
+    const loadUpiApps = async () => {
+      setLoadingUpiApps(true);
+      try {
+        const apps = await getInstalledUpiApps();
+        if (cancelled) return;
+        setUpiApps(apps);
+        setSelectedUpiApp(await resolvePreferredUpiApp(apps));
+      } finally {
+        if (!cancelled) {
+          setLoadingUpiApps(false);
+        }
+      }
+    };
+
+    loadUpiApps();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentMethod]);
 
   const groupedShops = useMemo<CheckoutGroup[]>(() => {
     if (Array.isArray(orderSummary?.groupedShops) && orderSummary.groupedShops.length > 0) {
@@ -213,7 +250,7 @@ export default function PaymentScreen({ route, navigation }: any) {
     return createdOrders;
   };
 
-  const placeOnlineOrders = async () => {
+  const placeOnlineOrders = async (upiApp: UpiApp) => {
     const paidOrders = [];
     let pendingOnlineOrders: any[] = [];
     const orderDeliveryLocation = await getDeliveryPin();
@@ -256,24 +293,16 @@ export default function PaymentScreen({ route, navigation }: any) {
 
         let paymentResult: any;
         try {
-          paymentResult = await RazorpayCheckout.open({
-            key: paymentOrder.keyId,
-            amount: paymentOrder.amount,
-            currency: paymentOrder.currency || "INR",
-            name: "Vyaha",
+          paymentResult = await openUpiIntentPayment({
+            keyId: paymentOrder.keyId,
+            amountPaise: paymentOrder.amount,
+            orderId: createdOrder._id,
+            razorpayOrderId: paymentOrder.id,
             description: `Order from ${group.shopName}`,
-            order_id: paymentOrder.id,
-            prefill: {
-              name: userProfile.name,
-              contact: userProfile.phone
-            },
-            theme: { color: "#FF6B35" },
-            method: {
-              upi: true,
-              card: true,
-              netbanking: true,
-              wallet: true
-            }
+            customerName: userProfile.name,
+            customerPhone: userProfile.phone,
+            customerEmail: userProfile.email,
+            upiApp
           });
         } catch (paymentError: any) {
           throw new OnlinePaymentFailedError(getOnlinePaymentFailureMessage(paymentError));
@@ -332,12 +361,42 @@ export default function PaymentScreen({ route, navigation }: any) {
     navigation.replace("Orders");
   };
 
+  const handleUpiAppSelection = async (app: UpiApp) => {
+    setSelectedUpiApp(app);
+    await savePreferredUpiApp(app);
+    setShowUpiPicker(false);
+  };
+
   const handlePayment = async () => {
     try {
+      if (paymentMethod === "RAZORPAY") {
+        if (loadingUpiApps) {
+          Alert.alert("Loading UPI apps", "Please wait a moment while we detect UPI apps on your phone.");
+          return;
+        }
+
+        if (!selectedUpiApp) {
+          if (upiApps.length === 0) {
+            Alert.alert(
+              "No UPI app found",
+              "Install Google Pay, PhonePe, or Paytm to pay online, or switch to Cash on Delivery.",
+              [
+                { text: "Switch to COD", onPress: () => setPaymentMethod("CASH_ON_DELIVERY") },
+                { text: "OK", style: "cancel" }
+              ]
+            );
+            return;
+          }
+
+          setShowUpiPicker(true);
+          return;
+        }
+      }
+
       setLoading(true);
 
       if (paymentMethod === "RAZORPAY") {
-        const paidOrders = await placeOnlineOrders();
+        const paidOrders = await placeOnlineOrders(selectedUpiApp!);
         handleSuccessfulCheckout(paidOrders);
       } else {
         const createdOrders = await placeOrders("CASH_ON_DELIVERY");
@@ -387,12 +446,28 @@ export default function PaymentScreen({ route, navigation }: any) {
           <Text style={styles.methodChip}>{method?.icon}</Text>
         </View>
         <View style={styles.methodBody}>
-          <Text style={styles.methodName}>{method?.name}</Text>
+          <Text style={styles.methodName}>
+            {paymentMethod === "RAZORPAY" ? selectedUpiApp?.name || "Select UPI app" : method?.name}
+          </Text>
           <Text style={styles.methodHint}>
-            {paymentMethod === "CASH_ON_DELIVERY" ? "Pay when your order arrives" : "Pay securely with UPI, card, wallet, or netbanking"}
+            {paymentMethod === "CASH_ON_DELIVERY"
+              ? "Pay when your order arrives"
+              : selectedUpiApp
+                ? "Opens your UPI app directly — no extra Razorpay screens"
+                : loadingUpiApps
+                  ? "Detecting UPI apps on your phone..."
+                  : "Choose a UPI app to pay in one tap"}
           </Text>
         </View>
-        <TouchableOpacity onPress={() => setShowPaymentMethods(true)}>
+        <TouchableOpacity
+          onPress={() => {
+            if (paymentMethod === "RAZORPAY") {
+              setShowUpiPicker(true);
+              return;
+            }
+            setShowPaymentMethods(true);
+          }}
+        >
           <Text style={styles.changeText}>Change</Text>
         </TouchableOpacity>
       </View>
@@ -506,28 +581,50 @@ export default function PaymentScreen({ route, navigation }: any) {
           </View>
         ) : (
           <View style={styles.infoSection}>
-            <Text style={styles.infoTitle}>Online payment</Text>
-            <Text style={styles.infoText}>Your order is confirmed only after Razorpay verifies the payment signature.</Text>
+            <Text style={styles.infoTitle}>UPI payment</Text>
+            <Text style={styles.infoText}>
+              We remember your last UPI app and open it directly, similar to Zomato. Your order is confirmed after Razorpay verifies the payment.
+            </Text>
           </View>
         )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
-        <View style={styles.footerSummary}>
-          <Text style={styles.footerEstimate}>Estimated by {getDeliveryTime()}</Text>
-          <Text style={styles.footerTotal}>{formatAmount(orderSummary.total)}</Text>
-        </View>
+        {paymentMethod === "RAZORPAY" ? (
+          <TouchableOpacity style={styles.payUsingRow} onPress={() => setShowUpiPicker(true)}>
+            <View>
+              <Text style={styles.payUsingLabel}>Pay using</Text>
+              <Text style={styles.payUsingValue}>
+                {loadingUpiApps ? "Loading UPI apps..." : selectedUpiApp?.name || "Select UPI app"}
+              </Text>
+            </View>
+            <Text style={styles.payUsingChevron}>⌃</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.footerSummary}>
+            <Text style={styles.footerEstimate}>Estimated by {getDeliveryTime()}</Text>
+            <Text style={styles.footerTotal}>{formatAmount(orderSummary.total)}</Text>
+          </View>
+        )}
+
         <TouchableOpacity
-          style={[styles.payButton, loading && styles.payButtonDisabled]}
+          style={[styles.payButton, styles.payButtonSplit, loading && styles.payButtonDisabled]}
           onPress={handlePayment}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.payButtonText}>
-              {paymentMethod === "CASH_ON_DELIVERY" ? "Place Order" : "Pay Securely"}
-            </Text>
+            <View style={styles.payButtonInner}>
+              <View style={styles.payButtonAmountBlock}>
+                <Text style={styles.payButtonAmountLabel}>Total</Text>
+                <Text style={styles.payButtonAmountValue}>{formatAmount(orderSummary.total)}</Text>
+              </View>
+              <View style={styles.payButtonActionBlock}>
+                <Text style={styles.payButtonText}>Place Order</Text>
+                <Text style={styles.payButtonArrow}>›</Text>
+              </View>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -556,6 +653,16 @@ export default function PaymentScreen({ route, navigation }: any) {
         </View>
       </Modal>
 
+      <UpiAppPicker
+        visible={showUpiPicker}
+        loading={loadingUpiApps}
+        apps={upiApps}
+        selectedAppId={selectedUpiApp?.id}
+        totalLabel={formatAmount(orderSummary.total)}
+        onClose={() => setShowUpiPicker(false)}
+        onSelect={handleUpiAppSelection}
+      />
+
       <Modal visible={showPaymentMethods} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -574,7 +681,7 @@ export default function PaymentScreen({ route, navigation }: any) {
                 <View style={styles.methodInfo}>
                   <Text style={styles.methodOptionName}>{method.name}</Text>
                   <Text style={styles.methodDescription}>
-                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "UPI, card, wallet, and netbanking via Razorpay"}
+                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "Pay with your preferred UPI app in one tap"}
                   </Text>
                 </View>
                 {paymentMethod === method.id ? <Text style={styles.selectedIndicator}>Selected</Text> : null}
@@ -856,6 +963,31 @@ const styles = StyleSheet.create({
   footerSummary: {
     marginBottom: 12
   },
+  payUsingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    paddingHorizontal: 4
+  },
+  payUsingLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#8B6A54"
+  },
+  payUsingValue: {
+    marginTop: 4,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  payUsingChevron: {
+    fontSize: 18,
+    color: "#FF6B35",
+    fontWeight: "700"
+  },
   footerEstimate: {
     fontSize: 12,
     color: "#8B6A54",
@@ -871,6 +1003,42 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 18,
     alignItems: "center"
+  },
+  payButtonSplit: {
+    paddingVertical: 12,
+    paddingHorizontal: 16
+  },
+  payButtonInner: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  payButtonAmountBlock: {
+    flex: 1
+  },
+  payButtonAmountLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: "rgba(255,255,255,0.82)"
+  },
+  payButtonAmountValue: {
+    marginTop: 2,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#FFFFFF"
+  },
+  payButtonActionBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  payButtonArrow: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF"
   },
   payButtonDisabled: {
     backgroundColor: "#FFB08F"
