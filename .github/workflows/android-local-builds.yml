@@ -92,6 +92,35 @@ jobs:
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
         run: npx eas-cli build -p android --profile production --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-production.aab
 
+      - name: Verify and stage production AAB
+        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab') }}
+        run: |
+          AAB_OUT="${{ matrix.artifact_prefix }}-production.aab"
+          AAB_SRC="${{ matrix.app_dir }}/android/app/build/outputs/bundle/release/app-release.aab"
+          MAPPING_SRC="${{ matrix.app_dir }}/android/app/build/outputs/mapping/release/mapping.txt"
+          MAPPING_OUT="${{ matrix.artifact_prefix }}-production-mapping.txt"
+
+          if [ -f "$AAB_SRC" ]; then
+            cp "$AAB_SRC" "$AAB_OUT"
+          fi
+
+          if [ -f "$MAPPING_SRC" ]; then
+            cp "$MAPPING_SRC" "$MAPPING_OUT"
+          fi
+
+          if [ ! -f "$AAB_OUT" ]; then
+            echo "Error: production AAB not found at $AAB_OUT"
+            exit 1
+          fi
+
+          HEADER=$(xxd -p -l 2 "$AAB_OUT" | tr -d '\n')
+          if [ "$HEADER" != "504b" ]; then
+            echo "Error: $AAB_OUT is not a valid AAB (expected PK zip header, got $HEADER)"
+            exit 1
+          fi
+
+          echo "Verified valid AAB: $AAB_OUT ($(du -h "$AAB_OUT" | cut -f1))"
+
       - name: Build development APK
         if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'development-apk')) }}
         working-directory: ${{ matrix.app_dir }}
@@ -121,6 +150,14 @@ jobs:
           name: ${{ matrix.artifact_prefix }}-production-aab
           path: ${{ matrix.artifact_prefix }}-production.aab
           if-no-files-found: error
+
+      - name: Upload ProGuard mapping
+        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab') }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact_prefix }}-production-mapping
+          path: ${{ matrix.artifact_prefix }}-production-mapping.txt
+          if-no-files-found: warn
 
       - name: Upload development APK
         if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'development-apk')) }}
