@@ -425,16 +425,13 @@ export default function PaymentScreen({ route, navigation }: any) {
             }
           ]
         );
-        setLoading(false);
         return;
       }
 
       Alert.alert("Order Failed", errorMessage);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setLoading(false);
   };
 
   const renderPaymentMethod = () => {

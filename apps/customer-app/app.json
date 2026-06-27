@@ -3,7 +3,7 @@
     "name": "Vyaha",
     "slug": "vyaha-customer",
     "scheme": "vyaha-customer",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -27,6 +27,7 @@
           "whatsapp",
           "navi",
           "supermoney",
+          "super",
           "credpay",
           "mobikwik",
           "freecharge",
@@ -46,7 +47,7 @@
     },
     "android": {
       "package": "com.vyaha.customer",
-      "versionCode": 25,
+      "versionCode": 26,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",

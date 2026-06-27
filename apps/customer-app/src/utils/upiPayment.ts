@@ -73,11 +73,31 @@ const parseUpiAppsResponse = (payload: unknown): UpiApp[] => {
 };
 
 let razorpayInitialized = false;
+let razorpayInitKey = "";
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
 
 export const ensureRazorpayCustomUi = async (keyId: string) => {
-  if (!keyId || razorpayInitialized) return;
-  await RazorpayCustom.initRazorpay(keyId);
+  if (!keyId) return;
+  if (razorpayInitialized && razorpayInitKey === keyId) return;
+
+  // react-native-customui initRazorpay() creates a Promise that never resolves.
+  void RazorpayCustom.initRazorpay(keyId);
   razorpayInitialized = true;
+  razorpayInitKey = keyId;
 };
 
 export const getInstalledUpiApps = async (): Promise<UpiApp[]> => {
@@ -157,10 +177,22 @@ export const openUpiIntentPayment = async (input: UpiIntentPaymentInput): Promis
   }
 
   if (Platform.OS === "android") {
-    await RazorpayCustom.validateOptions(options);
+    try {
+      await withTimeout(
+        RazorpayCustom.validateOptions(options),
+        8000,
+        "Could not validate UPI payment options."
+      );
+    } catch (error) {
+      console.warn("[upiPayment] validateOptions failed, continuing with intent:", error);
+    }
   }
 
-  const result = (await RazorpayCustom.open(options)) as Record<string, string>;
+  const result = (await withTimeout(
+    RazorpayCustom.open(options),
+    180000,
+    "Payment timed out. Complete payment in your UPI app or try again."
+  )) as Record<string, string>;
   const paymentId = result.razorpay_payment_id || result.payment_id;
   const orderId = result.razorpay_order_id || input.razorpayOrderId;
   const signature = result.razorpay_signature || result.signature;
