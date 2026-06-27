@@ -1,4 +1,3 @@
-import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import RazorpayCustom from "react-native-customui";
 
@@ -72,9 +71,6 @@ const parseUpiAppsResponse = (payload: unknown): UpiApp[] => {
   return sortUpiApps(Array.from(unique.values()));
 };
 
-let razorpayInitialized = false;
-let razorpayInitKey = "";
-
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -88,16 +84,6 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMes
   } finally {
     if (timer) clearTimeout(timer);
   }
-};
-
-export const ensureRazorpayCustomUi = async (keyId: string) => {
-  if (!keyId) return;
-  if (razorpayInitialized && razorpayInitKey === keyId) return;
-
-  // react-native-customui initRazorpay() creates a Promise that never resolves.
-  void RazorpayCustom.initRazorpay(keyId);
-  razorpayInitialized = true;
-  razorpayInitKey = keyId;
 };
 
 export const getInstalledUpiApps = async (): Promise<UpiApp[]> => {
@@ -156,7 +142,6 @@ export type UpiIntentPaymentResult = {
 };
 
 export const openUpiIntentPayment = async (input: UpiIntentPaymentInput): Promise<UpiIntentPaymentResult> => {
-  await ensureRazorpayCustomUi(input.keyId);
   await savePreferredUpiApp(input.upiApp);
 
   const options: Record<string, string | number> = {
@@ -176,23 +161,15 @@ export const openUpiIntentPayment = async (input: UpiIntentPaymentInput): Promis
     options.name = input.customerName;
   }
 
-  if (Platform.OS === "android") {
-    try {
-      await withTimeout(
-        RazorpayCustom.validateOptions(options),
-        8000,
-        "Could not validate UPI payment options."
-      );
-    } catch (error) {
-      console.warn("[upiPayment] validateOptions failed, continuing with intent:", error);
-    }
-  }
-
+  // Do not call initRazorpay or validateOptions here. The native module keeps a
+  // separate Razorpay instance for those helpers, and calling them before it is
+  // ready causes a NullPointerException. PaymentActivity creates its own client.
   const result = (await withTimeout(
     RazorpayCustom.open(options),
     180000,
     "Payment timed out. Complete payment in your UPI app or try again."
   )) as Record<string, string>;
+
   const paymentId = result.razorpay_payment_id || result.payment_id;
   const orderId = result.razorpay_order_id || input.razorpayOrderId;
   const signature = result.razorpay_signature || result.signature;
