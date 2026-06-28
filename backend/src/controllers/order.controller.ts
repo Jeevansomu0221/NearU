@@ -18,6 +18,7 @@ import {
   notifyPartnerDeliveryStatus,
   notifyPartnerNewOrder
 } from "../services/notification.service";
+import { PaymentService } from "../services/payment.service";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
@@ -1236,7 +1237,9 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
     const { orderId } = req.params;
-    const { status, collectedAmount } = req.body;
+    const { status, collectedAmount, collectionMethod } = req.body;
+    const normalizedCollectionMethod =
+      String(collectionMethod || "CASH").toUpperCase() === "UPI" ? "UPI" : "CASH";
 
     if (!user) {
       return errorResponse(res, "Unauthorized", 401);
@@ -1282,7 +1285,12 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
     const codCollectedAmount = status === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
     if (status === "DELIVERED" && totalCodAmount > 0) {
-      if (!Number.isFinite(codCollectedAmount) || codCollectedAmount < totalCodAmount) {
+      if (normalizedCollectionMethod === "UPI") {
+        const unpaidCodOrders = codOrders.filter((deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID");
+        if (unpaidCodOrders.length > 0) {
+          return errorResponse(res, "Wait for the customer UPI payment to be confirmed before completing delivery", 400);
+        }
+      } else if (!Number.isFinite(codCollectedAmount) || codCollectedAmount < totalCodAmount) {
         return errorResponse(res, `Collect Rs ${totalCodAmount} before marking this delivery as delivered`, 400);
       }
     }
@@ -1309,12 +1317,13 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
         }
 
         const orderCodAmount = Number(deliveryOrder.grandTotal || 0);
-        if (
-          deliveryPartner &&
+        const isCashCodCollection =
+          normalizedCollectionMethod === "CASH" &&
           deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
           orderCodAmount > 0 &&
-          !deliveryOrder.codCollection?.cashLedgerEntryId
-        ) {
+          !deliveryOrder.codCollection?.cashLedgerEntryId;
+
+        if (deliveryPartner && isCashCodCollection) {
           const cashLedgerEntry = await CashLedgerEntry.create({
             deliveryPartnerId: deliveryPartner._id,
             userId: user.id,
@@ -1323,16 +1332,32 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
             balanceDelta: orderCodAmount,
             status: "POSTED",
             orderId: deliveryOrder._id,
-            note: `COD collected for order #${String(deliveryOrder._id).slice(-6)}`
+            note: `COD cash collected for order #${String(deliveryOrder._id).slice(-6)}`
           });
 
           deliveryOrder.codCollection = {
             collectedAmount: orderCodAmount,
             collectedAt: new Date(),
             collectedBy: userId,
+            method: "CASH",
             cashLedgerEntryId: cashLedgerEntry._id
           };
           createdCashLedgerAmount += orderCodAmount;
+        } else if (
+          deliveryPartner &&
+          normalizedCollectionMethod === "UPI" &&
+          deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
+          orderCodAmount > 0 &&
+          !deliveryOrder.codCollection?.collectedAt
+        ) {
+          deliveryOrder.codCollection = {
+            collectedAmount: orderCodAmount,
+            collectedAt: new Date(),
+            collectedBy: userId,
+            method: "UPI",
+            razorpayPaymentId: deliveryOrder.razorpayPaymentId || deliveryOrder.paymentId
+          };
+          deliveryOrder.paymentMethod = "UPI";
         }
       }
 
@@ -1383,12 +1408,195 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
         0
       );
       responseOrder.collectedAmount = collectedAmount ? Number(collectedAmount) : undefined;
+      responseOrder.collectionMethod = normalizedCollectionMethod;
     }
 
     return successResponse(res, responseOrder, `Delivery ${status.toLowerCase()} successfully`);
   } catch (err: any) {
     console.error("updateDeliveryStatus error:", err);
     return errorResponse(res, "Failed to update delivery status");
+  }
+};
+
+const getAssignedDeliveryOrders = async (orderId: string, userId: mongoose.Types.ObjectId) => {
+  const order = await Order.findById(orderId);
+  if (!order) {
+    return { error: "Order not found", status: 404 as const };
+  }
+
+  const deliveryOrders = isBundledDeliveryOrder(order)
+    ? await Order.find({ deliveryBundleId: order.deliveryBundleId }).sort({ deliveryBundleSequence: 1, createdAt: 1 })
+    : [order];
+
+  const unauthorizedOrder = deliveryOrders.find((deliveryOrder: any) => {
+    return !deliveryOrder.deliveryPartnerId || !deliveryOrder.deliveryPartnerId.equals(userId);
+  });
+  if (unauthorizedOrder) {
+    return { error: "Unauthorized - Not assigned to this delivery job", status: 401 as const };
+  }
+
+  return { order, deliveryOrders };
+};
+
+const markCodOrdersPaidFromUpi = async (deliveryOrders: any[], paymentId?: string) => {
+  for (const deliveryOrder of deliveryOrders) {
+    if (deliveryOrder.paymentMethod !== "CASH_ON_DELIVERY") continue;
+    if (deliveryOrder.paymentStatus === "PAID") continue;
+    deliveryOrder.paymentStatus = "PAID";
+    deliveryOrder.paymentMethod = "UPI";
+    if (paymentId) {
+      deliveryOrder.razorpayPaymentId = paymentId;
+      deliveryOrder.paymentId = paymentId;
+    }
+    await deliveryOrder.save();
+  }
+};
+
+export const createCodUpiCollection = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { orderId } = req.params;
+
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const assignment = await getAssignedDeliveryOrders(String(orderId), new mongoose.Types.ObjectId(user.id));
+    if ("error" in assignment) {
+      return errorResponse(res, assignment.error, assignment.status);
+    }
+
+    const { order, deliveryOrders } = assignment;
+    const codOrders = deliveryOrders.filter(
+      (deliveryOrder: any) =>
+        deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" && deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY"
+    );
+
+    if (codOrders.length === 0) {
+      return errorResponse(res, "This delivery does not require COD collection", 400);
+    }
+
+    if (deliveryOrders.some((deliveryOrder: any) => deliveryOrder.status !== "PICKED_UP")) {
+      return errorResponse(res, "Mark the order as picked up before collecting payment", 400);
+    }
+
+    const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
+    const amountPaise = Math.round(totalCodAmount * 100);
+    const orderRef = String(order._id).slice(-6).toUpperCase();
+    const session = await PaymentService.createCodCollectionPayment({
+      amountPaise,
+      orderId: String(order._id),
+      orderRef
+    });
+
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const codUpiSession = {
+      provider: session.provider,
+      razorpayQrId: session.razorpayQrId,
+      paymentLinkId: session.paymentLinkId,
+      qrImageUrl: session.qrImageUrl,
+      paymentUrl: session.paymentUrl,
+      amount: session.amount,
+      createdAt: new Date(),
+      expiresAt
+    };
+
+    for (const deliveryOrder of codOrders) {
+      deliveryOrder.codUpiSession = codUpiSession;
+      await deliveryOrder.save();
+    }
+
+    return successResponse(
+      res,
+      {
+        ...session,
+        amount: totalCodAmount,
+        orderRef,
+        payeeName: "Vyaha"
+      },
+      "UPI collection QR created"
+    );
+  } catch (error: any) {
+    console.error("createCodUpiCollection error:", error);
+    return errorResponse(res, error.message || "Failed to create UPI collection QR");
+  }
+};
+
+export const getCodUpiPaymentStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { orderId } = req.params;
+
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const assignment = await getAssignedDeliveryOrders(String(orderId), new mongoose.Types.ObjectId(user.id));
+    if ("error" in assignment) {
+      return errorResponse(res, assignment.error, assignment.status);
+    }
+
+    const { deliveryOrders } = assignment;
+    const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
+    const primaryCodOrder = codOrders[0];
+    const session = primaryCodOrder?.codUpiSession;
+
+    if (!session?.provider) {
+      return errorResponse(res, "UPI collection has not been started for this order", 400);
+    }
+
+    const paymentStatus = await PaymentService.checkCodCollectionPayment({
+      provider: session.provider,
+      razorpayQrId: session.razorpayQrId || undefined,
+      paymentLinkId: session.paymentLinkId || undefined,
+      amount: session.amount || undefined
+    });
+    if (paymentStatus.paid) {
+      await markCodOrdersPaidFromUpi(codOrders);
+    }
+
+    const allPaid = codOrders.every((deliveryOrder: any) => deliveryOrder.paymentStatus === "PAID");
+
+    return successResponse(res, {
+      paid: allPaid,
+      manualConfirmRequired: paymentStatus.manualConfirmRequired,
+      amount: session.amount,
+      provider: session.provider
+    });
+  } catch (error: any) {
+    console.error("getCodUpiPaymentStatus error:", error);
+    return errorResponse(res, error.message || "Failed to check UPI payment status");
+  }
+};
+
+export const confirmCodUpiPayment = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { orderId } = req.params;
+
+    if (!user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    const assignment = await getAssignedDeliveryOrders(String(orderId), new mongoose.Types.ObjectId(user.id));
+    if ("error" in assignment) {
+      return errorResponse(res, assignment.error, assignment.status);
+    }
+
+    const { deliveryOrders } = assignment;
+    const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
+    const session = codOrders[0]?.codUpiSession;
+
+    if (!session || session.provider !== "platform_upi") {
+      return errorResponse(res, "Manual UPI confirmation is not available for this payment", 400);
+    }
+
+    await markCodOrdersPaidFromUpi(codOrders);
+
+    return successResponse(res, { paid: true }, "UPI payment marked as received");
+  } catch (error: any) {
+    console.error("confirmCodUpiPayment error:", error);
+    return errorResponse(res, error.message || "Failed to confirm UPI payment");
   }
 };
 

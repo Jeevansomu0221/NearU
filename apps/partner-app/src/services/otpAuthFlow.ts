@@ -4,9 +4,43 @@ import { sendFirebaseOtp, confirmFirebaseOtp } from "./firebasePhoneAuth";
 export const TEST_LOGIN_PHONE = "1010101010";
 export const TEST_LOGIN_OTP = "000000";
 
+/** Firebase Console → Authentication → Phone → numbers for testing (+91, no country code). */
+const DEFAULT_FIREBASE_TEST_PHONES: Record<string, string> = {
+  "9999900000": "123456",
+  "9999900001": "123456",
+  "2020202020": "000000",
+  "3030303030": "000000"
+};
+
+const parseFirebaseTestPhones = (): Record<string, string> => {
+  const raw = process.env.EXPO_PUBLIC_FIREBASE_TEST_PHONES;
+  if (!raw) {
+    return DEFAULT_FIREBASE_TEST_PHONES;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return { ...DEFAULT_FIREBASE_TEST_PHONES, ...parsed };
+  } catch {
+    return DEFAULT_FIREBASE_TEST_PHONES;
+  }
+};
+
+const FIREBASE_TEST_PHONES = parseFirebaseTestPhones();
+
 export const isTestLoginPhone = (phone: string) => phone.replace(/\D/g, "") === TEST_LOGIN_PHONE;
 export const isTestOtpLogin = (phone: string, otp: string) =>
   isTestLoginPhone(phone) && otp === TEST_LOGIN_OTP;
+
+export const isFirebaseTestPhone = (phone: string) => {
+  const cleaned = phone.replace(/\D/g, "");
+  return cleaned in FIREBASE_TEST_PHONES;
+};
+
+export const getFirebaseTestOtpHint = (phone: string) => {
+  const cleaned = phone.replace(/\D/g, "");
+  return FIREBASE_TEST_PHONES[cleaned] || "the Firebase test code";
+};
 
 export type OtpAuthProvider = "2factor" | "firebase";
 
@@ -76,6 +110,15 @@ export const sendOtpWithFallback = async (phone: string, role: string): Promise<
     return {
       provider: "2factor",
       deliveryHint: `Use test OTP ${TEST_LOGIN_OTP} to continue.`
+    };
+  }
+
+  if (isFirebaseTestPhone(cleanedPhone)) {
+    logOtp("firebase-test-phone", cleanedPhone);
+    await sendFirebaseOtp(phone);
+    return {
+      provider: "firebase",
+      deliveryHint: `Use test OTP ${getFirebaseTestOtpHint(cleanedPhone)} to continue.`
     };
   }
 
@@ -149,7 +192,7 @@ export const verifyOtpSession = async (
     };
   }
 
-  if (session.provider === "2factor") {
+  if (session.provider === "2factor" && !isFirebaseTestPhone(phone)) {
     const payload = await withNetworkRetry(() => verifyOtp(phone, otp, role), "verify-otp");
     return {
       success: true,

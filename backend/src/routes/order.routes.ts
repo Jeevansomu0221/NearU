@@ -9,6 +9,9 @@ import {
   updateOrderStatus,
   assignDelivery,
   updateDeliveryStatus,
+  createCodUpiCollection,
+  getCodUpiPaymentStatus,
+  confirmCodUpiPayment,
   getMyOrders,
   getOrderDetails,
   cancelOrder,
@@ -144,6 +147,24 @@ router.post(
   "/delivery/:orderId/status", 
   authMiddleware, 
   updateDeliveryStatus
+);
+
+router.post(
+  "/delivery/:orderId/cod-upi",
+  authMiddleware,
+  createCodUpiCollection
+);
+
+router.get(
+  "/delivery/:orderId/cod-upi/status",
+  authMiddleware,
+  getCodUpiPaymentStatus
+);
+
+router.post(
+  "/delivery/:orderId/cod-upi/confirm",
+  authMiddleware,
+  confirmCodUpiPayment
 );
 
 /**

@@ -9,14 +9,20 @@ import {
   Alert,
   Linking,
   Modal,
-  Platform
+  Platform,
+  Image
 } from "react-native";
+import QRCode from "react-native-qrcode-svg";
 import { 
   acceptJob,
   getJobDetails, 
   markAsPickedUp, 
   markAsDelivered,
-  DeliveryOrder 
+  createCodUpiCollection,
+  getCodUpiPaymentStatus,
+  confirmCodUpiPayment,
+  DeliveryOrder,
+  type CodUpiSession
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
@@ -67,6 +73,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(!initialJob);
   const [updating, setUpdating] = useState(false);
   const [cashConfirmVisible, setCashConfirmVisible] = useState(false);
+  const [codPaymentChoiceVisible, setCodPaymentChoiceVisible] = useState(false);
+  const [upiPaymentVisible, setUpiPaymentVisible] = useState(false);
+  const [codUpiSession, setCodUpiSession] = useState<CodUpiSession | null>(null);
+  const [upiPaymentPaid, setUpiPaymentPaid] = useState(false);
+  const [upiLoading, setUpiLoading] = useState(false);
+  const [upiPolling, setUpiPolling] = useState(false);
   const [statusModal, setStatusModal] = useState<{
     title: string;
     message: string;
@@ -79,6 +91,33 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     loadJobDetails();
     getCurrentRiderLocation({ showDeniedAlert: false }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!upiPaymentVisible || !codUpiSession || upiPaymentPaid) return;
+
+    let cancelled = false;
+    const pollPaymentStatus = async () => {
+      try {
+        setUpiPolling(true);
+        const response = await getCodUpiPaymentStatus(orderId);
+        if (cancelled) return;
+        if (response.success && response.data?.paid) {
+          setUpiPaymentPaid(true);
+        }
+      } catch (error) {
+        console.error("Failed to poll COD UPI status:", error);
+      } finally {
+        if (!cancelled) setUpiPolling(false);
+      }
+    };
+
+    pollPaymentStatus();
+    const intervalId = setInterval(pollPaymentStatus, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [upiPaymentVisible, codUpiSession, upiPaymentPaid, orderId]);
 
   const returnToJobs = () => {
     if (navigation.canGoBack?.()) {
@@ -376,14 +415,60 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const handleDeliver = async () => {
     if (job?.paymentMethod === "CASH_ON_DELIVERY") {
-      setCashConfirmVisible(true);
+      setCodPaymentChoiceVisible(true);
     } else {
-      // For pre-paid orders, just confirm delivery
       await confirmDelivery();
     }
   };
 
-  const confirmDelivery = async (collectedAmount?: number) => {
+  const startCashCollection = () => {
+    setCodPaymentChoiceVisible(false);
+    setCashConfirmVisible(true);
+  };
+
+  const startUpiCollection = async () => {
+    try {
+      setUpiLoading(true);
+      const response = await createCodUpiCollection(orderId);
+      if (!response.success || !response.data?.paymentUrl) {
+        Alert.alert("UPI unavailable", response.message || "Could not create UPI payment QR. Try cash collection.");
+        return;
+      }
+      setCodUpiSession(response.data);
+      setUpiPaymentPaid(false);
+      setCodPaymentChoiceVisible(false);
+      setUpiPaymentVisible(true);
+    } catch (error) {
+      console.error("Failed to start UPI collection:", error);
+      Alert.alert("UPI unavailable", "Could not create UPI payment QR. Try cash collection.");
+    } finally {
+      setUpiLoading(false);
+    }
+  };
+
+  const handleManualUpiConfirm = async () => {
+    try {
+      setUpiLoading(true);
+      const response = await confirmCodUpiPayment(orderId);
+      if (!response.success) {
+        Alert.alert("Could not confirm", response.message || "Please try again.");
+        return;
+      }
+      setUpiPaymentPaid(true);
+    } catch (error) {
+      console.error("Failed to confirm UPI payment:", error);
+      Alert.alert("Could not confirm", "Please try again.");
+    } finally {
+      setUpiLoading(false);
+    }
+  };
+
+  const completeUpiDelivery = async () => {
+    setUpiPaymentVisible(false);
+    await confirmDelivery(undefined, "UPI");
+  };
+
+  const confirmDelivery = async (collectedAmount?: number, collectionMethod: "CASH" | "UPI" = "CASH") => {
     try {
       setUpdating(true);
 
@@ -398,14 +483,17 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude
         },
-        collectedAmount
+        collectedAmount,
+        collectionMethod
       );
 
       if (response.success) {
         const earnedAmount = response.data?.deliveryEarnings || response.data?.deliveryFee || job?.deliveryFee || 49;
-        const collectedText = collectedAmount
-          ? ` Cash collected: Rs ${collectedAmount}.`
-          : "";
+        const collectedText = collectionMethod === "UPI"
+          ? ` UPI payment of Rs ${job?.grandTotal || collectedAmount || 0} received by Vyaha.`
+          : collectedAmount
+            ? ` Cash collected: Rs ${collectedAmount}.`
+            : "";
 
         setStatusModal({
           title: "Delivery complete",
@@ -726,7 +814,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                 <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
                 <Text style={styles.actionButtonText}>
                   {job.paymentMethod === "CASH_ON_DELIVERY" 
-                    ? "Collect Cash & Mark Delivered" 
+                    ? "Collect Payment & Deliver" 
                     : "Mark as Delivered"}
                 </Text>
               </>
@@ -734,13 +822,104 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           </TouchableOpacity>
           <Text style={styles.actionHint}>
             {job.paymentMethod === "CASH_ON_DELIVERY"
-              ? `Collect ₹${job.grandTotal} from customer before marking as delivered`
+              ? `Collect ₹${job.grandTotal} via cash or Vyaha UPI QR before marking as delivered`
               : "Click after delivering to the customer"}
           </Text>
         </View>
       )}
 
       <View style={styles.spacer} />
+
+      <Modal visible={codPaymentChoiceVisible} transparent animationType="fade" onRequestClose={() => setCodPaymentChoiceVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={[styles.confirmIcon, styles.confirmIconUpi]}>
+              <Ionicons name="wallet-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.confirmTitle}>How is the customer paying?</Text>
+            <Text style={styles.confirmText}>
+              Collect Rs {job?.grandTotal} before completing delivery. Cash is held by you until deposit. UPI goes directly to Vyaha.
+            </Text>
+            <View style={styles.codChoiceList}>
+              <TouchableOpacity style={styles.codChoiceButton} onPress={startCashCollection} disabled={upiLoading}>
+                <Ionicons name="cash-outline" size={22} color="#15803D" />
+                <View style={styles.codChoiceCopy}>
+                  <Text style={styles.codChoiceTitle}>Cash</Text>
+                  <Text style={styles.codChoiceSubtitle}>Customer pays notes/coins to you</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.codChoiceButton} onPress={startUpiCollection} disabled={upiLoading}>
+                {upiLoading ? (
+                  <ActivityIndicator color="#1D4ED8" />
+                ) : (
+                  <Ionicons name="qr-code-outline" size={22} color="#1D4ED8" />
+                )}
+                <View style={styles.codChoiceCopy}>
+                  <Text style={styles.codChoiceTitle}>UPI Scanner</Text>
+                  <Text style={styles.codChoiceSubtitle}>Show Vyaha QR — payment to our account</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.confirmSecondary} onPress={() => setCodPaymentChoiceVisible(false)}>
+              <Text style={styles.confirmSecondaryText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={upiPaymentVisible} transparent animationType="fade" onRequestClose={() => setUpiPaymentVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.confirmCard, styles.upiCard]}>
+            <View style={[styles.confirmIcon, styles.confirmIconUpi]}>
+              <Ionicons name="qr-code-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.confirmTitle}>Scan to pay Vyaha</Text>
+            <Text style={styles.confirmText}>
+              Ask the customer to scan this QR and pay Rs {codUpiSession?.amount || job?.grandTotal}. Money goes directly to Vyaha, not your account.
+            </Text>
+
+            <View style={styles.qrFrame}>
+              {codUpiSession?.qrImageUrl ? (
+                <Image source={{ uri: codUpiSession.qrImageUrl }} style={styles.qrImage} resizeMode="contain" />
+              ) : codUpiSession?.paymentUrl ? (
+                <QRCode value={codUpiSession.paymentUrl} size={220} />
+              ) : (
+                <ActivityIndicator color="#1D4ED8" />
+              )}
+            </View>
+
+            <Text style={styles.upiAmount}>Rs {codUpiSession?.amount || job?.grandTotal}</Text>
+            <Text style={styles.upiRef}>Ref: {codUpiSession?.orderRef || orderId.slice(-6).toUpperCase()}</Text>
+
+            {upiPaymentPaid ? (
+              <Text style={styles.upiPaidText}>Payment received. You can complete delivery now.</Text>
+            ) : (
+              <Text style={styles.upiWaitingText}>
+                {upiPolling ? "Checking payment status..." : "Waiting for customer payment..."}
+              </Text>
+            )}
+
+            <View style={styles.confirmActions}>
+              <TouchableOpacity style={styles.confirmSecondary} onPress={() => setUpiPaymentVisible(false)} disabled={updating}>
+                <Text style={styles.confirmSecondaryText}>Back</Text>
+              </TouchableOpacity>
+              {codUpiSession?.manualConfirmRequired && !upiPaymentPaid ? (
+                <TouchableOpacity style={[styles.confirmPrimary, styles.confirmPrimaryUpi]} onPress={handleManualUpiConfirm} disabled={upiLoading}>
+                  {upiLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Customer Paid</Text>}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.confirmPrimary, styles.confirmPrimaryUpi, !upiPaymentPaid && styles.confirmPrimaryDisabled]}
+                  onPress={completeUpiDelivery}
+                  disabled={!upiPaymentPaid || updating}
+                >
+                  {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Complete Delivery</Text>}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={cashConfirmVisible} transparent animationType="fade" onRequestClose={() => setCashConfirmVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -1225,6 +1404,85 @@ const styles = StyleSheet.create({
   },
   confirmIconWarn: {
     backgroundColor: "#F4A100"
+  },
+  confirmIconUpi: {
+    backgroundColor: "#2563EB"
+  },
+  codChoiceList: {
+    width: "100%",
+    marginTop: 18,
+    gap: 10
+  },
+  codChoiceButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0"
+  },
+  codChoiceCopy: {
+    flex: 1
+  },
+  codChoiceTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1F2937"
+  },
+  codChoiceSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#667085"
+  },
+  upiCard: {
+    maxWidth: 360
+  },
+  qrFrame: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 252
+  },
+  qrImage: {
+    width: 220,
+    height: 220
+  },
+  upiAmount: {
+    marginTop: 12,
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#1F2937"
+  },
+  upiRef: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#667085"
+  },
+  upiWaitingText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: "#B45309",
+    textAlign: "center"
+  },
+  upiPaidText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: "#15803D",
+    fontWeight: "700",
+    textAlign: "center"
+  },
+  confirmPrimaryUpi: {
+    backgroundColor: "#2563EB"
+  },
+  confirmPrimaryDisabled: {
+    opacity: 0.5
   },
   noLocationAddressCard: {
     width: "100%",

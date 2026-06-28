@@ -304,6 +304,39 @@ const OrderSchema = new Schema({
     type: Date
   },
 
+  codUpiSession: {
+    provider: {
+      type: String,
+      enum: ["razorpay_qr", "razorpay_link", "platform_upi"]
+    },
+    razorpayQrId: {
+      type: String,
+      trim: true
+    },
+    paymentLinkId: {
+      type: String,
+      trim: true
+    },
+    qrImageUrl: {
+      type: String,
+      trim: true
+    },
+    paymentUrl: {
+      type: String,
+      trim: true
+    },
+    amount: {
+      type: Number,
+      min: 0
+    },
+    createdAt: {
+      type: Date
+    },
+    expiresAt: {
+      type: Date
+    }
+  },
+
   codCollection: {
     collectedAmount: {
       type: Number,
@@ -316,6 +349,14 @@ const OrderSchema = new Schema({
     collectedBy: {
       type: Types.ObjectId,
       ref: "User"
+    },
+    method: {
+      type: String,
+      enum: ["CASH", "UPI"]
+    },
+    razorpayPaymentId: {
+      type: String,
+      trim: true
     },
     cashLedgerEntryId: {
       type: Types.ObjectId,

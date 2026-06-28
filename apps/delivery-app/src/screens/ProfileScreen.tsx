@@ -20,7 +20,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import { API_BASE_URLS } from "../api/client";
+import { uploadMultipart } from "../api/client";
 import { buildLegalUrl } from "../constants/legal";
 import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { deleteAccount } from "../api/auth.api";
@@ -112,7 +112,6 @@ type AddressForm = {
 };
 
 type UploadAsset = { uri: string; name: string; mimeType?: string | null };
-type UploadApiResponse = { success?: boolean; message?: string; data?: { url?: string } };
 type ActiveDocumentItem = { field: UploadField; title: string; subtitle: string; required: boolean; url?: string };
 
 const DOCUMENT_UPLOAD_FIELDS = new Set<UploadField>([
@@ -217,33 +216,17 @@ const vehicleTypeRequiresMotorDocuments = (value?: DeliveryProfile["vehicleType"
   !["cycle", "bicycle", "ev"].includes((value || "").trim().toLowerCase());
 
 const uploadAssetToServer = async (asset: UploadAsset, field: UploadField) => {
-  const token = await AsyncStorage.getItem("token");
-  if (!token) throw new Error(GENERIC_UPLOAD_ERROR);
   const rawFileName = asset.name || asset.uri.split("/").pop() || null;
   const mimeType = getUploadMimeType(rawFileName || field, asset.mimeType);
   const fileName = createUploadFileName(field, mimeType, rawFileName);
   const formData = new FormData();
-  // @ts-ignore
+  // @ts-ignore React Native FormData file object
   formData.append("image", { uri: asset.uri, type: mimeType, name: fileName });
-  let lastErrorMessage = GENERIC_UPLOAD_ERROR;
-  for (const baseUrl of API_BASE_URLS) {
-    try {
-      const response = await fetch(`${baseUrl}/upload/image`, {
-        method: "POST",
-        headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
-        body: formData
-      });
-      const responseData = await response.json() as UploadApiResponse;
-      if (!response.ok || !responseData?.success || !responseData?.data?.url) {
-        lastErrorMessage = GENERIC_UPLOAD_ERROR;
-        continue;
-      }
-      return responseData.data.url;
-    } catch {
-      lastErrorMessage = GENERIC_UPLOAD_ERROR;
-    }
+  const responseData = await uploadMultipart<{ url: string }>("/upload/image", formData);
+  if (!responseData?.success || !responseData?.data?.url) {
+    throw new Error(responseData?.message || GENERIC_UPLOAD_ERROR);
   }
-  throw new Error(lastErrorMessage);
+  return responseData.data.url;
 };
 
 const statusTone: Record<DeliveryProfile["status"], { bg: string; fg: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = {

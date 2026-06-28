@@ -206,16 +206,44 @@ export const markAsPickedUp = (
 export const markAsDelivered = (
   orderId: string,
   location?: LocationUpdate,
-  collectedAmount?: number
+  collectedAmount?: number,
+  collectionMethod?: "CASH" | "UPI"
 ): Promise<ApiResponse<DeliveryOrder>> => {
   const data: any = { 
     status: "DELIVERED",
-    collectedAmount 
+    collectedAmount,
+    collectionMethod
   };
   if (location) {
     data.location = location;
   }
   return apiPost<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data, STATUS_UPDATE_REQUEST_CONFIG);
+};
+
+export interface CodUpiSession {
+  provider: "razorpay_qr" | "razorpay_link" | "platform_upi";
+  razorpayQrId?: string;
+  paymentLinkId?: string;
+  qrImageUrl?: string;
+  paymentUrl: string;
+  amount: number;
+  orderRef: string;
+  payeeName: string;
+  manualConfirmRequired?: boolean;
+}
+
+export const createCodUpiCollection = (orderId: string): Promise<ApiResponse<CodUpiSession>> => {
+  return apiPost<CodUpiSession>(`/orders/delivery/${orderId}/cod-upi`, {}, STATUS_UPDATE_REQUEST_CONFIG);
+};
+
+export const getCodUpiPaymentStatus = (
+  orderId: string
+): Promise<ApiResponse<{ paid: boolean; manualConfirmRequired?: boolean; amount?: number; provider?: string }>> => {
+  return apiGet(`/orders/delivery/${orderId}/cod-upi/status`);
+};
+
+export const confirmCodUpiPayment = (orderId: string): Promise<ApiResponse<{ paid: boolean }>> => {
+  return apiPost<{ paid: boolean }>(`/orders/delivery/${orderId}/cod-upi/confirm`, {}, STATUS_UPDATE_REQUEST_CONFIG);
 };
 
 // =================== DELIVERY STATS ===================

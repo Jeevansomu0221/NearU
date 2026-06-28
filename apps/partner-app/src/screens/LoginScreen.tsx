@@ -213,7 +213,7 @@ export default function LoginScreen({ navigation }: any) {
       const payload = data.data;
 
       if (!data.success || !payload?.token || !payload.user) {
-        throw new Error(data.message || "Invalid response from server");
+        throw new Error("Invalid response from server");
       }
 
       await storeAuthData({

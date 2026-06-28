@@ -52,6 +52,8 @@ export const config = {
   razorpayKeyId: process.env.RAZORPAY_KEY_ID || "",
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || "",
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+  platformUpiVpa: process.env.PLATFORM_UPI_VPA || "",
+  platformUpiPayeeName: process.env.PLATFORM_UPI_PAYEE_NAME || "Vyaha",
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || "",
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || "",

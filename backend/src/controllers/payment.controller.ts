@@ -133,22 +133,50 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
     }
 
     const event = JSON.parse(payload.toString("utf-8"));
-    if (event.event === "payment.captured") {
-      const notes = event.payload?.payment?.entity?.notes;
-      const paymentEntity = event.payload?.payment?.entity;
+    if (event.event === "payment.captured" || event.event === "qr_code.credited") {
+      const paymentEntity =
+        event.payload?.payment?.entity ||
+        event.payload?.qr_code?.entity?.payment ||
+        event.payload?.qr_code?.entity;
+      const notes = paymentEntity?.notes || event.payload?.qr_code?.entity?.notes;
       const orderId = notes?.orderId;
+      const isDeliveryCollection = notes?.deliveryCollection === "true";
 
       if (orderId) {
-        await Order.findByIdAndUpdate(orderId, {
+        const order = await Order.findById(orderId);
+        const update: Record<string, unknown> = {
           paymentStatus: "PAID",
-          paymentMethod: "RAZORPAY",
+          paymentMethod: isDeliveryCollection ? "UPI" : "RAZORPAY",
           paymentId: paymentEntity?.id,
-          razorpayPaymentId: paymentEntity?.id,
-          status: "CONFIRMED"
-        });
-        void notifyPaymentConfirmed(orderId).catch((error) => {
-          console.error("Failed to notify partner from payment webhook:", error);
-        });
+          razorpayPaymentId: paymentEntity?.id
+        };
+
+        if (!isDeliveryCollection && order?.status === "PENDING") {
+          update.status = "CONFIRMED";
+        }
+
+        const ordersToUpdate = order?.deliveryBundleId
+          ? await Order.find({ deliveryBundleId: order.deliveryBundleId })
+          : order
+            ? [order]
+            : [];
+
+        for (const targetOrder of ordersToUpdate) {
+          const orderUpdate = { ...update };
+          if (!isDeliveryCollection && targetOrder.status !== "PENDING") {
+            delete orderUpdate.status;
+          }
+          if (isDeliveryCollection && targetOrder.paymentMethod !== "CASH_ON_DELIVERY") {
+            continue;
+          }
+          await Order.findByIdAndUpdate(targetOrder._id, orderUpdate);
+        }
+
+        if (!isDeliveryCollection) {
+          void notifyPaymentConfirmed(orderId).catch((error) => {
+            console.error("Failed to notify partner from payment webhook:", error);
+          });
+        }
       }
     }
 

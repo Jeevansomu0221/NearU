@@ -321,6 +321,61 @@ export const apiPatch = async <T = any>(url: string, data?: any, config?: any): 
   }
 };
 
+export const uploadMultipart = async <T = any>(path: string, formData: FormData): Promise<ApiResponse<T>> => {
+  let token = await getAccessToken();
+  let didRefresh = false;
+
+  const makeRequest = async (baseUrl: string, authToken?: string | null) => {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      },
+      body: formData
+    });
+    const responseText = await response.text();
+    const data = responseText
+      ? (() => {
+          try {
+            return JSON.parse(responseText);
+          } catch {
+            return { success: false, message: responseText };
+          }
+        })()
+      : null;
+    return { response, data };
+  };
+
+  for (const baseUrl of API_BASE_URLS) {
+    try {
+      let { response, data } = await makeRequest(baseUrl, token);
+
+      if (response.status === 401 && !didRefresh) {
+        const refreshedToken = await refreshAccessToken();
+        if (refreshedToken) {
+          token = refreshedToken;
+          didRefresh = true;
+          ({ response, data } = await makeRequest(baseUrl, token));
+        }
+      }
+
+      if (!response.ok) {
+        if (data && typeof data === "object") {
+          return data;
+        }
+        return { success: false, message: `Request failed (${response.status})` };
+      }
+
+      return data;
+    } catch (error: any) {
+      logDebug(`Upload failed for ${baseUrl}${path}:`, error?.message || error);
+    }
+  }
+
+  throw new Error("Network Error");
+};
+
 const typedApi = {
   get: apiGet,
   post: apiPost,
