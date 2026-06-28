@@ -6,6 +6,7 @@ import DeliveryPartner from "../models/DeliveryPartner.model";
 import Payout from "../models/Payout.model";
 import CashLedgerEntry from "../models/CashLedgerEntry.model";
 import { notifyPayoutPaid } from "../services/notification.service";
+import { markPendingWithdrawalRequestsPaid } from "../services/payout.service";
 
 interface AuthRequest extends Request {
   user?: {
@@ -579,6 +580,16 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
           }
         }
       );
+    }
+
+    if (recipientType === "DELIVERY_PARTNER") {
+      await markPendingWithdrawalRequestsPaid({
+        deliveryPartnerId: recipientId,
+        payoutId: payout._id,
+        paidReference: String(req.body.paidReference || "").trim(),
+        paidNotes: String(req.body.paidNotes || "").trim(),
+        reviewedBy: req.user?.id
+      });
     }
 
     void notifyPayoutPaid(payout).catch((error) => {

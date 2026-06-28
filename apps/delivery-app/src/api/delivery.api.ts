@@ -302,6 +302,19 @@ export interface WithdrawalWallet {
     status: string;
     createdAt: string;
   } | null;
+  lastPaidWithdrawal?: {
+    _id: string;
+    amount: number;
+    status: string;
+    reviewedAt?: string;
+    paidReference?: string;
+  } | null;
+  lastPaidPayout?: {
+    _id: string;
+    amount: number;
+    paidAt: string;
+    paidReference?: string;
+  } | null;
   payouts: Array<{
     _id: string;
     amount: number;

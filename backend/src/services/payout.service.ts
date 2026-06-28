@@ -3,6 +3,7 @@ import Order from "../models/Order.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import Payout from "../models/Payout.model";
 import CashLedgerEntry from "../models/CashLedgerEntry.model";
+import WithdrawalRequest from "../models/WithdrawalRequest.model";
 import { notifyPayoutPaid } from "./notification.service";
 
 export const getRiderPayoutBreakdown = (grossEarnings: number, cashBalance: number) => {
@@ -52,6 +53,35 @@ export const getPendingDeliveryPayoutOrders = async (deliveryUserId: string) => 
   })
     .select("deliveryPartnerId deliveryFee createdAt updatedAt deliveredAt")
     .lean();
+};
+
+export const markPendingWithdrawalRequestsPaid = async ({
+  deliveryPartnerId,
+  payoutId,
+  paidReference = "",
+  paidNotes = "",
+  reviewedBy
+}: {
+  deliveryPartnerId: mongoose.Types.ObjectId | string;
+  payoutId: mongoose.Types.ObjectId;
+  paidReference?: string;
+  paidNotes?: string;
+  reviewedBy?: string;
+}) => {
+  const now = new Date();
+  await WithdrawalRequest.updateMany(
+    { deliveryPartnerId, status: "PENDING" },
+    {
+      $set: {
+        status: "PAID",
+        payoutId,
+        paidReference: String(paidReference || "").trim(),
+        paidNotes: String(paidNotes || "").trim(),
+        reviewedBy: reviewedBy && mongoose.Types.ObjectId.isValid(reviewedBy) ? reviewedBy : undefined,
+        reviewedAt: now
+      }
+    }
+  );
 };
 
 export const executeDeliveryPartnerPayout = async ({
@@ -158,6 +188,14 @@ export const executeDeliveryPartnerPayout = async ({
       }
     );
   }
+
+  await markPendingWithdrawalRequestsPaid({
+    deliveryPartnerId: deliveryPartner._id,
+    payoutId: payout._id,
+    paidReference,
+    paidNotes,
+    reviewedBy: paidBy
+  });
 
   void notifyPayoutPaid(payout).catch((error) => {
     console.error("Failed to notify payout paid:", error);

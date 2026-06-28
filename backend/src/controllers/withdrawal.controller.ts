@@ -62,12 +62,37 @@ const buildWalletPayload = async (deliveryPartner: any) => {
   const breakdown = getRiderPayoutBreakdown(grossEarnings, Number(deliveryPartner.cashBalance || 0));
   const bankDetails = getBankDetails(deliveryPartner, "DELIVERY_PARTNER");
 
-  const pendingRequest = await WithdrawalRequest.findOne({
+  let pendingRequest = await WithdrawalRequest.findOne({
     deliveryPartnerId: deliveryPartner._id,
     status: "PENDING"
   })
     .sort({ createdAt: -1 })
     .lean();
+
+  if (pendingRequest) {
+    const paidPayoutAfterRequest = await Payout.findOne({
+      recipientType: "DELIVERY_PARTNER",
+      recipientId: deliveryPartner._id,
+      paidAt: { $gte: new Date(pendingRequest.createdAt) }
+    })
+      .sort({ paidAt: -1 })
+      .lean();
+
+    if (paidPayoutAfterRequest) {
+      await WithdrawalRequest.updateOne(
+        { _id: pendingRequest._id },
+        {
+          $set: {
+            status: "PAID",
+            payoutId: paidPayoutAfterRequest._id,
+            paidReference: paidPayoutAfterRequest.paidReference || "",
+            reviewedAt: paidPayoutAfterRequest.paidAt || new Date()
+          }
+        }
+      );
+      pendingRequest = null;
+    }
+  }
 
   const payouts = await Payout.find({
     recipientType: "DELIVERY_PARTNER",
@@ -83,6 +108,9 @@ const buildWalletPayload = async (deliveryPartner: any) => {
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
+
+  const latestPaidWithdrawal = withdrawalHistory.find((entry) => entry.status === "PAID") || null;
+  const latestPaidPayout = payouts[0] || null;
 
   return {
     availableBalance: pendingRequest ? 0 : breakdown.netPayable,
@@ -109,6 +137,23 @@ const buildWalletPayload = async (deliveryPartner: any) => {
           amount: Number(pendingRequest.amount || 0),
           status: pendingRequest.status,
           createdAt: pendingRequest.createdAt
+        }
+      : null,
+    lastPaidWithdrawal: latestPaidWithdrawal
+      ? {
+          _id: String(latestPaidWithdrawal._id),
+          amount: Number(latestPaidWithdrawal.amount || 0),
+          status: latestPaidWithdrawal.status,
+          reviewedAt: latestPaidWithdrawal.reviewedAt,
+          paidReference: latestPaidWithdrawal.paidReference || ""
+        }
+      : null,
+    lastPaidPayout: latestPaidPayout
+      ? {
+          _id: String(latestPaidPayout._id),
+          amount: Number(latestPaidPayout.amount || 0),
+          paidAt: latestPaidPayout.paidAt,
+          paidReference: latestPaidPayout.paidReference || ""
         }
       : null,
     payouts: payouts.map((payout: any) => ({
@@ -305,18 +350,11 @@ export const approveWithdrawalRequest = async (req: AuthRequest, res: Response) 
       paidBy: admin.id
     });
 
-    const now = new Date();
-    withdrawalRequest.status = "PAID";
-    withdrawalRequest.payoutId = payout._id;
-    withdrawalRequest.paidReference = String(req.body.paidReference || "").trim();
-    withdrawalRequest.paidNotes = String(req.body.paidNotes || "").trim();
-    withdrawalRequest.reviewedBy = new mongoose.Types.ObjectId(admin.id);
-    withdrawalRequest.reviewedAt = now;
-    await withdrawalRequest.save();
+    const updatedRequest = await WithdrawalRequest.findById(withdrawalRequest._id).lean();
 
     res.json({
       success: true,
-      data: { withdrawalRequest, payout },
+      data: { withdrawalRequest: updatedRequest || withdrawalRequest, payout },
       message: "Withdrawal paid and rider notified"
     });
   } catch (error: any) {

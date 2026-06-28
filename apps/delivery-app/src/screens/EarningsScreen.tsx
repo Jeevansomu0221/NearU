@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import {
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 
 type EarningHistoryItem = {
   id: string;
@@ -60,6 +61,27 @@ export default function EarningsScreen({ navigation }: any) {
   const [requestingWithdrawal, setRequestingWithdrawal] = useState(false);
   const [payoutHistoryVisible, setPayoutHistoryVisible] = useState(false);
   const [cashRefreshing, setCashRefreshing] = useState(false);
+  const [walletRefreshing, setWalletRefreshing] = useState(false);
+
+  const refreshWithdrawalWallet = useCallback(async () => {
+    try {
+      setWalletRefreshing(true);
+      const walletResponse = await getWithdrawalWallet();
+      if (walletResponse.success && walletResponse.data) {
+        setWithdrawalWallet(walletResponse.data);
+      }
+    } catch {
+      Alert.alert("Refresh failed", "Could not update withdrawal status. Please try again.");
+    } finally {
+      setWalletRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshWithdrawalWallet();
+    }, [refreshWithdrawalWallet])
+  );
 
   useEffect(() => {
     loadEarningsData();
@@ -564,9 +586,23 @@ export default function EarningsScreen({ navigation }: any) {
 
       {/* Withdrawal Info */}
       <View style={styles.withdrawalCard}>
-        <View style={styles.withdrawalHeader}>
-          <Ionicons name="wallet" size={24} color="#4CAF50" />
-          <Text style={styles.withdrawalTitle}>Available Balance</Text>
+        <View style={styles.cashCardHeader}>
+          <View style={styles.withdrawalHeader}>
+            <Ionicons name="wallet" size={24} color="#4CAF50" />
+            <Text style={styles.withdrawalTitle}>Available Balance</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.cashRefreshButton}
+            onPress={refreshWithdrawalWallet}
+            disabled={walletRefreshing}
+            accessibilityLabel="Refresh withdrawal status"
+          >
+            {walletRefreshing ? (
+              <ActivityIndicator size="small" color="#4CAF50" />
+            ) : (
+              <Ionicons name="refresh" size={20} color="#4CAF50" />
+            )}
+          </TouchableOpacity>
         </View>
         <Text style={styles.withdrawalAmount}>
           {formatCurrency(withdrawalWallet?.availableBalance ?? 0)}
@@ -576,6 +612,21 @@ export default function EarningsScreen({ navigation }: any) {
             <Ionicons name="time-outline" size={16} color="#B45309" />
             <Text style={styles.pendingWithdrawalText}>
               {formatCurrency(withdrawalWallet.pendingRequest.amount)} withdrawal pending admin approval
+            </Text>
+          </View>
+        ) : withdrawalWallet?.lastPaidPayout || withdrawalWallet?.lastPaidWithdrawal ? (
+          <View style={styles.paidWithdrawalBanner}>
+            <Ionicons name="checkmark-circle-outline" size={16} color="#166534" />
+            <Text style={styles.paidWithdrawalText}>
+              {formatCurrency(
+                withdrawalWallet.lastPaidPayout?.amount || withdrawalWallet.lastPaidWithdrawal?.amount || 0
+              )}{" "}
+              paid to your account
+              {(withdrawalWallet.lastPaidPayout?.paidAt || withdrawalWallet.lastPaidWithdrawal?.reviewedAt)
+                ? ` · ${new Date(
+                    withdrawalWallet.lastPaidPayout?.paidAt || withdrawalWallet.lastPaidWithdrawal?.reviewedAt || ""
+                  ).toLocaleDateString("en-IN")}`
+                : ""}
             </Text>
           </View>
         ) : null}
@@ -1292,6 +1343,21 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: '#92400E',
+    fontWeight: '500',
+  },
+  paidWithdrawalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#DCFCE7',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+  },
+  paidWithdrawalText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#166534',
     fontWeight: '500',
   },
   bankHint: {
