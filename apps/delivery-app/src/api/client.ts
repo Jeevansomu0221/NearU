@@ -287,9 +287,15 @@ export const apiPut = async <T = any>(url: string, data?: any, config?: any): Pr
     const response = await api.put(url, data, config);
     return extractData<T>(response);
   } catch (error: any) {
+    const serverMessage =
+      typeof error?.message === "string"
+        ? error.message
+        : typeof error?.response?.data?.message === "string"
+          ? error.response.data.message
+          : undefined;
     return {
       success: false,
-      message: error.message || "Request failed",
+      message: serverMessage || "Request failed",
       ...error
     };
   }

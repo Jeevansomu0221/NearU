@@ -489,8 +489,14 @@ export default function ProfileScreen({ navigation, route }: any) {
         bankIfsc: documents.bankIfsc?.trim().toUpperCase(),
         bankUpiId
       });
-      if (!response.success || !response.data) throw new Error(response.message || "Failed to update payout details");
-      syncProfile(response.data);
+      if (!response.success) {
+        throw new Error(response.message || "Failed to update payout details");
+      }
+      const profileResponse = await getDeliveryProfile();
+      if (!profileResponse.success || !profileResponse.data) {
+        throw new Error(profileResponse.message || "Bank details saved but profile refresh failed");
+      }
+      syncProfile(profileResponse.data);
       setEditingBank(false);
       Alert.alert("Submitted", "Bank details sent for admin verification. You can withdraw after they are verified.");
     } catch (error: any) {

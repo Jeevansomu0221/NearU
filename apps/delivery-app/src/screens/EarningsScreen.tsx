@@ -59,6 +59,7 @@ export default function EarningsScreen({ navigation }: any) {
   const [withdrawalWallet, setWithdrawalWallet] = useState<WithdrawalWallet | null>(null);
   const [requestingWithdrawal, setRequestingWithdrawal] = useState(false);
   const [payoutHistoryVisible, setPayoutHistoryVisible] = useState(false);
+  const [cashRefreshing, setCashRefreshing] = useState(false);
 
   useEffect(() => {
     loadEarningsData();
@@ -107,6 +108,23 @@ export default function EarningsScreen({ navigation }: any) {
   const onRefresh = () => {
     setRefreshing(true);
     loadEarningsData();
+  };
+
+  const refreshCashBalance = async () => {
+    try {
+      setCashRefreshing(true);
+      const [cashResponse, statsResponse] = await Promise.all([getCashLedger(), getDeliveryStats()]);
+      if (cashResponse.success && cashResponse.data) {
+        setCashLedger(cashResponse.data);
+      }
+      if (statsResponse.success && statsResponse.data) {
+        setStats(statsResponse.data);
+      }
+    } catch {
+      Alert.alert("Refresh failed", "Could not update COD cash balance. Please try again.");
+    } finally {
+      setCashRefreshing(false);
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -415,9 +433,23 @@ export default function EarningsScreen({ navigation }: any) {
       </View>
 
       <View style={styles.cashCard}>
-        <View style={styles.withdrawalHeader}>
-          <Ionicons name="wallet-outline" size={24} color="#B45309" />
-          <Text style={styles.withdrawalTitle}>COD Cash Balance</Text>
+        <View style={styles.cashCardHeader}>
+          <View style={styles.withdrawalHeader}>
+            <Ionicons name="wallet-outline" size={24} color="#B45309" />
+            <Text style={styles.withdrawalTitle}>COD Cash Balance</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.cashRefreshButton}
+            onPress={refreshCashBalance}
+            disabled={cashRefreshing}
+            accessibilityLabel="Refresh COD cash balance"
+          >
+            {cashRefreshing ? (
+              <ActivityIndicator size="small" color="#B45309" />
+            ) : (
+              <Ionicons name="refresh" size={20} color="#B45309" />
+            )}
+          </TouchableOpacity>
         </View>
         <Text style={styles.cashAmount}>{formatCurrency(cashLedger?.cashBalance || stats?.cashBalance || 0)}</Text>
         <Text style={styles.withdrawalNote}>
@@ -1057,6 +1089,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+  },
+  cashCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  cashRefreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
   },
   withdrawalHeader: {
     flexDirection: 'row',

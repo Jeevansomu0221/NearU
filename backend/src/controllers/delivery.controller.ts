@@ -1124,15 +1124,21 @@ export const updateBankDetails = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, validationError, 400);
     }
 
-    deliveryPartner.documents = {
-      ...existingDocuments,
-      ...bank,
-      bankVerificationStatus: "PENDING",
-      bankReviewComment: ""
-    };
-    deliveryPartner.markModified("documents");
-    await deliveryPartner.save();
+    await DeliveryPartner.updateOne(
+      { _id: deliveryPartner._id },
+      {
+        $set: {
+          "documents.bankAccountHolderName": bank.bankAccountHolderName,
+          "documents.bankAccountNumber": bank.bankAccountNumber,
+          "documents.bankIfsc": bank.bankIfsc,
+          "documents.bankUpiId": bank.bankUpiId,
+          "documents.bankVerificationStatus": "PENDING",
+          "documents.bankReviewComment": ""
+        }
+      }
+    );
 
+    const updatedPartner = await DeliveryPartner.findById(deliveryPartner._id).lean();
     const userDoc = await User.findById(user.id).select("name phone email");
     return successResponse(
       res,
@@ -1142,14 +1148,14 @@ export const updateBankDetails = async (req: AuthRequest, res: Response) => {
         name: userDoc?.name || deliveryPartner.name,
         phone: userDoc?.phone || deliveryPartner.phone,
         email: userDoc?.email || deliveryPartner.email,
-        documents: deliveryPartner.documents,
-        status: deliveryPartner.status
+        documents: updatedPartner?.documents,
+        status: updatedPartner?.status || deliveryPartner.status
       },
       "Bank details submitted for admin verification"
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error("updateBankDetails error:", error);
-    return errorResponse(res, "Failed to update bank details");
+    return errorResponse(res, error?.message || "Failed to update bank details");
   }
 };
 
