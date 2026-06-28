@@ -11,6 +11,7 @@ import {
   clearSuspensionFields,
   type SuspensionType
 } from "../utils/suspension.util";
+import { getRiderWalletSummary } from "../services/payout.service";
 
 interface AuthRequest extends Request {
   user?: {
@@ -619,7 +620,7 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
     todayStart.setHours(0, 0, 0, 0);
     const deliveryUserId = deliveryPartner.userId || user.id;
 
-    const [todaysOrders, deliveredOrders, acceptedJobs, rejectedJobs] = await Promise.all([
+    const [todaysOrders, deliveredOrders, acceptedJobs, rejectedJobs, walletSummary] = await Promise.all([
       Order.find({
         deliveryPartnerId: deliveryUserId,
         status: "DELIVERED",
@@ -634,7 +635,8 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
       }),
       Order.countDocuments({
         deliveryRejectedBy: deliveryUserId
-      })
+      }),
+      getRiderWalletSummary(deliveryPartner)
     ]);
     const totalJobResponses = acceptedJobs + rejectedJobs;
     const acceptanceRate = totalJobResponses > 0 ? Math.round((acceptedJobs / totalJobResponses) * 100) : 0;
@@ -656,7 +658,9 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
       res,
       {
         totalDeliveries: deliveredOrders.length,
-        totalEarnings: deliveredOrders.reduce(
+        totalEarnings: walletSummary.totalPaidEarnings,
+        walletBalance: walletSummary.walletBalance,
+        lifetimeDeliveredEarnings: deliveredOrders.reduce(
           (sum, order) => sum + (typeof order.deliveryFee === "number" ? order.deliveryFee : 0),
           0
         ),

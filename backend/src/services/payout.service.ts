@@ -44,6 +44,38 @@ export const hasVerifiedBankDetails = (source: any) => {
 
 const getOrderDeliveredAt = (order: any) => new Date(order.deliveredAt || order.updatedAt || order.createdAt);
 
+export const getRiderPaidEarningsTotal = async (deliveryPartnerId: mongoose.Types.ObjectId | string) => {
+  const [result] = await Payout.aggregate([
+    {
+      $match: {
+        recipientType: "DELIVERY_PARTNER",
+        recipientId: new mongoose.Types.ObjectId(String(deliveryPartnerId)),
+        status: "PAID"
+      }
+    },
+    { $group: { _id: null, total: { $sum: "$amount" } } }
+  ]);
+  return Number(result?.total || 0);
+};
+
+export const getRiderWalletSummary = async (deliveryPartner: any) => {
+  const orders = await getPendingDeliveryPayoutOrders(String(deliveryPartner.userId));
+  const grossEarnings = orders.reduce((sum, order) => sum + Number(order.deliveryFee || 0), 0);
+  const breakdown = getRiderPayoutBreakdown(grossEarnings, Number(deliveryPartner.cashBalance || 0));
+  const totalPaidEarnings = await getRiderPaidEarningsTotal(deliveryPartner._id);
+
+  return {
+    walletBalance: breakdown.netPayable,
+    grossWalletEarnings: breakdown.grossEarnings,
+    cashHeld: breakdown.cashHeld,
+    cashOffset: breakdown.offsetApplied,
+    netPayable: breakdown.netPayable,
+    cashDueToPlatform: breakdown.cashDueToPlatform,
+    pendingPayoutOrderCount: orders.length,
+    totalPaidEarnings
+  };
+};
+
 export const getPendingDeliveryPayoutOrders = async (deliveryUserId: string) => {
   return Order.find({
     status: "DELIVERED",

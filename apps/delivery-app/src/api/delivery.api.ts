@@ -85,6 +85,8 @@ export interface DeliveryJob extends DeliveryOrder {
 export interface DeliveryStats {
   totalDeliveries: number;
   totalEarnings: number;
+  walletBalance?: number;
+  lifetimeDeliveredEarnings?: number;
   todaysDeliveries: number;
   todaysEarnings: number;
   averageDeliveryTime: number;
@@ -278,6 +280,8 @@ export const submitCashDeposit = (payload: {
 };
 
 export interface WithdrawalWallet {
+  walletBalance: number;
+  totalPaidEarnings: number;
   availableBalance: number;
   grossEarnings: number;
   cashHeld: number;

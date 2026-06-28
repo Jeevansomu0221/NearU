@@ -434,23 +434,44 @@ export default function EarningsScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Overall Stats */}
+      {/* Wallet & Paid Earnings */}
       <View style={styles.statsContainer}>
+        <View style={styles.statCard}>
+          <View style={styles.statIconContainer}>
+            <Ionicons name="wallet" size={24} color="#B45309" />
+          </View>
+          <Text style={styles.statValue}>
+            {formatCurrency(withdrawalWallet?.walletBalance ?? stats?.walletBalance ?? 0)}
+          </Text>
+          <Text style={styles.statLabel}>Wallet</Text>
+          <Text style={styles.statHint}>Unpaid delivery earnings</Text>
+        </View>
         <View style={styles.statCard}>
           <View style={styles.statIconContainer}>
             <Ionicons name="cash" size={24} color="#4CAF50" />
           </View>
           <Text style={styles.statValue}>
-            {formatCurrency(stats?.totalEarnings || 0)}
+            {formatCurrency(withdrawalWallet?.totalPaidEarnings ?? stats?.totalEarnings ?? 0)}
           </Text>
           <Text style={styles.statLabel}>Total Earnings</Text>
+          <Text style={styles.statHint}>Paid to your account by Vyaha</Text>
         </View>
+      </View>
+
+      <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <View style={styles.statIconContainer}>
             <Ionicons name="bicycle" size={24} color="#2196F3" />
           </View>
           <Text style={styles.statValue}>{stats?.totalDeliveries || 0}</Text>
           <Text style={styles.statLabel}>Total Deliveries</Text>
+        </View>
+        <View style={styles.statCard}>
+          <View style={styles.statIconContainer}>
+            <Ionicons name="today" size={24} color="#7C3AED" />
+          </View>
+          <Text style={styles.statValue}>{formatCurrency(todayEarnings)}</Text>
+          <Text style={styles.statLabel}>Today's Earnings</Text>
         </View>
       </View>
 
@@ -550,7 +571,9 @@ export default function EarningsScreen({ navigation }: any) {
         <View style={styles.divider} />
         
         <View style={styles.totalEarningsItem}>
-          <Text style={styles.totalEarningsLabel}>Total Earnings</Text>
+          <Text style={styles.totalEarningsLabel}>
+            {selectedPeriod === "today" ? "Today's Total" : selectedPeriod === "week" ? "This Week" : "This Month"}
+          </Text>
           <Text style={styles.totalEarningsAmount}>
             {formatCurrency(todayEarnings)}
           </Text>
@@ -584,12 +607,12 @@ export default function EarningsScreen({ navigation }: any) {
         )}
       </View>
 
-      {/* Withdrawal Info */}
+      {/* Rider Wallet */}
       <View style={styles.withdrawalCard}>
         <View style={styles.cashCardHeader}>
           <View style={styles.withdrawalHeader}>
-            <Ionicons name="wallet" size={24} color="#4CAF50" />
-            <Text style={styles.withdrawalTitle}>Available Balance</Text>
+            <Ionicons name="wallet" size={24} color="#B45309" />
+            <Text style={styles.withdrawalTitle}>Wallet</Text>
           </View>
           <TouchableOpacity
             style={styles.cashRefreshButton}
@@ -605,7 +628,16 @@ export default function EarningsScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
         <Text style={styles.withdrawalAmount}>
-          {formatCurrency(withdrawalWallet?.availableBalance ?? 0)}
+          {formatCurrency(withdrawalWallet?.walletBalance ?? 0)}
+        </Text>
+        <Text style={styles.withdrawalNote}>
+          Money you earn from completed deliveries sits here until Vyaha pays you. After payout, wallet resets to ₹0 and the amount is added to Total Earnings above.
+          {withdrawalWallet?.pendingPayoutOrderCount
+            ? `\n\n${withdrawalWallet.pendingPayoutOrderCount} delivered order${withdrawalWallet.pendingPayoutOrderCount === 1 ? "" : "s"} in wallet`
+            : ""}
+          {withdrawalWallet?.cashOffset
+            ? ` · ₹${withdrawalWallet.cashOffset.toLocaleString("en-IN")} COD cash offset applied`
+            : ""}
         </Text>
         {withdrawalWallet?.pendingRequest ? (
           <View style={styles.pendingWithdrawalBanner}>
@@ -630,14 +662,6 @@ export default function EarningsScreen({ navigation }: any) {
             </Text>
           </View>
         ) : null}
-        <Text style={styles.withdrawalNote}>
-          {withdrawalWallet?.pendingPayoutOrderCount
-            ? `${withdrawalWallet.pendingPayoutOrderCount} delivered order${withdrawalWallet.pendingPayoutOrderCount === 1 ? "" : "s"} pending payout`
-            : "Complete deliveries to earn withdrawable balance"}
-          {withdrawalWallet?.cashOffset
-            ? ` · ₹${withdrawalWallet.cashOffset.toLocaleString("en-IN")} COD cash offset applied`
-            : ""}
-        </Text>
         {withdrawalWallet?.bankVerified ? (
           <Text style={styles.bankHint}>
             Payout to {withdrawalWallet.bankDetails.accountHolderName || "your account"}
@@ -988,6 +1012,12 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: '#666',
+  },
+  statHint: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 4,
+    textAlign: 'center',
   },
   breakdownCard: {
     backgroundColor: '#FFFFFF',

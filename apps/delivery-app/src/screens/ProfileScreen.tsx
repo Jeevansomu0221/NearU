@@ -728,7 +728,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           {/* Stats Grid */}
           <View style={s.statsGrid}>
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(todayEarnings)}</Text><Text style={s.statLbl}>Today</Text></View>
-            <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.totalEarnings || profile?.totalEarnings)}</Text><Text style={s.statLbl}>Total earnings</Text></View>
+            <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.totalEarnings || profile?.totalEarnings)}</Text><Text style={s.statLbl}>Paid earnings</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{stats?.totalDeliveries || profile?.totalDeliveries || 0}</Text><Text style={s.statLbl}>Deliveries</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{(profile?.rating || 0).toFixed(1)}</Text><Text style={s.statLbl}>Rating</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.cashBalance || profile?.cashBalance || 0)}</Text><Text style={s.statLbl}>COD cash held</Text></View>
@@ -810,7 +810,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={s.sectionTitle}>Performance</Text>
             {renderInfoRow("Total deliveries", String(stats?.totalDeliveries || profile?.totalDeliveries || 0))}
             {renderInfoRow("Today earnings", formatCurrency(todayEarnings))}
-            {renderInfoRow("Total earnings", formatCurrency(stats?.totalEarnings || profile?.totalEarnings || 0))}
+            {renderInfoRow("Paid earnings", formatCurrency(stats?.totalEarnings || profile?.totalEarnings || 0))}
             {renderInfoRow("Average delivery time", formatAverageDeliveryTime(stats?.averageDeliveryTime))}
             {renderInfoRow("Rating", `${(profile?.rating || 0).toFixed(1)} / 5 (${profile?.ratingCount || 0} ratings)`)}
             {renderInfoRow("Acceptance rate", formatAcceptanceRate(stats))}

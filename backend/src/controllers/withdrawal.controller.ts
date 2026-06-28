@@ -8,6 +8,7 @@ import {
   getBankDetails,
   getPendingDeliveryPayoutOrders,
   getRiderPayoutBreakdown,
+  getRiderWalletSummary,
   hasMissingBankDetails,
   hasVerifiedBankDetails
 } from "../services/payout.service";
@@ -57,9 +58,7 @@ const maskAccountNumber = (accountNumber?: string) => {
 };
 
 const buildWalletPayload = async (deliveryPartner: any) => {
-  const orders = await getPendingDeliveryPayoutOrders(String(deliveryPartner.userId));
-  const grossEarnings = orders.reduce((sum, order) => sum + Number(order.deliveryFee || 0), 0);
-  const breakdown = getRiderPayoutBreakdown(grossEarnings, Number(deliveryPartner.cashBalance || 0));
+  const walletSummary = await getRiderWalletSummary(deliveryPartner);
   const bankDetails = getBankDetails(deliveryPartner, "DELIVERY_PARTNER");
 
   let pendingRequest = await WithdrawalRequest.findOne({
@@ -113,13 +112,15 @@ const buildWalletPayload = async (deliveryPartner: any) => {
   const latestPaidPayout = payouts[0] || null;
 
   return {
-    availableBalance: pendingRequest ? 0 : breakdown.netPayable,
-    grossEarnings: breakdown.grossEarnings,
-    cashHeld: breakdown.cashHeld,
-    cashOffset: breakdown.offsetApplied,
-    netPayable: breakdown.netPayable,
-    cashDueToPlatform: breakdown.cashDueToPlatform,
-    pendingPayoutOrderCount: orders.length,
+    walletBalance: walletSummary.walletBalance,
+    totalPaidEarnings: walletSummary.totalPaidEarnings,
+    availableBalance: pendingRequest ? 0 : walletSummary.walletBalance,
+    grossEarnings: walletSummary.grossWalletEarnings,
+    cashHeld: walletSummary.cashHeld,
+    cashOffset: walletSummary.cashOffset,
+    netPayable: walletSummary.netPayable,
+    cashDueToPlatform: walletSummary.cashDueToPlatform,
+    pendingPayoutOrderCount: walletSummary.pendingPayoutOrderCount,
     pendingDepositAmount: Number(deliveryPartner.pendingDepositAmount || 0),
     hasBankDetails: !hasMissingBankDetails(bankDetails),
     bankVerified: hasVerifiedBankDetails(deliveryPartner),
