@@ -72,6 +72,12 @@ type NoLocationModalState = {
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const UPI_FOCUS_SIZE = SCREEN_WIDTH - 40;
 const UPI_NATIVE_QR_SIZE = UPI_FOCUS_SIZE - 12;
+// Razorpay poster proportions: width ≈ 63% of height (630×1008 px)
+// QR code block sits at ~23-62% vertically, ~6-94% horizontally in the poster
+const RZPAY_IMG_W = UPI_FOCUS_SIZE * 1.25;
+const RZPAY_IMG_H = RZPAY_IMG_W * 1.61;
+const RZPAY_IMG_LEFT = -((RZPAY_IMG_W - UPI_FOCUS_SIZE) / 2);
+const RZPAY_IMG_TOP = -(RZPAY_IMG_H * 0.22);
 
 const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (!session) return null;
@@ -945,8 +951,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                   showRazorpayPoster ? (
                     <Image
                       source={{ uri: codQrDisplayUri }}
-                      style={styles.qrPosterContained}
-                      resizeMode="contain"
+                      style={styles.qrPosterZoomed}
                     />
                   ) : (
                     <Image
@@ -1573,14 +1578,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 12,
     elevation: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    padding: 6
+    overflow: "hidden"
   },
-  qrPosterContained: {
-    width: UPI_FOCUS_SIZE - 12,
-    height: UPI_FOCUS_SIZE - 12
+  qrPosterZoomed: {
+    position: "absolute",
+    width: RZPAY_IMG_W,
+    height: RZPAY_IMG_H,
+    left: RZPAY_IMG_LEFT,
+    top: RZPAY_IMG_TOP
   },
   nativeQrImage: {
     width: UPI_NATIVE_QR_SIZE,
