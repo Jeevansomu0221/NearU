@@ -16,7 +16,7 @@ import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, getDeliveryStats, getMyDeliveryOrders, rejectJob, updateLocation } from "../api/delivery.api";
+import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, getDeliveryStats, getMyDeliveryOrders, getWithdrawalWallet, rejectJob, updateLocation } from "../api/delivery.api";
 import { getDeliveryProfile, updateDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { formatAddress } from "../utils/address";
@@ -49,14 +49,12 @@ export default function JobsScreen({ navigation }: any) {
   const [newJobAlert, setNewJobAlert] = useState<CalculatedJob | null>(null);
   const [selectedJobAction, setSelectedJobAction] = useState<{ job: CalculatedJob; action: "accept" | "reject" } | null>(null);
   const [emptyMessage, setEmptyMessage] = useState("When restaurants mark orders as READY, they will appear here for delivery.");
-  const [todaysEarnings, setTodaysEarnings] = useState(0);
+  const [riderName, setRiderName] = useState("");
+  const [walletBalance, setWalletBalance] = useState(0);
   const [todaysDeliveries, setTodaysDeliveries] = useState(0);
-  const [onlineMinutes, setOnlineMinutes] = useState(0);
   const knownJobIds = useRef<Set<string>>(new Set());
   const rejectedJobIds = useRef<Set<string>>(new Set());
   const firstLoadDone = useRef(false);
-  const onlineStartRef = useRef<Date | null>(null);
-  const onlineTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const applyAvailabilityPreference = useCallback((value: boolean) => {
     setIsAvailable(value);
@@ -139,12 +137,23 @@ export default function JobsScreen({ navigation }: any) {
     [userLocation]
   );
 
-  const loadTodaysStats = useCallback(async () => {
+  const loadHeaderStats = useCallback(async () => {
     try {
-      const response = await getDeliveryStats();
-      if (response.success && response.data) {
-        setTodaysEarnings(response.data.todaysEarnings || 0);
-        setTodaysDeliveries(response.data.todaysDeliveries || 0);
+      const [statsResponse, profileResponse, walletResponse] = await Promise.all([
+        getDeliveryStats(),
+        getDeliveryProfile(),
+        getWithdrawalWallet()
+      ]);
+      if (statsResponse.success && statsResponse.data) {
+        setTodaysDeliveries(statsResponse.data.todaysDeliveries || 0);
+      }
+      if (walletResponse.success && walletResponse.data) {
+        setWalletBalance(walletResponse.data.walletBalance || 0);
+      } else if (statsResponse.success && statsResponse.data) {
+        setWalletBalance(statsResponse.data.walletBalance || 0);
+      }
+      if (profileResponse.success && profileResponse.data?.name) {
+        setRiderName(profileResponse.data.name.trim());
       }
     } catch {
       // silent
@@ -209,31 +218,9 @@ export default function JobsScreen({ navigation }: any) {
   useFocusEffect(
     useCallback(() => {
       loadAvailabilityPreference().catch(() => {});
-    }, [loadAvailabilityPreference])
+      loadHeaderStats().catch(() => {});
+    }, [loadAvailabilityPreference, loadHeaderStats])
   );
-
-  useEffect(() => {
-    if (isAvailable) {
-      onlineStartRef.current = new Date();
-      onlineTimerRef.current = setInterval(() => {
-        if (onlineStartRef.current) {
-          const mins = Math.floor((Date.now() - onlineStartRef.current.getTime()) / 60000);
-          setOnlineMinutes(mins);
-        }
-      }, 30000);
-    } else {
-      if (onlineTimerRef.current) {
-        clearInterval(onlineTimerRef.current);
-        onlineTimerRef.current = null;
-      }
-      setOnlineMinutes(0);
-    }
-    return () => {
-      if (onlineTimerRef.current) {
-        clearInterval(onlineTimerRef.current);
-      }
-    };
-  }, [isAvailable]);
 
   const toggleAvailability = async (value: boolean) => {
     setIsAvailable(value);
@@ -251,10 +238,10 @@ export default function JobsScreen({ navigation }: any) {
 
   useEffect(() => {
     loadAvailableJobs();
-    loadTodaysStats();
+    loadHeaderStats();
     const interval = setInterval(loadAvailableJobs, 10000);
     return () => clearInterval(interval);
-  }, [loadAvailableJobs, loadTodaysStats]);
+  }, [loadAvailableJobs, loadHeaderStats]);
 
   useEffect(() => {
     if (!userLocation) return;
@@ -267,7 +254,7 @@ export default function JobsScreen({ navigation }: any) {
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshLocation(true);
-    await loadAvailableJobs();
+    await Promise.all([loadAvailableJobs(), loadHeaderStats()]);
   };
 
   const handleAcceptJob = (job: CalculatedJob) => {
@@ -378,19 +365,14 @@ export default function JobsScreen({ navigation }: any) {
     return `${totalItems} item${totalItems === 1 ? "" : "s"}`;
   };
 
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes}m`;
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return `${h}h ${m}m`;
-  };
-
   const renderHeader = () => (
     <View>
       <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
         <View style={styles.headerTop}>
           <View style={styles.headerCopy}>
-            <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}</Text>
+            <Text style={styles.greeting} numberOfLines={1}>
+              Hello, {riderName || "Rider"}
+            </Text>
             <Text style={[styles.title, width < 380 && styles.titleCompact]}>
               Available Jobs
             </Text>
@@ -402,18 +384,13 @@ export default function JobsScreen({ navigation }: any) {
 
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>Rs {todaysEarnings.toLocaleString("en-IN")}</Text>
-            <Text style={styles.statLabel}>Today's earnings</Text>
+            <Text style={styles.statValue}>₹{walletBalance.toLocaleString("en-IN")}</Text>
+            <Text style={styles.statLabel}>Wallet</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{todaysDeliveries}</Text>
             <Text style={styles.statLabel}>Deliveries</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{formatDuration(onlineMinutes)}</Text>
-            <Text style={styles.statLabel}>Online</Text>
           </View>
         </View>
       </View>
