@@ -10,7 +10,8 @@ import {
   Linking,
   Modal,
   Platform,
-  Image
+  Image,
+  Dimensions
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { 
@@ -66,6 +67,11 @@ type NoLocationModalState = {
   contactPhone?: string;
   destinationLabel?: string;
 };
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const UPI_QR_WIDTH = SCREEN_WIDTH - 24;
+const UPI_POSTER_HEIGHT = Math.min(SCREEN_HEIGHT * 0.58, UPI_QR_WIDTH * 1.55);
+const UPI_NATIVE_QR_SIZE = Math.min(UPI_QR_WIDTH - 48, 340);
 
 export default function JobDetailsScreen({ route, navigation }: Props) {
   const { orderId, job: initialJob } = route.params;
@@ -867,57 +873,82 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         </View>
       </Modal>
 
-      <Modal visible={upiPaymentVisible} transparent animationType="fade" onRequestClose={() => setUpiPaymentVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.confirmCard, styles.upiCard]}>
-            <View style={[styles.confirmIcon, styles.confirmIconUpi]}>
-              <Ionicons name="qr-code-outline" size={28} color="#FFFFFF" />
-            </View>
-            <Text style={styles.confirmTitle}>Scan to pay Vyaha</Text>
-            <Text style={styles.confirmText}>
-              Ask the customer to scan this QR and pay Rs {codUpiSession?.amount || job?.grandTotal}. Money goes directly to Vyaha, not your account.
-            </Text>
-
-            <View style={styles.qrFrame}>
-              {codUpiSession?.qrImageUrl ? (
-                <Image source={{ uri: codUpiSession.qrImageUrl }} style={styles.qrImage} resizeMode="contain" />
-              ) : codUpiSession?.paymentUrl ? (
-                <QRCode value={codUpiSession.paymentUrl} size={220} />
-              ) : (
-                <ActivityIndicator color="#1D4ED8" />
-              )}
-            </View>
-
-            <Text style={styles.upiAmount}>Rs {codUpiSession?.amount || job?.grandTotal}</Text>
-            <Text style={styles.upiRef}>Ref: {codUpiSession?.orderRef || orderId.slice(-6).toUpperCase()}</Text>
-
-            {upiPaymentPaid ? (
-              <Text style={styles.upiPaidText}>Payment received. You can complete delivery now.</Text>
-            ) : (
-              <Text style={styles.upiWaitingText}>
-                {upiPolling ? "Checking payment status..." : "Waiting for customer payment..."}
-              </Text>
-            )}
-
-            <View style={styles.confirmActions}>
-              <TouchableOpacity style={styles.confirmSecondary} onPress={() => setUpiPaymentVisible(false)} disabled={updating}>
-                <Text style={styles.confirmSecondaryText}>Back</Text>
-              </TouchableOpacity>
-              {codUpiSession?.manualConfirmRequired && !upiPaymentPaid ? (
-                <TouchableOpacity style={[styles.confirmPrimary, styles.confirmPrimaryUpi]} onPress={handleManualUpiConfirm} disabled={upiLoading}>
-                  {upiLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Customer Paid</Text>}
-                </TouchableOpacity>
-              ) : (
+      <Modal visible={upiPaymentVisible} animationType="slide" onRequestClose={() => setUpiPaymentVisible(false)}>
+        <View style={styles.upiFullOverlay}>
+          <ScrollView
+            contentContainerStyle={styles.upiScrollContent}
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.upiSheet}>
+              <View style={styles.upiHeaderRow}>
+                <View style={styles.upiHeaderCopy}>
+                  <Text style={styles.upiHeaderTitle}>Scan to pay Vyaha</Text>
+                  <Text style={styles.upiHeaderSubtitle}>
+                    Customer scans with any UPI app. Payment goes to Vyaha.
+                  </Text>
+                </View>
                 <TouchableOpacity
-                  style={[styles.confirmPrimary, styles.confirmPrimaryUpi, !upiPaymentPaid && styles.confirmPrimaryDisabled]}
-                  onPress={completeUpiDelivery}
-                  disabled={!upiPaymentPaid || updating}
+                  style={styles.upiCloseButton}
+                  onPress={() => setUpiPaymentVisible(false)}
+                  hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
                 >
-                  {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Complete Delivery</Text>}
+                  <Ionicons name="close" size={22} color="#475467" />
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.qrHero}>
+                {codUpiSession?.qrImageUrl ? (
+                  <Image
+                    source={{ uri: codUpiSession.qrImageUrl }}
+                    style={styles.qrPosterImage}
+                    resizeMode="contain"
+                  />
+                ) : codUpiSession?.paymentUrl ? (
+                  <View style={styles.nativeQrWrap}>
+                    <QRCode value={codUpiSession.paymentUrl} size={UPI_NATIVE_QR_SIZE} />
+                  </View>
+                ) : (
+                  <ActivityIndicator color="#1D4ED8" size="large" />
+                )}
+              </View>
+
+              <Text style={styles.qrScanHint}>Hold the phone steady and let the customer scan the code above.</Text>
+
+              <View style={styles.upiAmountBanner}>
+                <Text style={styles.upiAmountLabel}>Amount to pay</Text>
+                <Text style={styles.upiAmount}>Rs {codUpiSession?.amount || job?.grandTotal}</Text>
+                <Text style={styles.upiRef}>Ref: {codUpiSession?.orderRef || orderId.slice(-6).toUpperCase()}</Text>
+              </View>
+
+              {upiPaymentPaid ? (
+                <Text style={styles.upiPaidText}>Payment received. You can complete delivery now.</Text>
+              ) : (
+                <Text style={styles.upiWaitingText}>
+                  {upiPolling ? "Checking payment status..." : "Waiting for customer payment..."}
+                </Text>
               )}
+
+              <View style={styles.upiFooterActions}>
+                <TouchableOpacity style={styles.confirmSecondary} onPress={() => setUpiPaymentVisible(false)} disabled={updating}>
+                  <Text style={styles.confirmSecondaryText}>Back</Text>
+                </TouchableOpacity>
+                {codUpiSession?.manualConfirmRequired && !upiPaymentPaid ? (
+                  <TouchableOpacity style={[styles.confirmPrimary, styles.confirmPrimaryUpi]} onPress={handleManualUpiConfirm} disabled={upiLoading}>
+                    {upiLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Customer Paid</Text>}
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.confirmPrimary, styles.confirmPrimaryUpi, !upiPaymentPaid && styles.confirmPrimaryDisabled]}
+                    onPress={completeUpiDelivery}
+                    disabled={!upiPaymentPaid || updating}
+                  >
+                    {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Complete Delivery</Text>}
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -1436,6 +1467,101 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#667085"
   },
+  upiFullOverlay: {
+    flex: 1,
+    backgroundColor: "#0F172A"
+  },
+  upiScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12
+  },
+  upiSheet: {
+    width: "100%",
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 20
+  },
+  upiHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  upiHeaderCopy: {
+    flex: 1
+  },
+  upiHeaderTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#111827"
+  },
+  upiHeaderSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#667085"
+  },
+  upiCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F3F4F6"
+  },
+  qrHero: {
+    marginTop: 14,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden"
+  },
+  qrPosterImage: {
+    width: UPI_QR_WIDTH,
+    height: UPI_POSTER_HEIGHT
+  },
+  nativeQrWrap: {
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  qrScanHint: {
+    marginTop: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#475467",
+    textAlign: "center"
+  },
+  upiAmountBanner: {
+    marginTop: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center"
+  },
+  upiAmountLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1D4ED8",
+    textTransform: "uppercase",
+    letterSpacing: 0.6
+  },
+  upiFooterActions: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18
+  },
   upiCard: {
     maxWidth: 360
   },
@@ -1455,10 +1581,10 @@ const styles = StyleSheet.create({
     height: 220
   },
   upiAmount: {
-    marginTop: 12,
-    fontSize: 24,
+    marginTop: 4,
+    fontSize: 32,
     fontWeight: "900",
-    color: "#1F2937"
+    color: "#111827"
   },
   upiRef: {
     marginTop: 4,

@@ -99,6 +99,26 @@ export const PaymentService = {
     const amount = amountPaise / 100;
 
     try {
+      const paymentLink = await razorpay.paymentLink.create({
+        amount: amountPaise,
+        currency: "INR",
+        description: `Vyaha COD ${orderRef}`,
+        notes,
+        notify: { sms: false, email: false },
+        reminder_enable: false
+      } as any);
+
+      return {
+        provider: "razorpay_link",
+        paymentLinkId: paymentLink.id,
+        paymentUrl: (paymentLink as any).short_url,
+        amount
+      };
+    } catch (linkError) {
+      console.warn("Razorpay payment link creation failed, trying QR:", (linkError as Error)?.message || linkError);
+    }
+
+    try {
       const qr = await razorpay.qrCode.create({
         type: "upi_qr",
         name: `COD ${orderRef}`,
@@ -118,27 +138,7 @@ export const PaymentService = {
         amount
       };
     } catch (qrError) {
-      console.warn("Razorpay QR creation failed, trying payment link:", (qrError as Error)?.message || qrError);
-    }
-
-    try {
-      const paymentLink = await razorpay.paymentLink.create({
-        amount: amountPaise,
-        currency: "INR",
-        description: `Vyaha COD ${orderRef}`,
-        notes,
-        notify: { sms: false, email: false },
-        reminder_enable: false
-      } as any);
-
-      return {
-        provider: "razorpay_link",
-        paymentLinkId: paymentLink.id,
-        paymentUrl: (paymentLink as any).short_url,
-        amount
-      };
-    } catch (linkError) {
-      console.warn("Razorpay payment link creation failed:", (linkError as Error)?.message || linkError);
+      console.warn("Razorpay QR creation failed:", (qrError as Error)?.message || qrError);
     }
 
     const platformVpa = config.platformUpiVpa || process.env.PLATFORM_UPI_VPA || "";
