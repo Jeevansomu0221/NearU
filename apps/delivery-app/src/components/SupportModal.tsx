@@ -49,6 +49,25 @@ const FAQ_FALLBACK: FAQEntry[] = [
   { question: "Can I update my bank details?", answer: "Yes, go to Profile > edit payout details anytime." }
 ];
 
+const mapCategoryForApi = (category: SupportTicket["category"]) => {
+  switch (category) {
+    case "DELIVERY_JOBS":
+      return "DELIVERY" as const;
+    case "PAYMENT":
+    case "ACCOUNT":
+    case "REPORT_ISSUE":
+    case "OTHER":
+      return category;
+    default:
+      return "OTHER" as const;
+  }
+};
+
+const buildDefaultChatSubject = (category: SupportTicket["category"]) => {
+  const categoryLabel = CATEGORIES.find((cat) => cat.key === category)?.label || "Support";
+  return `Chat: ${categoryLabel}`;
+};
+
 export default function SupportModal({ visible, initialMode = "main", onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>("main");
@@ -116,10 +135,15 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
       Alert.alert("Message required", "Please type your message.");
       return;
     }
-    if (mode === "chat" && !trimmedSubject) {
-      Alert.alert("Subject required", "Please enter a subject for your ticket.");
+    if (mode === "report" && !trimmedSubject) {
+      Alert.alert("Subject required", "Please enter a subject for your report.");
       return;
     }
+
+    const resolvedSubject =
+      mode === "report"
+        ? `Report: ${trimmedSubject}`
+        : trimmedSubject || buildDefaultChatSubject(selectedCategory);
 
     setSending(true);
     try {
@@ -134,9 +158,9 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
         }
       } else {
         const response = await createSupportTicket({
-          subject: mode === "report" ? `Report: ${trimmedSubject}` : trimmedSubject,
+          subject: resolvedSubject,
           message: trimmedMessage,
-          category: selectedCategory,
+          category: mapCategoryForApi(selectedCategory),
           priority: mode === "report" ? "HIGH" : "NORMAL"
         });
         if (response.success && response.data) {
