@@ -20,6 +20,25 @@ const statusColor: Record<DeliveryPartnerRecord["status"], string> = {
   INACTIVE: "default"
 };
 
+const bankStatusColor = (status?: string) => {
+  if (status === "VERIFIED") return "green";
+  if (status === "REJECTED") return "red";
+  if (status === "PENDING") return "gold";
+  return "default";
+};
+
+const bankStatusLabel = (status?: string) => {
+  if (status === "VERIFIED") return "Verified";
+  if (status === "REJECTED") return "Rejected";
+  if (status === "PENDING") return "Pending review";
+  return "Not submitted";
+};
+
+const hasBankDetails = (partner: DeliveryPartnerRecord) =>
+  Boolean(partner.documents?.bankAccountHolderName || partner.documents?.bankUpiId);
+
+type ListFilter = "ALL" | DeliveryPartnerRecord["status"] | "BANK_PENDING";
+
 const REUPLOAD_OPTIONS: Array<{ key: DeliveryDocumentReuploadKey; label: string }> = [
   { key: "aadhaarFrontUrl", label: "Aadhaar front" },
   { key: "selfiePhotoUrl", label: "Selfie / verification photo" },
@@ -31,7 +50,7 @@ export default function DeliveryPartners() {
   const [loading, setLoading] = useState(true);
   const [partners, setPartners] = useState<DeliveryPartnerRecord[]>([]);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | DeliveryPartnerRecord["status"]>("ALL");
+  const [statusFilter, setStatusFilter] = useState<ListFilter>("ALL");
   const [selected, setSelected] = useState<DeliveryPartnerRecord | null>(null);
   const [reviewing, setReviewing] = useState<{ partner: DeliveryPartnerRecord; nextStatus: DeliveryPartnerRecord["status"] } | null>(null);
   const [reviewComment, setReviewComment] = useState("");
@@ -66,11 +85,19 @@ export default function DeliveryPartners() {
   const filtered = useMemo(() => {
     return partners
       .filter((partner) => {
-        const matchesStatus = statusFilter === "ALL" || partner.status === statusFilter;
-        const haystack = `${partner.userId?.name || ""} ${partner.userId?.phone || ""} ${partner.address || ""} ${partner.vehicleType || ""}`.toLowerCase();
+        const matchesStatus =
+          statusFilter === "ALL"
+            ? true
+            : statusFilter === "BANK_PENDING"
+              ? partner.documents?.bankVerificationStatus === "PENDING"
+              : partner.status === statusFilter;
+        const haystack = `${partner.userId?.name || ""} ${partner.userId?.phone || ""} ${partner.address || ""} ${partner.vehicleType || ""} ${partner.documents?.bankAccountHolderName || ""} ${partner.documents?.bankUpiId || ""}`.toLowerCase();
         return matchesStatus && haystack.includes(query.toLowerCase());
       })
       .sort((a, b) => {
+        const aBankPending = a.documents?.bankVerificationStatus === "PENDING" ? 1 : 0;
+        const bBankPending = b.documents?.bankVerificationStatus === "PENDING" ? 1 : 0;
+        if (aBankPending !== bBankPending) return bBankPending - aBankPending;
         if (a.status === "PENDING" && b.status !== "PENDING") return -1;
         if (a.status !== "PENDING" && b.status === "PENDING") return 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -82,7 +109,8 @@ export default function DeliveryPartners() {
       total: partners.length,
       pending: partners.filter((item) => item.status === "PENDING").length,
       verified: partners.filter((item) => item.status === "VERIFIED").length,
-      active: partners.filter((item) => item.status === "ACTIVE").length
+      active: partners.filter((item) => item.status === "ACTIVE").length,
+      bankPending: partners.filter((item) => item.documents?.bankVerificationStatus === "PENDING").length
     }),
     [partners]
   );
@@ -270,8 +298,30 @@ export default function DeliveryPartners() {
               <Typography.Text type="secondary">Active</Typography.Text>
               <Typography.Title level={3} style={{ margin: 0, color: "#16a34a" }}>{counts.active}</Typography.Title>
             </div>
+            <div>
+              <Typography.Text type="secondary">Bank Pending</Typography.Text>
+              <Typography.Title level={3} style={{ margin: 0, color: "#ea580c" }}>{counts.bankPending}</Typography.Title>
+            </div>
           </Space>
         </Card>
+
+        {counts.bankPending > 0 ? (
+          <Card bordered={false} style={{ borderLeft: "4px solid #ea580c" }}>
+            <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
+              <div>
+                <Typography.Text strong>{counts.bankPending} rider bank detail update{counts.bankPending === 1 ? "" : "s"} waiting for review</Typography.Text>
+                <div>
+                  <Typography.Text type="secondary">
+                    These are separate from rider profile verification. Click Review bank or View to verify payout details.
+                  </Typography.Text>
+                </div>
+              </div>
+              <Button type="primary" onClick={() => setStatusFilter("BANK_PENDING")}>
+                Show bank pending
+              </Button>
+            </Space>
+          </Card>
+        ) : null}
 
         <Card bordered={false}>
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -289,8 +339,17 @@ export default function DeliveryPartners() {
               </Space>
               <Segmented
                 value={statusFilter}
-                onChange={(value) => setStatusFilter(value as typeof statusFilter)}
-                options={["ALL", "PENDING", "VERIFIED", "ACTIVE", "REJECTED", "SUSPENDED", "INACTIVE"]}
+                onChange={(value) => setStatusFilter(value as ListFilter)}
+                options={[
+                  "ALL",
+                  "BANK_PENDING",
+                  "PENDING",
+                  "VERIFIED",
+                  "ACTIVE",
+                  "REJECTED",
+                  "SUSPENDED",
+                  "INACTIVE"
+                ]}
               />
             </Space>
 
@@ -336,10 +395,38 @@ export default function DeliveryPartners() {
                   render: (status: DeliveryPartnerRecord["status"]) => <Tag color={statusColor[status]}>{status}</Tag>
                 },
                 {
+                  title: "Bank Payout",
+                  render: (_, partner) => (
+                    <Space direction="vertical" size={4}>
+                      <Tag color={bankStatusColor(partner.documents?.bankVerificationStatus)}>
+                        {bankStatusLabel(partner.documents?.bankVerificationStatus)}
+                      </Tag>
+                      {hasBankDetails(partner) ? (
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {partner.documents?.bankAccountHolderName || partner.documents?.bankUpiId}
+                        </Typography.Text>
+                      ) : (
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          No bank/UPI added
+                        </Typography.Text>
+                      )}
+                    </Space>
+                  )
+                },
+                {
                   title: "Actions",
                   render: (_, partner) => (
                     <Space wrap>
                       <Button size="small" onClick={() => setSelected(partner)}>View</Button>
+                      {partner.documents?.bankVerificationStatus === "PENDING" ? (
+                        <Button
+                          size="small"
+                          type="primary"
+                          onClick={() => setSelected(partner)}
+                        >
+                          Review bank
+                        </Button>
+                      ) : null}
                       {partner.status === "PENDING" ? (
                         <>
                           <Button size="small" icon={<CheckCircleOutlined />} onClick={() => setReviewing({ partner, nextStatus: "VERIFIED" })}>
@@ -391,6 +478,63 @@ export default function DeliveryPartners() {
       >
         {selected ? (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Card
+              size="small"
+              style={{
+                borderColor:
+                  selected.documents?.bankVerificationStatus === "PENDING"
+                    ? "#fdba74"
+                    : selected.documents?.bankVerificationStatus === "VERIFIED"
+                      ? "#86efac"
+                      : "#e5e7eb",
+                background:
+                  selected.documents?.bankVerificationStatus === "PENDING" ? "#fff7ed" : "#fafafa"
+              }}
+            >
+              <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>
+                Payout / Bank Details
+              </Typography.Text>
+              <div>{selected.documents?.bankAccountHolderName || "Account holder not provided"}</div>
+              <div>{selected.documents?.bankAccountNumber || "Account number not provided"}</div>
+              <div>IFSC: {selected.documents?.bankIfsc || "Not provided"}</div>
+              <div>UPI: {selected.documents?.bankUpiId || "Not provided"}</div>
+              <div style={{ marginTop: 8 }}>
+                <Tag color={bankStatusColor(selected.documents?.bankVerificationStatus)}>
+                  Bank {bankStatusLabel(selected.documents?.bankVerificationStatus)}
+                </Tag>
+              </div>
+              {selected.documents?.bankReviewComment ? (
+                <Typography.Text type="danger" style={{ display: "block", marginTop: 8 }}>
+                  {selected.documents.bankReviewComment}
+                </Typography.Text>
+              ) : null}
+              {selected.documents?.bankVerificationStatus !== "VERIFIED" && hasBankDetails(selected) ? (
+                <Space style={{ marginTop: 12 }}>
+                  <Button
+                    type="primary"
+                    size="small"
+                    onClick={() => {
+                      setBankReviewPartner(selected);
+                      setBankReviewAction("VERIFIED");
+                      setBankReviewComment("");
+                    }}
+                  >
+                    Verify Bank
+                  </Button>
+                  <Button
+                    danger
+                    size="small"
+                    onClick={() => {
+                      setBankReviewPartner(selected);
+                      setBankReviewAction("REJECTED");
+                      setBankReviewComment("");
+                    }}
+                  >
+                    Reject Bank
+                  </Button>
+                </Space>
+              ) : null}
+            </Card>
             <div>
               <Typography.Text type="secondary">Phone</Typography.Text>
               <div>{selected.userId?.phone || selected.phone || "Not available"}</div>
@@ -419,60 +563,6 @@ export default function DeliveryPartners() {
             <div>
               <Typography.Text type="secondary">Driving License Number</Typography.Text>
               <div>{selectedRequiresMotorDocs ? selected.licenseNumber || "Not provided" : "Not required for this vehicle type"}</div>
-            </div>
-            <div>
-              <Typography.Text type="secondary">Bank Details</Typography.Text>
-              <div>{selected.documents?.bankAccountHolderName || "Account holder not provided"}</div>
-              <div>{selected.documents?.bankAccountNumber || "Account number skipped"}</div>
-              <Typography.Text type="secondary">IFSC</Typography.Text>
-              <div>{selected.documents?.bankIfsc || "Not provided"}</div>
-              <Typography.Text type="secondary">UPI</Typography.Text>
-              <div>{selected.documents?.bankUpiId || "Not provided"}</div>
-              <div style={{ marginTop: 8 }}>
-                <Tag
-                  color={
-                    selected.documents?.bankVerificationStatus === "VERIFIED"
-                      ? "green"
-                      : selected.documents?.bankVerificationStatus === "REJECTED"
-                        ? "red"
-                        : selected.documents?.bankVerificationStatus === "PENDING"
-                          ? "gold"
-                          : "default"
-                  }
-                >
-                  Bank {selected.documents?.bankVerificationStatus || "NOT SUBMITTED"}
-                </Tag>
-              </div>
-              {selected.documents?.bankReviewComment ? (
-                <Typography.Text type="secondary">{selected.documents.bankReviewComment}</Typography.Text>
-              ) : null}
-              {selected.documents?.bankVerificationStatus !== "VERIFIED" &&
-              (selected.documents?.bankAccountHolderName || selected.documents?.bankUpiId) ? (
-                <Space style={{ marginTop: 12 }}>
-                  <Button
-                    type="primary"
-                    size="small"
-                    onClick={() => {
-                      setBankReviewPartner(selected);
-                      setBankReviewAction("VERIFIED");
-                      setBankReviewComment("");
-                    }}
-                  >
-                    Verify Bank
-                  </Button>
-                  <Button
-                    danger
-                    size="small"
-                    onClick={() => {
-                      setBankReviewPartner(selected);
-                      setBankReviewAction("REJECTED");
-                      setBankReviewComment("");
-                    }}
-                  >
-                    Reject Bank
-                  </Button>
-                </Space>
-              ) : null}
             </div>
             <div>
               <Typography.Text type="secondary">Documents</Typography.Text>
