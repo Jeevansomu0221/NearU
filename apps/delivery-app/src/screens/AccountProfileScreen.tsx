@@ -198,7 +198,7 @@ export default function AccountProfileScreen({ navigation }: any) {
           { title: "Privacy Policy", icon: "lock-closed-outline", onPress: () => Linking.openURL(PRIVACY_URL) },
           { title: "Cancellation Policy", icon: "close-circle-outline", onPress: () => showComingSoon("Cancellation Policy") },
           { title: "About App", icon: "apps-outline", onPress: () => showComingSoon("About App") },
-          { title: "App Version", icon: "phone-portrait-outline", rightText: "1.0.0", onPress: () => showComingSoon("App Version") }
+          { title: "App Version", icon: "phone-portrait-outline", rightText: "1.0.10", onPress: () => showComingSoon("App Version") }
         ]
       },
       {

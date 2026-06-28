@@ -846,7 +846,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             {renderShortcut("reader-outline", "Terms & conditions", "Read Vyaha terms", () => Linking.openURL(TERMS_URL))}
             {renderShortcut("lock-closed-outline", "Privacy policy", "Read how data is handled", () => Linking.openURL(PRIVACY_URL))}
             {renderShortcut("document-text-outline", "Account deletion policy", "Read how account deletion works", () => Linking.openURL(DELETE_ACCOUNT_URL))}
-            {renderShortcut("information-circle-outline", "App version", "Delivery app version 1.0.0", () => Alert.alert("App version", "Delivery app version 1.0.0"))}
+            {renderShortcut("information-circle-outline", "App version", "Delivery app version 1.0.10", () => Alert.alert("App version", "Delivery app version 1.0.10"))}
           </View>
 
           {/* Logout / Delete */}
