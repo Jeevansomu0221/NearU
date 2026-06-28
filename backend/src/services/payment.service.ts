@@ -9,49 +9,50 @@ type RazorpayOrderParams = {
   notes?: Record<string, string>;
 };
 
-export type CodCollectionProvider = "razorpay_qr" | "razorpay_link" | "platform_upi";
+export type CodCollectionProvider = "razorpay_qr" | "platform_upi";
 
 export type CodCollectionSession = {
   provider: CodCollectionProvider;
   razorpayQrId?: string;
-  paymentLinkId?: string;
   qrImageUrl?: string;
   qrDataUrl?: string;
+  upiUri?: string;
   paymentUrl: string;
   amount: number;
   manualConfirmRequired?: boolean;
 };
 
-const attachGeneratedQrDataUrl = async (session: CodCollectionSession): Promise<CodCollectionSession> => {
-  if (session.provider === "razorpay_qr" && session.qrImageUrl) {
+const buildPlatformUpiUri = (vpa: string, payeeName: string, amount: number, note: string) => {
+  const params = new URLSearchParams();
+  params.set("pa", vpa.trim());
+  params.set("pn", payeeName.trim());
+  params.set("am", amount.toFixed(2));
+  params.set("cu", "INR");
+  params.set("tn", note.trim());
+  return `upi://pay?${params.toString()}`;
+};
+
+const attachUpiQrDataUrl = async (session: CodCollectionSession): Promise<CodCollectionSession> => {
+  if (session.qrImageUrl || session.qrDataUrl) {
     return session;
   }
 
-  if (!session.paymentUrl) {
+  const upiPayload = session.upiUri || session.paymentUrl;
+  if (!upiPayload?.startsWith("upi://pay?")) {
     return session;
   }
 
   try {
-    const qrDataUrl = await QRCode.toDataURL(session.paymentUrl, {
-      width: 512,
-      margin: 1,
+    const qrDataUrl = await QRCode.toDataURL(upiPayload, {
+      width: 640,
+      margin: 2,
       errorCorrectionLevel: "M"
     });
-    return { ...session, qrDataUrl };
+    return { ...session, qrDataUrl, upiUri: upiPayload };
   } catch (error) {
-    console.warn("Failed to generate COD QR data URL:", (error as Error)?.message || error);
+    console.warn("Failed to generate UPI QR data URL:", (error as Error)?.message || error);
     return session;
   }
-};
-
-const buildPlatformUpiUri = (vpa: string, payeeName: string, amount: number, note: string) => {
-  const params = new URLSearchParams();
-  params.set("pa", vpa);
-  params.set("pn", payeeName);
-  params.set("am", amount.toFixed(2));
-  params.set("cu", "INR");
-  params.set("tn", note);
-  return `upi://pay?${params.toString()}`;
 };
 
 let razorpayClient: Razorpay | null = null;
@@ -123,29 +124,9 @@ export const PaymentService = {
     const amount = amountPaise / 100;
 
     try {
-      const paymentLink = await razorpay.paymentLink.create({
-        amount: amountPaise,
-        currency: "INR",
-        description: `Vyaha COD ${orderRef}`,
-        notes,
-        notify: { sms: false, email: false },
-        reminder_enable: false
-      } as any);
-
-      return attachGeneratedQrDataUrl({
-        provider: "razorpay_link",
-        paymentLinkId: paymentLink.id,
-        paymentUrl: (paymentLink as any).short_url,
-        amount
-      });
-    } catch (linkError) {
-      console.warn("Razorpay payment link creation failed, trying QR:", (linkError as Error)?.message || linkError);
-    }
-
-    try {
       const qr = await razorpay.qrCode.create({
         type: "upi_qr",
-        name: `COD ${orderRef}`,
+        name: `Vyaha COD ${orderRef}`,
         usage: "single_use",
         fixed_amount: true,
         payment_amount: amountPaise,
@@ -154,35 +135,43 @@ export const PaymentService = {
         notes
       } as any);
 
+      const imageUrl = String((qr as any).image_url || "").trim();
+      if (!imageUrl) {
+        throw new Error("Razorpay did not return a QR image");
+      }
+
       return {
         provider: "razorpay_qr",
         razorpayQrId: qr.id,
-        qrImageUrl: (qr as any).image_url,
-        paymentUrl: (qr as any).image_url || "",
+        qrImageUrl: imageUrl,
+        paymentUrl: imageUrl,
         amount
       };
     } catch (qrError) {
-      console.warn("Razorpay QR creation failed:", (qrError as Error)?.message || qrError);
+      console.warn("Razorpay UPI QR creation failed:", (qrError as Error)?.message || qrError);
     }
 
     const platformVpa = config.platformUpiVpa || process.env.PLATFORM_UPI_VPA || "";
     if (platformVpa) {
       const payeeName = config.platformUpiPayeeName || process.env.PLATFORM_UPI_PAYEE_NAME || "Vyaha";
-      return attachGeneratedQrDataUrl({
+      const upiUri = buildPlatformUpiUri(platformVpa, payeeName, amount, `Vyaha COD ${orderRef}`);
+      return attachUpiQrDataUrl({
         provider: "platform_upi",
-        paymentUrl: buildPlatformUpiUri(platformVpa, payeeName, amount, `COD ${orderRef}`),
+        upiUri,
+        paymentUrl: upiUri,
         amount,
         manualConfirmRequired: true
       });
     }
 
-    throw new Error("UPI collection is not configured. Contact support.");
+    throw new Error(
+      "UPI QR is not available. Enable Razorpay UPI QR on your account or set PLATFORM_UPI_VPA on the server."
+    );
   },
 
   checkCodCollectionPayment: async (session: {
-    provider?: CodCollectionProvider;
+    provider?: CodCollectionProvider | string;
     razorpayQrId?: string;
-    paymentLinkId?: string;
     amount?: number;
   }) => {
     if (!session?.provider) {
@@ -193,29 +182,26 @@ export const PaymentService = {
       return { paid: false, manualConfirmRequired: true };
     }
 
+    if (session.provider !== "razorpay_qr" || !session.razorpayQrId) {
+      return { paid: false, manualConfirmRequired: false };
+    }
+
     const razorpay = getRazorpayClient();
+    const qr = await razorpay.qrCode.fetch(session.razorpayQrId);
+    const expectedAmount = Number((qr as any).payment_amount || 0);
+    const receivedAmount = Number((qr as any).payments_amount_received || 0);
+    const paymentsCount = Number((qr as any).payments_count_received || 0);
+    const qrStatus = String((qr as any).status || "").toLowerCase();
+    const paid =
+      paymentsCount > 0 ||
+      qrStatus === "closed" ||
+      (expectedAmount > 0 ? receivedAmount >= expectedAmount : receivedAmount > 0);
 
-    if (session.provider === "razorpay_qr" && session.razorpayQrId) {
-      const qr = await razorpay.qrCode.fetch(session.razorpayQrId);
-      const expectedAmount = Number((qr as any).payment_amount || 0);
-      const receivedAmount = Number((qr as any).payments_amount_received || 0);
-      const paid = expectedAmount > 0 ? receivedAmount >= expectedAmount : receivedAmount > 0;
-      return {
-        paid,
-        manualConfirmRequired: false,
-        receivedAmount: receivedAmount / 100,
-        expectedAmount: expectedAmount / 100
-      };
-    }
-
-    if (session.provider === "razorpay_link" && session.paymentLinkId) {
-      const paymentLink = await razorpay.paymentLink.fetch(session.paymentLinkId);
-      return {
-        paid: (paymentLink as any).status === "paid",
-        manualConfirmRequired: false
-      };
-    }
-
-    return { paid: false, manualConfirmRequired: false };
+    return {
+      paid,
+      manualConfirmRequired: false,
+      receivedAmount: receivedAmount / 100,
+      expectedAmount: expectedAmount / 100
+    };
   }
 };

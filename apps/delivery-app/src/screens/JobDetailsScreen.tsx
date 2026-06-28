@@ -80,11 +80,10 @@ const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (session.qrDataUrl) {
     return session.qrDataUrl;
   }
-  if (session.paymentUrl) {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=500x500&margin=12&data=${encodeURIComponent(session.paymentUrl)}`;
-  }
   return null;
 };
+
+const isRazorpayPosterQr = (session: CodUpiSession | null) => session?.provider === "razorpay_qr";
 
 export default function JobDetailsScreen({ route, navigation }: Props) {
   const { orderId, job: initialJob } = route.params;
@@ -450,8 +449,15 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     try {
       setUpiLoading(true);
       const response = await createCodUpiCollection(orderId);
-      if (!response.success || !response.data?.paymentUrl) {
+      if (!response.success || !response.data) {
         Alert.alert("UPI unavailable", response.message || "Could not create UPI payment QR. Try cash collection.");
+        return;
+      }
+      if (!getCodQrDisplayUri(response.data)) {
+        Alert.alert(
+          "UPI unavailable",
+          "Could not prepare a scannable UPI QR. Use cash collection or contact support."
+        );
         return;
       }
       setCodUpiSession(response.data);
@@ -915,11 +921,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                 {codQrDisplayUri ? (
                   <Image
                     source={{ uri: codQrDisplayUri }}
-                    style={
-                      codUpiSession?.provider === "razorpay_qr"
-                        ? styles.qrPosterImage
-                        : styles.nativeQrImage
-                    }
+                    style={isRazorpayPosterQr(codUpiSession) ? styles.qrPosterImage : styles.nativeQrImage}
                     resizeMode="contain"
                   />
                 ) : (
@@ -1553,7 +1555,8 @@ const styles = StyleSheet.create({
   },
   nativeQrImage: {
     width: UPI_NATIVE_QR_SIZE,
-    height: UPI_NATIVE_QR_SIZE
+    height: UPI_NATIVE_QR_SIZE,
+    backgroundColor: "#FFFFFF"
   },
   qrScanHint: {
     marginTop: 10,

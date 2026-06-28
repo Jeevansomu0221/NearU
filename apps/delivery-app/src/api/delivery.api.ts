@@ -221,11 +221,11 @@ export const markAsDelivered = (
 };
 
 export interface CodUpiSession {
-  provider: "razorpay_qr" | "razorpay_link" | "platform_upi";
+  provider: "razorpay_qr" | "platform_upi";
   razorpayQrId?: string;
-  paymentLinkId?: string;
   qrImageUrl?: string;
   qrDataUrl?: string;
+  upiUri?: string;
   paymentUrl: string;
   amount: number;
   orderRef: string;

@@ -134,11 +134,9 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
 
     const event = JSON.parse(payload.toString("utf-8"));
     if (event.event === "payment.captured" || event.event === "qr_code.credited") {
-      const paymentEntity =
-        event.payload?.payment?.entity ||
-        event.payload?.qr_code?.entity?.payment ||
-        event.payload?.qr_code?.entity;
-      const notes = paymentEntity?.notes || event.payload?.qr_code?.entity?.notes;
+      const qrEntity = event.payload?.qr_code?.entity;
+      const paymentEntity = event.payload?.payment?.entity;
+      const notes = paymentEntity?.notes || qrEntity?.notes;
       const orderId = notes?.orderId;
       const isDeliveryCollection = notes?.deliveryCollection === "true";
 
