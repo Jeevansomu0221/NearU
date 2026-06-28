@@ -4,9 +4,11 @@ import {
   Alert,
   Animated,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +16,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import {
   createSupportTicket,
@@ -33,11 +35,15 @@ interface Props {
   onClose: () => void;
 }
 
+const GREEN_PRIMARY = "#16A34A";
+const GREEN_DEEP = "#166534";
+const GREEN_SOFT = "#DCFCE7";
+
 const CATEGORIES: { key: SupportTicket["category"]; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
   { key: "DELIVERY_JOBS", icon: "bicycle-outline", label: "Delivery Jobs" },
-  { key: "PAYMENT", icon: "cash-outline", label: "Payments & Payouts" },
-  { key: "ACCOUNT", icon: "person-outline", label: "Account & Verification" },
-  { key: "REPORT_ISSUE", icon: "flag-outline", label: "Report an Issue" },
+  { key: "PAYMENT", icon: "cash-outline", label: "Payments" },
+  { key: "ACCOUNT", icon: "person-outline", label: "Account" },
+  { key: "REPORT_ISSUE", icon: "flag-outline", label: "Report Issue" },
   { key: "OTHER", icon: "ellipsis-horizontal-outline", label: "Other" }
 ];
 
@@ -80,8 +86,24 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
   const [message, setMessage] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<SupportTicket["category"]>("DELIVERY_JOBS");
   const [sending, setSending] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const slideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -100,6 +122,7 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
       loadTickets();
     } else {
       slideAnim.setValue(0);
+      setKeyboardHeight(0);
     }
   }, [visible, initialMode]);
 
@@ -152,7 +175,6 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
         if (response.success && response.data) {
           setActiveTicket(response.data);
           setMessage("");
-          Alert.alert("Sent", "Your message has been sent to the Vyaha admin panel.");
         } else {
           Alert.alert("Error", response.message || "Failed to send message.");
         }
@@ -168,7 +190,6 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
           setSubject("");
           setMessage("");
           setTickets((prev) => [response.data!, ...prev]);
-          Alert.alert("Submitted", "Your message has been sent to the Vyaha admin panel.");
         } else {
           Alert.alert("Error", response.message || "Failed to submit.");
         }
@@ -187,14 +208,31 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
     return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
+  const handleBack = () => {
+    if (mode === "main") {
+      onClose();
+      return;
+    }
+    if (activeTicket && mode === "chat") {
+      setActiveTicket(null);
+      setSubject("");
+      setMessage("");
+      setMode("main");
+      return;
+    }
+    setMode("main");
+    setSubject("");
+    setMessage("");
+  };
+
   const renderMain = () => (
     <>
       <Text style={styles.modalTitle}>Help & Support</Text>
       <Text style={styles.modalSubtitle}>Get answers, report issues, or chat with the admin team.</Text>
 
       <TouchableOpacity style={styles.menuItem} onPress={() => setMode("faq")}>
-        <View style={[styles.menuIcon, { backgroundColor: "#FFF4EE" }]}>
-          <Ionicons name="help-circle-outline" size={22} color="#C2410C" />
+        <View style={[styles.menuIcon, { backgroundColor: GREEN_SOFT }]}>
+          <Ionicons name="help-circle-outline" size={22} color={GREEN_DEEP} />
         </View>
         <View style={styles.menuCopy}>
           <Text style={styles.menuTitle}>FAQs</Text>
@@ -204,8 +242,8 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.menuItem} onPress={() => setMode("chat")}>
-        <View style={[styles.menuIcon, { backgroundColor: "#ECFDF3" }]}>
-          <Ionicons name="chatbubble-ellipses-outline" size={22} color="#027A48" />
+        <View style={[styles.menuIcon, { backgroundColor: GREEN_SOFT }]}>
+          <Ionicons name="chatbubble-ellipses-outline" size={22} color={GREEN_DEEP} />
         </View>
         <View style={styles.menuCopy}>
           <Text style={styles.menuTitle}>Chat Support</Text>
@@ -262,9 +300,7 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
                   color="#667085"
                 />
               </View>
-              {expandedFaq === index && (
-                <Text style={styles.faqAnswer}>{faq.answer}</Text>
-              )}
+              {expandedFaq === index && <Text style={styles.faqAnswer}>{faq.answer}</Text>}
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -272,108 +308,171 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
     );
   };
 
+  const renderComposerHeader = (title: string, subtitle: string) => (
+    <View style={styles.composerTopBar}>
+      <TouchableOpacity onPress={handleBack} style={styles.headerIconBtn} hitSlop={12}>
+        <Ionicons name="arrow-back" size={22} color="#1D2939" />
+      </TouchableOpacity>
+      <View style={styles.composerTopCopy}>
+        <Text style={styles.composerTopTitle}>{title}</Text>
+        <Text style={styles.composerTopSubtitle}>{subtitle}</Text>
+      </View>
+      <TouchableOpacity onPress={onClose} style={styles.headerIconBtn} hitSlop={12}>
+        <Ionicons name="close" size={22} color="#667085" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderComposerFooter = (label: string) => (
+    <View
+      style={[
+        styles.composerFooter,
+        {
+          paddingBottom: keyboardHeight > 0 ? Math.max(keyboardHeight - insets.bottom, 12) : Math.max(insets.bottom, 12)
+        }
+      ]}
+    >
+      <TouchableOpacity
+        style={[styles.sendButton, (sending || !message.trim()) && styles.sendButtonDisabled]}
+        onPress={handleSendMessage}
+        disabled={sending || !message.trim()}
+      >
+        {sending ? (
+          <ActivityIndicator size="small" color="#FFF" />
+        ) : (
+          <>
+            <Ionicons name="send" size={18} color="#FFF" />
+            <Text style={styles.sendButtonText}>{label}</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderChatOrReport = () => {
     const isReport = mode === "report";
-    return (
-      <View style={styles.composerBody}>
-        <Text style={styles.modalTitle}>{isReport ? "Report an Issue" : "Chat Support"}</Text>
-        <Text style={styles.modalSubtitle}>
-          {isReport
-            ? "Report payment, job, account, or app problems to the Vyaha admin panel."
-            : "Send a message directly to the Vyaha admin panel."}
-        </Text>
+    const title = isReport ? "Report an Issue" : "Chat Support";
+    const subtitle = isReport
+      ? "Tell us what went wrong and our team will review it."
+      : "Message the Vyaha admin team. We usually reply within 24 hours.";
 
-        {activeTicket ? (
-          <View style={styles.ticketThread}>
-            <ScrollView
-              style={styles.threadScroll}
-              contentContainerStyle={styles.threadScrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
+    if (activeTicket) {
+      return (
+        <SafeAreaView style={styles.fullScreen} edges={["top", "left", "right"]}>
+          {renderComposerHeader(title, activeTicket.subject)}
+          <ScrollView
+            style={styles.threadScroll}
+            contentContainerStyle={styles.threadScrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {activeTicket.messages?.map((msg, i) => (
+              <View
+                key={msg._id || i}
+                style={[styles.threadBubble, msg.senderRole === "admin" ? styles.adminBubble : styles.deliveryBubble]}
+              >
+                <Text style={styles.threadSender}>{msg.senderRole === "admin" ? "Vyaha Admin" : "You"}</Text>
+                <Text style={styles.threadBubbleText}>{msg.message}</Text>
+                <Text style={styles.threadBubbleTime}>{formatDate(msg.createdAt)}</Text>
+              </View>
+            ))}
+          </ScrollView>
+          <View
+            style={[
+              styles.threadComposer,
+              {
+                paddingBottom: keyboardHeight > 0 ? Math.max(keyboardHeight - insets.bottom, 8) : Math.max(insets.bottom, 8)
+              }
+            ]}
+          >
+            <TextInput
+              style={styles.threadInput}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="Type your reply..."
+              placeholderTextColor="#98A2B3"
+              multiline
+              selectionColor={GREEN_PRIMARY}
+            />
+            <TouchableOpacity
+              style={[styles.threadSendButton, (!message.trim() || sending) && styles.sendButtonDisabled]}
+              onPress={handleSendMessage}
+              disabled={sending || !message.trim()}
             >
-              {activeTicket.messages?.map((msg, i) => (
-                <View key={msg._id || i} style={[styles.threadBubble, msg.senderRole === "admin" ? styles.adminBubble : styles.deliveryBubble]}>
-                  <Text style={[styles.threadBubbleText, msg.senderRole === "admin" && styles.adminBubbleText]}>
-                    {msg.message}
-                  </Text>
-                  <Text style={[styles.threadBubbleTime, msg.senderRole === "admin" && styles.adminBubbleTime]}>
-                    {formatDate(msg.createdAt)} — {msg.senderRole === "admin" ? "Vyaha Admin" : "You"}
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
-            <View style={styles.threadInputRow}>
-              <TextInput
-                style={styles.threadInput}
-                value={message}
-                onChangeText={setMessage}
-                placeholder="Type your reply..."
-                placeholderTextColor="#98A2B3"
-                multiline
-                selectionColor="#FF6B35"
-              />
-              <TouchableOpacity style={styles.threadSendButton} onPress={handleSendMessage} disabled={sending || !message.trim()}>
-                {sending ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="send" size={18} color="#FFF" />}
-              </TouchableOpacity>
-            </View>
+              {sending ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="send" size={18} color="#FFF" />}
+            </TouchableOpacity>
           </View>
-        ) : (
+        </SafeAreaView>
+      );
+    }
+
+    return (
+      <SafeAreaView style={styles.fullScreen} edges={["top", "left", "right"]}>
+        <KeyboardAvoidingView style={styles.fullScreen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          {renderComposerHeader(title, subtitle)}
+
           <ScrollView
             style={styles.composerScroll}
             contentContainerStyle={styles.composerScrollContent}
             keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
             showsVerticalScrollIndicator={false}
           >
-            {!isReport && <Text style={styles.inputLabel}>Category</Text>}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat.key}
-                  style={[styles.categoryChip, selectedCategory === cat.key && styles.categoryChipActive]}
-                  onPress={() => setSelectedCategory(cat.key)}
-                >
-                  <Ionicons name={cat.icon} size={16} color={selectedCategory === cat.key ? "#C2410C" : "#667085"} />
-                  <Text style={[styles.categoryChipText, selectedCategory === cat.key && styles.categoryChipTextActive]}>
-                    {cat.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            {isReport && (
-              <>
-                <Text style={styles.inputLabel}>Subject</Text>
-                <TextInput
-                  style={styles.input}
-                  value={subject}
-                  onChangeText={setSubject}
-                  placeholder="Brief title for your report"
-                  placeholderTextColor="#98A2B3"
-                  selectionColor="#FF6B35"
-                />
-              </>
-            )}
-            <Text style={styles.inputLabel}>Message</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={message}
-              onChangeText={setMessage}
-              placeholder={isReport ? "Describe the issue in detail..." : "Type your message here..."}
-              placeholderTextColor="#98A2B3"
-              multiline
-              textAlignVertical="top"
-              selectionColor="#FF6B35"
-            />
-            <TouchableOpacity
-              style={[styles.sendButton, sending && styles.disabled]}
-              onPress={handleSendMessage}
-              disabled={sending}
-            >
-              {sending ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.sendButtonText}>Send to Admin Panel</Text>}
-            </TouchableOpacity>
+            <View style={styles.formCard}>
+              {!isReport && (
+                <>
+                  <Text style={styles.inputLabel}>Category</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+                    {CATEGORIES.map((cat) => (
+                      <TouchableOpacity
+                        key={cat.key}
+                        style={[styles.categoryChip, selectedCategory === cat.key && styles.categoryChipActive]}
+                        onPress={() => setSelectedCategory(cat.key)}
+                      >
+                        <Ionicons
+                          name={cat.icon}
+                          size={16}
+                          color={selectedCategory === cat.key ? GREEN_DEEP : "#667085"}
+                        />
+                        <Text style={[styles.categoryChipText, selectedCategory === cat.key && styles.categoryChipTextActive]}>
+                          {cat.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+
+              {isReport && (
+                <>
+                  <Text style={styles.inputLabel}>Subject</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={subject}
+                    onChangeText={setSubject}
+                    placeholder="Brief title for your report"
+                    placeholderTextColor="#98A2B3"
+                    selectionColor={GREEN_PRIMARY}
+                  />
+                </>
+              )}
+
+              <Text style={styles.inputLabel}>Message</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={message}
+                onChangeText={setMessage}
+                placeholder={isReport ? "Describe the issue in detail..." : "Type your message here..."}
+                placeholderTextColor="#98A2B3"
+                multiline
+                textAlignVertical="top"
+                selectionColor={GREEN_PRIMARY}
+              />
+            </View>
           </ScrollView>
-        )}
-      </View>
+
+          {renderComposerFooter(isReport ? "Submit Report" : "Send Message")}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     );
   };
 
@@ -382,7 +481,7 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
       <Text style={styles.modalTitle}>My Support Tickets</Text>
       <Text style={styles.modalSubtitle}>View your previous conversations with the admin team.</Text>
       {loading ? (
-        <ActivityIndicator size="large" color="#FF6B35" style={{ marginTop: 32 }} />
+        <ActivityIndicator size="large" color={GREEN_PRIMARY} style={{ marginTop: 32 }} />
       ) : tickets.length === 0 ? (
         <View style={styles.emptyTickets}>
           <Ionicons name="mail-outline" size={48} color="#D0D5DD" />
@@ -394,10 +493,27 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
           keyExtractor={(item) => item._id}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.ticketCard} onPress={() => { setActiveTicket(item); setMode("chat"); }}>
+            <TouchableOpacity
+              style={styles.ticketCard}
+              onPress={() => {
+                setActiveTicket(item);
+                setMode("chat");
+              }}
+            >
               <View style={styles.ticketCardTop}>
-                <Text style={styles.ticketCardSubject} numberOfLines={1}>{item.subject}</Text>
-                <View style={[styles.statusDot, item.status === "OPEN" ? styles.statusOpen : item.status === "IN_PROGRESS" ? styles.statusProgress : styles.statusResolved]} />
+                <Text style={styles.ticketCardSubject} numberOfLines={1}>
+                  {item.subject}
+                </Text>
+                <View
+                  style={[
+                    styles.statusDot,
+                    item.status === "OPEN"
+                      ? styles.statusOpen
+                      : item.status === "IN_PROGRESS"
+                        ? styles.statusProgress
+                        : styles.statusResolved
+                  ]}
+                />
               </View>
               <Text style={styles.ticketCardDate}>{formatDate(item.updatedAt)}</Text>
               <Text style={styles.ticketCardPreview} numberOfLines={2}>
@@ -416,43 +532,25 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
   };
   const isComposerMode = mode === "chat" || mode === "report";
 
+  if (isComposerMode) {
+    return (
+      <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+        {renderChatOrReport()}
+      </Modal>
+    );
+  }
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
-      >
-        <Animated.View
-          style={[
-            styles.sheet,
-            slideStyle,
-            isComposerMode && styles.sheetComposer,
-            { paddingBottom: insets.bottom + (isComposerMode ? 8 : 20) }
-          ]}
-        >
+      <View style={styles.overlay}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Animated.View style={[styles.sheet, slideStyle, { paddingBottom: insets.bottom + 20 }]}>
           <View style={styles.handleRow}>
             <View style={styles.handle} />
           </View>
 
           <View style={styles.headerRow}>
-            <TouchableOpacity
-              onPress={() => {
-                if (mode === "main") {
-                  onClose();
-                } else if (activeTicket && (mode === "chat")) {
-                  setActiveTicket(null);
-                  setSubject("");
-                  setMessage("");
-                  setMode("main");
-                } else {
-                  setMode("main");
-                  setSubject("");
-                  setMessage("");
-                }
-              }}
-              hitSlop={12}
-            >
+            <TouchableOpacity onPress={handleBack} hitSlop={12}>
               <Ionicons name="arrow-back" size={24} color="#1D2939" />
             </TouchableOpacity>
             <TouchableOpacity onPress={onClose} hitSlop={12}>
@@ -460,22 +558,18 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
             </TouchableOpacity>
           </View>
 
-          {isComposerMode ? (
-            renderChatOrReport()
-          ) : (
-            <ScrollView
-              style={styles.body}
-              contentContainerStyle={styles.bodyContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {mode === "main" && renderMain()}
-              {mode === "faq" && renderFaqs()}
-              {mode === "tickets" && renderTickets()}
-            </ScrollView>
-          )}
+          <ScrollView
+            style={styles.body}
+            contentContainerStyle={styles.bodyContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {mode === "main" && renderMain()}
+            {mode === "faq" && renderFaqs()}
+            {mode === "tickets" && renderTickets()}
+          </ScrollView>
         </Animated.View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -483,18 +577,22 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(15,23,42,0.45)",
     justifyContent: "flex-end"
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.62)"
   },
   sheet: {
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: "92%"
+    maxHeight: "92%",
+    overflow: "hidden"
   },
-  sheetComposer: {
-    minHeight: "72%",
-    maxHeight: "92%"
+  fullScreen: {
+    flex: 1,
+    backgroundColor: "#F8FAFC"
   },
   handleRow: {
     alignItems: "center",
@@ -514,22 +612,64 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8
   },
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF"
+  },
+  composerTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E4E7EC"
+  },
+  composerTopCopy: {
+    flex: 1
+  },
+  composerTopTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1D2939"
+  },
+  composerTopSubtitle: {
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#667085"
+  },
   body: {
     paddingHorizontal: 20
   },
   bodyContent: {
     paddingBottom: 16
   },
-  composerBody: {
-    flex: 1,
-    paddingHorizontal: 20,
-    minHeight: 320
-  },
   composerScroll: {
     flex: 1
   },
   composerScrollContent: {
+    padding: 16,
     paddingBottom: 24
+  },
+  formCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E4E7EC"
+  },
+  composerFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#E4E7EC"
   },
   modalTitle: {
     fontSize: 22,
@@ -583,7 +723,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F2F4F7"
   },
   faqItemExpanded: {
-    backgroundColor: "#FFFBFA",
+    backgroundColor: GREEN_SOFT,
     borderRadius: 12,
     paddingHorizontal: 12,
     marginHorizontal: -8
@@ -608,7 +748,7 @@ const styles = StyleSheet.create({
     color: "#667085"
   },
   categoryScroll: {
-    marginBottom: 16
+    marginBottom: 4
   },
   categoryChip: {
     flexDirection: "row",
@@ -618,10 +758,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: "#F2F4F7",
-    marginRight: 8
+    marginRight: 8,
+    marginBottom: 8
   },
   categoryChipActive: {
-    backgroundColor: "#FFF4EE"
+    backgroundColor: GREEN_SOFT
   },
   categoryChipText: {
     fontSize: 13,
@@ -629,7 +770,7 @@ const styles = StyleSheet.create({
     color: "#475467"
   },
   categoryChipTextActive: {
-    color: "#C2410C"
+    color: GREEN_DEEP
   },
   inputLabel: {
     fontSize: 13,
@@ -646,73 +787,79 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: "#101828",
-    backgroundColor: "#fff"
+    backgroundColor: "#F8FAFC"
   },
   textArea: {
-    minHeight: 110
+    minHeight: 140
   },
   sendButton: {
-    marginTop: 16,
-    borderRadius: 16,
-    paddingVertical: 15,
+    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FF6B35"
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 15,
+    backgroundColor: GREEN_PRIMARY
+  },
+  sendButtonDisabled: {
+    opacity: 0.55
   },
   sendButtonText: {
     fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF"
   },
-  disabled: {
-    opacity: 0.7
-  },
-  ticketThread: {
-    flex: 1,
-    minHeight: 240
-  },
   threadScroll: {
     flex: 1,
-    marginBottom: 12
+    paddingHorizontal: 16
   },
   threadScrollContent: {
-    paddingBottom: 8
+    paddingVertical: 16,
+    paddingBottom: 24
   },
   threadBubble: {
     marginBottom: 12,
     padding: 14,
     borderRadius: 16,
-    maxWidth: "85%"
+    maxWidth: "88%"
   },
   deliveryBubble: {
-    backgroundColor: "#FFF4EE",
+    backgroundColor: GREEN_SOFT,
     alignSelf: "flex-end",
     borderBottomRightRadius: 4
   },
   adminBubble: {
-    backgroundColor: "#F2F4F7",
+    backgroundColor: "#FFFFFF",
     alignSelf: "flex-start",
-    borderBottomLeftRadius: 4
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: "#E4E7EC"
+  },
+  threadSender: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#667085",
+    marginBottom: 4
   },
   threadBubbleText: {
     fontSize: 14,
     lineHeight: 20,
     color: "#1D2939"
   },
-  adminBubbleText: {
-    color: "#344054"
-  },
   threadBubbleTime: {
     marginTop: 6,
     fontSize: 11,
     color: "#98A2B3"
   },
-  adminBubbleTime: {
-    color: "#98A2B3"
-  },
-  threadInputRow: {
+  threadComposer: {
     flexDirection: "row",
     gap: 8,
-    alignItems: "flex-end"
+    alignItems: "flex-end",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#E4E7EC"
   },
   threadInput: {
     flex: 1,
@@ -720,19 +867,19 @@ const styles = StyleSheet.create({
     borderColor: "#E4E7EC",
     borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingVertical: 12,
+    fontSize: 15,
     color: "#101828",
-    backgroundColor: "#fff",
-    maxHeight: 80
+    backgroundColor: "#F8FAFC",
+    maxHeight: 120
   },
   threadSendButton: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FF6B35"
+    backgroundColor: GREEN_PRIMARY
   },
   ticketCard: {
     paddingVertical: 14,
@@ -768,7 +915,7 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   statusOpen: {
-    backgroundColor: "#FF6B35"
+    backgroundColor: GREEN_PRIMARY
   },
   statusProgress: {
     backgroundColor: "#2196F3"
