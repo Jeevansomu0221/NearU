@@ -27,7 +27,7 @@ import {
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
-import { getCurrentRiderLocation } from "../utils/riderLocation";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Props {
   route: any;
@@ -68,10 +68,13 @@ type NoLocationModalState = {
   destinationLabel?: string;
 };
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const UPI_QR_WIDTH = SCREEN_WIDTH - 24;
-const UPI_FOCUS_SIZE = Math.min(SCREEN_WIDTH - 40, 372);
-const UPI_NATIVE_QR_SIZE = UPI_FOCUS_SIZE;
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const UPI_FOCUS_SIZE = SCREEN_WIDTH - 32;
+const UPI_NATIVE_QR_SIZE = UPI_FOCUS_SIZE - 8;
+const RAZORPAY_POSTER_WIDTH = UPI_FOCUS_SIZE * 1.28;
+const RAZORPAY_POSTER_HEIGHT = UPI_FOCUS_SIZE * 2.95;
+const RAZORPAY_POSTER_LEFT = (UPI_FOCUS_SIZE - RAZORPAY_POSTER_WIDTH) / 2 + 14;
+const RAZORPAY_POSTER_TOP = -UPI_FOCUS_SIZE * 0.84;
 
 const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (!session) return null;
@@ -87,6 +90,7 @@ const getCodQrDisplayUri = (session: CodUpiSession | null) => {
 const isRazorpayPosterQr = (session: CodUpiSession | null) => session?.provider === "razorpay_qr";
 
 export default function JobDetailsScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { orderId, job: initialJob } = route.params;
   const [job, setJob] = useState<DeliveryOrder | null>(initialJob || null);
   const [loading, setLoading] = useState(!initialJob);
@@ -913,104 +917,84 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       </Modal>
 
       <Modal visible={upiPaymentVisible} animationType="slide" onRequestClose={() => setUpiPaymentVisible(false)}>
-        <View style={styles.upiFullOverlay}>
-          <ScrollView
-            contentContainerStyle={styles.upiScrollContent}
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.upiSheet}>
-              <View style={styles.upiHeaderRow}>
-                <View style={styles.upiHeaderCopy}>
-                  <Text style={styles.upiHeaderTitle}>Scan to pay Vyaha</Text>
-                  <Text style={styles.upiHeaderSubtitle}>
-                    Customer scans with any UPI app. Payment goes to Vyaha.
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.upiCloseButton}
-                  onPress={() => setUpiPaymentVisible(false)}
-                  hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-                >
-                  <Ionicons name="close" size={22} color="#475467" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.qrStage}>
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.qrPulseRing,
-                    { opacity: qrRingOpacity, transform: [{ scale: qrRingScale }] }
-                  ]}
-                />
-                <View style={styles.qrFocusShell}>
-                  {codQrDisplayUri ? (
-                    showRazorpayPoster ? (
-                      <View style={styles.qrPosterCrop}>
-                        <Image
-                          source={{ uri: codQrDisplayUri }}
-                          style={styles.qrPosterZoomed}
-                          resizeMode="cover"
-                        />
-                      </View>
-                    ) : (
-                      <View style={styles.qrCleanCard}>
-                        <Image
-                          source={{ uri: codQrDisplayUri }}
-                          style={styles.nativeQrImage}
-                          resizeMode="contain"
-                        />
-                      </View>
-                    )
-                  ) : (
-                    <View style={styles.nativeQrWrap}>
-                      <ActivityIndicator color="#1D4ED8" size="large" />
-                    </View>
-                  )}
-                </View>
-                <View style={styles.qrBadgeRow}>
-                  <Ionicons name="scan-outline" size={16} color="#1D4ED8" />
-                  <Text style={styles.qrBadgeText}>Point customer UPI camera here</Text>
-                </View>
-              </View>
-
-              <Text style={styles.qrScanHint}>Keep the phone steady until payment is confirmed.</Text>
-
-              <View style={styles.upiAmountBanner}>
-                <Text style={styles.upiAmountLabel}>Amount to pay</Text>
-                <Text style={styles.upiAmount}>Rs {codUpiSession?.amount || job?.grandTotal}</Text>
-                <Text style={styles.upiRef}>Ref: {codUpiSession?.orderRef || orderId.slice(-6).toUpperCase()}</Text>
-              </View>
-
-              {upiPaymentPaid ? (
-                <Text style={styles.upiPaidText}>Payment received. You can complete delivery now.</Text>
-              ) : (
-                <Text style={styles.upiWaitingText}>
-                  {upiPolling ? "Checking payment status..." : "Waiting for customer payment..."}
+        <View style={[styles.upiFullOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          <View style={styles.upiSheet}>
+            <View style={styles.upiTopBar}>
+              <View style={styles.upiTopBarCopy}>
+                <Text style={styles.upiHeaderTitle}>Scan & pay Vyaha</Text>
+                <Text style={styles.upiMetaLine}>
+                  Rs {codUpiSession?.amount || job?.grandTotal} · Ref {codUpiSession?.orderRef || orderId.slice(-6).toUpperCase()}
                 </Text>
-              )}
+              </View>
+              <TouchableOpacity
+                style={styles.upiCloseButton}
+                onPress={() => setUpiPaymentVisible(false)}
+                hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+              >
+                <Ionicons name="close" size={20} color="#475467" />
+              </TouchableOpacity>
+            </View>
 
-              <View style={styles.upiFooterActions}>
-                <TouchableOpacity style={styles.confirmSecondary} onPress={() => setUpiPaymentVisible(false)} disabled={updating}>
-                  <Text style={styles.confirmSecondaryText}>Back</Text>
-                </TouchableOpacity>
-                {codUpiSession?.manualConfirmRequired && !upiPaymentPaid ? (
-                  <TouchableOpacity style={[styles.confirmPrimary, styles.confirmPrimaryUpi]} onPress={handleManualUpiConfirm} disabled={upiLoading}>
-                    {upiLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Customer Paid</Text>}
-                  </TouchableOpacity>
+            <View style={styles.qrStage}>
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.qrPulseRing,
+                  { opacity: qrRingOpacity, transform: [{ scale: qrRingScale }] }
+                ]}
+              />
+              <View style={styles.qrFocusShell}>
+                {codQrDisplayUri ? (
+                  showRazorpayPoster ? (
+                    <View style={styles.qrPosterCrop}>
+                      <Image
+                        source={{ uri: codQrDisplayUri }}
+                        style={styles.qrPosterZoomed}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: codQrDisplayUri }}
+                      style={styles.nativeQrImage}
+                      resizeMode="contain"
+                    />
+                  )
                 ) : (
-                  <TouchableOpacity
-                    style={[styles.confirmPrimary, styles.confirmPrimaryUpi, !upiPaymentPaid && styles.confirmPrimaryDisabled]}
-                    onPress={completeUpiDelivery}
-                    disabled={!upiPaymentPaid || updating}
-                  >
-                    {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Complete Delivery</Text>}
-                  </TouchableOpacity>
+                  <ActivityIndicator color="#1D4ED8" size="large" />
                 )}
               </View>
             </View>
-          </ScrollView>
+
+            <Text style={styles.qrScanHint}>Customer scans with any UPI app · Vyaha receives payment directly</Text>
+
+            {upiPaymentPaid ? (
+              <Text style={styles.upiPaidText}>Payment received — complete delivery</Text>
+            ) : (
+              <Text style={styles.upiWaitingText}>
+                {upiPolling ? "Checking payment status..." : "Waiting for customer payment..."}
+              </Text>
+            )}
+
+            <View style={styles.upiFooterActions}>
+              <TouchableOpacity style={styles.confirmSecondary} onPress={() => setUpiPaymentVisible(false)} disabled={updating}>
+                <Text style={styles.confirmSecondaryText}>Back</Text>
+              </TouchableOpacity>
+              {codUpiSession?.manualConfirmRequired && !upiPaymentPaid ? (
+                <TouchableOpacity style={[styles.confirmPrimary, styles.confirmPrimaryUpi]} onPress={handleManualUpiConfirm} disabled={upiLoading}>
+                  {upiLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Customer Paid</Text>}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.confirmPrimary, styles.confirmPrimaryUpi, !upiPaymentPaid && styles.confirmPrimaryDisabled]}
+                  onPress={completeUpiDelivery}
+                  disabled={!upiPaymentPaid || updating}
+                >
+                  {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Complete Delivery</Text>}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -1531,211 +1515,117 @@ const styles = StyleSheet.create({
   },
   upiFullOverlay: {
     flex: 1,
-    backgroundColor: "#0F172A"
-  },
-  upiScrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 12
   },
   upiSheet: {
-    width: "100%",
-    borderRadius: 24,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 20
+    flex: 1,
+    justifyContent: "space-between"
   },
-  upiHeaderRow: {
+  upiTopBar: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 12
+    gap: 10,
+    paddingTop: 4
   },
-  upiHeaderCopy: {
+  upiTopBarCopy: {
     flex: 1
   },
+  upiMetaLine: {
+    marginTop: 2,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2563EB"
+  },
   upiHeaderTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     color: "#111827"
   },
-  upiHeaderSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#667085"
-  },
   upiCloseButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#F3F4F6"
   },
   qrStage: {
-    marginTop: 16,
+    flex: 1,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    minHeight: UPI_FOCUS_SIZE + 12
   },
   qrPulseRing: {
     position: "absolute",
-    width: UPI_FOCUS_SIZE + 28,
-    height: UPI_FOCUS_SIZE + 28,
-    borderRadius: (UPI_FOCUS_SIZE + 28) / 2,
-    borderWidth: 3,
+    width: UPI_FOCUS_SIZE + 20,
+    height: UPI_FOCUS_SIZE + 20,
+    borderRadius: (UPI_FOCUS_SIZE + 20) / 2,
+    borderWidth: 2,
     borderColor: "#60A5FA",
     backgroundColor: "transparent"
   },
   qrFocusShell: {
-    width: UPI_FOCUS_SIZE + 16,
-    height: UPI_FOCUS_SIZE + 16,
-    borderRadius: 28,
-    padding: 8,
+    width: UPI_FOCUS_SIZE,
+    height: UPI_FOCUS_SIZE,
+    borderRadius: 22,
     backgroundColor: "#FFFFFF",
     borderWidth: 2,
-    borderColor: "#BFDBFE",
+    borderColor: "#93C5FD",
     shadowColor: "#2563EB",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 6,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    overflow: "hidden"
   },
   qrPosterCrop: {
     width: UPI_FOCUS_SIZE,
     height: UPI_FOCUS_SIZE,
-    borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: "#FFFFFF",
-    alignItems: "center"
+    backgroundColor: "#FFFFFF"
   },
   qrPosterZoomed: {
-    width: UPI_FOCUS_SIZE * 1.14,
-    height: UPI_FOCUS_SIZE * 2.85,
-    marginTop: -UPI_FOCUS_SIZE * 0.8
-  },
-  qrCleanCard: {
-    width: UPI_FOCUS_SIZE,
-    height: UPI_FOCUS_SIZE,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 10
-  },
-  qrBadgeRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "#EFF6FF"
-  },
-  qrBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#1D4ED8"
-  },
-  qrHero: {
-    marginTop: 14,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E2E8F0"
-  },
-  qrPosterImage: {
-    width: UPI_QR_WIDTH,
-    aspectRatio: 0.58
-  },
-  nativeQrWrap: {
-    width: UPI_FOCUS_SIZE,
-    height: UPI_FOCUS_SIZE,
-    alignItems: "center",
-    justifyContent: "center"
+    position: "absolute",
+    width: RAZORPAY_POSTER_WIDTH,
+    height: RAZORPAY_POSTER_HEIGHT,
+    left: RAZORPAY_POSTER_LEFT,
+    top: RAZORPAY_POSTER_TOP
   },
   nativeQrImage: {
-    width: UPI_NATIVE_QR_SIZE - 20,
-    height: UPI_NATIVE_QR_SIZE - 20,
+    width: UPI_NATIVE_QR_SIZE,
+    height: UPI_NATIVE_QR_SIZE,
     backgroundColor: "#FFFFFF"
   },
   qrScanHint: {
-    marginTop: 10,
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#475467",
+    marginTop: 0,
+    marginBottom: 6,
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#64748B",
     textAlign: "center"
   },
-  upiAmountBanner: {
-    marginTop: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: "#EFF6FF",
-    alignItems: "center"
-  },
-  upiAmountLabel: {
-    fontSize: 12,
+  upiPaidText: {
+    marginBottom: 8,
+    fontSize: 13,
+    color: "#15803D",
     fontWeight: "700",
-    color: "#1D4ED8",
-    textTransform: "uppercase",
-    letterSpacing: 0.6
+    textAlign: "center"
+  },
+  upiWaitingText: {
+    marginBottom: 8,
+    fontSize: 13,
+    color: "#B45309",
+    textAlign: "center"
   },
   upiFooterActions: {
     width: "100%",
     flexDirection: "row",
     gap: 10,
-    marginTop: 18
-  },
-  upiCard: {
-    maxWidth: 360
-  },
-  qrFrame: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 252
-  },
-  qrImage: {
-    width: 220,
-    height: 220
-  },
-  upiAmount: {
-    marginTop: 4,
-    fontSize: 32,
-    fontWeight: "900",
-    color: "#111827"
-  },
-  upiRef: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#667085"
-  },
-  upiWaitingText: {
-    marginTop: 10,
-    fontSize: 13,
-    color: "#B45309",
-    textAlign: "center"
-  },
-  upiPaidText: {
-    marginTop: 10,
-    fontSize: 13,
-    color: "#15803D",
-    fontWeight: "700",
-    textAlign: "center"
+    paddingBottom: 4
   },
   confirmPrimaryUpi: {
     backgroundColor: "#2563EB"
