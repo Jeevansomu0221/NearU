@@ -368,14 +368,14 @@ export default function EarningsScreen({ navigation }: any) {
         <Text style={styles.todayAmount}>{formatCurrency(walletBalance)}</Text>
         <View style={styles.todayStats}>
           <View style={styles.todayStatItem}>
-            <Ionicons name="bicycle" size={16} color="#4CAF50" />
-            <Text style={styles.todayStatText}>
+            <Ionicons name="bicycle" size={16} color="rgba(255,255,255,0.95)" />
+            <Text style={styles.todayStatText} numberOfLines={1}>
               {stats?.todaysDeliveries || 0} deliveries today
             </Text>
           </View>
           <View style={styles.todayStatItem}>
-            <Ionicons name="receipt" size={16} color="#4CAF50" />
-            <Text style={styles.todayStatText}>
+            <Ionicons name="receipt" size={16} color="rgba(255,255,255,0.95)" />
+            <Text style={styles.todayStatText} numberOfLines={1}>
               {withdrawalWallet?.pendingPayoutOrderCount || 0} orders in wallet
             </Text>
           </View>
@@ -857,18 +857,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   todayStats: {
-    flexDirection: 'row',
-    gap: 20,
+    flexDirection: 'column',
+    gap: 10,
   },
   todayStatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    alignSelf: 'stretch',
   },
   todayStatText: {
-    fontSize: 14,
-    color: '#FFFFFF',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.95)',
     fontWeight: '500',
+    flex: 1,
+    flexShrink: 1,
   },
   periodSelector: {
     flexDirection: 'row',
