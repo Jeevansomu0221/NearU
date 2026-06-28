@@ -24,7 +24,7 @@ import { uploadMultipart } from "../api/client";
 import { buildLegalUrl } from "../constants/legal";
 import { getDeliveryProfile, updateBankDetails, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { deleteAccount } from "../api/auth.api";
-import { getDeliveryStats, getTodaysEarnings, type DeliveryStats } from "../api/delivery.api";
+import { getDeliveryStats, getTodaysEarnings, getWithdrawalWallet, type DeliveryStats } from "../api/delivery.api";
 import SupportModal from "../components/SupportModal";
 import {
   getNotificationPermissionLabel,
@@ -259,6 +259,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [editingBank, setEditingBank] = useState(false);
   const [stats, setStats] = useState<DeliveryStats | null>(null);
   const [todayEarnings, setTodayEarnings] = useState(0);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
   const [supportInitialMode, setSupportInitialMode] = useState<SupportInitialMode>("main");
   const [stepAnim] = useState(() => new Animated.Value(0));
@@ -313,11 +314,18 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const loadDashboardStats = async () => {
     try {
-      const [statsResponse, earningsResponse] = await Promise.all([
-        getDeliveryStats(), getTodaysEarnings()
+      const [statsResponse, earningsResponse, walletResponse] = await Promise.all([
+        getDeliveryStats(),
+        getTodaysEarnings(),
+        getWithdrawalWallet()
       ]);
       if (statsResponse.success && statsResponse.data) setStats(statsResponse.data);
       if (earningsResponse.success && earningsResponse.data) setTodayEarnings(earningsResponse.data.earnings);
+      if (walletResponse.success && walletResponse.data) {
+        setWalletBalance(walletResponse.data.walletBalance || 0);
+      } else if (statsResponse.success && statsResponse.data) {
+        setWalletBalance(statsResponse.data.walletBalance || 0);
+      }
     } catch (error) {
       console.log("Failed to load delivery dashboard stats", error);
     }
@@ -727,7 +735,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           {/* Stats Grid */}
           <View style={s.statsGrid}>
-            <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(todayEarnings)}</Text><Text style={s.statLbl}>Today</Text></View>
+            <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(walletBalance)}</Text><Text style={s.statLbl}>Wallet</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.totalEarnings || profile?.totalEarnings)}</Text><Text style={s.statLbl}>Paid earnings</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{stats?.totalDeliveries || profile?.totalDeliveries || 0}</Text><Text style={s.statLbl}>Deliveries</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{(profile?.rating || 0).toFixed(1)}</Text><Text style={s.statLbl}>Rating</Text></View>
@@ -808,6 +816,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           {/* Work Stats */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Performance</Text>
+            {renderInfoRow("Wallet", formatCurrency(walletBalance))}
             {renderInfoRow("Total deliveries", String(stats?.totalDeliveries || profile?.totalDeliveries || 0))}
             {renderInfoRow("Today earnings", formatCurrency(todayEarnings))}
             {renderInfoRow("Paid earnings", formatCurrency(stats?.totalEarnings || profile?.totalEarnings || 0))}
