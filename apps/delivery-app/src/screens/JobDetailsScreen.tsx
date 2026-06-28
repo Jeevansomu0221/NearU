@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import {
   Modal,
   Platform,
   Image,
-  Dimensions
+  Dimensions,
+  Animated
 } from "react-native";
 import { 
   acceptJob,
@@ -69,8 +70,8 @@ type NoLocationModalState = {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const UPI_QR_WIDTH = SCREEN_WIDTH - 24;
-const UPI_POSTER_HEIGHT = Math.min(SCREEN_HEIGHT * 0.58, UPI_QR_WIDTH * 1.55);
-const UPI_NATIVE_QR_SIZE = Math.min(UPI_QR_WIDTH - 48, 340);
+const UPI_FOCUS_SIZE = Math.min(SCREEN_WIDTH - 40, 372);
+const UPI_NATIVE_QR_SIZE = UPI_FOCUS_SIZE;
 
 const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (!session) return null;
@@ -105,6 +106,24 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   } | null>(null);
   const [noLocationModal, setNoLocationModal] = useState<NoLocationModalState | null>(null);
   const codQrDisplayUri = useMemo(() => getCodQrDisplayUri(codUpiSession), [codUpiSession]);
+  const showRazorpayPoster = isRazorpayPosterQr(codUpiSession);
+  const qrPulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!upiPaymentVisible) return;
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(qrPulse, { toValue: 1, duration: 1400, useNativeDriver: true }),
+        Animated.timing(qrPulse, { toValue: 0, duration: 1400, useNativeDriver: true })
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [upiPaymentVisible, qrPulse]);
+
+  const qrRingScale = qrPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] });
+  const qrRingOpacity = qrPulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.85] });
 
   useEffect(() => {
     loadJobDetails();
@@ -917,21 +936,46 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.qrHero}>
-                {codQrDisplayUri ? (
-                  <Image
-                    source={{ uri: codQrDisplayUri }}
-                    style={isRazorpayPosterQr(codUpiSession) ? styles.qrPosterImage : styles.nativeQrImage}
-                    resizeMode="contain"
-                  />
-                ) : (
-                  <View style={styles.nativeQrWrap}>
-                    <ActivityIndicator color="#1D4ED8" size="large" />
-                  </View>
-                )}
+              <View style={styles.qrStage}>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.qrPulseRing,
+                    { opacity: qrRingOpacity, transform: [{ scale: qrRingScale }] }
+                  ]}
+                />
+                <View style={styles.qrFocusShell}>
+                  {codQrDisplayUri ? (
+                    showRazorpayPoster ? (
+                      <View style={styles.qrPosterCrop}>
+                        <Image
+                          source={{ uri: codQrDisplayUri }}
+                          style={styles.qrPosterZoomed}
+                          resizeMode="cover"
+                        />
+                      </View>
+                    ) : (
+                      <View style={styles.qrCleanCard}>
+                        <Image
+                          source={{ uri: codQrDisplayUri }}
+                          style={styles.nativeQrImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    )
+                  ) : (
+                    <View style={styles.nativeQrWrap}>
+                      <ActivityIndicator color="#1D4ED8" size="large" />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.qrBadgeRow}>
+                  <Ionicons name="scan-outline" size={16} color="#1D4ED8" />
+                  <Text style={styles.qrBadgeText}>Point customer UPI camera here</Text>
+                </View>
               </View>
 
-              <Text style={styles.qrScanHint}>Hold the phone steady and let the customer scan the code above.</Text>
+              <Text style={styles.qrScanHint}>Keep the phone steady until payment is confirmed.</Text>
 
               <View style={styles.upiAmountBanner}>
                 <Text style={styles.upiAmountLabel}>Amount to pay</Text>
@@ -1531,6 +1575,73 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#F3F4F6"
   },
+  qrStage: {
+    marginTop: 16,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  qrPulseRing: {
+    position: "absolute",
+    width: UPI_FOCUS_SIZE + 28,
+    height: UPI_FOCUS_SIZE + 28,
+    borderRadius: (UPI_FOCUS_SIZE + 28) / 2,
+    borderWidth: 3,
+    borderColor: "#60A5FA",
+    backgroundColor: "transparent"
+  },
+  qrFocusShell: {
+    width: UPI_FOCUS_SIZE + 16,
+    height: UPI_FOCUS_SIZE + 16,
+    borderRadius: 28,
+    padding: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: "#BFDBFE",
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  qrPosterCrop: {
+    width: UPI_FOCUS_SIZE,
+    height: UPI_FOCUS_SIZE,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center"
+  },
+  qrPosterZoomed: {
+    width: UPI_FOCUS_SIZE * 1.14,
+    height: UPI_FOCUS_SIZE * 2.85,
+    marginTop: -UPI_FOCUS_SIZE * 0.8
+  },
+  qrCleanCard: {
+    width: UPI_FOCUS_SIZE,
+    height: UPI_FOCUS_SIZE,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10
+  },
+  qrBadgeRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#EFF6FF"
+  },
+  qrBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1D4ED8"
+  },
   qrHero: {
     marginTop: 14,
     width: "100%",
@@ -1539,23 +1650,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    overflow: "hidden"
+    borderColor: "#E2E8F0"
   },
   qrPosterImage: {
     width: UPI_QR_WIDTH,
-    height: UPI_POSTER_HEIGHT
+    aspectRatio: 0.58
   },
   nativeQrWrap: {
-    paddingVertical: 28,
-    paddingHorizontal: 20,
+    width: UPI_FOCUS_SIZE,
+    height: UPI_FOCUS_SIZE,
     alignItems: "center",
-    justifyContent: "center",
-    minHeight: UPI_NATIVE_QR_SIZE + 56
+    justifyContent: "center"
   },
   nativeQrImage: {
-    width: UPI_NATIVE_QR_SIZE,
-    height: UPI_NATIVE_QR_SIZE,
+    width: UPI_NATIVE_QR_SIZE - 20,
+    height: UPI_NATIVE_QR_SIZE - 20,
     backgroundColor: "#FFFFFF"
   },
   qrScanHint: {
