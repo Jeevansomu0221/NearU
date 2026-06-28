@@ -20,18 +20,22 @@ import {
 import { CheckCircleOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import {
+  approveWithdrawalRequest,
   createPayout,
   getCashDeposits,
   getPayoutHistory,
   getPayoutSummary,
+  getWithdrawalRequests,
   rejectCashDeposit,
+  rejectWithdrawalRequest,
   verifyCashDeposit,
   type CashDepositRecord,
   type PayoutPeriodType,
   type PayoutRecord,
   type PayoutRecipientType,
   type PayoutSummary,
-  type PayoutSummaryRow
+  type PayoutSummaryRow,
+  type WithdrawalRequestRecord
 } from "../api/admin.api";
 
 const formatCurrency = (value: number) =>
@@ -54,6 +58,8 @@ export default function Payouts() {
   const [summary, setSummary] = useState<PayoutSummary | null>(null);
   const [history, setHistory] = useState<PayoutRecord[]>([]);
   const [deposits, setDeposits] = useState<CashDepositRecord[]>([]);
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRequestRecord[]>([]);
+  const [withdrawalStatus, setWithdrawalStatus] = useState<"PENDING" | "PAID" | "REJECTED" | "ALL">("PENDING");
   const [activeRecipient, setActiveRecipient] = useState<PayoutRecipientType>("PARTNER");
   const [depositStatus, setDepositStatus] = useState<"PENDING" | "VERIFIED" | "REJECTED" | "ALL">("PENDING");
   const [periodType, setPeriodType] = useState<PayoutPeriodType>("WEEKLY");
@@ -64,6 +70,7 @@ export default function Payouts() {
   const [paidReference, setPaidReference] = useState("");
   const [paidNotes, setPaidNotes] = useState("");
   const [depositAction, setDepositAction] = useState<{ deposit: CashDepositRecord; action: "verify" | "reject" } | null>(null);
+  const [withdrawalAction, setWithdrawalAction] = useState<{ request: WithdrawalRequestRecord; action: "approve" | "reject" } | null>(null);
   const [depositActionNote, setDepositActionNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -97,6 +104,14 @@ export default function Payouts() {
     }
   };
 
+  const loadWithdrawals = async () => {
+    try {
+      setWithdrawals(await getWithdrawalRequests(withdrawalStatus));
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to load withdrawal requests");
+    }
+  };
+
   useEffect(() => {
     loadSummary();
   }, [periodType, periodDate]);
@@ -108,6 +123,10 @@ export default function Payouts() {
   useEffect(() => {
     loadDeposits();
   }, [depositStatus]);
+
+  useEffect(() => {
+    loadWithdrawals();
+  }, [withdrawalStatus]);
 
   const rows = activeRecipient === "PARTNER" ? summary?.partners || [] : summary?.deliveryPartners || [];
   const filteredRows = useMemo(() => {
@@ -196,6 +215,37 @@ export default function Payouts() {
       await Promise.all([loadDeposits(), loadSummary()]);
     } catch (error: any) {
       message.error(error?.response?.data?.message || "Failed to update cash deposit");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleWithdrawalAction = async () => {
+    if (!withdrawalAction) return;
+
+    try {
+      setSubmitting(true);
+      if (withdrawalAction.action === "approve") {
+        await approveWithdrawalRequest(withdrawalAction.request._id, {
+          paidReference: paidReference.trim(),
+          paidNotes: paidNotes.trim()
+        });
+        message.success("Withdrawal paid and rider notified");
+      } else {
+        if (!depositActionNote.trim()) {
+          message.warning("Add a rejection reason.");
+          return;
+        }
+        await rejectWithdrawalRequest(withdrawalAction.request._id, depositActionNote.trim());
+        message.success("Withdrawal request rejected");
+      }
+      setWithdrawalAction(null);
+      setDepositActionNote("");
+      setPaidReference("");
+      setPaidNotes("");
+      await Promise.all([loadWithdrawals(), loadSummary(), loadHistory()]);
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to update withdrawal request");
     } finally {
       setSubmitting(false);
     }
@@ -671,6 +721,116 @@ export default function Payouts() {
         )}
       </Modal>
 
+      <Card bordered={false} title="Rider Withdrawal Requests">
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
+            <Typography.Text type="secondary">
+              Riders request withdrawals from the app. Pay via bank/UPI, then mark as paid.
+            </Typography.Text>
+            <Segmented
+              value={withdrawalStatus}
+              onChange={(value) => setWithdrawalStatus(value as "PENDING" | "PAID" | "REJECTED" | "ALL")}
+              options={[
+                { label: "Pending", value: "PENDING" },
+                { label: "Paid", value: "PAID" },
+                { label: "Rejected", value: "REJECTED" },
+                { label: "All", value: "ALL" }
+              ]}
+            />
+          </Space>
+          <Table
+            rowKey="_id"
+            dataSource={withdrawals}
+            pagination={{ pageSize: 8 }}
+            columns={[
+              {
+                title: "Rider",
+                render: (_, request) => (
+                  <div>
+                    <Typography.Text strong>
+                      {request.deliveryPartnerId?.name || request.userId?.name || "Unknown rider"}
+                    </Typography.Text>
+                    <div>
+                      <Typography.Text type="secondary">
+                        {request.deliveryPartnerId?.phone || request.userId?.phone || "No phone"}
+                      </Typography.Text>
+                    </div>
+                  </div>
+                )
+              },
+              {
+                title: "Amount",
+                dataIndex: "amount",
+                render: (value: number) => <Typography.Text strong>{formatCurrency(value)}</Typography.Text>
+              },
+              {
+                title: "Payout Details",
+                render: (_, request) => (
+                  <div>
+                    <div>{request.bankSnapshot?.accountHolderName || "-"}</div>
+                    {request.bankSnapshot?.upiId ? (
+                      <Typography.Text type="secondary">UPI: {request.bankSnapshot.upiId}</Typography.Text>
+                    ) : (
+                      <Typography.Text type="secondary">
+                        {request.bankSnapshot?.accountNumber || "-"} · {request.bankSnapshot?.ifsc || "-"}
+                      </Typography.Text>
+                    )}
+                  </div>
+                )
+              },
+              {
+                title: "Orders",
+                dataIndex: "orderCount"
+              },
+              {
+                title: "Status",
+                render: (_, request) => (
+                  <div>
+                    <Tag color={request.status === "PENDING" ? "gold" : request.status === "PAID" ? "green" : "red"}>
+                      {request.status}
+                    </Tag>
+                    <div>
+                      <Typography.Text type="secondary">{new Date(request.createdAt).toLocaleString()}</Typography.Text>
+                    </div>
+                  </div>
+                )
+              },
+              {
+                title: "Actions",
+                render: (_, request) =>
+                  request.status === "PENDING" ? (
+                    <Space wrap>
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={() => {
+                          setPaidReference("");
+                          setPaidNotes("");
+                          setWithdrawalAction({ request, action: "approve" });
+                        }}
+                      >
+                        Mark Paid
+                      </Button>
+                      <Button
+                        size="small"
+                        danger
+                        onClick={() => {
+                          setDepositActionNote("");
+                          setWithdrawalAction({ request, action: "reject" });
+                        }}
+                      >
+                        Reject
+                      </Button>
+                    </Space>
+                  ) : (
+                    request.paidReference || request.rejectionReason || "-"
+                  )
+              }
+            ]}
+          />
+        </Space>
+      </Card>
+
       <Card bordered={false} title="Rider Cash Deposits">
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
           <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
@@ -790,6 +950,66 @@ export default function Payouts() {
               onChange={(event) => setDepositActionNote(event.target.value)}
               placeholder={depositAction.action === "verify" ? "Verification note (optional)" : "Rejection reason"}
             />
+          </Space>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(withdrawalAction)}
+        title={
+          withdrawalAction?.action === "approve"
+            ? "Mark rider withdrawal as paid"
+            : "Reject rider withdrawal request"
+        }
+        okText={withdrawalAction?.action === "approve" ? "Mark Paid" : "Reject"}
+        okButtonProps={{ danger: withdrawalAction?.action === "reject" }}
+        confirmLoading={submitting}
+        onOk={handleWithdrawalAction}
+        onCancel={() => {
+          setWithdrawalAction(null);
+          setDepositActionNote("");
+          setPaidReference("");
+          setPaidNotes("");
+        }}
+      >
+        {withdrawalAction && (
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Alert
+              type={withdrawalAction.action === "approve" ? "success" : "warning"}
+              showIcon
+              message={`${formatCurrency(withdrawalAction.request.amount)} to ${
+                withdrawalAction.request.bankSnapshot?.accountHolderName || "rider"
+              }`}
+              description={
+                withdrawalAction.request.bankSnapshot?.upiId
+                  ? `Pay via UPI: ${withdrawalAction.request.bankSnapshot.upiId}`
+                  : `Pay via bank: ${withdrawalAction.request.bankSnapshot?.accountNumber || "-"} · ${
+                      withdrawalAction.request.bankSnapshot?.ifsc || "-"
+                    }`
+              }
+            />
+            {withdrawalAction.action === "approve" ? (
+              <>
+                <Input
+                  value={paidReference}
+                  onChange={(event) => setPaidReference(event.target.value)}
+                  placeholder="Payment reference / UTR (optional)"
+                />
+                <Input.TextArea
+                  rows={3}
+                  value={paidNotes}
+                  onChange={(event) => setPaidNotes(event.target.value)}
+                  placeholder="Notes (optional)"
+                />
+              </>
+            ) : (
+              <Input.TextArea
+                rows={3}
+                value={depositActionNote}
+                onChange={(event) => setDepositActionNote(event.target.value)}
+                placeholder="Rejection reason"
+              />
+            )}
           </Space>
         )}
       </Modal>

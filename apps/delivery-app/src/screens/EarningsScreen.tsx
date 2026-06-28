@@ -16,9 +16,12 @@ import {
   getDeliveryStats,
   getMyDeliveryOrders,
   getTodaysEarnings,
+  getWithdrawalWallet,
+  requestWithdrawal,
   submitCashDeposit,
   type CashLedgerSummary,
-  type DeliveryOrder
+  type DeliveryOrder,
+  type WithdrawalWallet
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -48,6 +51,9 @@ export default function EarningsScreen({ navigation }: any) {
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [earningsHistory, setEarningsHistory] = useState<EarningHistoryItem[]>([]);
   const [earningsModalVisible, setEarningsModalVisible] = useState(false);
+  const [withdrawalWallet, setWithdrawalWallet] = useState<WithdrawalWallet | null>(null);
+  const [requestingWithdrawal, setRequestingWithdrawal] = useState(false);
+  const [payoutHistoryVisible, setPayoutHistoryVisible] = useState(false);
 
   useEffect(() => {
     loadEarningsData();
@@ -78,6 +84,11 @@ export default function EarningsScreen({ navigation }: any) {
       const ordersResponse = await getMyDeliveryOrders();
       if (ordersResponse.success && ordersResponse.data) {
         setEarningsHistory(buildEarningsHistory(ordersResponse.data));
+      }
+
+      const walletResponse = await getWithdrawalWallet();
+      if (walletResponse.success && walletResponse.data) {
+        setWithdrawalWallet(walletResponse.data);
       }
     } catch (error: any) {
       console.error("Error loading earnings:", error);
@@ -164,6 +175,64 @@ export default function EarningsScreen({ navigation }: any) {
     } finally {
       setSubmittingDeposit(false);
     }
+  };
+
+  const handleRequestWithdrawal = async () => {
+    if (!withdrawalWallet?.hasBankDetails) {
+      Alert.alert(
+        "Bank details required",
+        "Add your bank account or UPI ID in Profile before requesting a withdrawal.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Go to Profile", onPress: () => navigation.navigate("Profile") }
+        ]
+      );
+      return;
+    }
+
+    if (withdrawalWallet.pendingRequest) {
+      Alert.alert(
+        "Request pending",
+        `Your withdrawal request of ${formatCurrency(withdrawalWallet.pendingRequest.amount)} is waiting for admin approval.`
+      );
+      return;
+    }
+
+    const available = withdrawalWallet.availableBalance || 0;
+    if (available <= 0) {
+      Alert.alert(
+        "No balance available",
+        withdrawalWallet.cashDueToPlatform > 0
+          ? "Your COD cash balance offsets your earnings. Deposit cash back before withdrawing."
+          : "No delivered earnings are available for withdrawal yet."
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Request withdrawal",
+      `Request ${formatCurrency(available)} to be paid to your bank/UPI? Admin will verify and transfer the amount.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Request",
+          onPress: async () => {
+            try {
+              setRequestingWithdrawal(true);
+              const response = await requestWithdrawal();
+              if (!response.success) {
+                Alert.alert("Request failed", response.message || "Could not submit withdrawal request.");
+                return;
+              }
+              Alert.alert("Request sent", response.message || "Admin will process your payment soon.");
+              loadEarningsData();
+            } finally {
+              setRequestingWithdrawal(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const recentEarnings = earningsHistory.slice(0, 3);
@@ -382,13 +451,60 @@ export default function EarningsScreen({ navigation }: any) {
           <Ionicons name="wallet" size={24} color="#4CAF50" />
           <Text style={styles.withdrawalTitle}>Available Balance</Text>
         </View>
-        <Text style={styles.withdrawalAmount}>{formatCurrency(stats?.totalEarnings || 0)}</Text>
-        <Text style={styles.withdrawalNote}>
-          You can withdraw your earnings every Monday
+        <Text style={styles.withdrawalAmount}>
+          {formatCurrency(withdrawalWallet?.availableBalance ?? 0)}
         </Text>
-        <TouchableOpacity style={styles.withdrawButton}>
-          <Text style={styles.withdrawButtonText}>Withdraw Earnings</Text>
+        {withdrawalWallet?.pendingRequest ? (
+          <View style={styles.pendingWithdrawalBanner}>
+            <Ionicons name="time-outline" size={16} color="#B45309" />
+            <Text style={styles.pendingWithdrawalText}>
+              {formatCurrency(withdrawalWallet.pendingRequest.amount)} withdrawal pending admin approval
+            </Text>
+          </View>
+        ) : null}
+        <Text style={styles.withdrawalNote}>
+          {withdrawalWallet?.pendingPayoutOrderCount
+            ? `${withdrawalWallet.pendingPayoutOrderCount} delivered order${withdrawalWallet.pendingPayoutOrderCount === 1 ? "" : "s"} pending payout`
+            : "Complete deliveries to earn withdrawable balance"}
+          {withdrawalWallet?.cashOffset
+            ? ` · ₹${withdrawalWallet.cashOffset.toLocaleString("en-IN")} COD cash offset applied`
+            : ""}
+        </Text>
+        {withdrawalWallet?.hasBankDetails ? (
+          <Text style={styles.bankHint}>
+            Payout to {withdrawalWallet.bankDetails.accountHolderName || "your account"}
+            {withdrawalWallet.bankDetails.upiId
+              ? ` · UPI ${withdrawalWallet.bankDetails.upiId}`
+              : withdrawalWallet.bankDetails.maskedAccountNumber
+                ? ` · ${withdrawalWallet.bankDetails.maskedAccountNumber}`
+                : ""}
+          </Text>
+        ) : (
+          <Text style={styles.bankHintWarning}>Add bank or UPI details in Profile to withdraw earnings.</Text>
+        )}
+        <TouchableOpacity
+          style={[
+            styles.withdrawButton,
+            ((withdrawalWallet?.availableBalance || 0) <= 0 || requestingWithdrawal || !!withdrawalWallet?.pendingRequest) &&
+              styles.disabledButton
+          ]}
+          disabled={
+            (withdrawalWallet?.availableBalance || 0) <= 0 ||
+            requestingWithdrawal ||
+            !!withdrawalWallet?.pendingRequest
+          }
+          onPress={handleRequestWithdrawal}
+        >
+          <Text style={styles.withdrawButtonText}>
+            {requestingWithdrawal ? "Submitting..." : "Withdraw Earnings"}
+          </Text>
         </TouchableOpacity>
+        {(withdrawalWallet?.payouts?.length || withdrawalWallet?.withdrawalHistory?.length) ? (
+          <TouchableOpacity style={styles.viewPayoutHistoryButton} onPress={() => setPayoutHistoryVisible(true)}>
+            <Text style={styles.viewPayoutHistoryText}>View payment history</Text>
+            <Ionicons name="chevron-forward" size={16} color="#4CAF50" />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.footer}>
@@ -414,24 +530,28 @@ export default function EarningsScreen({ navigation }: any) {
               style={styles.modalInput}
               keyboardType="numeric"
               placeholder="Amount"
+              placeholderTextColor="#6B7280"
               value={depositAmount}
               onChangeText={setDepositAmount}
             />
             <TextInput
               style={styles.modalInput}
               placeholder="Reference / UTR"
+              placeholderTextColor="#6B7280"
               value={depositReference}
               onChangeText={setDepositReference}
             />
             <TextInput
               style={styles.modalInput}
               placeholder="Proof URL (optional)"
+              placeholderTextColor="#6B7280"
               value={depositProofUrl}
               onChangeText={setDepositProofUrl}
             />
             <TextInput
               style={[styles.modalInput, styles.modalTextarea]}
               placeholder="Note (optional)"
+              placeholderTextColor="#6B7280"
               multiline
               value={depositNote}
               onChangeText={setDepositNote}
@@ -477,6 +597,82 @@ export default function EarningsScreen({ navigation }: any) {
                   <Text style={styles.emptyEarningsText}>No delivered earnings yet.</Text>
                 </View>
               )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={payoutHistoryVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPayoutHistoryVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.depositModal, { maxHeight: "80%" }]}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Payment History</Text>
+              <TouchableOpacity onPress={() => setPayoutHistoryVisible(false)}>
+                <Ionicons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {withdrawalWallet?.payouts?.length ? (
+                <>
+                  <Text style={styles.historySectionTitle}>Completed payouts</Text>
+                  {withdrawalWallet.payouts.map((payout) => (
+                    <View key={payout._id} style={styles.payoutHistoryItem}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.payoutHistoryAmount}>{formatCurrency(payout.amount)}</Text>
+                        <Text style={styles.payoutHistoryMeta}>
+                          {payout.orderCount} order{payout.orderCount === 1 ? "" : "s"} · {new Date(payout.paidAt).toLocaleString()}
+                        </Text>
+                        {payout.paidReference ? (
+                          <Text style={styles.payoutHistoryRef}>Ref: {payout.paidReference}</Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.paidBadge}>
+                        <Text style={styles.paidBadgeText}>PAID</Text>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+              {withdrawalWallet?.withdrawalHistory?.length ? (
+                <>
+                  <Text style={styles.historySectionTitle}>Withdrawal requests</Text>
+                  {withdrawalWallet.withdrawalHistory.map((entry) => (
+                    <View key={entry._id} style={styles.payoutHistoryItem}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.payoutHistoryAmount}>{formatCurrency(entry.amount)}</Text>
+                        <Text style={styles.payoutHistoryMeta}>
+                          {new Date(entry.createdAt).toLocaleString()}
+                          {entry.reviewedAt ? ` · Reviewed ${new Date(entry.reviewedAt).toLocaleDateString()}` : ""}
+                        </Text>
+                        {entry.rejectionReason ? (
+                          <Text style={styles.rejectionText}>{entry.rejectionReason}</Text>
+                        ) : null}
+                      </View>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          entry.status === "PAID" && styles.statusBadgePaid,
+                          entry.status === "PENDING" && styles.statusBadgePending,
+                          entry.status === "REJECTED" && styles.statusBadgeRejected
+                        ]}
+                      >
+                        <Text style={styles.statusBadgeText}>{entry.status}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+              {!withdrawalWallet?.payouts?.length && !withdrawalWallet?.withdrawalHistory?.length ? (
+                <View style={styles.emptyEarningsBox}>
+                  <Ionicons name="wallet-outline" size={24} color="#9CA3AF" />
+                  <Text style={styles.emptyEarningsText}>No payout history yet.</Text>
+                </View>
+              ) : null}
             </ScrollView>
           </View>
         </View>
@@ -888,13 +1084,14 @@ const styles = StyleSheet.create({
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#D1D5DB',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 14,
+    fontSize: 15,
+    color: '#111827',
     marginBottom: 12,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FFFFFF',
   },
   modalTextarea: {
     minHeight: 84,
@@ -933,5 +1130,114 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     textAlign: 'center',
+  },
+  pendingWithdrawalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+  },
+  pendingWithdrawalText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  bankHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 12,
+    lineHeight: 17,
+  },
+  bankHintWarning: {
+    fontSize: 12,
+    color: '#B45309',
+    marginBottom: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  viewPayoutHistoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  viewPayoutHistoryText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  historySectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  payoutHistoryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 12,
+  },
+  payoutHistoryAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  payoutHistoryMeta: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  payoutHistoryRef: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  paidBadge: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  paidBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  statusBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#F3F4F6',
+  },
+  statusBadgePaid: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusBadgePending: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusBadgeRejected: {
+    backgroundColor: '#FEE2E2',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  rejectionText: {
+    fontSize: 11,
+    color: '#B91C1C',
+    marginTop: 2,
   },
 });

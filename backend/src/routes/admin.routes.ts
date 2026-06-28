@@ -23,6 +23,11 @@ import {
   getPayoutSummary
 } from "../controllers/payout.controller";
 import {
+  approveWithdrawalRequest,
+  getAdminWithdrawalRequests,
+  rejectWithdrawalRequest
+} from "../controllers/withdrawal.controller";
+import {
   getAdminCashDeposits,
   rejectCashDeposit,
   verifyCashDeposit
@@ -46,6 +51,9 @@ router.put("/orders/:orderId/status", updateOrderStatus);
 router.get("/payouts/summary", getPayoutSummary);
 router.get("/payouts/history", getPayoutHistory);
 router.post("/payouts", createPayout);
+router.get("/withdrawals", getAdminWithdrawalRequests);
+router.post("/withdrawals/:requestId/approve", approveWithdrawalRequest);
+router.post("/withdrawals/:requestId/reject", rejectWithdrawalRequest);
 router.get("/cash-deposits", getAdminCashDeposits);
 router.post("/cash-deposits/:depositId/verify", verifyCashDeposit);
 router.post("/cash-deposits/:depositId/reject", rejectCashDeposit);

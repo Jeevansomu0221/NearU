@@ -22,6 +22,10 @@ import {
   getMyCashLedger,
   submitCashDeposit
 } from "../controllers/cash.controller";
+import {
+  getMyWithdrawalWallet,
+  requestWithdrawal
+} from "../controllers/withdrawal.controller";
 import { roleMiddleware } from "../middlewares/role.middleware";
 
 const router = express.Router();
@@ -38,6 +42,8 @@ router.get("/stats", getDeliveryStats);
 router.get("/earnings/today", getTodaysEarnings);
 router.get("/cash-ledger", getMyCashLedger);
 router.post("/cash-deposits", submitCashDeposit);
+router.get("/withdrawal-wallet", getMyWithdrawalWallet);
+router.post("/withdrawals", requestWithdrawal);
 
 // =================== ADMIN DELIVERY VERIFICATION ===================
 router.get("/admin/all", roleMiddleware(["admin"]), getAllDeliveryPartnersForAdmin);

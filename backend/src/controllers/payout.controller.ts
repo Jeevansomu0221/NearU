@@ -78,12 +78,16 @@ const getBankDetails = (source: any, recipientType: RecipientType) => {
     accountNumber: documents.bankAccountNumber || "",
     ifsc: documents.bankIfsc || "",
     bankDocumentType: documents.bankDocumentType || "",
-    upiId: recipientType === "PARTNER" ? source?.settings?.upiId || "" : ""
+    upiId:
+      recipientType === "PARTNER"
+        ? source?.settings?.upiId || ""
+        : documents.bankUpiId || ""
   };
 };
 
 const hasMissingBankDetails = (bankDetails: ReturnType<typeof getBankDetails>) =>
-  !bankDetails.accountHolderName || !bankDetails.accountNumber || !bankDetails.ifsc;
+  !bankDetails.accountHolderName ||
+  ((!bankDetails.accountNumber || !bankDetails.ifsc) && !bankDetails.upiId);
 
 const buildOrderSummary = (order: any, amount: number) => ({
   _id: String(order._id),

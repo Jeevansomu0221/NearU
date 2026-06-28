@@ -276,6 +276,56 @@ export const submitCashDeposit = (payload: {
   return apiPost<CashLedgerEntry>("/delivery/cash-deposits", payload);
 };
 
+export interface WithdrawalWallet {
+  availableBalance: number;
+  grossEarnings: number;
+  cashHeld: number;
+  cashOffset: number;
+  netPayable: number;
+  cashDueToPlatform: number;
+  pendingPayoutOrderCount: number;
+  pendingDepositAmount: number;
+  hasBankDetails: boolean;
+  bankDetails: {
+    accountHolderName: string;
+    maskedAccountNumber: string;
+    ifsc: string;
+    upiId: string;
+  };
+  pendingRequest: {
+    _id: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+  } | null;
+  payouts: Array<{
+    _id: string;
+    amount: number;
+    orderCount: number;
+    status: string;
+    paidAt: string;
+    paidReference?: string;
+    paidNotes?: string;
+  }>;
+  withdrawalHistory: Array<{
+    _id: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+    reviewedAt?: string;
+    paidReference?: string;
+    rejectionReason?: string;
+  }>;
+}
+
+export const getWithdrawalWallet = (): Promise<ApiResponse<WithdrawalWallet>> => {
+  return apiGet<WithdrawalWallet>("/delivery/withdrawal-wallet");
+};
+
+export const requestWithdrawal = (): Promise<ApiResponse<{ _id: string; amount: number; status: string }>> => {
+  return apiPost("/delivery/withdrawals", {});
+};
+
 // =================== LOCATION UPDATES ===================
 
 /**

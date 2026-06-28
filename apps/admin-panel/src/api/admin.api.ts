@@ -527,3 +527,61 @@ export const rejectCashDeposit = async (depositId: string, rejectionReason: stri
   });
   return response.data;
 };
+
+export interface WithdrawalRequestRecord {
+  _id: string;
+  amount: number;
+  grossEarnings: number;
+  cashOffset: number;
+  orderCount: number;
+  status: "PENDING" | "PAID" | "REJECTED";
+  bankSnapshot: {
+    accountHolderName: string;
+    accountNumber: string;
+    ifsc: string;
+    upiId: string;
+  };
+  paidReference?: string;
+  paidNotes?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  reviewedAt?: string;
+  deliveryPartnerId?: {
+    _id: string;
+    name?: string;
+    phone?: string;
+    cashBalance?: number;
+    pendingDepositAmount?: number;
+  };
+  userId?: {
+    _id: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+  };
+}
+
+export const getWithdrawalRequests = async (status: "PENDING" | "PAID" | "REJECTED" | "ALL" = "PENDING") => {
+  const response = await api.get<ApiEnvelope<WithdrawalRequestRecord[]>>("/admin/withdrawals", {
+    params: { status }
+  });
+  return response.data.data;
+};
+
+export const approveWithdrawalRequest = async (
+  requestId: string,
+  payload?: { paidReference?: string; paidNotes?: string }
+) => {
+  const response = await api.post<ApiEnvelope<{ withdrawalRequest: WithdrawalRequestRecord; payout: PayoutRecord }>>(
+    `/admin/withdrawals/${requestId}/approve`,
+    payload || {}
+  );
+  return response.data;
+};
+
+export const rejectWithdrawalRequest = async (requestId: string, rejectionReason: string) => {
+  const response = await api.post<ApiEnvelope<WithdrawalRequestRecord>>(`/admin/withdrawals/${requestId}/reject`, {
+    rejectionReason
+  });
+  return response.data;
+};
