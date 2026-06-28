@@ -18,7 +18,6 @@ import {
   getCashLedger,
   getDeliveryStats,
   getMyDeliveryOrders,
-  getTodaysEarnings,
   getWithdrawalWallet,
   requestWithdrawal,
   submitCashDeposit,
@@ -43,10 +42,8 @@ type EarningHistoryItem = {
 export default function EarningsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<any>(null);
-  const [todayEarnings, setTodayEarnings] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [cashLedger, setCashLedger] = useState<CashLedgerSummary | null>(null);
   const [depositModalVisible, setDepositModalVisible] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
@@ -60,6 +57,7 @@ export default function EarningsScreen({ navigation }: any) {
   const [withdrawalWallet, setWithdrawalWallet] = useState<WithdrawalWallet | null>(null);
   const [requestingWithdrawal, setRequestingWithdrawal] = useState(false);
   const [payoutHistoryVisible, setPayoutHistoryVisible] = useState(false);
+  const [cashLedgerModalVisible, setCashLedgerModalVisible] = useState(false);
   const [cashRefreshing, setCashRefreshing] = useState(false);
   const [walletRefreshing, setWalletRefreshing] = useState(false);
 
@@ -85,23 +83,16 @@ export default function EarningsScreen({ navigation }: any) {
 
   useEffect(() => {
     loadEarningsData();
-  }, [selectedPeriod]);
+  }, []);
 
   const loadEarningsData = async () => {
     try {
       setLoading(true);
       
-      // Load today's earnings
-      const todayResponse = await getTodaysEarnings();
-      if (todayResponse.success && todayResponse.data) {
-        setTodayEarnings(todayResponse.data.earnings);
-      }
-      
       // Load overall stats
       const statsResponse = await getDeliveryStats();
       if (statsResponse.success && statsResponse.data) {
         setStats(statsResponse.data);
-        setTodayEarnings(statsResponse.data.todaysEarnings ?? todayEarnings);
       }
 
       const cashResponse = await getCashLedger();
@@ -351,6 +342,9 @@ export default function EarningsScreen({ navigation }: any) {
   };
 
   const recentEarnings = earningsHistory.slice(0, 3);
+  const recentCashEntries = cashLedger?.entries?.slice(0, 3) ?? [];
+  const walletBalance = withdrawalWallet?.walletBalance ?? stats?.walletBalance ?? 0;
+  const totalPaidEarnings = withdrawalWallet?.totalPaidEarnings ?? stats?.totalEarnings ?? 0;
 
   if (loading) {
     return (
@@ -368,110 +362,41 @@ export default function EarningsScreen({ navigation }: any) {
         contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 34 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#4CAF50"]} tintColor="#4CAF50" />}
       >
-        {/* Today's Earnings Card */}
+        {/* Wallet Hero */}
         <View style={styles.todayCard}>
-        <Text style={styles.todayLabel}>TODAY'S EARNINGS</Text>
-        <Text style={styles.todayAmount}>{formatCurrency(todayEarnings)}</Text>
+        <Text style={styles.todayLabel}>WALLET</Text>
+        <Text style={styles.todayAmount}>{formatCurrency(walletBalance)}</Text>
         <View style={styles.todayStats}>
           <View style={styles.todayStatItem}>
             <Ionicons name="bicycle" size={16} color="#4CAF50" />
             <Text style={styles.todayStatText}>
-              {stats?.todaysDeliveries || 0} deliveries
+              {stats?.todaysDeliveries || 0} deliveries today
             </Text>
           </View>
           <View style={styles.todayStatItem}>
-            <Ionicons name="time" size={16} color="#4CAF50" />
+            <Ionicons name="receipt" size={16} color="#4CAF50" />
             <Text style={styles.todayStatText}>
-              {stats?.averageDeliveryTime || 0} min avg
+              {withdrawalWallet?.pendingPayoutOrderCount || 0} orders in wallet
             </Text>
           </View>
         </View>
       </View>
 
-      {/* Period Selector */}
-      <View style={styles.periodSelector}>
-        <TouchableOpacity
-          style={[
-            styles.periodButton,
-            selectedPeriod === 'today' && styles.periodButtonActive
-          ]}
-          onPress={() => setSelectedPeriod('today')}
-        >
-          <Text style={[
-            styles.periodButtonText,
-            selectedPeriod === 'today' && styles.periodButtonTextActive
-          ]}>
-            Today
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.periodButton,
-            selectedPeriod === 'week' && styles.periodButtonActive
-          ]}
-          onPress={() => setSelectedPeriod('week')}
-        >
-          <Text style={[
-            styles.periodButtonText,
-            selectedPeriod === 'week' && styles.periodButtonTextActive
-          ]}>
-            This Week
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.periodButton,
-            selectedPeriod === 'month' && styles.periodButtonActive
-          ]}
-          onPress={() => setSelectedPeriod('month')}
-        >
-          <Text style={[
-            styles.periodButtonText,
-            selectedPeriod === 'month' && styles.periodButtonTextActive
-          ]}>
-            This Month
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Wallet & Paid Earnings */}
       <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <View style={styles.statIconContainer}>
-            <Ionicons name="wallet" size={24} color="#B45309" />
-          </View>
-          <Text style={styles.statValue}>
-            {formatCurrency(withdrawalWallet?.walletBalance ?? stats?.walletBalance ?? 0)}
-          </Text>
-          <Text style={styles.statLabel}>Wallet</Text>
-          <Text style={styles.statHint}>Unpaid delivery earnings</Text>
-        </View>
         <View style={styles.statCard}>
           <View style={styles.statIconContainer}>
             <Ionicons name="cash" size={24} color="#4CAF50" />
           </View>
-          <Text style={styles.statValue}>
-            {formatCurrency(withdrawalWallet?.totalPaidEarnings ?? stats?.totalEarnings ?? 0)}
-          </Text>
+          <Text style={styles.statValue}>{formatCurrency(totalPaidEarnings)}</Text>
           <Text style={styles.statLabel}>Total Earnings</Text>
           <Text style={styles.statHint}>Paid to your account by Vyaha</Text>
         </View>
-      </View>
-
-      <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <View style={styles.statIconContainer}>
             <Ionicons name="bicycle" size={24} color="#2196F3" />
           </View>
           <Text style={styles.statValue}>{stats?.totalDeliveries || 0}</Text>
           <Text style={styles.statLabel}>Total Deliveries</Text>
-        </View>
-        <View style={styles.statCard}>
-          <View style={styles.statIconContainer}>
-            <Ionicons name="today" size={24} color="#7C3AED" />
-          </View>
-          <Text style={styles.statValue}>{formatCurrency(todayEarnings)}</Text>
-          <Text style={styles.statLabel}>Today's Earnings</Text>
         </View>
       </View>
 
@@ -517,7 +442,15 @@ export default function EarningsScreen({ navigation }: any) {
         >
           <Text style={styles.withdrawButtonText}>Submit Cash Deposit</Text>
         </TouchableOpacity>
-        {cashLedger?.entries?.slice(0, 5).map((entry) => (
+        {(cashLedger?.entries?.length ?? 0) > 0 ? (
+          <View style={styles.ledgerSectionHeader}>
+            <Text style={styles.ledgerSectionTitle}>Recent activity</Text>
+            <TouchableOpacity onPress={() => setCashLedgerModalVisible(true)}>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {recentCashEntries.map((entry) => (
           <View key={entry._id} style={styles.ledgerItem}>
             <View>
               <Text style={styles.ledgerTitle}>{formatLedgerTitle(entry.type)}</Text>
@@ -532,52 +465,6 @@ export default function EarningsScreen({ navigation }: any) {
             </Text>
           </View>
         ))}
-      </View>
-
-      {/* Earnings Breakdown */}
-      <View style={styles.breakdownCard}>
-        <Text style={styles.breakdownTitle}>Earnings Breakdown</Text>
-        
-        <View style={styles.breakdownItem}>
-          <View style={styles.breakdownIconContainer}>
-            <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-          </View>
-          <View style={styles.breakdownTextContainer}>
-            <Text style={styles.breakdownText}>Delivery Fees</Text>
-            <Text style={styles.breakdownAmount}>{formatCurrency(todayEarnings)}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.breakdownItem}>
-          <View style={styles.breakdownIconContainer}>
-            <Ionicons name="star" size={20} color="#FFD700" />
-          </View>
-          <View style={styles.breakdownTextContainer}>
-            <Text style={styles.breakdownText}>Tips Received</Text>
-            <Text style={styles.breakdownAmount}>₹0</Text>
-          </View>
-        </View>
-        
-        <View style={styles.breakdownItem}>
-          <View style={styles.breakdownIconContainer}>
-            <Ionicons name="trophy" size={20} color="#FF9800" />
-          </View>
-          <View style={styles.breakdownTextContainer}>
-            <Text style={styles.breakdownText}>Bonus Earnings</Text>
-            <Text style={styles.breakdownAmount}>₹0</Text>
-          </View>
-        </View>
-        
-        <View style={styles.divider} />
-        
-        <View style={styles.totalEarningsItem}>
-          <Text style={styles.totalEarningsLabel}>
-            {selectedPeriod === "today" ? "Today's Total" : selectedPeriod === "week" ? "This Week" : "This Month"}
-          </Text>
-          <Text style={styles.totalEarningsAmount}>
-            {formatCurrency(todayEarnings)}
-          </Text>
-        </View>
       </View>
 
       {/* Recent Earnings */}
@@ -607,12 +494,12 @@ export default function EarningsScreen({ navigation }: any) {
         )}
       </View>
 
-      {/* Rider Wallet */}
+      {/* Withdraw */}
       <View style={styles.withdrawalCard}>
         <View style={styles.cashCardHeader}>
           <View style={styles.withdrawalHeader}>
-            <Ionicons name="wallet" size={24} color="#B45309" />
-            <Text style={styles.withdrawalTitle}>Wallet</Text>
+            <Ionicons name="card" size={24} color="#4CAF50" />
+            <Text style={styles.withdrawalTitle}>Withdraw Earnings</Text>
           </View>
           <TouchableOpacity
             style={styles.cashRefreshButton}
@@ -627,11 +514,8 @@ export default function EarningsScreen({ navigation }: any) {
             )}
           </TouchableOpacity>
         </View>
-        <Text style={styles.withdrawalAmount}>
-          {formatCurrency(withdrawalWallet?.walletBalance ?? 0)}
-        </Text>
         <Text style={styles.withdrawalNote}>
-          Money you earn from completed deliveries sits here until Vyaha pays you. After payout, wallet resets to ₹0 and the amount is added to Total Earnings above.
+          Request a payout from your wallet balance. After Vyaha pays you, wallet resets to ₹0 and the amount is added to Total Earnings.
           {withdrawalWallet?.pendingPayoutOrderCount
             ? `\n\n${withdrawalWallet.pendingPayoutOrderCount} delivered order${withdrawalWallet.pendingPayoutOrderCount === 1 ? "" : "s"} in wallet`
             : ""}
@@ -802,6 +686,46 @@ export default function EarningsScreen({ navigation }: any) {
                 <View style={styles.emptyEarningsBox}>
                   <Ionicons name="receipt-outline" size={24} color="#9CA3AF" />
                   <Text style={styles.emptyEarningsText}>No delivered earnings yet.</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={cashLedgerModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCashLedgerModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.depositModal, { maxHeight: "80%" }]}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>COD Cash History</Text>
+              <TouchableOpacity onPress={() => setCashLedgerModalVisible(false)} accessibilityLabel="Close cash history">
+                <Ionicons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {cashLedger?.entries?.length ? cashLedger.entries.map((entry) => (
+                <View key={entry._id} style={styles.ledgerItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.ledgerTitle}>{formatLedgerTitle(entry.type)}</Text>
+                    <Text style={styles.ledgerMeta}>{new Date(entry.createdAt).toLocaleString()} · {entry.status}</Text>
+                  </View>
+                  <Text style={[
+                    styles.ledgerAmount,
+                    (entry.type === "CASH_DEPOSIT_VERIFIED" || entry.balanceDelta < 0) && styles.ledgerAmountNegative
+                  ]}>
+                    {entry.type === "CASH_DEPOSIT_VERIFIED" || entry.balanceDelta < 0 ? "-" : "+"}
+                    {formatCurrency(Math.abs(entry.balanceDelta || entry.amount))}
+                  </Text>
+                </View>
+              )) : (
+                <View style={styles.emptyEarningsBox}>
+                  <Ionicons name="wallet-outline" size={24} color="#9CA3AF" />
+                  <Text style={styles.emptyEarningsText}>No COD cash activity yet.</Text>
                 </View>
               )}
             </ScrollView>
@@ -1255,6 +1179,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#92400E',
+  },
+  ledgerSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  ledgerSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
   },
   ledgerItem: {
     flexDirection: 'row',
