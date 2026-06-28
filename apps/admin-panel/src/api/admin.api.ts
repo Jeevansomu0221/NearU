@@ -30,6 +30,9 @@ export interface PartnerRecord {
   createdAt: string;
   approvedAt?: string;
   rejectionReason?: string;
+  suspensionType?: "TEMPORARY" | "PERMANENT" | null;
+  suspendedUntil?: string | null;
+  suspendedAt?: string | null;
   menuItemsCount?: number;
   documents?: {
     fssaiNumber?: string;
@@ -130,6 +133,9 @@ export interface DeliveryPartnerRecord {
   licenseNumber?: string;
   profilePhotoUrl?: string;
   reviewComment?: string;
+  suspensionType?: "TEMPORARY" | "PERMANENT" | null;
+  suspendedUntil?: string | null;
+  suspendedAt?: string | null;
   isAvailable: boolean;
   status: "PENDING" | "VERIFIED" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "INACTIVE";
   createdAt: string;
@@ -364,11 +370,19 @@ export const getPartner = async (partnerId: string) => {
 export const updatePartnerStatus = async (
   partnerId: string,
   status: PartnerRecord["status"],
-  rejectionReason?: string
+  rejectionReason?: string,
+  options?: {
+    suspensionType?: "TEMPORARY" | "PERMANENT";
+    suspendedUntil?: string;
+    deleteAccount?: boolean;
+  }
 ) => {
   const response = await api.put<ApiEnvelope<PartnerRecord>>(`/admin/partners/${partnerId}/status`, {
     status,
-    rejectionReason
+    rejectionReason,
+    suspensionType: options?.suspensionType,
+    suspendedUntil: options?.suspendedUntil,
+    deleteAccount: options?.deleteAccount
   });
   return response.data;
 };
@@ -397,11 +411,19 @@ export const getDeliveryPartners = async () => {
 export const updateDeliveryPartnerStatus = async (
   deliveryPartnerId: string,
   status: DeliveryPartnerRecord["status"],
-  reviewComment?: string
+  reviewComment?: string,
+  options?: {
+    suspensionType?: "TEMPORARY" | "PERMANENT";
+    suspendedUntil?: string;
+    deleteAccount?: boolean;
+  }
 ) => {
   const response = await api.put<ApiEnvelope<DeliveryPartnerRecord>>(`/delivery/admin/${deliveryPartnerId}/status`, {
     status,
-    reviewComment
+    reviewComment,
+    suspensionType: options?.suspensionType,
+    suspendedUntil: options?.suspendedUntil,
+    deleteAccount: options?.deleteAccount
   });
   return response.data;
 };

@@ -98,7 +98,23 @@ export default function ReviewStatusScreen({ navigation, route }: any) {
     syncProfile();
   }, []);
 
-  const content = useMemo(() => statusContent[profile?.status || "INACTIVE"], [profile]);
+  const content = useMemo(() => {
+    const base = statusContent[profile?.status || "INACTIVE"];
+    if (profile?.status !== "SUSPENDED") return base;
+
+    const untilText = profile.suspendedUntil
+      ? new Date(profile.suspendedUntil).toLocaleString()
+      : "the end date";
+
+    return {
+      ...base,
+      title: profile.suspensionType === "PERMANENT" ? "Account Permanently Suspended" : "Account Temporarily Suspended",
+      body:
+        profile.suspensionType === "PERMANENT"
+          ? "Your rider account has been permanently suspended and you cannot take delivery jobs."
+          : `Your rider account is temporarily suspended until ${untilText}.`
+    };
+  }, [profile]);
 
   const handleLogout = async () => {
     await unregisterPushNotifications().catch(() => {});

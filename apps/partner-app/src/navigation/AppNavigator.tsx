@@ -16,6 +16,7 @@ import MenuScreen from "../screens/MenuScreen";
 import PendingApprovalScreen from "../screens/PendingApprovalScreen";
 import ApplicationSubmittedScreen from "../screens/ApplicationSubmittedScreen";
 import RejectedScreen from "../screens/RejectedScreen";
+import SuspendedScreen from "../screens/SuspendedScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import WelcomeApprovedScreen from "../screens/WelcomeApprovedScreen";
 import DashboardScreen from "../screens/DashboardScreen";
@@ -126,7 +127,7 @@ export default function AppNavigator() {
           break;
         case "SUSPENDED":
           logNavDebug("⚠️ Status: SUSPENDED");
-          setInitialRoute("Login");
+          setInitialRoute("Suspended");
           break;
         default:
           logNavDebug("❓ Unknown status:", partnerData.status);
@@ -213,6 +214,11 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Rejected" 
         component={RejectedScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Suspended"
+        component={SuspendedScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen 

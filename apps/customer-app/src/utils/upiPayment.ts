@@ -1,29 +1,35 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { NativeModules } from "react-native";
+import RazorpayCheckout from "react-native-razorpay";
 import RazorpayCustom from "react-native-customui";
 
 const PREFERRED_UPI_APP_KEY = "vyaha.preferredUpiApp";
+
+const hasStandardRazorpayModule = () => Boolean(NativeModules.RNRazorpayCheckout?.open);
+const hasCustomRazorpayModule = () => Boolean(NativeModules.RazorpayCustomui?.open);
 
 export type UpiApp = {
   id: string;
   name: string;
   packageName: string;
   iconUrl?: string;
+  source?: "detected" | "fallback";
 };
 
 const KNOWN_UPI_APPS: UpiApp[] = [
-  { id: "com.google.android.apps.nbu.paisa.user", name: "Google Pay", packageName: "com.google.android.apps.nbu.paisa.user" },
-  { id: "com.phonepe.app", name: "PhonePe", packageName: "com.phonepe.app" },
-  { id: "net.one97.paytm", name: "Paytm", packageName: "net.one97.paytm" },
-  { id: "in.org.npci.upiapp", name: "BHIM", packageName: "in.org.npci.upiapp" },
-  { id: "com.whatsapp", name: "WhatsApp", packageName: "com.whatsapp" },
-  { id: "in.amazon.mShop.android.shopping", name: "Amazon Pay", packageName: "in.amazon.mShop.android.shopping" },
-  { id: "money.super.payments", name: "super.money", packageName: "money.super.payments" },
-  { id: "com.naviapp", name: "Navi UPI", packageName: "com.naviapp" },
-  { id: "com.dreamplug.androidapp", name: "CRED", packageName: "com.dreamplug.androidapp" },
-  { id: "com.mobikwik_new", name: "MobiKwik", packageName: "com.mobikwik_new" },
-  { id: "com.freecharge.android", name: "Freecharge", packageName: "com.freecharge.android" },
-  { id: "com.myairtelapp", name: "Airtel Thanks", packageName: "com.myairtelapp" },
-  { id: "com.jio.myjio", name: "MyJio", packageName: "com.jio.myjio" }
+  { id: "com.google.android.apps.nbu.paisa.user", name: "Google Pay", packageName: "com.google.android.apps.nbu.paisa.user", source: "fallback" },
+  { id: "com.phonepe.app", name: "PhonePe", packageName: "com.phonepe.app", source: "fallback" },
+  { id: "net.one97.paytm", name: "Paytm", packageName: "net.one97.paytm", source: "fallback" },
+  { id: "in.org.npci.upiapp", name: "BHIM", packageName: "in.org.npci.upiapp", source: "fallback" },
+  { id: "com.whatsapp", name: "WhatsApp", packageName: "com.whatsapp", source: "fallback" },
+  { id: "in.amazon.mShop.android.shopping", name: "Amazon Pay", packageName: "in.amazon.mShop.android.shopping", source: "fallback" },
+  { id: "money.super.payments", name: "super.money", packageName: "money.super.payments", source: "fallback" },
+  { id: "com.naviapp", name: "Navi UPI", packageName: "com.naviapp", source: "fallback" },
+  { id: "com.dreamplug.androidapp", name: "CRED", packageName: "com.dreamplug.androidapp", source: "fallback" },
+  { id: "com.mobikwik_new", name: "MobiKwik", packageName: "com.mobikwik_new", source: "fallback" },
+  { id: "com.freecharge.android", name: "Freecharge", packageName: "com.freecharge.android", source: "fallback" },
+  { id: "com.myairtelapp", name: "Airtel Thanks", packageName: "com.myairtelapp", source: "fallback" },
+  { id: "com.jio.myjio", name: "MyJio", packageName: "com.jio.myjio", source: "fallback" }
 ];
 
 const RECOMMENDED_ORDER = [
@@ -41,7 +47,7 @@ const RECOMMENDED_ORDER = [
   "mobikwik"
 ];
 
-const normalizeUpiApp = (entry: Record<string, unknown>): UpiApp | null => {
+const normalizeUpiApp = (entry: Record<string, unknown>, source: UpiApp["source"] = "detected"): UpiApp | null => {
   const packageName = String(
     entry.packageName || entry.package_name || entry.shortcode || entry.appPackage || ""
   ).trim();
@@ -53,6 +59,7 @@ const normalizeUpiApp = (entry: Record<string, unknown>): UpiApp | null => {
     id: packageName,
     name: name || packageName,
     packageName,
+    source,
     iconUrl: typeof entry.image === "string" ? entry.image : typeof entry.appLogo === "string" ? entry.appLogo : undefined
   };
 };
@@ -77,7 +84,7 @@ const mergeUpiApps = (...groups: UpiApp[][]) => {
 
   groups.flat().forEach((app) => {
     const existing = merged.get(app.packageName);
-    merged.set(app.packageName, existing ? { ...existing, ...app, name: app.name || existing.name } : app);
+    merged.set(app.packageName, existing ? { ...existing, ...app, name: app.name || existing.name, source: app.source || existing.source } : app);
   });
 
   return sortUpiApps(Array.from(merged.values()));
@@ -91,7 +98,7 @@ const parseUpiAppsResponse = (payload: unknown): UpiApp[] => {
       : [];
 
   const apps = rawList
-    .map((entry) => normalizeUpiApp((entry || {}) as Record<string, unknown>))
+    .map((entry) => normalizeUpiApp((entry || {}) as Record<string, unknown>, "detected"))
     .filter((entry): entry is UpiApp => Boolean(entry));
 
   return mergeUpiApps(apps);
@@ -192,7 +199,7 @@ export type UpiIntentPaymentInput = {
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
-  upiApp: UpiApp;
+  upiApp?: UpiApp | null;
 };
 
 export type UpiIntentPaymentResult = {
@@ -201,34 +208,17 @@ export type UpiIntentPaymentResult = {
   razorpay_signature: string;
 };
 
-export const openUpiIntentPayment = async (input: UpiIntentPaymentInput): Promise<UpiIntentPaymentResult> => {
-  await savePreferredUpiApp(input.upiApp);
-
-  const options: Record<string, string | number> = {
-    description: input.description,
-    currency: "INR",
-    key_id: input.keyId,
-    amount: String(input.amountPaise),
-    order_id: input.razorpayOrderId,
-    contact: input.customerPhone || "",
-    email: input.customerEmail || "",
-    method: "upi",
-    upi_app_package_name: input.upiApp.packageName,
-    "_[flow]": "intent"
-  };
-
-  if (input.customerName) {
-    options.name = input.customerName;
+export const formatRazorpayContact = (phone?: string) => {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length >= 10) {
+    return digits.slice(-10);
   }
+  return "";
+};
 
-  const result = (await withTimeout(
-    RazorpayCustom.open(options),
-    180000,
-    "Payment timed out. Complete payment in your UPI app or try again."
-  )) as Record<string, string>;
-
+const normalizePaymentSuccess = (result: Record<string, string>, fallbackOrderId: string): UpiIntentPaymentResult => {
   const paymentId = result.razorpay_payment_id || result.payment_id;
-  const orderId = result.razorpay_order_id || input.razorpayOrderId;
+  const orderId = result.razorpay_order_id || fallbackOrderId;
   const signature = result.razorpay_signature || result.signature;
 
   if (!paymentId || !orderId || !signature) {
@@ -242,8 +232,174 @@ export const openUpiIntentPayment = async (input: UpiIntentPaymentInput): Promis
   };
 };
 
+const openStandardUpiCheckout = async (input: UpiIntentPaymentInput): Promise<UpiIntentPaymentResult> => {
+  if (!hasStandardRazorpayModule()) {
+    throw new Error("STANDARD_RAZORPAY_UNAVAILABLE");
+  }
+
+  const contact = formatRazorpayContact(input.customerPhone);
+  const prefill: { name?: string; email?: string; contact?: string } = {};
+
+  if (input.customerName) prefill.name = input.customerName;
+  if (input.customerEmail) prefill.email = input.customerEmail;
+  if (contact) prefill.contact = contact;
+
+  const result = await RazorpayCheckout.open({
+    key: input.keyId,
+    amount: input.amountPaise,
+    currency: "INR",
+    name: "Vyaha",
+    description: input.description,
+    order_id: input.razorpayOrderId,
+    prefill,
+    theme: { color: "#FF6B35" },
+    method: {
+      upi: true,
+      card: false,
+      netbanking: false,
+      wallet: false
+    }
+  });
+
+  return normalizePaymentSuccess(result as unknown as Record<string, string>, input.razorpayOrderId);
+};
+
+const resolvePaymentUpiApp = async (selected?: UpiApp | null) => {
+  if (!selected?.packageName) {
+    throw new Error("Please choose a UPI app before paying.");
+  }
+
+  const apps = await getInstalledUpiApps();
+  const matched = apps.find(
+    (app) =>
+      app.packageName === selected.packageName ||
+      app.id === selected.id ||
+      app.name.toLowerCase() === selected.name.toLowerCase()
+  );
+
+  return matched || selected;
+};
+
+const openCustomUpiIntent = async (input: UpiIntentPaymentInput, upiApp: UpiApp): Promise<UpiIntentPaymentResult> => {
+  if (!hasCustomRazorpayModule()) {
+    throw new Error("CUSTOM_RAZORPAY_UNAVAILABLE");
+  }
+
+  const contact = formatRazorpayContact(input.customerPhone);
+  const options: Record<string, string | number> = {
+    description: input.description,
+    currency: "INR",
+    key_id: input.keyId,
+    amount: String(input.amountPaise),
+    order_id: input.razorpayOrderId,
+    method: "upi",
+    upi_app_package_name: upiApp.packageName,
+    "_[flow]": "intent"
+  };
+
+  if (contact) options.contact = contact;
+  if (input.customerEmail) options.email = input.customerEmail;
+
+  const result = (await withTimeout(
+    RazorpayCustom.open(options),
+    180000,
+    "Payment timed out. Complete payment in your UPI app or try again."
+  )) as Record<string, string>;
+
+  return normalizePaymentSuccess(result, input.razorpayOrderId);
+};
+
+export const openUpiIntentPayment = async (input: UpiIntentPaymentInput): Promise<UpiIntentPaymentResult> => {
+  if (input.upiApp) {
+    await savePreferredUpiApp(input.upiApp);
+  }
+
+  if (hasStandardRazorpayModule()) {
+    try {
+      return await openStandardUpiCheckout(input);
+    } catch (error) {
+      const message = describeRazorpayPaymentError(error);
+      if (!hasCustomRazorpayModule() || message.toLowerCase().includes("cancel")) {
+        throw error;
+      }
+      console.warn("[upiPayment] Standard checkout failed, trying custom UPI intent:", error);
+    }
+  }
+
+  if (hasCustomRazorpayModule()) {
+    const upiApp = await resolvePaymentUpiApp(input.upiApp);
+    return openCustomUpiIntent(input, upiApp);
+  }
+
+  throw new Error(
+    "Online payment is unavailable in this app build. Reinstall the latest Vyaha build, then try again."
+  );
+};
+
 export const prepareCheckoutUpiSelection = async () => {
   const apps = await getInstalledUpiApps();
   const selected = await resolvePreferredUpiApp(apps);
   return { apps, selected };
+};
+
+export const describeRazorpayPaymentError = (error: unknown) => {
+  const payload = error as {
+    description?: string;
+    message?: string;
+    reason?: string;
+    code?: string | number;
+    error?: { description?: string; code?: string | number; reason?: string };
+  };
+
+  const candidates = [
+    payload?.description,
+    payload?.error?.description,
+    payload?.message,
+    payload?.reason
+  ].filter(Boolean) as string[];
+
+  let rawMessage = "";
+  for (const candidate of candidates) {
+    const text = String(candidate).trim();
+    if (!text) continue;
+
+    if (text.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(text) as { error?: { description?: string; reason?: string } };
+        rawMessage = parsed?.error?.description || parsed?.error?.reason || text;
+        break;
+      } catch {
+        rawMessage = text;
+        break;
+      }
+    }
+
+    rawMessage = text;
+    break;
+  }
+
+  const code = String(payload?.code || payload?.error?.code || "");
+  const normalizedMessage = rawMessage.toLowerCase();
+
+  if (code === "0" || normalizedMessage.includes("cancel") || normalizedMessage.includes("back button")) {
+    return "Payment was cancelled before it was completed.";
+  }
+
+  if (normalizedMessage.includes("open") && normalizedMessage.includes("null")) {
+    return "This app build is missing the Razorpay payment module. Reinstall the latest Vyaha build.";
+  }
+
+  if (normalizedMessage.includes("not required and should not be sent")) {
+    return "Payment could not start because of invalid checkout fields. Please try again.";
+  }
+
+  if (rawMessage) {
+    return rawMessage;
+  }
+
+  if (String((error as Error)?.message || "").includes("STANDARD_RAZORPAY_UNAVAILABLE")) {
+    return "This app build is missing the standard Razorpay module. Reinstall the latest Vyaha build.";
+  }
+
+  return "Online payment did not complete.";
 };

@@ -7,6 +7,7 @@ import Order from "../models/Order.model";
 import Payout from "../models/Payout.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
 import { notifyPartnerApplicationStatus } from "../services/notification.service";
+import { applyPartnerSuspensionLift } from "../utils/suspension.util";
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
@@ -854,18 +855,25 @@ export const getMyStatus = async (req: Request, res: Response) => {
     const objectId = toObjectId(userId);
     if (objectId) {
       partner = await Partner.findOne({ userId: objectId })
-        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason userId category createdAt documents.submittedAt");
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason suspensionType suspendedUntil suspendedAt userId category createdAt documents.submittedAt");
     }
     
     if (!partner && userPhone) {
       partner = await Partner.findOne({ phone: userPhone })
-        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason userId category createdAt documents.submittedAt");
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason suspensionType suspendedUntil suspendedAt userId category createdAt documents.submittedAt");
     }
     
     if (!partner) {
       return res.status(404).json({
         success: false,
         message: "Partner not found"
+      });
+    }
+
+    const lifted = await applyPartnerSuspensionLift(partner);
+    if (lifted) {
+      void notifyPartnerApplicationStatus(partner).catch((error) => {
+        console.error("Failed to notify partner reinstatement:", error);
       });
     }
     

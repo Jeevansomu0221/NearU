@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
+import User from "../models/User.model";
 import {
   notifyCustomerOrderStatus,
   notifyDeliveryJobReady,
@@ -9,6 +10,7 @@ import {
   notifyPartnerDeliveryStatus,
   notifyPartnerDocumentReupload
 } from "../services/notification.service";
+import { clearSuspensionFields, type SuspensionType } from "../utils/suspension.util";
 
 // Create a type for authenticated requests
 interface AuthRequest extends Request {
@@ -90,7 +92,7 @@ export const updatePartnerStatus = async (req: AuthRequest, res: Response) => {
 
   try {
     const { partnerId } = req.params;
-    const { status, rejectionReason } = req.body;
+    const { status, rejectionReason, suspensionType, suspendedUntil, deleteAccount } = req.body;
 
     // Validate status
     const validStatuses = ["APPROVED", "REJECTED", "SUSPENDED", "PENDING"];
@@ -99,6 +101,30 @@ export const updatePartnerStatus = async (req: AuthRequest, res: Response) => {
         success: false,
         message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`
       });
+    }
+
+    if (status === "SUSPENDED" && !String(rejectionReason || "").trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "A suspension reason is required"
+      });
+    }
+
+    const normalizedSuspensionType = suspensionType as SuspensionType | undefined;
+    if (status === "SUSPENDED" && !deleteAccount) {
+      if (!normalizedSuspensionType || !["TEMPORARY", "PERMANENT"].includes(normalizedSuspensionType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Suspension type must be TEMPORARY or PERMANENT"
+        });
+      }
+
+      if (normalizedSuspensionType === "TEMPORARY" && !suspendedUntil) {
+        return res.status(400).json({
+          success: false,
+          message: "suspendedUntil is required for temporary suspensions"
+        });
+      }
     }
 
     // Find partner
@@ -120,16 +146,36 @@ export const updatePartnerStatus = async (req: AuthRequest, res: Response) => {
       }
       partner.approvedAt = new Date();
       partner.rejectionReason = undefined;
+      clearSuspensionFields(partner);
       
     } else if (status === "REJECTED") {
       partner.rejectionReason = rejectionReason || "Application rejected";
       partner.approvedBy = undefined;
       partner.approvedAt = undefined;
+      clearSuspensionFields(partner);
     } else if (status === "SUSPENDED") {
-      partner.rejectionReason = rejectionReason || "Account suspended";
+      partner.rejectionReason = String(rejectionReason || "Account suspended").trim();
+      partner.suspensionType = deleteAccount ? "PERMANENT" : normalizedSuspensionType;
+      partner.suspendedAt = new Date();
+      partner.suspendedUntil =
+        !deleteAccount && normalizedSuspensionType === "TEMPORARY" && suspendedUntil
+          ? new Date(suspendedUntil)
+          : null;
+      partner.isOpen = false;
     }
 
     await partner.save();
+
+    if (status === "SUSPENDED" && deleteAccount && partner.userId) {
+      await User.findByIdAndUpdate(partner.userId, {
+        $set: { isActive: false },
+        $inc: { sessionVersion: 1 }
+      });
+    } else if (status === "APPROVED" && partner.userId) {
+      await User.findByIdAndUpdate(partner.userId, {
+        $set: { isActive: true }
+      });
+    }
 
     void notifyPartnerApplicationStatus(partner).catch((error) => {
       console.error("Failed to notify partner status update:", error);

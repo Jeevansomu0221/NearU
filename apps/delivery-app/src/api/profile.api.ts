@@ -16,6 +16,9 @@ export interface DeliveryProfile {
   licenseNumber?: string;
   profilePhotoUrl?: string;
   reviewComment?: string;
+  suspensionType?: "TEMPORARY" | "PERMANENT" | null;
+  suspendedUntil?: string | null;
+  suspendedAt?: string | null;
   documents?: {
     aadhaarNumber?: string;
     aadhaarFrontUrl?: string;

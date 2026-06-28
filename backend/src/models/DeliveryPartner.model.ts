@@ -15,6 +15,9 @@ export interface IDeliveryPartner extends Document {
   licenseNumber?: string;
   profilePhotoUrl?: string;
   reviewComment?: string;
+  suspensionType?: "TEMPORARY" | "PERMANENT" | null;
+  suspendedUntil?: Date | null;
+  suspendedAt?: Date | null;
   documents?: {
     aadhaarNumber?: string;
     aadhaarFrontUrl?: string;
@@ -120,6 +123,19 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     reviewComment: {
       type: String,
       default: ""
+    },
+    suspensionType: {
+      type: String,
+      enum: ["TEMPORARY", "PERMANENT"],
+      default: null
+    },
+    suspendedUntil: {
+      type: Date,
+      default: null
+    },
+    suspendedAt: {
+      type: Date,
+      default: null
     },
     documents: {
       aadhaarNumber: { type: String, default: "" },

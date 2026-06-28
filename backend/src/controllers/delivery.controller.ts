@@ -6,6 +6,11 @@ import User from "../models/User.model";
 import { successResponse, errorResponse } from "../utils/response";
 import { config } from "../config/env";
 import { notifyDeliveryApplicationStatus, notifyDeliveryDocumentReupload } from "../services/notification.service";
+import {
+  applyDeliverySuspensionLift,
+  clearSuspensionFields,
+  type SuspensionType
+} from "../utils/suspension.util";
 
 interface AuthRequest extends Request {
   user?: {
@@ -188,6 +193,14 @@ export const getDeliveryProfile = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Delivery profile not found", 404);
     }
 
+    const deliveryDoc = await DeliveryPartner.findById(deliveryPartner._id);
+    if (deliveryDoc) {
+      const lifted = await applyDeliverySuspensionLift(deliveryDoc);
+      if (lifted) {
+        Object.assign(deliveryPartner, deliveryDoc.toObject());
+      }
+    }
+
     return successResponse(
       res,
       {
@@ -206,6 +219,9 @@ export const getDeliveryProfile = async (req: AuthRequest, res: Response) => {
         licenseNumber: deliveryPartner.licenseNumber,
         profilePhotoUrl: deliveryPartner.profilePhotoUrl,
         reviewComment: deliveryPartner.reviewComment,
+        suspensionType: deliveryPartner.suspensionType,
+        suspendedUntil: deliveryPartner.suspendedUntil,
+        suspendedAt: deliveryPartner.suspendedAt,
         documents: deliveryPartner.documents,
         isAvailable: deliveryPartner.isAvailable,
         status: deliveryPartner.status,
@@ -709,11 +725,26 @@ export const updateDeliveryPartnerStatusByAdmin = async (req: AuthRequest, res: 
     }
 
     const { deliveryPartnerId } = req.params;
-    const { status, reviewComment } = req.body;
+    const { status, reviewComment, suspensionType, suspendedUntil, deleteAccount } = req.body;
     const validStatuses = ["PENDING", "VERIFIED", "ACTIVE", "REJECTED", "SUSPENDED", "INACTIVE"];
 
     if (!validStatuses.includes(status)) {
       return errorResponse(res, `Status must be one of: ${validStatuses.join(", ")}`, 400);
+    }
+
+    if (status === "SUSPENDED" && !String(reviewComment || "").trim()) {
+      return errorResponse(res, "A suspension reason is required", 400);
+    }
+
+    const normalizedSuspensionType = suspensionType as SuspensionType | undefined;
+    if (status === "SUSPENDED" && !deleteAccount) {
+      if (!normalizedSuspensionType || !["TEMPORARY", "PERMANENT"].includes(normalizedSuspensionType)) {
+        return errorResponse(res, "Suspension type must be TEMPORARY or PERMANENT", 400);
+      }
+
+      if (normalizedSuspensionType === "TEMPORARY" && !suspendedUntil) {
+        return errorResponse(res, "suspendedUntil is required for temporary suspensions", 400);
+      }
     }
 
     const deliveryPartner = await DeliveryPartner.findById(deliveryPartnerId);
@@ -752,11 +783,47 @@ export const updateDeliveryPartnerStatusByAdmin = async (req: AuthRequest, res: 
     deliveryPartner.status = status;
     if (status === "ACTIVE") {
       deliveryPartner.isAvailable = true;
+      clearSuspensionFields(deliveryPartner);
+      if (reviewComment === undefined) {
+        deliveryPartner.reviewComment = "";
+      }
     } else if (["PENDING", "REJECTED", "SUSPENDED", "INACTIVE"].includes(status)) {
       deliveryPartner.isAvailable = false;
     }
-    deliveryPartner.reviewComment = typeof reviewComment === "string" ? reviewComment.trim() : "";
+
+    if (status === "SUSPENDED") {
+      deliveryPartner.reviewComment = String(reviewComment || "Account suspended").trim();
+      deliveryPartner.suspensionType = deleteAccount ? "PERMANENT" : normalizedSuspensionType;
+      deliveryPartner.suspendedAt = new Date();
+      deliveryPartner.suspendedUntil =
+        !deleteAccount && normalizedSuspensionType === "TEMPORARY" && suspendedUntil
+          ? new Date(suspendedUntil)
+          : null;
+    } else if (status === "REJECTED") {
+      deliveryPartner.reviewComment = typeof reviewComment === "string" ? reviewComment.trim() : "";
+      clearSuspensionFields(deliveryPartner);
+    } else if (status === "VERIFIED") {
+      deliveryPartner.reviewComment = typeof reviewComment === "string" ? reviewComment.trim() : "";
+      clearSuspensionFields(deliveryPartner);
+    } else if (reviewComment !== undefined) {
+      deliveryPartner.reviewComment = typeof reviewComment === "string" ? reviewComment.trim() : "";
+    }
+
     await deliveryPartner.save();
+
+    if (deleteAccount && deliveryPartner.userId) {
+      deliveryPartner.status = "INACTIVE";
+      deliveryPartner.isAvailable = false;
+      await deliveryPartner.save();
+      await User.findByIdAndUpdate(deliveryPartner.userId, {
+        $set: { isActive: false },
+        $inc: { sessionVersion: 1 }
+      });
+    } else if (status === "ACTIVE" && deliveryPartner.userId) {
+      await User.findByIdAndUpdate(deliveryPartner.userId, {
+        $set: { isActive: true }
+      });
+    }
 
     void notifyDeliveryApplicationStatus(deliveryPartner).catch((error) => {
       console.error("Failed to notify delivery status update:", error);

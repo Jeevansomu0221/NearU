@@ -54,7 +54,7 @@ export const getInitialRoute = (partner: PartnerStatus | null): string => {
     case "REJECTED":
       return "Rejected";
     case "SUSPENDED":
-      return "Login"; // Could have a suspended screen instead
+      return "Suspended";
     default:
       return "Login";
   }

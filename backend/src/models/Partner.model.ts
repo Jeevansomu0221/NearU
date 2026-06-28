@@ -222,6 +222,19 @@ const PartnerSchema = new Schema(
     },
     approvedAt: Date,
     rejectionReason: String,
+    suspensionType: {
+      type: String,
+      enum: ["TEMPORARY", "PERMANENT"],
+      default: null
+    },
+    suspendedUntil: {
+      type: Date,
+      default: null
+    },
+    suspendedAt: {
+      type: Date,
+      default: null
+    },
     // ADD THIS: Setup completion tracking
     hasCompletedSetup: {
       type: Boolean,

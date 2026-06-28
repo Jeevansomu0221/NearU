@@ -81,6 +81,13 @@ export const getPublicPartnerMenu = async (req: Request, res: Response) => {
       });
     }
 
+    if (partner.status !== "APPROVED" || !partner.hasCompletedSetup) {
+      return res.status(403).json({
+        success: false,
+        message: "This shop is not available"
+      });
+    }
+
     // Get only available menu items
     const menuItems = await MenuItem.find({ 
       partnerId: partnerId,

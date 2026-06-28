@@ -1,5 +1,5 @@
 import { Button, Card, Checkbox, Drawer, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, SearchOutlined, StopOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import {
   getPartners,
@@ -8,6 +8,7 @@ import {
   type DocumentReuploadKey,
   type PartnerRecord
 } from "../api/admin.api";
+import SuspendAccountModal, { type AccountActionType } from "../components/SuspendAccountModal";
 
 const REUPLOAD_OPTIONS: Array<{ key: DocumentReuploadKey; label: string }> = [
   { key: "fssaiUrl", label: "FSSAI license" },
@@ -28,6 +29,8 @@ export default function Partners() {
   const [reuploadKeys, setReuploadKeys] = useState<DocumentReuploadKey[]>([]);
   const [reuploadNote, setReuploadNote] = useState("");
   const [reuploadSubmitting, setReuploadSubmitting] = useState(false);
+  const [suspendingPartner, setSuspendingPartner] = useState<PartnerRecord | null>(null);
+  const [suspendSubmitting, setSuspendSubmitting] = useState(false);
 
   const loadPartners = async () => {
     setLoading(true);
@@ -87,6 +90,44 @@ export default function Partners() {
     setRejectingPartner(null);
     setRejectReason("");
     loadPartners();
+  };
+
+  const handleSuspendConfirm = async (payload: {
+    actionType: AccountActionType;
+    reason: string;
+    suspendedUntil?: string;
+  }) => {
+    if (!suspendingPartner) return;
+
+    try {
+      setSuspendSubmitting(true);
+      await updatePartnerStatus(suspendingPartner._id, "SUSPENDED", payload.reason, {
+        suspensionType: payload.actionType === "TEMPORARY" ? "TEMPORARY" : "PERMANENT",
+        suspendedUntil: payload.suspendedUntil,
+        deleteAccount: payload.actionType === "DELETE"
+      });
+      message.success(
+        payload.actionType === "DELETE"
+          ? `${suspendingPartner.restaurantName} account deleted`
+          : `${suspendingPartner.restaurantName} suspended`
+      );
+      setSuspendingPartner(null);
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to update partner account");
+    } finally {
+      setSuspendSubmitting(false);
+    }
+  };
+
+  const handleReinstate = async (partner: PartnerRecord) => {
+    try {
+      await updatePartnerStatus(partner._id, "APPROVED");
+      message.success(`${partner.restaurantName} reinstated`);
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to reinstate partner");
+    }
   };
 
   const openReuploadModal = (partner: PartnerRecord) => {
@@ -255,7 +296,7 @@ export default function Partners() {
                   title: "Status",
                   dataIndex: "status",
                   render: (status: PartnerRecord["status"]) => (
-                    <Tag color={status === "APPROVED" ? "green" : status === "PENDING" ? "gold" : "red"}>{status}</Tag>
+                    <Tag color={status === "APPROVED" ? "green" : status === "PENDING" ? "gold" : status === "SUSPENDED" ? "volcano" : "red"}>{status}</Tag>
                   )
                 },
                 {
@@ -284,6 +325,21 @@ export default function Partners() {
                             Reject
                           </Button>
                         </>
+                      ) : null}
+                      {partner.status === "APPROVED" ? (
+                        <Button
+                          size="small"
+                          danger
+                          icon={<StopOutlined />}
+                          onClick={() => setSuspendingPartner(partner)}
+                        >
+                          Suspend
+                        </Button>
+                      ) : null}
+                      {partner.status === "SUSPENDED" ? (
+                        <Button size="small" type="primary" onClick={() => handleReinstate(partner)}>
+                          Reinstate
+                        </Button>
                       ) : null}
                     </Space>
                   )
@@ -403,8 +459,20 @@ export default function Partners() {
             </div>
             {selectedPartner.rejectionReason ? (
               <div>
-                <Typography.Text type="secondary">Rejection Reason</Typography.Text>
+                <Typography.Text type="secondary">
+                  {selectedPartner.status === "SUSPENDED" ? "Suspension Reason" : "Rejection Reason"}
+                </Typography.Text>
                 <div>{selectedPartner.rejectionReason}</div>
+              </div>
+            ) : null}
+            {selectedPartner.status === "SUSPENDED" && selectedPartner.suspensionType ? (
+              <div>
+                <Typography.Text type="secondary">Suspension Type</Typography.Text>
+                <div>
+                  {selectedPartner.suspensionType === "TEMPORARY"
+                    ? `Temporary until ${selectedPartner.suspendedUntil ? new Date(selectedPartner.suspendedUntil).toLocaleString() : "not set"}`
+                    : "Permanent"}
+                </div>
               </div>
             ) : null}
           </Space>
@@ -477,6 +545,14 @@ export default function Partners() {
           style={{ marginTop: 16 }}
         />
       </Modal>
+
+      <SuspendAccountModal
+        open={Boolean(suspendingPartner)}
+        entityLabel={suspendingPartner?.restaurantName || "partner"}
+        onCancel={() => setSuspendingPartner(null)}
+        onConfirm={handleSuspendConfirm}
+        loading={suspendSubmitting}
+      />
     </>
   );
 }

@@ -168,6 +168,11 @@ export default function LoginScreen({ navigation }: any) {
           index: 0,
           routes: [{ name: "Rejected" }]
         });
+      } else if (partner.status === "SUSPENDED") {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Suspended" }]
+        });
       } else {
         navigation.reset({
           index: 0,

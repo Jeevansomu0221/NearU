@@ -16,6 +16,7 @@ import { createRazorpayOrder, verifyPayment } from "../api/payment.api";
 import SuccessCelebration from "../components/SuccessCelebration";
 import UpiAppPicker from "../components/UpiAppPicker";
 import {
+  describeRazorpayPaymentError,
   openUpiIntentPayment,
   prepareCheckoutUpiSelection,
   savePreferredUpiApp,
@@ -60,34 +61,7 @@ const isOnlinePaymentFailure = (error: any) => Boolean(error?.isOnlinePaymentFai
 const hasValidRazorpaySuccess = (result: any) =>
   Boolean(result?.razorpay_order_id && result?.razorpay_payment_id && result?.razorpay_signature);
 
-const getOnlinePaymentFailureMessage = (error: any) => {
-  const rawMessage = String(
-    error?.description ||
-      error?.error?.description ||
-      error?.message ||
-      error?.reason ||
-      ""
-  );
-  const normalizedMessage = rawMessage.toLowerCase();
-  const code = String(error?.code || error?.error?.code || "");
-
-  if (code === "0" || normalizedMessage.includes("cancel")) {
-    return "Payment was cancelled before it was completed.";
-  }
-
-  if (normalizedMessage.includes("verification") || normalizedMessage.includes("signature")) {
-    return "Payment could not be verified. If money was deducted, please contact support with the payment reference.";
-  }
-
-  if (rawMessage.trim()) {
-    return rawMessage;
-  }
-
-  return "Online payment did not complete.";
-};
-
-const ONLINE_PAYMENT_FAILED_MESSAGE =
-  "Payment failed. Please try online payment again or switch to Cash on Delivery.";
+const getOnlinePaymentFailureMessage = (error: any) => describeRazorpayPaymentError(error);
 
 const createDeliveryBundleId = () =>
   `bundle_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -441,17 +415,13 @@ export default function PaymentScreen({ route, navigation }: any) {
       }
 
       if (paymentMethod === "RAZORPAY" && isOnlinePaymentFailure(error)) {
-        Alert.alert(
-          "Payment Failed",
-          ONLINE_PAYMENT_FAILED_MESSAGE,
-          [
-            { text: "Try Online Again", style: "cancel" },
-            {
-              text: "Switch to COD",
-              onPress: () => setPaymentMethod("CASH_ON_DELIVERY")
-            }
-          ]
-        );
+        Alert.alert("Payment Failed", errorMessage, [
+          { text: "Try Online Again", style: "cancel" },
+          {
+            text: "Switch to COD",
+            onPress: () => setPaymentMethod("CASH_ON_DELIVERY")
+          }
+        ]);
         return;
       }
 
@@ -477,7 +447,7 @@ export default function PaymentScreen({ route, navigation }: any) {
             {paymentMethod === "CASH_ON_DELIVERY"
               ? "Pay when your order arrives"
               : selectedUpiApp
-                ? "Opens your UPI app directly — no extra Razorpay screens"
+                ? "Opens your UPI app via Razorpay — pick the same app if asked"
                 : loadingUpiApps
                   ? "Detecting UPI apps on your phone..."
                   : "Choose a UPI app to pay in one tap"}
@@ -607,7 +577,7 @@ export default function PaymentScreen({ route, navigation }: any) {
           <View style={styles.infoSection}>
             <Text style={styles.infoTitle}>UPI payment</Text>
             <Text style={styles.infoText}>
-              We remember your last UPI app and open it directly, similar to Zomato. Your order is confirmed after Razorpay verifies the payment.
+              We remember your last UPI app. Razorpay opens UPI directly on your phone; if that fails, you may see a short UPI chooser.
             </Text>
           </View>
         )}

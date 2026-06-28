@@ -1,5 +1,5 @@
 import { Button, Card, Checkbox, Drawer, Input, Modal, Segmented, Space, Table, Tag, Typography, message } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, SearchOutlined, StopOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import {
   getDeliveryPartners,
@@ -8,6 +8,7 @@ import {
   type DeliveryDocumentReuploadKey,
   type DeliveryPartnerRecord
 } from "../api/admin.api";
+import SuspendAccountModal, { type AccountActionType } from "../components/SuspendAccountModal";
 
 const statusColor: Record<DeliveryPartnerRecord["status"], string> = {
   PENDING: "gold",
@@ -39,6 +40,8 @@ export default function DeliveryPartners() {
   const [reuploadNote, setReuploadNote] = useState("");
   const [reuploadSubmitting, setReuploadSubmitting] = useState(false);
   const [statusSubmitting, setStatusSubmitting] = useState(false);
+  const [suspendingPartner, setSuspendingPartner] = useState<DeliveryPartnerRecord | null>(null);
+  const [suspendSubmitting, setSuspendSubmitting] = useState(false);
 
   const loadPartners = async () => {
     setLoading(true);
@@ -170,6 +173,44 @@ export default function DeliveryPartners() {
     }
   };
 
+  const handleSuspendConfirm = async (payload: {
+    actionType: AccountActionType;
+    reason: string;
+    suspendedUntil?: string;
+  }) => {
+    if (!suspendingPartner) return;
+
+    try {
+      setSuspendSubmitting(true);
+      await updateDeliveryPartnerStatus(suspendingPartner._id, "SUSPENDED", payload.reason, {
+        suspensionType: payload.actionType === "TEMPORARY" ? "TEMPORARY" : "PERMANENT",
+        suspendedUntil: payload.suspendedUntil,
+        deleteAccount: payload.actionType === "DELETE"
+      });
+      message.success(
+        payload.actionType === "DELETE"
+          ? `${suspendingPartner.userId?.name || suspendingPartner.name || "Rider"} account deleted`
+          : `${suspendingPartner.userId?.name || suspendingPartner.name || "Rider"} suspended`
+      );
+      setSuspendingPartner(null);
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to update delivery partner account");
+    } finally {
+      setSuspendSubmitting(false);
+    }
+  };
+
+  const handleReinstate = async (partner: DeliveryPartnerRecord) => {
+    try {
+      await updateDeliveryPartnerStatus(partner._id, "ACTIVE");
+      message.success(`${partner.userId?.name || partner.name || "Rider"} reinstated`);
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to reinstate delivery partner");
+    }
+  };
+
   const documentRows: Array<{ label: string; url?: string; required: boolean; reuploadKey: DeliveryDocumentReuploadKey }> = selected
     ? [
         { label: `Aadhaar Front${selected.documents?.aadhaarNumber ? ` (${selected.documents.aadhaarNumber})` : ""}`, url: selected.documents?.aadhaarFrontUrl || selected.documents?.aadhaarUrl, required: true, reuploadKey: "aadhaarFrontUrl" },
@@ -285,6 +326,16 @@ export default function DeliveryPartners() {
                       ) : partner.status === "VERIFIED" ? (
                         <Button size="small" type="primary" onClick={() => setReviewing({ partner, nextStatus: "ACTIVE" })}>
                           Activate
+                        </Button>
+                      ) : null}
+                      {["ACTIVE", "VERIFIED"].includes(partner.status) ? (
+                        <Button size="small" danger icon={<StopOutlined />} onClick={() => setSuspendingPartner(partner)}>
+                          Suspend
+                        </Button>
+                      ) : null}
+                      {partner.status === "SUSPENDED" ? (
+                        <Button size="small" type="primary" onClick={() => handleReinstate(partner)}>
+                          Reinstate
                         </Button>
                       ) : null}
                     </Space>
@@ -424,8 +475,20 @@ export default function DeliveryPartners() {
             </div>
             {selected.reviewComment ? (
               <div>
-                <Typography.Text type="secondary">Admin Note</Typography.Text>
+                <Typography.Text type="secondary">
+                  {selected.status === "SUSPENDED" ? "Suspension Reason" : "Admin Note"}
+                </Typography.Text>
                 <div>{selected.reviewComment}</div>
+              </div>
+            ) : null}
+            {selected.status === "SUSPENDED" && selected.suspensionType ? (
+              <div>
+                <Typography.Text type="secondary">Suspension Type</Typography.Text>
+                <div>
+                  {selected.suspensionType === "TEMPORARY"
+                    ? `Temporary until ${selected.suspendedUntil ? new Date(selected.suspendedUntil).toLocaleString() : "not set"}`
+                    : "Permanent"}
+                </div>
               </div>
             ) : null}
             <div>
@@ -528,6 +591,14 @@ export default function DeliveryPartners() {
           style={{ marginTop: 16 }}
         />
       </Modal>
+
+      <SuspendAccountModal
+        open={Boolean(suspendingPartner)}
+        entityLabel={suspendingPartner?.userId?.name || suspendingPartner?.name || "delivery partner"}
+        onCancel={() => setSuspendingPartner(null)}
+        onConfirm={handleSuspendConfirm}
+        loading={suspendSubmitting}
+      />
     </>
   );
 }

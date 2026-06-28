@@ -403,13 +403,24 @@ export const notifyPartnerDeliveryStatus = async (order: any, status: string) =>
 };
 
 export const notifyPartnerApplicationStatus = async (partner: any) => {
+  const suspensionTitles: Record<string, string> = {
+    TEMPORARY: "Shop temporarily suspended",
+    PERMANENT: "Shop permanently suspended"
+  };
+
+  let body = "Please check your partner application status.";
+  if (partner.status === "APPROVED") {
+    body = "Your shop is approved and ready to receive orders.";
+  } else if (partner.status === "SUSPENDED") {
+    body = partner.rejectionReason || suspensionTitles[partner.suspensionType] || "Your shop has been suspended.";
+  } else if (partner.rejectionReason) {
+    body = partner.rejectionReason;
+  }
+
   await sendNotificationToUsers([partner.userId], {
     app: "partner",
-    title: partner.status === "APPROVED" ? "Shop approved" : "Shop application updated",
-    body:
-      partner.status === "APPROVED"
-        ? "Your shop is approved and ready to receive orders."
-        : partner.rejectionReason || "Please check your partner application status.",
+    title: partner.status === "APPROVED" ? "Shop approved" : partner.status === "SUSPENDED" ? "Shop suspended" : "Shop application updated",
+    body,
     data: {
       type: "PARTNER_STATUS",
       status: partner.status
@@ -430,13 +441,23 @@ export const notifyPartnerDocumentReupload = async (partner: any) => {
 };
 
 export const notifyDeliveryApplicationStatus = async (deliveryPartner: any) => {
+  let body = "Please check your delivery profile status.";
+  if (["VERIFIED", "ACTIVE"].includes(deliveryPartner.status)) {
+    body = "You can now receive delivery jobs.";
+  } else if (deliveryPartner.status === "SUSPENDED") {
+    body = deliveryPartner.reviewComment || "Your rider account has been suspended.";
+  } else if (deliveryPartner.reviewComment) {
+    body = deliveryPartner.reviewComment;
+  }
+
   await sendNotificationToUsers([deliveryPartner.userId], {
     app: "delivery",
-    title: ["VERIFIED", "ACTIVE"].includes(deliveryPartner.status) ? "Delivery profile approved" : "Delivery profile updated",
-    body:
-      ["VERIFIED", "ACTIVE"].includes(deliveryPartner.status)
-        ? "You can now receive delivery jobs."
-        : deliveryPartner.reviewComment || "Please check your delivery profile status.",
+    title: ["VERIFIED", "ACTIVE"].includes(deliveryPartner.status)
+      ? "Delivery profile approved"
+      : deliveryPartner.status === "SUSPENDED"
+        ? "Rider account suspended"
+        : "Delivery profile updated",
+    body,
     data: {
       type: "DELIVERY_STATUS",
       status: deliveryPartner.status
