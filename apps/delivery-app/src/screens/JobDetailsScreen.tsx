@@ -27,6 +27,7 @@ import {
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
+import { getCurrentRiderLocation } from "../utils/riderLocation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Props {
