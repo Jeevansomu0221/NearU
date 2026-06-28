@@ -16,9 +16,8 @@ import { createRazorpayOrder, verifyPayment } from "../api/payment.api";
 import SuccessCelebration from "../components/SuccessCelebration";
 import UpiAppPicker from "../components/UpiAppPicker";
 import {
-  getInstalledUpiApps,
   openUpiIntentPayment,
-  resolvePreferredUpiApp,
+  prepareCheckoutUpiSelection,
   savePreferredUpiApp,
   type UpiApp
 } from "../utils/upiPayment";
@@ -119,10 +118,10 @@ export default function PaymentScreen({ route, navigation }: any) {
     const loadUpiApps = async () => {
       setLoadingUpiApps(true);
       try {
-        const apps = await getInstalledUpiApps();
+        const { apps, selected } = await prepareCheckoutUpiSelection();
         if (cancelled) return;
         setUpiApps(apps);
-        setSelectedUpiApp(await resolvePreferredUpiApp(apps));
+        setSelectedUpiApp(selected);
       } finally {
         if (!cancelled) {
           setLoadingUpiApps(false);
@@ -136,6 +135,23 @@ export default function PaymentScreen({ route, navigation }: any) {
       cancelled = true;
     };
   }, [paymentMethod]);
+
+  const refreshUpiApps = async () => {
+    setLoadingUpiApps(true);
+    try {
+      const { apps, selected } = await prepareCheckoutUpiSelection();
+      setUpiApps(apps);
+      setSelectedUpiApp((current) => current || selected);
+      return { apps, selected };
+    } finally {
+      setLoadingUpiApps(false);
+    }
+  };
+
+  const openUpiPicker = async () => {
+    await refreshUpiApps();
+    setShowUpiPicker(true);
+  };
 
   const groupedShops = useMemo<CheckoutGroup[]>(() => {
     if (Array.isArray(orderSummary?.groupedShops) && orderSummary.groupedShops.length > 0) {
@@ -368,6 +384,8 @@ export default function PaymentScreen({ route, navigation }: any) {
   };
 
   const handlePayment = async () => {
+    let checkoutUpiApp: UpiApp | null = null;
+
     try {
       if (paymentMethod === "RAZORPAY") {
         if (loadingUpiApps) {
@@ -375,28 +393,37 @@ export default function PaymentScreen({ route, navigation }: any) {
           return;
         }
 
-        if (!selectedUpiApp) {
+        let upiApp = selectedUpiApp;
+        if (!upiApp) {
+          const refreshed = await refreshUpiApps();
+          upiApp = selectedUpiApp || refreshed.selected;
+        }
+
+        if (!upiApp) {
           if (upiApps.length === 0) {
             Alert.alert(
-              "No UPI app found",
-              "Install Google Pay, PhonePe, or Paytm to pay online, or switch to Cash on Delivery.",
+              "Could not detect UPI apps",
+              "Tap Pay using to choose Google Pay, PhonePe, Paytm, or super.money manually, or switch to Cash on Delivery.",
               [
-                { text: "Switch to COD", onPress: () => setPaymentMethod("CASH_ON_DELIVERY") },
-                { text: "OK", style: "cancel" }
+                { text: "Choose UPI app", onPress: () => void openUpiPicker() },
+                { text: "Switch to COD", onPress: () => setPaymentMethod("CASH_ON_DELIVERY") }
               ]
             );
             return;
           }
 
-          setShowUpiPicker(true);
+          await openUpiPicker();
           return;
         }
+
+        checkoutUpiApp = upiApp;
+        setSelectedUpiApp(upiApp);
       }
 
       setLoading(true);
 
       if (paymentMethod === "RAZORPAY") {
-        const paidOrders = await placeOnlineOrders(selectedUpiApp!);
+        const paidOrders = await placeOnlineOrders(checkoutUpiApp!);
         handleSuccessfulCheckout(paidOrders);
       } else {
         const createdOrders = await placeOrders("CASH_ON_DELIVERY");
@@ -459,7 +486,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         <TouchableOpacity
           onPress={() => {
             if (paymentMethod === "RAZORPAY") {
-              setShowUpiPicker(true);
+              void openUpiPicker();
               return;
             }
             setShowPaymentMethods(true);
@@ -588,7 +615,7 @@ export default function PaymentScreen({ route, navigation }: any) {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
         {paymentMethod === "RAZORPAY" ? (
-          <TouchableOpacity style={styles.payUsingRow} onPress={() => setShowUpiPicker(true)}>
+          <TouchableOpacity style={styles.payUsingRow} onPress={() => void openUpiPicker()}>
             <View>
               <Text style={styles.payUsingLabel}>Pay using</Text>
               <Text style={styles.payUsingValue}>
