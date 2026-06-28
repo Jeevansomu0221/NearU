@@ -15,6 +15,8 @@ import {
   getAllDeliveryPartnersForAdmin,
   updateDeliveryPartnerStatusByAdmin,
   requestDeliveryPartnerDocumentReupload,
+  updateBankDetails,
+  updateBankVerificationByAdmin,
   updateDeliveryLocation,
   calculateDeliveryDistance
 } from "../controllers/delivery.controller";
@@ -36,6 +38,7 @@ router.use(authMiddleware);
 // =================== PROFILE ===================
 router.get("/profile", getDeliveryProfile);
 router.put("/profile", updateDeliveryProfile);
+router.put("/bank-details", updateBankDetails);
 
 // =================== STATS ===================
 router.get("/stats", getDeliveryStats);
@@ -48,6 +51,7 @@ router.post("/withdrawals", requestWithdrawal);
 // =================== ADMIN DELIVERY VERIFICATION ===================
 router.get("/admin/all", roleMiddleware(["admin"]), getAllDeliveryPartnersForAdmin);
 router.put("/admin/:deliveryPartnerId/status", roleMiddleware(["admin"]), updateDeliveryPartnerStatusByAdmin);
+router.put("/admin/:deliveryPartnerId/bank-verification", roleMiddleware(["admin"]), updateBankVerificationByAdmin);
 router.put("/admin/:deliveryPartnerId/documents/reupload", roleMiddleware(["admin"]), requestDeliveryPartnerDocumentReupload);
 
 // =================== DELIVERY JOBS ===================

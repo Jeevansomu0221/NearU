@@ -163,6 +163,9 @@ export interface DeliveryPartnerRecord {
     bankStatementUrl?: string;
     bankAccountNumber?: string;
     bankIfsc?: string;
+    bankUpiId?: string;
+    bankVerificationStatus?: "PENDING" | "VERIFIED" | "REJECTED" | "";
+    bankReviewComment?: string;
     submittedAt?: string;
     isComplete?: boolean;
     reuploadFlags?: Partial<Record<DeliveryDocumentReuploadKey, boolean>>;
@@ -438,6 +441,17 @@ export const requestDeliveryPartnerDocumentReupload = async (
     status: DeliveryPartnerRecord["status"];
     reviewComment?: string;
   }>>(`/delivery/admin/${deliveryPartnerId}/documents/reupload`, payload);
+  return response.data;
+};
+
+export const updateDeliveryPartnerBankVerification = async (
+  deliveryPartnerId: string,
+  payload: { status: "VERIFIED" | "REJECTED"; bankReviewComment?: string }
+) => {
+  const response = await api.put<ApiEnvelope<DeliveryPartnerRecord>>(
+    `/delivery/admin/${deliveryPartnerId}/bank-verification`,
+    payload
+  );
   return response.data;
 };
 

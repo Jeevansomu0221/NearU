@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { uploadMultipart } from "../api/client";
 import { buildLegalUrl } from "../constants/legal";
-import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
+import { getDeliveryProfile, updateBankDetails, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { deleteAccount } from "../api/auth.api";
 import { getDeliveryStats, getTodaysEarnings, type DeliveryStats } from "../api/delivery.api";
 import SupportModal from "../components/SupportModal";
@@ -160,6 +160,7 @@ const emptyDocs = (): Docs => ({
   // Kept for future bank proof uploads; current registration does not ask for bank proof type.
   bankDocumentType: "", bankAccountHolderName: "", cancelledChequeUrl: "",
   bankPassbookUrl: "", bankStatementUrl: "", bankAccountNumber: "", bankIfsc: "", bankUpiId: "",
+  bankVerificationStatus: "", bankReviewComment: "",
   submittedAt: "", isComplete: false, reuploadFlags: {}, reuploadNotes: ""
 });
 
@@ -236,6 +237,13 @@ const statusTone: Record<DeliveryProfile["status"], { bg: string; fg: string; la
   REJECTED: { bg: "#FEF3F2", fg: "#B42318", label: "Rejected", icon: "close-circle-outline" },
   SUSPENDED: { bg: "#FDECEC", fg: "#B42318", label: "Suspended", icon: "shield-outline" },
   INACTIVE: { bg: "#F2F4F7", fg: "#475467", label: "Incomplete", icon: "ellipse-outline" }
+};
+
+const bankStatusTone: Record<NonNullable<DeliveryProfile["documents"]>["bankVerificationStatus"] & string, { bg: string; fg: string; label: string }> = {
+  PENDING: { bg: "#FFF4E8", fg: "#C2410C", label: "Pending verification" },
+  VERIFIED: { bg: "#ECFDF3", fg: "#027A48", label: "Verified" },
+  REJECTED: { bg: "#FEF3F2", fg: "#B42318", label: "Rejected" },
+  "": { bg: "#F2F4F7", fg: "#475467", label: "Not submitted" }
 };
 
 export default function ProfileScreen({ navigation, route }: any) {
@@ -461,6 +469,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const handleSaveBankDetails = async () => {
     const hasBankInput = Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim());
     const bankUpiId = documents.bankUpiId?.trim().toLowerCase() || "";
+    if (!hasBankInput && !bankUpiId) {
+      Alert.alert("Missing details", "Add bank account details or a UPI ID.");
+      return;
+    }
     if (hasBankInput) {
       if (!documents.bankAccountHolderName?.trim()) { Alert.alert("Missing details", "Account holder name is required if you add bank details."); return; }
       if (!documents.bankAccountNumber?.trim()) { Alert.alert("Missing details", "Bank account number is required if you add bank details."); return; }
@@ -471,19 +483,16 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (bankUpiId && !UPI_REGEX.test(bankUpiId)) { Alert.alert("Invalid details", "UPI ID format is invalid."); return; }
     setBankSaving(true);
     try {
-      const response = await updateDeliveryProfile({
-        documents: {
-          ...documents,
-          bankAccountHolderName: documents.bankAccountHolderName?.trim(),
-          bankAccountNumber: documents.bankAccountNumber?.trim() || "",
-          bankIfsc: documents.bankIfsc?.trim().toUpperCase(),
-          bankUpiId
-        }
+      const response = await updateBankDetails({
+        bankAccountHolderName: documents.bankAccountHolderName?.trim(),
+        bankAccountNumber: documents.bankAccountNumber?.trim() || "",
+        bankIfsc: documents.bankIfsc?.trim().toUpperCase(),
+        bankUpiId
       });
       if (!response.success || !response.data) throw new Error(response.message || "Failed to update payout details");
       syncProfile(response.data);
       setEditingBank(false);
-      Alert.alert("Saved", "Payout details updated successfully.");
+      Alert.alert("Submitted", "Bank details sent for admin verification. You can withdraw after they are verified.");
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to update payout details");
     } finally {
@@ -733,7 +742,29 @@ export default function ProfileScreen({ navigation, route }: any) {
           {/* Bank Details */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Bank Account Details</Text>
-            {editingBank ? (
+            {(() => {
+              const bankStatus = documents.bankVerificationStatus || "";
+              const bankTone = bankStatusTone[bankStatus] || bankStatusTone[""];
+              const canEditBank = !bankStatus || bankStatus === "REJECTED";
+              return (
+                <>
+                  <View style={[s.statusChip, { backgroundColor: bankTone.bg, alignSelf: "flex-start", marginBottom: 10 }]}>
+                    <Text style={[s.statusChipText, { color: bankTone.fg }]}>Bank: {bankTone.label}</Text>
+                  </View>
+                  {documents.bankReviewComment ? (
+                    <View style={s.alertBox}>
+                      <Ionicons name="alert-circle" size={16} color="#B42318" />
+                      <Text style={s.alertBoxText}>{documents.bankReviewComment}</Text>
+                    </View>
+                  ) : null}
+                  {bankStatus === "PENDING" ? (
+                    <Text style={s.sectionSub}>Your bank details are under admin review. Withdrawals unlock after verification.</Text>
+                  ) : bankStatus === "VERIFIED" ? (
+                    <Text style={s.sectionSub}>Verified payout details are locked for security.</Text>
+                  ) : (
+                    <Text style={s.sectionSub}>Add payout details for withdrawals. Admin will verify them separately from your rider profile.</Text>
+                  )}
+                  {editingBank && canEditBank ? (
               <>
                 <Text style={s.inputLabel}>Account Holder Name</Text>
                 <TextInput style={s.input} value={documents.bankAccountHolderName || ""} onChangeText={(v) => setDocuments((c) => ({ ...c, bankAccountHolderName: v }))} placeholder="Enter account holder name" placeholderTextColor="#98A2B3" selectionColor={GREEN_PRIMARY} />
@@ -746,7 +777,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <View style={s.btnRow}>
                   <TouchableOpacity style={s.btnOutline} onPress={() => setEditingBank(false)}><Text style={s.btnOutlineText}>Cancel</Text></TouchableOpacity>
                   <TouchableOpacity style={[s.btnPrimary, bankSaving && s.btnDisabled]} onPress={handleSaveBankDetails} disabled={bankSaving}>
-                    {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnPrimaryText}>Save</Text>}
+                    {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnPrimaryText}>Submit for verification</Text>}
                   </TouchableOpacity>
                 </View>
               </>
@@ -756,9 +787,16 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {renderInfoRow("Account number", safeValue(documents.bankAccountNumber ? `••••${documents.bankAccountNumber.slice(-4)}` : ""))}
                 {renderInfoRow("IFSC", safeValue(documents.bankIfsc))}
                 {renderInfoRow("UPI ID", safeValue(documents.bankUpiId))}
-                <TouchableOpacity style={[s.btnPrimary, { marginTop: 14 }]} onPress={() => setEditingBank(true)}><Text style={s.btnPrimaryText}>Edit Payout Details</Text></TouchableOpacity>
+                {canEditBank ? (
+                  <TouchableOpacity style={[s.btnPrimary, { marginTop: 14 }]} onPress={() => setEditingBank(true)}>
+                    <Text style={s.btnPrimaryText}>{bankStatus === "REJECTED" ? "Update Bank Details" : "Add Payout Details"}</Text>
+                  </TouchableOpacity>
+                ) : null}
               </>
             )}
+                </>
+              );
+            })()}
           </View>
 
           {/* Work Stats */}

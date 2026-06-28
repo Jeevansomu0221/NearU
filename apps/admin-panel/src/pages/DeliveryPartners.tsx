@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getDeliveryPartners,
   requestDeliveryPartnerDocumentReupload,
+  updateDeliveryPartnerBankVerification,
   updateDeliveryPartnerStatus,
   type DeliveryDocumentReuploadKey,
   type DeliveryPartnerRecord
@@ -42,6 +43,10 @@ export default function DeliveryPartners() {
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [suspendingPartner, setSuspendingPartner] = useState<DeliveryPartnerRecord | null>(null);
   const [suspendSubmitting, setSuspendSubmitting] = useState(false);
+  const [bankReviewPartner, setBankReviewPartner] = useState<DeliveryPartnerRecord | null>(null);
+  const [bankReviewAction, setBankReviewAction] = useState<"VERIFIED" | "REJECTED" | null>(null);
+  const [bankReviewComment, setBankReviewComment] = useState("");
+  const [bankReviewSubmitting, setBankReviewSubmitting] = useState(false);
 
   const loadPartners = async () => {
     setLoading(true);
@@ -208,6 +213,30 @@ export default function DeliveryPartners() {
       loadPartners();
     } catch (error: any) {
       message.error(error?.response?.data?.message || "Failed to reinstate delivery partner");
+    }
+  };
+
+  const handleBankReview = async () => {
+    if (!bankReviewPartner || !bankReviewAction) return;
+    if (bankReviewAction === "REJECTED" && !bankReviewComment.trim()) {
+      message.warning("Add a rejection reason for the rider.");
+      return;
+    }
+    try {
+      setBankReviewSubmitting(true);
+      await updateDeliveryPartnerBankVerification(bankReviewPartner._id, {
+        status: bankReviewAction,
+        bankReviewComment: bankReviewComment.trim()
+      });
+      message.success(`Bank details ${bankReviewAction === "VERIFIED" ? "verified" : "rejected"}`);
+      setBankReviewPartner(null);
+      setBankReviewAction(null);
+      setBankReviewComment("");
+      loadPartners();
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Failed to update bank verification");
+    } finally {
+      setBankReviewSubmitting(false);
     }
   };
 
@@ -397,6 +426,53 @@ export default function DeliveryPartners() {
               <div>{selected.documents?.bankAccountNumber || "Account number skipped"}</div>
               <Typography.Text type="secondary">IFSC</Typography.Text>
               <div>{selected.documents?.bankIfsc || "Not provided"}</div>
+              <Typography.Text type="secondary">UPI</Typography.Text>
+              <div>{selected.documents?.bankUpiId || "Not provided"}</div>
+              <div style={{ marginTop: 8 }}>
+                <Tag
+                  color={
+                    selected.documents?.bankVerificationStatus === "VERIFIED"
+                      ? "green"
+                      : selected.documents?.bankVerificationStatus === "REJECTED"
+                        ? "red"
+                        : selected.documents?.bankVerificationStatus === "PENDING"
+                          ? "gold"
+                          : "default"
+                  }
+                >
+                  Bank {selected.documents?.bankVerificationStatus || "NOT SUBMITTED"}
+                </Tag>
+              </div>
+              {selected.documents?.bankReviewComment ? (
+                <Typography.Text type="secondary">{selected.documents.bankReviewComment}</Typography.Text>
+              ) : null}
+              {selected.documents?.bankVerificationStatus !== "VERIFIED" &&
+              (selected.documents?.bankAccountHolderName || selected.documents?.bankUpiId) ? (
+                <Space style={{ marginTop: 12 }}>
+                  <Button
+                    type="primary"
+                    size="small"
+                    onClick={() => {
+                      setBankReviewPartner(selected);
+                      setBankReviewAction("VERIFIED");
+                      setBankReviewComment("");
+                    }}
+                  >
+                    Verify Bank
+                  </Button>
+                  <Button
+                    danger
+                    size="small"
+                    onClick={() => {
+                      setBankReviewPartner(selected);
+                      setBankReviewAction("REJECTED");
+                      setBankReviewComment("");
+                    }}
+                  >
+                    Reject Bank
+                  </Button>
+                </Space>
+              ) : null}
             </div>
             <div>
               <Typography.Text type="secondary">Documents</Typography.Text>
@@ -590,6 +666,47 @@ export default function DeliveryPartners() {
           placeholder="Reason for the delivery partner (e.g. Aadhaar photo is blurred)."
           style={{ marginTop: 16 }}
         />
+      </Modal>
+
+      <Modal
+        title={
+          bankReviewAction === "VERIFIED"
+            ? `Verify bank details for ${bankReviewPartner?.userId?.name || bankReviewPartner?.name || "rider"}`
+            : `Reject bank details for ${bankReviewPartner?.userId?.name || bankReviewPartner?.name || "rider"}`
+        }
+        open={Boolean(bankReviewPartner && bankReviewAction)}
+        onCancel={() => {
+          setBankReviewPartner(null);
+          setBankReviewAction(null);
+          setBankReviewComment("");
+        }}
+        onOk={handleBankReview}
+        confirmLoading={bankReviewSubmitting}
+        okText={bankReviewAction === "VERIFIED" ? "Verify Bank" : "Reject Bank"}
+        okButtonProps={{ danger: bankReviewAction === "REJECTED" }}
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <div>
+            <Typography.Text strong>
+              {bankReviewPartner?.documents?.bankAccountHolderName || "Account holder not provided"}
+            </Typography.Text>
+            <div>{bankReviewPartner?.documents?.bankAccountNumber || "No account number"}</div>
+            <div>{bankReviewPartner?.documents?.bankIfsc || "No IFSC"}</div>
+            <div>{bankReviewPartner?.documents?.bankUpiId ? `UPI: ${bankReviewPartner.documents.bankUpiId}` : "No UPI"}</div>
+          </div>
+          {bankReviewAction === "REJECTED" ? (
+            <Input.TextArea
+              rows={3}
+              value={bankReviewComment}
+              onChange={(event) => setBankReviewComment(event.target.value)}
+              placeholder="Tell the rider what to fix in their bank details."
+            />
+          ) : (
+            <Typography.Text type="secondary">
+              Rider will be able to withdraw earnings after bank details are verified.
+            </Typography.Text>
+          )}
+        </Space>
       </Modal>
 
       <SuspendAccountModal

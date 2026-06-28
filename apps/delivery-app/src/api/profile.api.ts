@@ -43,6 +43,8 @@ export interface DeliveryProfile {
     bankAccountNumber?: string;
     bankIfsc?: string;
     bankUpiId?: string;
+    bankVerificationStatus?: "PENDING" | "VERIFIED" | "REJECTED" | "";
+    bankReviewComment?: string;
     submittedAt?: string;
     isComplete?: boolean;
     reuploadFlags?: Partial<Record<
@@ -96,4 +98,13 @@ export const updateDeliveryProfile = (payload: {
   isAvailable?: boolean;
 }): Promise<ApiResponse<DeliveryProfile>> => {
   return apiPut<DeliveryProfile>("/delivery/profile", payload);
+};
+
+export const updateBankDetails = (payload: {
+  bankAccountHolderName?: string;
+  bankAccountNumber?: string;
+  bankIfsc?: string;
+  bankUpiId?: string;
+}): Promise<ApiResponse<DeliveryProfile>> => {
+  return apiPut<DeliveryProfile>("/delivery/bank-details", payload);
 };

@@ -9,8 +9,11 @@ import {
   Alert,
   RefreshControl,
   Modal,
-  TextInput
+  TextInput,
+  Image
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { uploadMultipart } from "../api/client";
 import {
   getCashLedger,
   getDeliveryStats,
@@ -20,6 +23,7 @@ import {
   requestWithdrawal,
   submitCashDeposit,
   type CashLedgerSummary,
+  type CashLedgerEntry,
   type DeliveryOrder,
   type WithdrawalWallet
 } from "../api/delivery.api";
@@ -48,6 +52,7 @@ export default function EarningsScreen({ navigation }: any) {
   const [depositReference, setDepositReference] = useState("");
   const [depositProofUrl, setDepositProofUrl] = useState("");
   const [depositNote, setDepositNote] = useState("");
+  const [uploadingProof, setUploadingProof] = useState(false);
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [earningsHistory, setEarningsHistory] = useState<EarningHistoryItem[]>([]);
   const [earningsModalVisible, setEarningsModalVisible] = useState(false);
@@ -108,6 +113,56 @@ export default function EarningsScreen({ navigation }: any) {
     return `₹${amount.toLocaleString('en-IN')}`;
   };
 
+  const formatLedgerTitle = (type: CashLedgerEntry["type"]) => {
+    switch (type) {
+      case "COD_COLLECTED":
+        return "COD collected";
+      case "CASH_DEPOSIT_VERIFIED":
+        return "COD returned";
+      case "CASH_DEPOSIT_SUBMITTED":
+        return "Deposit pending";
+      case "EARNINGS_OFFSET":
+        return "Earnings offset";
+      default:
+        return type.replace(/_/g, " ");
+    }
+  };
+
+  const pickDepositProof = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== "granted") {
+      Alert.alert("Permission needed", "Allow gallery access to upload your deposit proof.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    try {
+      setUploadingProof(true);
+      const asset = result.assets[0];
+      const fileName = asset.fileName || `deposit-proof-${Date.now()}.jpg`;
+      const formData = new FormData();
+      // @ts-ignore React Native FormData file
+      formData.append("image", {
+        uri: asset.uri,
+        type: asset.mimeType || "image/jpeg",
+        name: fileName
+      });
+      const response = await uploadMultipart<{ url: string }>("/upload/image", formData);
+      if (!response.success || !response.data?.url) {
+        throw new Error(response.message || "Could not upload proof image");
+      }
+      setDepositProofUrl(response.data.url);
+    } catch (error: any) {
+      Alert.alert("Upload failed", error.message || "Could not upload proof screenshot");
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
   const formatEarningDate = (timestamp: number) => {
     const date = new Date(timestamp);
     const today = new Date();
@@ -147,6 +202,10 @@ export default function EarningsScreen({ navigation }: any) {
       Alert.alert("Invalid amount", "Enter the amount you deposited back to the platform.");
       return;
     }
+    if (!depositProofUrl.trim()) {
+      Alert.alert("Proof required", "Upload a screenshot of your deposit or UPI payment proof.");
+      return;
+    }
     if (amount > (cashLedger?.cashBalance || 0)) {
       Alert.alert("Invalid amount", "Deposit amount cannot be more than your current cash balance.");
       return;
@@ -178,10 +237,26 @@ export default function EarningsScreen({ navigation }: any) {
   };
 
   const handleRequestWithdrawal = async () => {
-    if (!withdrawalWallet?.hasBankDetails) {
+    if (!withdrawalWallet?.bankVerified) {
+      const bankStatus = withdrawalWallet?.bankVerificationStatus || "";
+      if (bankStatus === "PENDING") {
+        Alert.alert("Bank under review", "Your bank details are waiting for admin verification.");
+        return;
+      }
+      if (bankStatus === "REJECTED") {
+        Alert.alert(
+          "Bank details rejected",
+          withdrawalWallet?.bankReviewComment || "Update your bank details in Profile and submit again.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Go to Profile", onPress: () => navigation.navigate("Profile") }
+          ]
+        );
+        return;
+      }
       Alert.alert(
         "Bank details required",
-        "Add your bank account or UPI ID in Profile before requesting a withdrawal.",
+        "Add and verify your bank account or UPI ID in Profile before requesting a withdrawal.",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Go to Profile", onPress: () => navigation.navigate("Profile") }
@@ -354,6 +429,12 @@ export default function EarningsScreen({ navigation }: any) {
             {formatCurrency(cashLedger?.pendingDepositAmount || stats?.pendingDepositAmount || 0)}
           </Text>
         </View>
+        <View style={styles.cashSummaryRow}>
+          <Text style={styles.cashSummaryLabel}>COD returned to platform</Text>
+          <Text style={[styles.cashSummaryValue, styles.ledgerAmountNegative]}>
+            {formatCurrency(cashLedger?.totalCodReturned || 0)}
+          </Text>
+        </View>
         <TouchableOpacity
           style={[styles.depositButton, (cashLedger?.cashBalance || stats?.cashBalance || 0) <= 0 && styles.disabledButton]}
           disabled={(cashLedger?.cashBalance || stats?.cashBalance || 0) <= 0}
@@ -361,14 +442,18 @@ export default function EarningsScreen({ navigation }: any) {
         >
           <Text style={styles.withdrawButtonText}>Submit Cash Deposit</Text>
         </TouchableOpacity>
-        {cashLedger?.entries?.slice(0, 3).map((entry) => (
+        {cashLedger?.entries?.slice(0, 5).map((entry) => (
           <View key={entry._id} style={styles.ledgerItem}>
             <View>
-              <Text style={styles.ledgerTitle}>{entry.type.replace(/_/g, " ")}</Text>
+              <Text style={styles.ledgerTitle}>{formatLedgerTitle(entry.type)}</Text>
               <Text style={styles.ledgerMeta}>{new Date(entry.createdAt).toLocaleString()} · {entry.status}</Text>
             </View>
-            <Text style={[styles.ledgerAmount, entry.balanceDelta < 0 && styles.ledgerAmountNegative]}>
-              {entry.balanceDelta < 0 ? "-" : "+"}{formatCurrency(Math.abs(entry.balanceDelta || entry.amount))}
+            <Text style={[
+              styles.ledgerAmount,
+              (entry.type === "CASH_DEPOSIT_VERIFIED" || entry.balanceDelta < 0) && styles.ledgerAmountNegative
+            ]}>
+              {entry.type === "CASH_DEPOSIT_VERIFIED" || entry.balanceDelta < 0 ? "-" : "+"}
+              {formatCurrency(Math.abs(entry.balanceDelta || entry.amount))}
             </Text>
           </View>
         ))}
@@ -470,7 +555,7 @@ export default function EarningsScreen({ navigation }: any) {
             ? ` · ₹${withdrawalWallet.cashOffset.toLocaleString("en-IN")} COD cash offset applied`
             : ""}
         </Text>
-        {withdrawalWallet?.hasBankDetails ? (
+        {withdrawalWallet?.bankVerified ? (
           <Text style={styles.bankHint}>
             Payout to {withdrawalWallet.bankDetails.accountHolderName || "your account"}
             {withdrawalWallet.bankDetails.upiId
@@ -480,7 +565,13 @@ export default function EarningsScreen({ navigation }: any) {
                 : ""}
           </Text>
         ) : (
-          <Text style={styles.bankHintWarning}>Add bank or UPI details in Profile to withdraw earnings.</Text>
+          <Text style={styles.bankHintWarning}>
+            {withdrawalWallet?.bankVerificationStatus === "PENDING"
+              ? "Bank details are under admin verification."
+              : withdrawalWallet?.bankVerificationStatus === "REJECTED"
+                ? withdrawalWallet.bankReviewComment || "Bank details rejected. Update them in Profile."
+                : "Add and verify bank or UPI details in Profile to withdraw earnings."}
+          </Text>
         )}
         <TouchableOpacity
           style={[
@@ -541,13 +632,22 @@ export default function EarningsScreen({ navigation }: any) {
               value={depositReference}
               onChangeText={setDepositReference}
             />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Proof URL (optional)"
-              placeholderTextColor="#6B7280"
-              value={depositProofUrl}
-              onChangeText={setDepositProofUrl}
-            />
+            <Text style={styles.proofLabel}>Deposit proof screenshot</Text>
+            <TouchableOpacity style={styles.proofUploadButton} onPress={pickDepositProof} disabled={uploadingProof}>
+              {uploadingProof ? (
+                <ActivityIndicator color="#B45309" />
+              ) : (
+                <>
+                  <Ionicons name="image-outline" size={20} color="#B45309" />
+                  <Text style={styles.proofUploadText}>
+                    {depositProofUrl ? "Change proof screenshot" : "Upload proof screenshot"}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+            {depositProofUrl ? (
+              <Image source={{ uri: depositProofUrl }} style={styles.proofPreview} resizeMode="cover" />
+            ) : null}
             <TextInput
               style={[styles.modalInput, styles.modalTextarea]}
               placeholder="Note (optional)"
@@ -1239,5 +1339,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#B91C1C',
     marginTop: 2,
+  },
+  proofLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  proofUploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    borderStyle: 'dashed',
+    borderRadius: 10,
+    paddingVertical: 14,
+    marginBottom: 12,
+    backgroundColor: '#FFF7ED',
+  },
+  proofUploadText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#B45309',
+  },
+  proofPreview: {
+    width: '100%',
+    height: 160,
+    borderRadius: 10,
+    marginBottom: 12,
+    backgroundColor: '#F3F4F6',
   },
 });

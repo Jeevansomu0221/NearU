@@ -111,6 +111,7 @@ export interface CashLedgerEntry {
 export interface CashLedgerSummary {
   cashBalance: number;
   pendingDepositAmount: number;
+  totalCodReturned?: number;
   entries: CashLedgerEntry[];
 }
 
@@ -286,6 +287,9 @@ export interface WithdrawalWallet {
   pendingPayoutOrderCount: number;
   pendingDepositAmount: number;
   hasBankDetails: boolean;
+  bankVerified: boolean;
+  bankVerificationStatus?: string;
+  bankReviewComment?: string;
   bankDetails: {
     accountHolderName: string;
     maskedAccountNumber: string;

@@ -8,7 +8,8 @@ import {
   getBankDetails,
   getPendingDeliveryPayoutOrders,
   getRiderPayoutBreakdown,
-  hasMissingBankDetails
+  hasMissingBankDetails,
+  hasVerifiedBankDetails
 } from "../services/payout.service";
 
 interface AuthRequest extends Request {
@@ -93,6 +94,9 @@ const buildWalletPayload = async (deliveryPartner: any) => {
     pendingPayoutOrderCount: orders.length,
     pendingDepositAmount: Number(deliveryPartner.pendingDepositAmount || 0),
     hasBankDetails: !hasMissingBankDetails(bankDetails),
+    bankVerified: hasVerifiedBankDetails(deliveryPartner),
+    bankVerificationStatus: deliveryPartner.documents?.bankVerificationStatus || "",
+    bankReviewComment: deliveryPartner.documents?.bankReviewComment || "",
     bankDetails: {
       accountHolderName: bankDetails.accountHolderName,
       maskedAccountNumber: maskAccountNumber(bankDetails.accountNumber),
@@ -170,10 +174,23 @@ export const requestWithdrawal = async (req: AuthRequest, res: Response) => {
     }
 
     const bankDetails = getBankDetails(deliveryPartner, "DELIVERY_PARTNER");
-    if (hasMissingBankDetails(bankDetails)) {
+    if (!hasVerifiedBankDetails(deliveryPartner)) {
+      const bankStatus = deliveryPartner.documents?.bankVerificationStatus || "";
+      if (bankStatus === "PENDING") {
+        return res.status(400).json({
+          success: false,
+          message: "Your bank details are under admin review. You can withdraw after they are verified."
+        });
+      }
+      if (bankStatus === "REJECTED") {
+        return res.status(400).json({
+          success: false,
+          message: "Your bank details were rejected. Update them in Profile and wait for verification."
+        });
+      }
       return res.status(400).json({
         success: false,
-        message: "Add your bank account or UPI ID in Profile before requesting a withdrawal."
+        message: "Add and verify your bank account or UPI ID in Profile before requesting a withdrawal."
       });
     }
 

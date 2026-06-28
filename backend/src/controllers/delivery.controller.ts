@@ -475,6 +475,25 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         didUpdateReuploadFlags = clearReuploadFlagIfChanged(nextReuploadFlags, key, nextUrl, previousUrls) || didUpdateReuploadFlags;
       });
 
+      const hasBankDetails = Boolean(
+        normalizedDocuments.bankAccountHolderName ||
+          normalizedDocuments.bankAccountNumber ||
+          normalizedDocuments.bankIfsc ||
+          normalizedDocuments.bankUpiId
+      );
+      const bankFieldsChanged =
+        normalizedDocuments.bankAccountHolderName !== (existingDocuments.bankAccountHolderName || "") ||
+        normalizedDocuments.bankAccountNumber !== (existingDocuments.bankAccountNumber || "") ||
+        normalizedDocuments.bankIfsc !== (existingDocuments.bankIfsc || "") ||
+        normalizedDocuments.bankUpiId !== (existingDocuments.bankUpiId || "");
+
+      let nextBankVerificationStatus = existingDocuments.bankVerificationStatus || "";
+      if (bankFieldsChanged && hasBankDetails) {
+        nextBankVerificationStatus = "PENDING";
+      } else if (!hasBankDetails) {
+        nextBankVerificationStatus = "";
+      }
+
       updateDelivery.documents = {
         ...normalizedDocuments,
         aadhaarUrl: normalizedDocuments.aadhaarFrontUrl,
@@ -483,13 +502,16 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         vehicleRcUrl: normalizedDocuments.vehicleRcFrontUrl,
         bankIfsc: normalizedDocuments.bankIfsc,
         bankUpiId: normalizedDocuments.bankUpiId,
+        bankVerificationStatus: nextBankVerificationStatus,
+        bankReviewComment: bankFieldsChanged ? "" : existingDocuments.bankReviewComment || "",
         reuploadFlags: nextReuploadFlags,
         reuploadNotes: existingDocuments.reuploadNotes || "",
         submittedAt: hasMandatoryDocuments ? new Date() : currentPartner?.documents?.submittedAt || null,
         isComplete: hasMandatoryDocuments
       };
 
-      if (hasMandatoryDocuments && status === undefined && reviewComment === undefined) {
+      const isInitialRegistration = ["INACTIVE", "PENDING"].includes(currentPartner?.status || "INACTIVE");
+      if (hasMandatoryDocuments && status === undefined && reviewComment === undefined && isInitialRegistration) {
         updateDelivery.status = "PENDING";
       }
     } else if (didUpdateReuploadFlags) {
@@ -1050,5 +1072,124 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error("acceptDeliveryJob error:", error);
     return errorResponse(res, "Failed to accept job");
+  }
+};
+
+const normalizeBankPayload = (body: any) => ({
+  bankAccountHolderName: firstString(body.bankAccountHolderName, body.bank_account_holder_name),
+  bankAccountNumber: firstString(body.bankAccountNumber, body.bank_account_number),
+  bankIfsc: firstString(body.bankIfsc, body.bank_ifsc).toUpperCase(),
+  bankUpiId: firstString(body.bankUpiId, body.bank_upi_id, body.upiId).toLowerCase()
+});
+
+const validateBankPayload = (bank: ReturnType<typeof normalizeBankPayload>) => {
+  const hasBankInput = Boolean(bank.bankAccountHolderName || bank.bankAccountNumber || bank.bankIfsc);
+  const hasUpiOnly = !hasBankInput && Boolean(bank.bankUpiId);
+
+  if (!hasBankInput && !hasUpiOnly) {
+    return "Add bank account details or a UPI ID";
+  }
+  if (hasBankInput) {
+    if (!bank.bankAccountHolderName) return "Account holder name is required";
+    if (!bank.bankAccountNumber) return "Bank account number is required";
+    if (!/^[0-9]+$/.test(bank.bankAccountNumber)) return "Bank account number must be numeric";
+    if (!bank.bankIfsc) return "IFSC code is required";
+    if (!ifscRegex.test(bank.bankIfsc)) return "IFSC code format is invalid";
+  }
+  if (bank.bankUpiId && !upiRegex.test(bank.bankUpiId)) return "UPI ID format is invalid";
+  return null;
+};
+
+export const updateBankDetails = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = ensureDeliveryUser(req, res);
+    if (!user) return;
+
+    const deliveryPartner = await findDeliveryPartnerForUser(user);
+    if (!deliveryPartner) {
+      return errorResponse(res, "Delivery profile not found", 404);
+    }
+
+    const existingDocuments: any = deliveryPartner.documents || {};
+    if (existingDocuments.bankVerificationStatus === "VERIFIED") {
+      return errorResponse(res, "Verified bank details are locked. Contact support if you need to change them.", 400);
+    }
+    if (existingDocuments.bankVerificationStatus === "PENDING") {
+      return errorResponse(res, "Your bank details are already under admin review.", 400);
+    }
+
+    const bank = normalizeBankPayload(req.body);
+    const validationError = validateBankPayload(bank);
+    if (validationError) {
+      return errorResponse(res, validationError, 400);
+    }
+
+    deliveryPartner.documents = {
+      ...existingDocuments,
+      ...bank,
+      bankVerificationStatus: "PENDING",
+      bankReviewComment: ""
+    };
+    deliveryPartner.markModified("documents");
+    await deliveryPartner.save();
+
+    const userDoc = await User.findById(user.id).select("name phone email");
+    return successResponse(
+      res,
+      {
+        _id: deliveryPartner._id,
+        userId: deliveryPartner.userId,
+        name: userDoc?.name || deliveryPartner.name,
+        phone: userDoc?.phone || deliveryPartner.phone,
+        email: userDoc?.email || deliveryPartner.email,
+        documents: deliveryPartner.documents,
+        status: deliveryPartner.status
+      },
+      "Bank details submitted for admin verification"
+    );
+  } catch (error) {
+    console.error("updateBankDetails error:", error);
+    return errorResponse(res, "Failed to update bank details");
+  }
+};
+
+export const updateBankVerificationByAdmin = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user || req.user.role !== "admin") {
+      return errorResponse(res, "Admin access only", 403);
+    }
+
+    const { deliveryPartnerId } = req.params;
+    const status = String(req.body.status || "").toUpperCase();
+    if (!["VERIFIED", "REJECTED"].includes(status)) {
+      return errorResponse(res, "Bank verification status must be VERIFIED or REJECTED", 400);
+    }
+
+    const deliveryPartner = await DeliveryPartner.findById(deliveryPartnerId);
+    if (!deliveryPartner) {
+      return errorResponse(res, "Delivery partner not found", 404);
+    }
+
+    const documents: any = deliveryPartner.documents || {};
+    const hasBankDetails = Boolean(
+      documents.bankAccountHolderName || documents.bankAccountNumber || documents.bankIfsc || documents.bankUpiId
+    );
+    if (!hasBankDetails) {
+      return errorResponse(res, "This rider has not submitted bank details yet", 400);
+    }
+
+    documents.bankVerificationStatus = status;
+    documents.bankReviewComment =
+      status === "REJECTED"
+        ? String(req.body.bankReviewComment || req.body.reviewComment || "Bank details rejected").trim()
+        : "";
+    deliveryPartner.documents = documents;
+    deliveryPartner.markModified("documents");
+    await deliveryPartner.save();
+
+    return successResponse(res, deliveryPartner, `Bank details marked as ${status.toLowerCase()}`);
+  } catch (error) {
+    console.error("updateBankVerificationByAdmin error:", error);
+    return errorResponse(res, "Failed to update bank verification");
   }
 };

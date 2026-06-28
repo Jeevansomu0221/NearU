@@ -55,11 +55,16 @@ export const getMyCashLedger = async (req: AuthRequest, res: Response) => {
       .limit(100)
       .lean();
 
+    const totalCodReturned = entries
+      .filter((entry) => entry.type === "CASH_DEPOSIT_VERIFIED")
+      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+
     res.json({
       success: true,
       data: {
         cashBalance: Number(deliveryPartner.cashBalance || 0),
         pendingDepositAmount: Number(deliveryPartner.pendingDepositAmount || 0),
+        totalCodReturned,
         entries
       }
     });

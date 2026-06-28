@@ -35,6 +35,12 @@ export const hasMissingBankDetails = (bankDetails: ReturnType<typeof getBankDeta
   !bankDetails.accountHolderName ||
   ((!bankDetails.accountNumber || !bankDetails.ifsc) && !bankDetails.upiId);
 
+export const hasVerifiedBankDetails = (source: any) => {
+  const documents = source?.documents || {};
+  const bankDetails = getBankDetails(source, "DELIVERY_PARTNER");
+  return documents.bankVerificationStatus === "VERIFIED" && !hasMissingBankDetails(bankDetails);
+};
+
 const getOrderDeliveredAt = (order: any) => new Date(order.deliveredAt || order.updatedAt || order.createdAt);
 
 export const getPendingDeliveryPayoutOrders = async (deliveryUserId: string) => {

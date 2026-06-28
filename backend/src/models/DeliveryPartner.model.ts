@@ -42,6 +42,8 @@ export interface IDeliveryPartner extends Document {
     bankAccountNumber?: string;
     bankIfsc?: string;
     bankUpiId?: string;
+    bankVerificationStatus?: "PENDING" | "VERIFIED" | "REJECTED" | "";
+    bankReviewComment?: string;
     submittedAt?: Date;
     isComplete?: boolean;
     reuploadFlags?: Record<string, boolean>;
@@ -161,6 +163,12 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
       bankAccountNumber: { type: String, default: "" },
       bankIfsc: { type: String, default: "" },
       bankUpiId: { type: String, default: "" },
+      bankVerificationStatus: {
+        type: String,
+        enum: ["PENDING", "VERIFIED", "REJECTED", ""],
+        default: ""
+      },
+      bankReviewComment: { type: String, default: "" },
       submittedAt: { type: Date, default: null },
       isComplete: { type: Boolean, default: false },
       reuploadFlags: {
