@@ -1495,6 +1495,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
       razorpayQrId: session.razorpayQrId,
       paymentLinkId: session.paymentLinkId,
       qrImageUrl: session.qrImageUrl,
+      qrDataUrl: session.qrDataUrl,
       paymentUrl: session.paymentUrl,
       amount: session.amount,
       createdAt: new Date(),

@@ -225,6 +225,7 @@ export interface CodUpiSession {
   razorpayQrId?: string;
   paymentLinkId?: string;
   qrImageUrl?: string;
+  qrDataUrl?: string;
   paymentUrl: string;
   amount: number;
   orderRef: string;

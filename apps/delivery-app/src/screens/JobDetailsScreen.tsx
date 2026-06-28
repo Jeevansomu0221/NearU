@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,6 @@ import {
   Image,
   Dimensions
 } from "react-native";
-import QRCode from "react-native-qrcode-svg";
 import { 
   acceptJob,
   getJobDetails, 
@@ -73,6 +72,20 @@ const UPI_QR_WIDTH = SCREEN_WIDTH - 24;
 const UPI_POSTER_HEIGHT = Math.min(SCREEN_HEIGHT * 0.58, UPI_QR_WIDTH * 1.55);
 const UPI_NATIVE_QR_SIZE = Math.min(UPI_QR_WIDTH - 48, 340);
 
+const getCodQrDisplayUri = (session: CodUpiSession | null) => {
+  if (!session) return null;
+  if (session.provider === "razorpay_qr" && session.qrImageUrl) {
+    return session.qrImageUrl;
+  }
+  if (session.qrDataUrl) {
+    return session.qrDataUrl;
+  }
+  if (session.paymentUrl) {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=500x500&margin=12&data=${encodeURIComponent(session.paymentUrl)}`;
+  }
+  return null;
+};
+
 export default function JobDetailsScreen({ route, navigation }: Props) {
   const { orderId, job: initialJob } = route.params;
   const [job, setJob] = useState<DeliveryOrder | null>(initialJob || null);
@@ -92,6 +105,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     onAction: () => void;
   } | null>(null);
   const [noLocationModal, setNoLocationModal] = useState<NoLocationModalState | null>(null);
+  const codQrDisplayUri = useMemo(() => getCodQrDisplayUri(codUpiSession), [codUpiSession]);
 
   useEffect(() => {
     loadJobDetails();
@@ -898,18 +912,20 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               </View>
 
               <View style={styles.qrHero}>
-                {codUpiSession?.qrImageUrl ? (
+                {codQrDisplayUri ? (
                   <Image
-                    source={{ uri: codUpiSession.qrImageUrl }}
-                    style={styles.qrPosterImage}
+                    source={{ uri: codQrDisplayUri }}
+                    style={
+                      codUpiSession?.provider === "razorpay_qr"
+                        ? styles.qrPosterImage
+                        : styles.nativeQrImage
+                    }
                     resizeMode="contain"
                   />
-                ) : codUpiSession?.paymentUrl ? (
-                  <View style={styles.nativeQrWrap}>
-                    <QRCode value={codUpiSession.paymentUrl} size={UPI_NATIVE_QR_SIZE} />
-                  </View>
                 ) : (
-                  <ActivityIndicator color="#1D4ED8" size="large" />
+                  <View style={styles.nativeQrWrap}>
+                    <ActivityIndicator color="#1D4ED8" size="large" />
+                  </View>
                 )}
               </View>
 
@@ -1532,7 +1548,12 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
     paddingHorizontal: 20,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    minHeight: UPI_NATIVE_QR_SIZE + 56
+  },
+  nativeQrImage: {
+    width: UPI_NATIVE_QR_SIZE,
+    height: UPI_NATIVE_QR_SIZE
   },
   qrScanHint: {
     marginTop: 10,

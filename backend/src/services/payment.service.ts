@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import QRCode from "qrcode";
 import Razorpay from "razorpay";
 import { config } from "../config/env";
 
@@ -15,9 +16,32 @@ export type CodCollectionSession = {
   razorpayQrId?: string;
   paymentLinkId?: string;
   qrImageUrl?: string;
+  qrDataUrl?: string;
   paymentUrl: string;
   amount: number;
   manualConfirmRequired?: boolean;
+};
+
+const attachGeneratedQrDataUrl = async (session: CodCollectionSession): Promise<CodCollectionSession> => {
+  if (session.provider === "razorpay_qr" && session.qrImageUrl) {
+    return session;
+  }
+
+  if (!session.paymentUrl) {
+    return session;
+  }
+
+  try {
+    const qrDataUrl = await QRCode.toDataURL(session.paymentUrl, {
+      width: 512,
+      margin: 1,
+      errorCorrectionLevel: "M"
+    });
+    return { ...session, qrDataUrl };
+  } catch (error) {
+    console.warn("Failed to generate COD QR data URL:", (error as Error)?.message || error);
+    return session;
+  }
 };
 
 const buildPlatformUpiUri = (vpa: string, payeeName: string, amount: number, note: string) => {
@@ -108,12 +132,12 @@ export const PaymentService = {
         reminder_enable: false
       } as any);
 
-      return {
+      return attachGeneratedQrDataUrl({
         provider: "razorpay_link",
         paymentLinkId: paymentLink.id,
         paymentUrl: (paymentLink as any).short_url,
         amount
-      };
+      });
     } catch (linkError) {
       console.warn("Razorpay payment link creation failed, trying QR:", (linkError as Error)?.message || linkError);
     }
@@ -144,12 +168,12 @@ export const PaymentService = {
     const platformVpa = config.platformUpiVpa || process.env.PLATFORM_UPI_VPA || "";
     if (platformVpa) {
       const payeeName = config.platformUpiPayeeName || process.env.PLATFORM_UPI_PAYEE_NAME || "Vyaha";
-      return {
+      return attachGeneratedQrDataUrl({
         provider: "platform_upi",
         paymentUrl: buildPlatformUpiUri(platformVpa, payeeName, amount, `COD ${orderRef}`),
         amount,
         manualConfirmRequired: true
-      };
+      });
     }
 
     throw new Error("UPI collection is not configured. Contact support.");
