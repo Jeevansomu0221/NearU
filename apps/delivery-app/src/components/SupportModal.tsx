@@ -275,7 +275,7 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
   const renderChatOrReport = () => {
     const isReport = mode === "report";
     return (
-      <>
+      <View style={styles.composerBody}>
         <Text style={styles.modalTitle}>{isReport ? "Report an Issue" : "Chat Support"}</Text>
         <Text style={styles.modalSubtitle}>
           {isReport
@@ -285,7 +285,12 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
 
         {activeTicket ? (
           <View style={styles.ticketThread}>
-            <ScrollView style={styles.threadScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.threadScroll}
+              contentContainerStyle={styles.threadScrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               {activeTicket.messages?.map((msg, i) => (
                 <View key={msg._id || i} style={[styles.threadBubble, msg.senderRole === "admin" ? styles.adminBubble : styles.deliveryBubble]}>
                   <Text style={[styles.threadBubbleText, msg.senderRole === "admin" && styles.adminBubbleText]}>
@@ -313,10 +318,14 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
             </View>
           </View>
         ) : (
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            {!isReport && (
-              <Text style={styles.inputLabel}>Category</Text>
-            )}
+          <ScrollView
+            style={styles.composerScroll}
+            contentContainerStyle={styles.composerScrollContent}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+            showsVerticalScrollIndicator={false}
+          >
+            {!isReport && <Text style={styles.inputLabel}>Category</Text>}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
               {CATEGORIES.map((cat) => (
                 <TouchableOpacity
@@ -362,9 +371,9 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
             >
               {sending ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.sendButtonText}>Send to Admin Panel</Text>}
             </TouchableOpacity>
-          </KeyboardAvoidingView>
+          </ScrollView>
         )}
-      </>
+      </View>
     );
   };
 
@@ -405,11 +414,23 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
   const slideStyle = {
     transform: [{ translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [600, 0] }) }]
   };
+  const isComposerMode = mode === "chat" || mode === "report";
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Animated.View style={[styles.sheet, slideStyle, { paddingBottom: insets.bottom + 20 }]}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      >
+        <Animated.View
+          style={[
+            styles.sheet,
+            slideStyle,
+            isComposerMode && styles.sheetComposer,
+            { paddingBottom: insets.bottom + (isComposerMode ? 8 : 20) }
+          ]}
+        >
           <View style={styles.handleRow}>
             <View style={styles.handle} />
           </View>
@@ -439,19 +460,22 @@ export default function SupportModal({ visible, initialMode = "main", onClose }:
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            style={styles.body}
-            contentContainerStyle={styles.bodyContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {mode === "main" && renderMain()}
-            {mode === "faq" && renderFaqs()}
-            {(mode === "chat" || mode === "report") && renderChatOrReport()}
-            {mode === "tickets" && renderTickets()}
-          </ScrollView>
+          {isComposerMode ? (
+            renderChatOrReport()
+          ) : (
+            <ScrollView
+              style={styles.body}
+              contentContainerStyle={styles.bodyContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {mode === "main" && renderMain()}
+              {mode === "faq" && renderFaqs()}
+              {mode === "tickets" && renderTickets()}
+            </ScrollView>
+          )}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -466,6 +490,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
+    maxHeight: "92%"
+  },
+  sheetComposer: {
+    minHeight: "72%",
     maxHeight: "92%"
   },
   handleRow: {
@@ -491,6 +519,17 @@ const styles = StyleSheet.create({
   },
   bodyContent: {
     paddingBottom: 16
+  },
+  composerBody: {
+    flex: 1,
+    paddingHorizontal: 20,
+    minHeight: 320
+  },
+  composerScroll: {
+    flex: 1
+  },
+  composerScrollContent: {
+    paddingBottom: 24
   },
   modalTitle: {
     fontSize: 22,
@@ -629,11 +668,14 @@ const styles = StyleSheet.create({
   },
   ticketThread: {
     flex: 1,
-    minHeight: 300
+    minHeight: 240
   },
   threadScroll: {
-    maxHeight: 320,
+    flex: 1,
     marginBottom: 12
+  },
+  threadScrollContent: {
+    paddingBottom: 8
   },
   threadBubble: {
     marginBottom: 12,
