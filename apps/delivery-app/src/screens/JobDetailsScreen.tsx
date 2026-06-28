@@ -70,12 +70,8 @@ type NoLocationModalState = {
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const UPI_FOCUS_SIZE = SCREEN_WIDTH - 32;
-const UPI_NATIVE_QR_SIZE = UPI_FOCUS_SIZE - 8;
-const RAZORPAY_POSTER_WIDTH = UPI_FOCUS_SIZE * 1.28;
-const RAZORPAY_POSTER_HEIGHT = UPI_FOCUS_SIZE * 2.95;
-const RAZORPAY_POSTER_LEFT = (UPI_FOCUS_SIZE - RAZORPAY_POSTER_WIDTH) / 2 + 14;
-const RAZORPAY_POSTER_TOP = -UPI_FOCUS_SIZE * 0.84;
+const UPI_FOCUS_SIZE = SCREEN_WIDTH - 40;
+const UPI_NATIVE_QR_SIZE = UPI_FOCUS_SIZE - 12;
 
 const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (!session) return null;
@@ -947,13 +943,11 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               <View style={styles.qrFocusShell}>
                 {codQrDisplayUri ? (
                   showRazorpayPoster ? (
-                    <View style={styles.qrPosterCrop}>
-                      <Image
-                        source={{ uri: codQrDisplayUri }}
-                        style={styles.qrPosterZoomed}
-                        resizeMode="cover"
-                      />
-                    </View>
+                    <Image
+                      source={{ uri: codQrDisplayUri }}
+                      style={styles.qrPosterContained}
+                      resizeMode="contain"
+                    />
                   ) : (
                     <Image
                       source={{ uri: codQrDisplayUri }}
@@ -1581,20 +1575,12 @@ const styles = StyleSheet.create({
     elevation: 6,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden"
-  },
-  qrPosterCrop: {
-    width: UPI_FOCUS_SIZE,
-    height: UPI_FOCUS_SIZE,
     overflow: "hidden",
-    backgroundColor: "#FFFFFF"
+    padding: 6
   },
-  qrPosterZoomed: {
-    position: "absolute",
-    width: RAZORPAY_POSTER_WIDTH,
-    height: RAZORPAY_POSTER_HEIGHT,
-    left: RAZORPAY_POSTER_LEFT,
-    top: RAZORPAY_POSTER_TOP
+  qrPosterContained: {
+    width: UPI_FOCUS_SIZE - 12,
+    height: UPI_FOCUS_SIZE - 12
   },
   nativeQrImage: {
     width: UPI_NATIVE_QR_SIZE,
