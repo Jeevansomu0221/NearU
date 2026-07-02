@@ -8,7 +8,7 @@ import { verifyFirebasePhoneToken } from "../services/firebaseAuth.service";
 import { successResponse, errorResponse } from "../utils/response";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
 import { AuthRequest } from "../middlewares/auth.middleware";
-import { ROLES } from "../config/roles";
+import { isRoleDeletedForApp, ROLES } from "../config/roles";
 import { config } from "../config/env";
 
 const phoneRegex = /^[0-9]{10}$/;
@@ -247,7 +247,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
       });
     } else if (role === ROLES.ADMIN && user.role !== ROLES.ADMIN) {
       return errorResponse(res, "Admin account not found", 403);
-    } else if (Array.isArray(user.deletedRoles) && user.deletedRoles.includes(role)) {
+    } else if (isRoleDeletedForApp(user.deletedRoles, role)) {
       return errorResponse(
         res,
         "This account has been deleted for this app. Contact support if you need help.",
@@ -307,7 +307,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     }
 
     const tokenRole = decoded.role || user.role;
-    if (Array.isArray(user.deletedRoles) && user.deletedRoles.includes(tokenRole)) {
+    if (isRoleDeletedForApp(user.deletedRoles, tokenRole)) {
       return errorResponse(res, "Account deleted for this app", 403);
     }
 

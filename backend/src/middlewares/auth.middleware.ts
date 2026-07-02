@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import User from "../models/User.model";
+import { isRoleDeletedForApp } from "../config/roles";
 import { verifyAccessToken } from "../utils/jwt";
 
 export interface AuthRequest extends Request {
@@ -40,7 +41,7 @@ export const authMiddleware = async (
       });
     }
 
-    if (Array.isArray(userRecord.deletedRoles) && userRecord.deletedRoles.includes(decoded.role)) {
+    if (isRoleDeletedForApp(userRecord.deletedRoles, decoded.role)) {
       return res.status(401).json({
         success: false,
         message: "Account deleted for this app"

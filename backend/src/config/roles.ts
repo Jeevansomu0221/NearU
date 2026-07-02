@@ -14,3 +14,19 @@ export const CONSUMER_APP_ROLES = [
   ROLES.PARTNER,
   ROLES.DELIVERY
 ] as const;
+
+export const DELETABLE_APP_ROLES = [
+  ROLES.CUSTOMER,
+  ROLES.PARTNER,
+  ROLES.DELIVERY
+] as const;
+
+export type DeletableAppRole = (typeof DELETABLE_APP_ROLES)[number];
+
+export const isDeletableAppRole = (role?: string): role is DeletableAppRole =>
+  typeof role === "string" && (DELETABLE_APP_ROLES as readonly string[]).includes(role);
+
+export const isRoleDeletedForApp = (deletedRoles: unknown, role?: string): boolean =>
+  isDeletableAppRole(role) &&
+  Array.isArray(deletedRoles) &&
+  (deletedRoles as DeletableAppRole[]).includes(role);
