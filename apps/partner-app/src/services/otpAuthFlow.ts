@@ -6,6 +6,7 @@ export const TEST_LOGIN_OTP = "000000";
 
 /** Firebase Console → Authentication → Phone → numbers for testing (+91, no country code). */
 const DEFAULT_FIREBASE_TEST_PHONES: Record<string, string> = {
+  "1010101010": "000000",
   "9999900000": "123456",
   "9999900001": "123456",
   "2020202020": "000000",

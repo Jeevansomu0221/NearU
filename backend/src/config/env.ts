@@ -60,7 +60,10 @@ export const config = {
   cloudinaryUploadFolder: process.env.CLOUDINARY_UPLOAD_FOLDER || "nearu-app",
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
   deliveryRadiusKm: Number.parseFloat(process.env.DELIVERY_RADIUS_KM || "8"),
-  deliveryLocationFreshnessMinutes: parsePositiveInt(process.env.DELIVERY_LOCATION_FRESHNESS_MINUTES, 10)
+  deliveryLocationFreshnessMinutes: parsePositiveInt(process.env.DELIVERY_LOCATION_FRESHNESS_MINUTES, 10),
+  testLoginPhone: (process.env.TEST_LOGIN_PHONE || "1010101010").replace(/\D/g, "").slice(-10),
+  testLoginOtp: process.env.TEST_LOGIN_OTP || "000000",
+  allowMultiDeviceSessions: process.env.ALLOW_MULTI_DEVICE_SESSIONS !== "false"
 };
 
 export const validateEnv = (): void => {

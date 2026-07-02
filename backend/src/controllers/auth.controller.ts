@@ -14,11 +14,13 @@ import { config } from "../config/env";
 const phoneRegex = /^[0-9]{10}$/;
 const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD || "";
 const ADMIN_PHONE = process.env.ADMIN_PANEL_PHONE || "";
-const TEST_LOGIN_PHONE = process.env.TEST_LOGIN_PHONE || "1010101010";
-const TEST_LOGIN_OTP = process.env.TEST_LOGIN_OTP || "000000";
-const isTestLoginPhone = (phone: string) => phone === TEST_LOGIN_PHONE;
+const TEST_LOGIN_PHONE = config.testLoginPhone;
+const TEST_LOGIN_OTP = config.testLoginOtp;
+
+const normalizePhone = (phone: string) => phone.replace(/\D/g, "").slice(-10);
+const isTestLoginPhone = (phone: string) => normalizePhone(phone) === TEST_LOGIN_PHONE;
 const isTestOtpLogin = (phone: string, otp?: string) =>
-  isTestLoginPhone(phone) && otp === TEST_LOGIN_OTP;
+  isTestLoginPhone(phone) && String(otp || "").trim() === TEST_LOGIN_OTP;
 
 const idsMatch = (left?: unknown, right?: unknown) =>
   Boolean(left && right && left.toString() === right.toString());
@@ -97,7 +99,8 @@ const buildTokens = async (user: any, requestedRole?: string) => {
 
 export const sendOTP = async (req: Request, res: Response) => {
   try {
-    const { phone, role } = req.body;
+    const { phone: rawPhone, role } = req.body;
+    const phone = normalizePhone(String(rawPhone || ""));
 
     if (!phone || !role) {
       return errorResponse(res, "Phone number and role are required", 400);
@@ -209,7 +212,8 @@ export const getOtpConfig = async (_req: Request, res: Response) => {
 
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
-    const { phone, otp, role, firebaseIdToken } = req.body;
+    const { phone: rawPhone, otp, role, firebaseIdToken } = req.body;
+    const phone = normalizePhone(String(rawPhone || ""));
 
     if (!phone || !role || (!otp && !firebaseIdToken)) {
       return errorResponse(res, "Phone, OTP, and role are required", 400);
@@ -382,11 +386,11 @@ export const logout = async (req: AuthRequest, res: Response) => {
     }
 
     const notificationToken = typeof req.body?.notificationToken === "string" ? req.body.notificationToken.trim() : "";
-    const userRecord = await User.findById(req.user.id).select("phone").lean();
-    const isTestUser = userRecord?.phone === TEST_LOGIN_PHONE;
 
     await User.findByIdAndUpdate(req.user.id, {
-      ...(isTestUser ? {} : { $inc: { sessionVersion: 1 } }),
+      ...(config.allowMultiDeviceSessions
+        ? {}
+        : { $inc: { sessionVersion: 1 } }),
       ...(notificationToken ? { $pull: { notificationTokens: { token: notificationToken } } } : {})
     });
     return successResponse(res, null, "Logged out successfully");
