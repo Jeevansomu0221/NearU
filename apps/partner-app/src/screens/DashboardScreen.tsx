@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 import { getPartnerWallet, type PartnerWallet } from "../api/partner.api";
-import NotificationButton from "../components/NotificationButton";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -156,7 +155,6 @@ export default function DashboardScreen({ navigation }: any) {
             >
               <Ionicons name="settings-outline" size={22} color={theme.colors.primaryDark} />
             </TouchableOpacity>
-            <NotificationButton count={stats.pendingOrders} onPress={() => navigation.navigate("Orders")} />
           </View>
         </View>
 

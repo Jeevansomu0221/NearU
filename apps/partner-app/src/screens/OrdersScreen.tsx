@@ -12,7 +12,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../api/client";
-import NotificationButton from "../components/NotificationButton";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { partnerTheme, type PartnerTheme } from "../theme";
 
@@ -333,7 +332,6 @@ export default function OrdersScreen({ navigation }: any) {
     );
   }
 
-  const pendingCount = orders.filter((order) => isAwaitingPartnerAction(order.status)).length;
 
   return (
     <View style={styles.container}>
@@ -349,7 +347,6 @@ export default function OrdersScreen({ navigation }: any) {
           <TouchableOpacity style={styles.refreshButton} onPress={loadOrders}>
             <Ionicons name="refresh" size={21} color={theme.colors.primary} />
           </TouchableOpacity>
-          <NotificationButton count={pendingCount} onPress={loadOrders} />
         </View>
       </View>
 
