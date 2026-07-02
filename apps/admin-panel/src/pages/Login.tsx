@@ -2,7 +2,7 @@ import { Alert, Button, Card, Form, Input, Space, Typography } from "antd";
 import { LockOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api/client";
+import api, { API_BASE_URL } from "../api/client";
 import { setToken } from "../utils/auth";
 
 interface AuthEnvelope {
@@ -52,8 +52,10 @@ export default function Login() {
       }
       navigate("/", { replace: true });
     } catch (error: any) {
-      if (error.code === "ERR_NETWORK") {
-        setError("Backend is not reachable. Start the backend or update VITE_API_URL.");
+      if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+        setError(
+          `Backend is not reachable at ${API_BASE_URL}. Check your internet connection, confirm Render is awake, or set VITE_API_URL if you use a different backend.`
+        );
       } else {
         setError(error.response?.data?.message || "Invalid password");
       }

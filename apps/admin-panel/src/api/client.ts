@@ -2,6 +2,7 @@ import axios from "axios";
 import { clearToken } from "../utils/auth";
 
 const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
+const LOCAL_API_URL = "http://localhost:5000/api";
 
 const resolveApiBaseUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL?.trim();
@@ -9,20 +10,14 @@ const resolveApiBaseUrl = () => {
     return envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`;
   }
 
-  if (import.meta.env.PROD) {
-    return PRODUCTION_API_URL;
+  if (import.meta.env.DEV && import.meta.env.VITE_USE_LOCAL_API === "true") {
+    return LOCAL_API_URL;
   }
 
-  const host = window.location.hostname;
-
-  if (!host || host === "localhost" || host === "127.0.0.1") {
-    return "http://localhost:5000/api";
-  }
-
-  return `http://${host}:5000/api`;
+  return PRODUCTION_API_URL;
 };
 
-const API_BASE_URL = resolveApiBaseUrl();
+export const API_BASE_URL = resolveApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,

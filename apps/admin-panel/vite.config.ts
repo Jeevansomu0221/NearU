@@ -7,9 +7,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://10.3.128.220:5000',
+        target: process.env.VITE_API_URL || 'https://vyaha-app-backend.onrender.com',
         changeOrigin: true,
-        secure: false,
+        secure: true
       }
     }
   }
