@@ -18,7 +18,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList, Shop } from "../navigation/AppNavigator";
-import { getPartnerDetails, getPartnerMenu, getPartnerReviews } from "../api/menu.api";
+import { getPartnerDetails, getPartnerMenu } from "../api/menu.api";
 import {
   addFavoriteFoodItem,
   getMyFavorites,
@@ -27,6 +27,7 @@ import {
 import { useCart } from "../context/CartContext";
 import { getPublicShopName } from "../utils/display";
 import { getVegModePreference } from "../utils/vegMode";
+import { getAccessToken } from "../utils/authStorage";
 
 type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, "ShopDetail">;
 
@@ -39,14 +40,6 @@ interface MenuItem {
   isAvailable: boolean;
   isVegetarian?: boolean;
   imageUrl?: string;
-}
-
-interface PartnerReview {
-  _id: string;
-  rating: number;
-  comment: string;
-  submittedAt?: string;
-  customerName: string;
 }
 
 interface Props {
@@ -164,11 +157,7 @@ function MenuCardItem({
 
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handlePress}
-        style={styles.menuCard}
-      >
+      <View style={styles.menuCard}>
         {index === 0 ? (
           <View style={styles.bestSellerChip}>
             <Feather name="star" size={11} color="#F59E0B" />
@@ -183,27 +172,40 @@ function MenuCardItem({
 
           <View style={styles.menuInfo}>
             <View style={styles.menuInfoTop}>
-              <View style={styles.menuTitleBlock}>
+              <TouchableOpacity
+                style={styles.menuTitleBlock}
+                activeOpacity={0.9}
+                onPress={handlePress}
+              >
                 <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
-              </View>
+              </TouchableOpacity>
               <View style={styles.menuPriceActions}>
                 <TouchableOpacity
                   style={[styles.menuFavoriteButton, isFavorite && styles.menuFavoriteButtonActive]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    onToggleFavorite(item);
-                  }}
+                  onPress={() => onToggleFavorite(item)}
                   disabled={favoriteBusy}
+                  activeOpacity={0.8}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
                 >
-                  <Feather name="heart" size={14} color={isFavorite ? "#E11D48" : "#A3968D"} />
+                  <MaterialCommunityIcons
+                    name={isFavorite ? "heart" : "heart-outline"}
+                    size={18}
+                    color={isFavorite ? "#E11D48" : "#A3968D"}
+                  />
                 </TouchableOpacity>
                 <Text style={styles.itemPrice}>Rs {item.price}</Text>
               </View>
             </View>
 
             <View style={styles.menuCompactRow}>
-              <View style={styles.menuTextStack}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.menuTextStack}
+                onPress={handlePress}
+              >
                 <Text style={styles.itemDescription} numberOfLines={2}>
                   {item.description || "Freshly prepared in-store with quality ingredients."}
                 </Text>
@@ -211,15 +213,12 @@ function MenuCardItem({
                   <Feather name="clock" size={11} color="#7C7168" />
                   <Text style={styles.readyText}>Ready in a few minutes</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
 
               <View style={styles.stepper}>
                 <TouchableOpacity
                   style={styles.stepperButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleDecrement(item);
-                  }}
+                  onPress={() => handleDecrement(item)}
                   disabled={quantity === 0}
                 >
                   <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
@@ -227,10 +226,7 @@ function MenuCardItem({
                 <Text style={styles.stepperValue}>{quantity}</Text>
                 <TouchableOpacity
                   style={styles.stepperButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handlePress();
-                  }}
+                  onPress={handlePress}
                 >
                   <Text style={styles.stepperButtonText}>+</Text>
                 </TouchableOpacity>
@@ -253,7 +249,7 @@ function MenuCardItem({
             <Text style={styles.floaterText}>+1 Added</Text>
           </Animated.View>
         ))}
-      </TouchableOpacity>
+      </View>
     </Animated.View>
   );
 }
@@ -269,8 +265,6 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [favoriteFoodItemIds, setFavoriteFoodItemIds] = useState<Set<string>>(new Set());
   const [favoriteBusyId, setFavoriteBusyId] = useState<string | null>(null);
-  const [reviews, setReviews] = useState<PartnerReview[]>([]);
-  const [reviewCount, setReviewCount] = useState(0);
   const { items, addItem, updateQuantity, getItemCount, getCartTotal } = useCart();
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -279,48 +273,13 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       try {
         setLoading(true);
 
-        const [menuResponse, shopResponse, reviewsResponse] = await Promise.all([
+        const [menuResponse, shopResponse] = await Promise.all([
           getPartnerMenu(shopId),
-          passedShop ? Promise.resolve(null) : getPartnerDetails(shopId),
-          getPartnerReviews(shopId, { limit: 8 })
+          passedShop ? Promise.resolve(null) : getPartnerDetails(shopId)
         ]);
 
         if (!passedShop && shopResponse && (shopResponse as any).success && (shopResponse as any).data) {
-          const shopData = (shopResponse as any).data;
-          setShop(shopData);
-          setReviewCount(Number(shopData.ratingCount || 0));
-        }
-
-        if ((reviewsResponse as any)?.success && (reviewsResponse as any)?.data) {
-          const reviewData = (reviewsResponse as any).data;
-          setReviews(reviewData.reviews || []);
-          setReviewCount(Number(reviewData.ratingCount || reviewData.total || 0));
-          if (!passedShop && !(shopResponse as any)?.data && reviewData.rating) {
-            setShop((current) =>
-              current
-                ? { ...current, rating: reviewData.rating, ratingCount: reviewData.ratingCount }
-                : current
-            );
-          }
-        } else {
-          setReviews([]);
-          setReviewCount(0);
-        }
-
-        if ((menuResponse as any).partner) {
-          const partnerMeta = (menuResponse as any).partner;
-          setShop((current) =>
-            current
-              ? {
-                  ...current,
-                  rating: partnerMeta.rating ?? current.rating,
-                  ratingCount: partnerMeta.ratingCount ?? current.ratingCount
-                }
-              : current
-          );
-          if (!passedShop && !shopResponse) {
-            setReviewCount((current) => current || Number(partnerMeta.ratingCount || 0));
-          }
+          setShop((shopResponse as any).data);
         }
 
         if ((menuResponse as any).data && Array.isArray((menuResponse as any).data)) {
@@ -341,7 +300,17 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
   const loadFavoriteFoodItems = useCallback(async () => {
     try {
+      const token = await getAccessToken();
+      if (!token) {
+        setFavoriteFoodItemIds(new Set());
+        return;
+      }
+
       const response = await getMyFavorites();
+      if (!response.success) {
+        return;
+      }
+
       const foodItems = response.data?.foodItems || [];
       setFavoriteFoodItemIds(new Set(foodItems.map((item) => item._id)));
     } catch {
@@ -355,10 +324,24 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     }, [loadFavoriteFoodItems])
   );
 
+  useEffect(() => {
+    loadFavoriteFoodItems();
+  }, [loadFavoriteFoodItems]);
+
   const toggleFavoriteFoodItem = async (item: MenuItem) => {
     if (favoriteBusyId) return;
 
+    const token = await getAccessToken();
+    if (!token) {
+      Alert.alert("Sign in required", "Please log in to save favorite dishes.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Log in", onPress: () => navigation.navigate("Login") }
+      ]);
+      return;
+    }
+
     const wasFavorite = favoriteFoodItemIds.has(item._id);
+    const previousIds = favoriteFoodItemIds;
     const nextIds = new Set(favoriteFoodItemIds);
     if (wasFavorite) {
       nextIds.delete(item._id);
@@ -372,10 +355,15 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       const response = wasFavorite
         ? await removeFavoriteFoodItem(item._id)
         : await addFavoriteFoodItem(item._id);
+
+      if (!response.success) {
+        throw new Error(response.message || "Could not update favorites right now.");
+      }
+
       const foodItems = response.data?.foodItems || [];
       setFavoriteFoodItemIds(new Set(foodItems.map((entry) => entry._id)));
     } catch (error: any) {
-      setFavoriteFoodItemIds(favoriteFoodItemIds);
+      setFavoriteFoodItemIds(previousIds);
       Alert.alert("Favorites", error?.message || "Could not update favorites right now.");
     } finally {
       setFavoriteBusyId(null);
@@ -530,7 +518,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
           <Feather name="arrow-left" size={18} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Restaurant Details</Text>
-        <View style={styles.topBarButton} />
+        <View style={styles.topBarSpacer} pointerEvents="none" />
       </View>
 
       <ScrollView
@@ -574,13 +562,6 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                     {shop.isOpen ? "Open" : "Closed"}
                   </Text>
                 </View>
-                <View style={styles.ratingBlock}>
-                  <Feather name="star" size={15} color="#F2A514" />
-                  <Text style={styles.ratingValue}>{shop.rating?.toFixed(1) || "4.0"}</Text>
-                </View>
-                <Text style={styles.reviewText}>
-                  ({reviewCount || (shop as any)?.ratingCount || 0} reviews)
-                </Text>
               </View>
             </View>
           </View>
@@ -663,40 +644,6 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
             })}
           </View>
         )}
-
-        <View style={styles.reviewsSection}>
-          <View style={styles.menuHeader}>
-            <Text style={styles.menuTitle}>Reviews</Text>
-            <Text style={styles.menuSubtitle}>
-              {reviewCount || (shop as any)?.ratingCount || reviews.length} customer reviews
-            </Text>
-          </View>
-          {reviews.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No reviews yet</Text>
-              <Text style={styles.emptyBody}>Reviews appear here after customers rate delivered orders.</Text>
-            </View>
-          ) : (
-            <View style={styles.reviewsList}>
-              {reviews.map((review) => (
-                <View key={review._id} style={styles.reviewCard}>
-                  <View style={styles.reviewTopRow}>
-                    <Text style={styles.reviewAuthor}>{review.customerName}</Text>
-                    <View style={styles.reviewStars}>
-                      <Feather name="star" size={12} color="#F2A514" />
-                      <Text style={styles.reviewRating}>{review.rating.toFixed(1)}</Text>
-                    </View>
-                  </View>
-                  {review.comment ? (
-                    <Text style={styles.reviewComment}>{review.comment}</Text>
-                  ) : (
-                    <Text style={styles.reviewCommentMuted}>No additional comments.</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -790,6 +737,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.14)"
+  },
+  topBarSpacer: {
+    width: 34,
+    height: 34
   },
   topBarTitle: {
     fontSize: 15,
@@ -1071,12 +1022,13 @@ const styles = StyleSheet.create({
     gap: 6
   },
   menuFavoriteButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F7F2EC"
+    backgroundColor: "#F7F2EC",
+    zIndex: 2
   },
   menuFavoriteButtonActive: {
     backgroundColor: "#FFE4E6"
