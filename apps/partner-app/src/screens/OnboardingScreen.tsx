@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Linking,
   ActivityIndicator,
   Image,
   Modal
@@ -144,7 +143,6 @@ type OnboardingDraft = {
     colony: string;
     roadStreet: string;
     nearbyPlaces: string;
-    googleMapsLink: string;
   };
   documents: DocumentState;
   selectedCategory: string;
@@ -234,8 +232,7 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
       area: String(safeAddress.area || ""),
       colony: String(safeAddress.colony || ""),
       roadStreet: String(safeAddress.roadStreet || ""),
-      nearbyPlaces: String(safeAddress.nearbyPlaces || ""),
-      googleMapsLink: String(safeAddress.googleMapsLink || "")
+      nearbyPlaces: String(safeAddress.nearbyPlaces || "")
     },
     documents: {
       fssaiNumber: String(safeDocuments.fssaiNumber || ""),
@@ -291,8 +288,7 @@ export default function OnboardingScreen({ navigation }: any) {
     area: "",
     colony: "",
     roadStreet: "",
-    nearbyPlaces: "",
-    googleMapsLink: ""
+    nearbyPlaces: ""
   });
   const [documents, setDocuments] = useState<DocumentState>({
     fssaiNumber: "",
@@ -540,7 +536,7 @@ export default function OnboardingScreen({ navigation }: any) {
       if (!Location) {
         Alert.alert(
           "App update required",
-          "This Partner app build does not include location support yet. Install the latest build, or paste your shop Google Maps link below for now."
+          "This Partner app build does not include location support yet. Install the latest build to capture your shop GPS pin."
         );
         return;
       }
@@ -664,8 +660,7 @@ export default function OnboardingScreen({ navigation }: any) {
           nearbyPlaces: address.nearbyPlaces
             .split(",")
             .map((place) => place.trim())
-            .filter((place) => place.length > 0),
-          googleMapsLink: address.googleMapsLink.trim()
+            .filter((place) => place.length > 0)
         },
         category: selectedCategory,
         userId: userId || fallbackUserId,
@@ -842,18 +837,6 @@ export default function OnboardingScreen({ navigation }: any) {
                 <Text style={styles.locationBadgeText}>Location captured</Text>
               </View>
             ) : null}
-
-            <Text style={styles.label}>Google Maps link (optional)</Text>
-            <TextInput
-              placeholder="Optional - paste a Google Maps share link"
-              placeholderTextColor="#98A2B3"
-              value={address.googleMapsLink}
-              onChangeText={(v) => setAddress({ ...address, googleMapsLink: v })}
-              style={styles.input}
-            />
-            <TouchableOpacity style={styles.utilityButton} onPress={() => Linking.openURL("https://maps.google.com")}>
-              <Text style={styles.utilityButtonText}>Open Google Maps</Text>
-            </TouchableOpacity>
           </View>
         );
 
@@ -1369,19 +1352,6 @@ const styles = StyleSheet.create({
   half: {
     flex: 1,
     marginRight: 10
-  },
-  utilityButton: {
-    alignSelf: "flex-start",
-    backgroundColor: partnerTheme.colors.neutralSoft,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginBottom: 12
-  },
-  utilityButtonText: {
-    color: partnerTheme.colors.primary,
-    fontWeight: "700",
-    fontSize: 13
   },
   primaryActionButton: {
     alignSelf: "stretch",

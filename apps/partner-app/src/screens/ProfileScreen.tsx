@@ -84,7 +84,6 @@ interface PartnerProfile {
     colony: string;
     roadStreet: string;
     nearbyPlaces: string[];
-    googleMapsLink: string;
   };
   location?: { coordinates?: number[] };
   documents?: Documents;
@@ -290,7 +289,6 @@ export default function ProfileScreen({ navigation }: any) {
     city: "",
     state: "",
     pincode: "",
-    googleMapsLink: "",
     landmark: ""
   });
   const [capturedLocation, setCapturedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -344,7 +342,6 @@ export default function ProfileScreen({ navigation }: any) {
       city: data.address?.city || "",
       state: data.address?.state || "",
       pincode: data.address?.pincode || "",
-      googleMapsLink: data.address?.googleMapsLink || "",
       landmark: data.address?.nearbyPlaces?.join(", ") || ""
     });
     setCapturedLocation(null);
@@ -480,7 +477,7 @@ export default function ProfileScreen({ navigation }: any) {
       if (!Location) {
         Alert.alert(
           "App update required",
-          "This Partner app build does not include location support yet. Install the latest build, or paste a Google Maps link with coordinates."
+          "This Partner app build does not include location support yet. Install the latest build to capture your shop GPS pin."
         );
         return;
       }
@@ -541,8 +538,7 @@ export default function ProfileScreen({ navigation }: any) {
         city: address.city.trim(),
         state: address.state.trim(),
         pincode: address.pincode.trim(),
-        nearbyPlaces: landmarks,
-        googleMapsLink: address.googleMapsLink.trim()
+        nearbyPlaces: landmarks
       }
     };
 
@@ -1356,27 +1352,6 @@ export default function ProfileScreen({ navigation }: any) {
           onChangeText={(text) => setAddress({ ...address, landmark: text })}
           editable={addressEditing}
         />
-
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Google Maps link</Text>
-        <TextInput
-          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
-          placeholder="Paste shop Google Maps link"
-          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
-          value={address.googleMapsLink}
-          onChangeText={(text) => setAddress({ ...address, googleMapsLink: text })}
-          autoCapitalize="none"
-          editable={addressEditing}
-        />
-
-        {address.googleMapsLink ? (
-          <TouchableOpacity
-            style={[styles.testLinkButton, isDarkMode && styles.testLinkButtonDark]}
-            onPress={() => Linking.openURL(address.googleMapsLink).catch(() => Alert.alert("Error", "Could not open link"))}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.testLinkButtonText}>Test link</Text>
-          </TouchableOpacity>
-        ) : null}
 
         {addressEditing ? (
           <>

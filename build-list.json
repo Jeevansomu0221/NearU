@@ -1,0 +1,222 @@
+﻿[
+  {
+    "id": "c8237deb-5599-49c1-862d-f5ec6c28adc7",
+    "status": "IN_QUEUE",
+    "platform": "ANDROID",
+    "artifacts": {},
+    "fingerprint": {
+      "id": "019ef5b9-0907-7b6a-9989-b9bcbbffb252",
+      "hash": "f65e2f0248a75b9ceda4589c14b0d9eb43220f0c"
+    },
+    "initiatingActor": {
+      "id": "68d1e47f-9402-4ea6-b9fb-8c90cabef297",
+      "displayName": "jeevansomu"
+    },
+    "logFiles": [],
+    "project": {
+      "id": "ef3786d8-9d3b-435c-b8e1-347b75c0daff",
+      "name": "vyaha-customer",
+      "slug": "vyaha-customer",
+      "ownerAccount": {
+        "id": "4a2656ce-032e-46e4-a061-cb67dc559426",
+        "name": "jeevansomu"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "production",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.0.10",
+    "appBuildVersion": "20",
+    "runtimeVersion": "1.0.10",
+    "gitCommitHash": "a89e52e413f4df579b0a53494959b78c5865a554",
+    "gitCommitMessage": "Add ProGuard mapping support for Play Store deobfuscation.\n\nShared R8 rules, Crashlytics mapping upload, and a collect:mapping script for manual AAB uploads.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-06-23T18:23:24.890Z",
+    "updatedAt": "2026-06-23T18:23:34.253Z",
+    "expirationDate": "2026-07-23T18:23:24.924Z",
+    "isForIosSimulator": false
+  },
+  {
+    "id": "ca47b7e9-0b71-4f7d-83c5-114de156583a",
+    "status": "ERRORED",
+    "platform": "ANDROID",
+    "error": {
+      "errorCode": "UNKNOWN_ERROR",
+      "message": "Unknown error. See logs of the Read app config build phase for more information."
+    },
+    "artifacts": {},
+    "fingerprint": {
+      "id": "019ea241-a3f8-72b3-9814-9a8ebee5a017",
+      "hash": "4cfd24aeb1229b61ba8af4774c546518cbe38780"
+    },
+    "initiatingActor": {
+      "id": "68d1e47f-9402-4ea6-b9fb-8c90cabef297",
+      "displayName": "jeevansomu"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/ef3786d8-9d3b-435c-b8e1-347b75c0daff/ca47b7e9-0b71-4f7d-83c5-114de156583a/2026-06-07T13%3A24%3A32Z-4152918a-906b-4069-848c-820cf1fc0881.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260623%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260623T185017Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=a133bcec3d7432c0c55cb6c1b66b6df84cefeb6eba4d3d618c9fa6f3687ff7e25fb3083816af491ca5a371d9e9bd2ced8131828bd6eddf3a9cf8e29d7a6a0a3075a39e0ff51dc8bfea5a2b2d22732442a9d3b3e71045dd964b458db5d117156944c36ea1e2e07aa98819fa91e5e9e676447ec77fea560236bb6ca0f345d5faf85f5de92bbec298d35e8ad2621111f36458e9aadd41f98d7b3ebbca0a2972d646ad8bf443700f02a39fa2dd7f4bbb82cf51734654bcc512b3c3e0c904d62bde0110a61794a37e2c059a2f626eb1d15c3dedd0d88afeeffeb2852909f6e0aee1a6a698c165967270639b7e996ec77e003a14f98206de85976b6af863ed8a8aeaad"
+    ],
+    "project": {
+      "id": "ef3786d8-9d3b-435c-b8e1-347b75c0daff",
+      "name": "vyaha-customer",
+      "slug": "vyaha-customer",
+      "ownerAccount": {
+        "id": "4a2656ce-032e-46e4-a061-cb67dc559426",
+        "name": "jeevansomu"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "production",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.0.6",
+    "appBuildVersion": "15",
+    "gitCommitHash": "2ee383bb25d9c8e924968436134c5635ff078045",
+    "gitCommitMessage": "notification modifications including logo",
+    "priority": "NORMAL_PLUS",
+    "createdAt": "2026-06-07T13:24:31.323Z",
+    "updatedAt": "2026-06-07T17:00:25.233Z",
+    "completedAt": "2026-06-07T13:24:57.513Z",
+    "expirationDate": "2026-07-07T13:24:31.342Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 810,
+      "buildQueueTime": 4638,
+      "buildDuration": 20742
+    }
+  },
+  {
+    "id": "3060f8c9-a30a-4159-9783-7aa558ab4c84",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/6YuAZu5ofgdVqtyaagoUis.aab",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/6YuAZu5ofgdVqtyaagoUis.aab"
+    },
+    "fingerprint": {
+      "id": "019de9e7-877a-7e44-85dd-92cdeb31d3f5",
+      "hash": "a7ba1149bcba0a065b4d114b4538f1d52200efb3"
+    },
+    "initiatingActor": {
+      "id": "68d1e47f-9402-4ea6-b9fb-8c90cabef297",
+      "displayName": "jeevansomu"
+    },
+    "logFiles": [],
+    "project": {
+      "id": "ef3786d8-9d3b-435c-b8e1-347b75c0daff",
+      "name": "vyaha-customer",
+      "slug": "vyaha-customer",
+      "ownerAccount": {
+        "id": "4a2656ce-032e-46e4-a061-cb67dc559426",
+        "name": "jeevansomu"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "production",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "1",
+    "gitCommitHash": "7ac7ca2faedcdd7d50a1879c9d8b1d32f072f31c",
+    "gitCommitMessage": "Stop tracking backend .env secrets\n\nRemove backend/.env from git tracking so credentials are not committed again.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-05-04T13:12:14.479Z",
+    "updatedAt": "2026-05-04T21:00:22.502Z",
+    "completedAt": "2026-05-04T17:14:32.299Z",
+    "expirationDate": "2026-06-03T13:12:14.547Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 11293820,
+      "buildQueueTime": 2975113,
+      "buildDuration": 268501
+    }
+  },
+  {
+    "id": "9b2b917e-dbb3-4906-8535-e34bce96bdb0",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/kakRWVQhG8TBZyJhK4GHE1.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/kakRWVQhG8TBZyJhK4GHE1.apk"
+    },
+    "fingerprint": {
+      "id": "019de9e7-877a-7e44-85dd-92cdeb31d3f5",
+      "hash": "a7ba1149bcba0a065b4d114b4538f1d52200efb3"
+    },
+    "initiatingActor": {
+      "id": "68d1e47f-9402-4ea6-b9fb-8c90cabef297",
+      "displayName": "jeevansomu"
+    },
+    "logFiles": [],
+    "project": {
+      "id": "ef3786d8-9d3b-435c-b8e1-347b75c0daff",
+      "name": "vyaha-customer",
+      "slug": "vyaha-customer",
+      "ownerAccount": {
+        "id": "4a2656ce-032e-46e4-a061-cb67dc559426",
+        "name": "jeevansomu"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "preview",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "1",
+    "gitCommitHash": "7ac7ca2faedcdd7d50a1879c9d8b1d32f072f31c",
+    "gitCommitMessage": "Stop tracking backend .env secrets\n\nRemove backend/.env from git tracking so credentials are not committed again.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-05-04T13:12:14.459Z",
+    "updatedAt": "2026-05-04T20:00:41.694Z",
+    "completedAt": "2026-05-04T16:20:12.867Z",
+    "expirationDate": "2026-06-03T13:12:14.520Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 7995027,
+      "buildQueueTime": 3020222,
+      "buildDuration": 262705
+    }
+  },
+  {
+    "id": "ae680db4-afc7-4d73-ba77-cc1110450543",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/nx7CrsunabQHCh3NP76bAx.aab",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/nx7CrsunabQHCh3NP76bAx.aab"
+    },
+    "fingerprint": {
+      "id": "019de9e7-877a-7e44-85dd-92cdeb31d3f5",
+      "hash": "a7ba1149bcba0a065b4d114b4538f1d52200efb3"
+    },
+    "initiatingActor": {
+      "id": "68d1e47f-9402-4ea6-b9fb-8c90cabef297",
+      "displayName": "jeevansomu"
+    },
+    "logFiles": [],
+    "project": {
+      "id": "ef3786d8-9d3b-435c-b8e1-347b75c0daff",
+      "name": "vyaha-customer",
+      "slug": "vyaha-customer",
+      "ownerAccount": {
+        "id": "4a2656ce-032e-46e4-a061-cb67dc559426",
+        "name": "jeevansomu"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "production",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "1",
+    "gitCommitHash": "7ac7ca2faedcdd7d50a1879c9d8b1d32f072f31c",
+    "gitCommitMessage": "Stop tracking backend .env secrets\n\nRemove backend/.env from git tracking so credentials are not committed again.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-05-04T13:10:54.459Z",
+    "updatedAt": "2026-05-04T19:01:07.805Z",
+    "completedAt": "2026-05-04T15:25:05.610Z",
+    "expirationDate": "2026-06-03T13:10:54.538Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 4549684,
+      "buildQueueTime": 3097744,
+      "buildDuration": 403304
+    }
+  }
+]

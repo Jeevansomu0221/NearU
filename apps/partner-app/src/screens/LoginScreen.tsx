@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import { buildLegalUrl } from "../constants/legal";
 
 const TERMS_URL = buildLegalUrl("terms");
 const PRIVACY_URL = buildLegalUrl("privacy");
+const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function LoginScreen({ navigation }: any) {
   const [phone, setPhone] = useState("");
@@ -34,6 +35,8 @@ export default function LoginScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [otpSession, setOtpSession] = useState<OtpSessionInfo>({ provider: "firebase" });
+  const [resendSeconds, setResendSeconds] = useState(RESEND_COOLDOWN_SECONDS);
+  const [requiresFreshOtp, setRequiresFreshOtp] = useState(false);
   const lastSubmittedOtp = useRef("");
   const insets = useSafeAreaInsets();
 
@@ -120,11 +123,13 @@ export default function LoginScreen({ navigation }: any) {
       setFeedback(null);
       setPhone(cleanedPhone);
       setOtp("");
+      setRequiresFreshOtp(false);
       lastSubmittedOtp.current = "";
 
       void warmApi();
       const session = await sendOtpWithFallback(cleanedPhone, "partner");
       setOtpSession(session);
+      setResendSeconds(RESEND_COOLDOWN_SECONDS);
 
       setStep("otp");
       setFeedback({
@@ -138,6 +143,50 @@ export default function LoginScreen({ navigation }: any) {
       setLoading(false);
     }
   };
+
+  const handleResendOtp = async () => {
+    if (loading) {
+      return;
+    }
+
+    if (resendSeconds > 0 && !requiresFreshOtp) {
+      setFeedback({ type: "error", text: `Please wait ${resendSeconds}s before requesting another OTP.` });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setFeedback(null);
+      setOtp("");
+      setRequiresFreshOtp(false);
+      lastSubmittedOtp.current = "";
+
+      const session = await sendOtpWithFallback(phone, "partner");
+      setOtpSession(session);
+      setResendSeconds(RESEND_COOLDOWN_SECONDS);
+      setFeedback({
+        type: "success",
+        text: session.deliveryHint || "Fresh OTP sent. Use only the newest SMS code."
+      });
+    } catch (error: any) {
+      console.error("Resend OTP error:", error);
+      setFeedback({ type: "error", text: getOtpErrorMessage(error) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (step !== "otp" || resendSeconds <= 0 || requiresFreshOtp) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setResendSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [step, resendSeconds, requiresFreshOtp]);
 
   const checkPartnerStatus = async () => {
     try {
@@ -234,6 +283,7 @@ export default function LoginScreen({ navigation }: any) {
       if (otpSession.provider === "firebase" && isFirebaseOtpSessionExpiredError(error)) {
         clearFirebaseOtpSession();
         setOtp("");
+        setRequiresFreshOtp(true);
         setFeedback({
           type: "error",
           text: "This OTP expired. Tap Resend OTP and use only the newest SMS code."
@@ -318,14 +368,29 @@ export default function LoginScreen({ navigation }: any) {
                   if (numbers.length < 6) lastSubmittedOtp.current = "";
                 }}
                 maxLength={6}
+                editable={!loading && !requiresFreshOtp}
               />
 
-              <TouchableOpacity style={styles.primaryButton} onPress={handleVerifyOtp} disabled={loading}>
+              <TouchableOpacity
+                style={[styles.primaryButton, (loading || otp.length !== 6 || requiresFreshOtp) && styles.primaryButtonDisabled]}
+                onPress={handleVerifyOtp}
+                disabled={loading || otp.length !== 6 || requiresFreshOtp}
+              >
                 {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Verify and Continue</Text>}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.secondaryButton} onPress={handleSendOtp} disabled={loading}>
-                <Text style={styles.secondaryButtonText}>Resend OTP</Text>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleResendOtp}
+                disabled={loading || (resendSeconds > 0 && !requiresFreshOtp)}
+              >
+                <Text style={[styles.secondaryButtonText, resendSeconds > 0 && !requiresFreshOtp && styles.secondaryButtonTextMuted]}>
+                  {requiresFreshOtp
+                    ? "Code expired? Resend OTP"
+                    : resendSeconds > 0
+                      ? `Resend OTP in ${resendSeconds}s`
+                      : "Didn't receive code? Resend OTP"}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -333,6 +398,8 @@ export default function LoginScreen({ navigation }: any) {
                 onPress={() => {
                   setStep("phone");
                   setFeedback(null);
+                  setResendSeconds(RESEND_COOLDOWN_SECONDS);
+                  setRequiresFreshOtp(false);
                 }}
                 disabled={loading}
               >
@@ -453,6 +520,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center"
   },
+  primaryButtonDisabled: {
+    opacity: 0.6
+  },
   primaryButtonText: {
     color: "#FFFFFF",
     fontSize: 15,
@@ -466,6 +536,9 @@ const styles = StyleSheet.create({
     color: partnerTheme.colors.primary,
     fontSize: 14,
     fontWeight: "700"
+  },
+  secondaryButtonTextMuted: {
+    color: partnerTheme.colors.muted
   },
   footer: {
     marginTop: 20,

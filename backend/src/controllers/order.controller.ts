@@ -23,8 +23,8 @@ import { PaymentService } from "../services/payment.service";
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
 
-const RESTAURANT_ACCEPT_TIMEOUT_MS = 10 * 60 * 1000;
-const DELIVERY_ACCEPT_TIMEOUT_MS = 30 * 60 * 1000;
+const RESTAURANT_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
+const DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const DELIVERY_FIRST_KM_FEE = 15;
 const DELIVERY_ADDITIONAL_KM_FEE = 10;
@@ -41,8 +41,12 @@ const parseOrderPagination = (req: AuthRequest) => {
 };
 const DELIVERY_GST_RATE = 0.18;
 const PLATFORM_FEE = 0;
-const AUTO_CANCEL_MESSAGE =
-  "Sorry for the problem. We could not place this order. If online payment was done, the refund will be completed within today.";
+const PARTNER_TIMEOUT_CANCEL_MESSAGE =
+  "Sorry, this order was cancelled because the restaurant did not accept it in time. If you paid online, your refund will be completed within today.";
+const DELIVERY_TIMEOUT_CANCEL_MESSAGE =
+  "Sorry, no delivery riders were available in time. Your order was cancelled. If you paid online, your refund will be completed within today.";
+const PARTNER_REJECTED_CANCEL_MESSAGE =
+  "Sorry, the restaurant could not accept your order. If you paid online, your refund will be completed within today.";
 
 const resolvePartnerForUser = async (user?: AuthRequest["user"]) => {
   if (!user) return null;
@@ -719,10 +723,14 @@ export const quoteOrderPricing = async (req: AuthRequest, res: Response) => {
   }
 };
 
-const markAutoCancelled = (order: any, reason: string) => {
+const markAutoCancelled = (
+  order: any,
+  reason: string,
+  customerMessage = PARTNER_TIMEOUT_CANCEL_MESSAGE
+) => {
   order.status = "CANCELLED";
   order.cancellationReason = reason;
-  order.customerCancellationMessage = AUTO_CANCEL_MESSAGE;
+  order.customerCancellationMessage = customerMessage;
   order.autoCancelledAt = new Date();
 
   if (order.paymentStatus === "PAID") {
@@ -751,11 +759,20 @@ export const cancelStaleUnacceptedOrders = async () => {
       ]
     };
 
-    const autoCancelByPaymentStatus = async (baseFilter: any, reason: string) => {
+    const autoCancelByPaymentStatus = async (
+      baseFilter: any,
+      reason: string,
+      customerCancellationMessage: string
+    ) => {
+      const staleOrders = await Order.find(baseFilter)
+        .select("_id customerId")
+        .lean();
+      if (staleOrders.length === 0) return;
+
       const baseSet = {
         status: "CANCELLED",
         cancellationReason: reason,
-        customerCancellationMessage: AUTO_CANCEL_MESSAGE,
+        customerCancellationMessage,
         autoCancelledAt: now
       };
 
@@ -773,17 +790,36 @@ export const cancelStaleUnacceptedOrders = async () => {
           { $set: baseSet }
         )
       ]);
+
+      const cancelledOrderIds = staleOrders.map((order: any) => order._id);
+      const cancelledOrders = await Order.find({ _id: { $in: cancelledOrderIds } })
+        .select("_id customerId customerCancellationMessage")
+        .lean();
+
+      await Promise.all(
+        cancelledOrders.map((order: any) =>
+          notifyCustomerOrderStatus(order, "CANCELLED").catch((error) => {
+            console.error(`Failed to notify customer about auto-cancelled order ${order._id}:`, error);
+          })
+        )
+      );
     };
 
     const autoCancelJobs = [
-      autoCancelByPaymentStatus(deliveryTimedOutFilter, "No delivery partner accepted the order in time")
+      autoCancelByPaymentStatus(
+        deliveryTimedOutFilter,
+        "No delivery partner accepted the order in time",
+        DELIVERY_TIMEOUT_CANCEL_MESSAGE
+      )
     ];
 
-    if (process.env.ENABLE_ORDER_AUTO_CANCEL === "true") {
-      autoCancelJobs.push(
-        autoCancelByPaymentStatus(restaurantTimedOutFilter, "Restaurant did not accept the order in time")
-      );
-    }
+    autoCancelJobs.push(
+      autoCancelByPaymentStatus(
+        restaurantTimedOutFilter,
+        "Restaurant did not accept the order in time",
+        PARTNER_TIMEOUT_CANCEL_MESSAGE
+      )
+    );
 
     await Promise.all(autoCancelJobs);
   } catch (error) {
@@ -1121,7 +1157,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       await configureSelfDeliveryForReadyOrder(order, orderPartner);
     }
     if (status === "REJECTED") {
-      markAutoCancelled(order, "Restaurant rejected the order");
+      markAutoCancelled(order, "Restaurant rejected the order", PARTNER_REJECTED_CANCEL_MESSAGE);
     }
     await order.save();
 

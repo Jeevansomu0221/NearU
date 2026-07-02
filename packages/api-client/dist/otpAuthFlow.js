@@ -45,6 +45,12 @@ export const sendOtpWithFallback = async (phone, role) => {
             await sendFirebaseOtp(phone);
             return { provider: "firebase" };
         }
+        if (response.success) {
+            return {
+                provider: "2factor",
+                deliveryHint: payload.deliveryHint || response.message || "OTP sent via SMS."
+            };
+        }
         throw new Error(response.message || "Failed to send OTP");
     }
     catch (error) {

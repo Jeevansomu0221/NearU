@@ -31,12 +31,19 @@ export const authMiddleware = async (
 
     const token = authHeader.split(" ")[1];
     const decoded = verifyAccessToken(token);
-    const userRecord = await User.findById(decoded.id).select("isActive sessionVersion").lean();
+    const userRecord = await User.findById(decoded.id).select("isActive sessionVersion deletedRoles").lean();
 
     if (!userRecord || !userRecord.isActive) {
       return res.status(401).json({
         success: false,
         message: "User account is inactive"
+      });
+    }
+
+    if (Array.isArray(userRecord.deletedRoles) && userRecord.deletedRoles.includes(decoded.role)) {
+      return res.status(401).json({
+        success: false,
+        message: "Account deleted for this app"
       });
     }
 

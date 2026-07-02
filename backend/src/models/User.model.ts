@@ -229,6 +229,11 @@ const UserSchema = new Schema({
     type: Boolean,
     default: true
   },
+  deletedRoles: {
+    type: [String],
+    enum: ["customer", "partner", "delivery"],
+    default: []
+  },
   sessionVersion: {
     type: Number,
     default: 0

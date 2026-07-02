@@ -247,6 +247,12 @@ export const verifyOTP = async (req: Request, res: Response) => {
       });
     } else if (role === ROLES.ADMIN && user.role !== ROLES.ADMIN) {
       return errorResponse(res, "Admin account not found", 403);
+    } else if (Array.isArray(user.deletedRoles) && user.deletedRoles.includes(role)) {
+      return errorResponse(
+        res,
+        "This account has been deleted for this app. Contact support if you need help.",
+        403
+      );
     }
 
     user.lastLogin = new Date();
@@ -300,11 +306,16 @@ export const refreshToken = async (req: Request, res: Response) => {
       return errorResponse(res, "User not found", 404);
     }
 
+    const tokenRole = decoded.role || user.role;
+    if (Array.isArray(user.deletedRoles) && user.deletedRoles.includes(tokenRole)) {
+      return errorResponse(res, "Account deleted for this app", 403);
+    }
+
     if (user.sessionVersion !== decoded.sessionVersion) {
       return errorResponse(res, "Refresh token expired", 401);
     }
 
-    const tokens = await buildTokens(user, decoded.role || user.role);
+    const tokens = await buildTokens(user, tokenRole);
     return successResponse(res, {
       token: tokens.accessToken,
       refreshToken: tokens.refreshToken
