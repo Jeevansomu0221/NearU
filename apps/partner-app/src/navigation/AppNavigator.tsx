@@ -22,6 +22,7 @@ import WelcomeApprovedScreen from "../screens/WelcomeApprovedScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import PaymentHistoryScreen from "../screens/PaymentHistoryScreen";
+import ReviewsScreen from "../screens/ReviewsScreen";
 
 const Stack = createNativeStackNavigator();
 const logNavDebug = (...args: unknown[]) => {
@@ -260,6 +261,11 @@ export default function AppNavigator() {
         name="PaymentHistory" 
         component={PaymentHistoryScreen} 
         options={{ title: "Payment History" }}
+      />
+      <Stack.Screen
+        name="Reviews"
+        component={ReviewsScreen}
+        options={{ title: "Customer Reviews" }}
       />
     </Stack.Navigator>
   );

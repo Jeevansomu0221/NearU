@@ -13,7 +13,8 @@ import {
   updatePartnerProfile,
   getPartnerOnboardingDraft,
   savePartnerOnboardingDraft,
-  clearPartnerOnboardingDraft
+  clearPartnerOnboardingDraft,
+  getMyPartnerReviews
 } from "../controllers/partner.controller";
 
 import { getShopsWithImages, getPartnerPublicProfile, getPartnerReviews } from "../controllers/shop.controller";
@@ -44,6 +45,7 @@ router.delete("/onboarding-draft", authMiddleware, clearPartnerOnboardingDraft);
 router.put("/shop-status", authMiddleware, updateShopStatus);
 router.get("/stats", authMiddleware, getPartnerStats);
 router.get("/wallet", authMiddleware, getPartnerWallet);
+router.get("/reviews", authMiddleware, getMyPartnerReviews);
 
 // Profile Management
 router.get("/profile", authMiddleware, getPartnerProfile);

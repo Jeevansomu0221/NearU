@@ -524,16 +524,16 @@ export default function HomeScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.shopCategory}>{category}</Text>
             </View>
-          </View>
 
-          <View style={styles.shopMetaRow}>
-            <View style={styles.ratingRow}>
-              <Feather name="star" size={12} color="#F59E0B" />
-              <Text style={styles.ratingText}>{item.rating?.toFixed(1) || "4.0"}</Text>
+            <View style={styles.shopRightMeta}>
+              <View style={styles.ratingRow}>
+                <Feather name="star" size={12} color="#F59E0B" />
+                <Text style={styles.ratingText}>{item.rating?.toFixed(1) || "4.0"}</Text>
+              </View>
+              <Text style={styles.timeText} numberOfLines={1}>
+                {item.openingTime && item.closingTime ? `${item.openingTime} - ${item.closingTime}` : "08:00 - 22:00"}
+              </Text>
             </View>
-            <Text style={styles.timeText} numberOfLines={1}>
-              {item.openingTime && item.closingTime ? `${item.openingTime} - ${item.closingTime}` : "08:00 - 22:00"}
-            </Text>
           </View>
 
           <View style={styles.shopFooterRow}>
@@ -1019,6 +1019,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 10
   },
+  shopRightMeta: {
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    gap: 4,
+    minWidth: 72
+  },
   favoriteButton: {
     width: 28,
     height: 28,
@@ -1059,19 +1065,6 @@ const styles = StyleSheet.create({
     color: "#FF6B35",
     marginRight: 1
   },
-  shopMetaRow: {
-    marginTop: 6,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10
-  },
-  distanceText: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: "800",
-    color: "#2B9C4A"
-  },
   shopFooterRow: {
     marginTop: 8,
     flexDirection: "row",
@@ -1090,9 +1083,15 @@ const styles = StyleSheet.create({
   },
   ratingText: {
     marginLeft: 4,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: "#D18E18"
+  },
+  distanceText: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "800",
+    color: "#2B9C4A"
   },
   statusPill: {
     paddingHorizontal: 9,

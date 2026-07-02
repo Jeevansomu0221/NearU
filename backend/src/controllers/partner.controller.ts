@@ -1085,6 +1085,87 @@ export const getPartnerStats = async (req: Request, res: Response) => {
   }
 };
 
+export const getMyPartnerReviews = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    const partner = await resolvePartnerForAuth(authReq);
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found"
+      });
+    }
+
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+
+    const reviewFilter = {
+      partnerId: partner._id,
+      status: "DELIVERED",
+      ratingSubmittedAt: { $ne: null },
+      "restaurantRating.overallExperience": { $gte: 1, $lte: 5 }
+    };
+
+    const [orders, total] = await Promise.all([
+      Order.find(reviewFilter)
+        .sort({ ratingSubmittedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate("customerId", "name")
+        .select("restaurantRating ratingSubmittedAt createdAt items grandTotal")
+        .lean(),
+      Order.countDocuments(reviewFilter)
+    ]);
+
+    const reviews = orders.map((order: any) => {
+      const itemNames = Array.isArray(order.items)
+        ? order.items.map((item: any) => item?.name).filter(Boolean)
+        : [];
+
+      return {
+        _id: order._id,
+        orderId: order._id,
+        orderNumber: order._id?.toString().slice(-6).toUpperCase(),
+        rating: order.restaurantRating?.overallExperience || 0,
+        comment: order.restaurantRating?.comment || "",
+        submittedAt: order.ratingSubmittedAt,
+        orderedAt: order.createdAt,
+        customerName: order.customerId?.name || "Customer",
+        grandTotal: order.grandTotal || 0,
+        itemsSummary: itemNames.slice(0, 3).join(", ") + (itemNames.length > 3 ? ` +${itemNames.length - 3} more` : "")
+      };
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        reviews,
+        total,
+        rating: partner.rating || 4,
+        ratingCount: partner.ratingCount || total,
+        page,
+        limit,
+        hasMore: page * limit < total
+      }
+    });
+  } catch (error: any) {
+    console.error("getMyPartnerReviews error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch reviews"
+    });
+  }
+};
+
 export const getPartnerWallet = async (req: Request, res: Response) => {
   try {
     const authReq = req as AuthRequest;

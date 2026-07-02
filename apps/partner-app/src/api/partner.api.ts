@@ -62,6 +62,32 @@ export const getMyStatus = () =>
 export const getPartnerWallet = () =>
   api.get<{ success: boolean; data?: PartnerWallet; message?: string }>("/partners/wallet");
 
+export type PartnerOrderReview = {
+  _id: string;
+  orderId: string;
+  orderNumber: string;
+  rating: number;
+  comment: string;
+  submittedAt?: string;
+  orderedAt?: string;
+  customerName: string;
+  grandTotal?: number;
+  itemsSummary?: string;
+};
+
+export type PartnerReviewsResponse = {
+  reviews: PartnerOrderReview[];
+  total: number;
+  rating: number;
+  ratingCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+};
+
+export const getPartnerReviews = (params?: { page?: number; limit?: number }) =>
+  api.get<{ success: boolean; data?: PartnerReviewsResponse; message?: string }>("/partners/reviews", { params });
+
 export const acceptSubOrder = (subOrderId: string, price: number) => {
   return api.post(`/partners/suborders/${subOrderId}/accept`, {
     price

@@ -269,12 +269,12 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Business & details</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={openWallet} activeOpacity={0.7}>
-              <View style={[styles.gridIconCircle, { backgroundColor: "#F0F6FE" }]}>
-                <Ionicons name="wallet" size={20} color="#60A5FA" />
+            <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Reviews")} activeOpacity={0.7}>
+              <View style={[styles.gridIconCircle, { backgroundColor: "#FFF7ED" }]}>
+                <Ionicons name="star" size={20} color="#F59E0B" />
               </View>
-              <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Wallet</Text>
-              <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Payout date & history</Text>
+              <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Reviews</Text>
+              <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Customer order feedback</Text>
             </TouchableOpacity>
           </View>
         </View>
