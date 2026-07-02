@@ -26,7 +26,7 @@ import {
   deleteAddress,
   getMyFavorites,
   deleteMyAccount,
-  type FavoriteRestaurant,
+  type FavoriteFoodItem,
   type SavedAddress,
   type UserProfile
 } from "../api/user.api";
@@ -160,7 +160,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [editingAddressId, setEditingAddressId] = useState<string | undefined>(undefined);
   const [supportModal, setSupportModal] = useState<"faq" | null>(null);
   const [faqs, setFaqs] = useState<FAQEntry[]>([]);
-  const [favoriteRestaurants, setFavoriteRestaurants] = useState<FavoriteRestaurant[]>([]);
+  const [favoriteFoodItems, setFavoriteFoodItems] = useState<FavoriteFoodItem[]>([]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -247,7 +247,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         }
 
         const favoritesResponse = await getMyFavorites().catch(() => null);
-        setFavoriteRestaurants(favoritesResponse?.data?.restaurants || []);
+        setFavoriteFoodItems(favoritesResponse?.data?.foodItems || []);
       }
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to load profile");
@@ -830,7 +830,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <Text style={styles.quickStatLabel}>Live Orders</Text>
               </View>
               <View style={styles.quickStatCard}>
-                <Text style={styles.quickStatValue}>{favoriteRestaurants.length}</Text>
+                <Text style={styles.quickStatValue}>{favoriteFoodItems.length}</Text>
                 <Text style={styles.quickStatLabel}>Favorites</Text>
               </View>
             </View>
@@ -876,26 +876,53 @@ export default function ProfileScreen({ navigation, route }: any) {
               <Text style={styles.inlineLinkText}>Add More</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.sectionHint}>Restaurants saved with the heart icon appear here.</Text>
-          {favoriteRestaurants.length === 0 ? (
-            <Text style={styles.emptyText}>No favorite restaurants yet.</Text>
+          <Text style={styles.sectionHint}>Menu items saved with the heart icon appear here.</Text>
+          {favoriteFoodItems.length === 0 ? (
+            <Text style={styles.emptyText}>No favorite dishes yet.</Text>
           ) : (
             <View style={styles.favoriteBlock}>
-              {favoriteRestaurants.map((restaurant) => (
-                <TouchableOpacity
-                  key={restaurant._id}
-                  style={styles.favoriteChip}
-                  onPress={() => navigation.navigate("ShopDetail", { shopId: restaurant._id, shop: restaurant as any })}
-                >
-                  <MaterialCommunityIcons name="heart" size={16} color="#E11D48" />
-                  <Text style={styles.favoriteChipText}>
-                    {getPublicShopName(restaurant.restaurantName || restaurant.shopName || "Restaurant")}
-                  </Text>
-                  {typeof restaurant.rating === "number" ? (
-                    <Text style={styles.favoriteChipCount}>{restaurant.rating.toFixed(1)}</Text>
-                  ) : null}
-                </TouchableOpacity>
-              ))}
+              {favoriteFoodItems.map((item) => {
+                const partnerId =
+                  typeof item.partnerId === "string"
+                    ? item.partnerId
+                    : item.partner?._id || "";
+                const restaurantName = getPublicShopName(
+                  item.partner?.restaurantName || item.partner?.shopName || "Restaurant"
+                );
+
+                return (
+                  <TouchableOpacity
+                    key={item._id}
+                    style={styles.favoriteChip}
+                    onPress={() => {
+                      if (!partnerId) return;
+                      navigation.navigate("ShopDetail", {
+                        shopId: partnerId,
+                        shop: item.partner as any
+                      });
+                    }}
+                  >
+                    <MaterialCommunityIcons name="heart" size={16} color="#E11D48" />
+                    <View style={styles.favoriteChipCopy}>
+                      <Text style={styles.favoriteChipText} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.favoriteChipMeta} numberOfLines={1}>
+                        {restaurantName}
+                        {typeof item.price === "number" ? ` · Rs ${item.price}` : ""}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.favoriteAvailability,
+                        item.isOrderable ? styles.favoriteAvailabilityOpen : styles.favoriteAvailabilityClosed
+                      ]}
+                    >
+                      {item.availabilityLabel || (item.isOrderable ? "Available" : "Unavailable")}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>
@@ -1881,17 +1908,37 @@ const styles = StyleSheet.create({
   favoriteChip: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
+    alignSelf: "stretch",
     backgroundColor: "#FBF6EF",
     borderWidth: 1,
     borderColor: "#F0E0D3",
-    borderRadius: 999,
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginBottom: 8
   },
+  favoriteChipCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 8
+  },
+  favoriteChipMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#8B7E74"
+  },
+  favoriteAvailability: {
+    fontSize: 10,
+    fontWeight: "700",
+    marginLeft: 8
+  },
+  favoriteAvailabilityOpen: {
+    color: "#15803D"
+  },
+  favoriteAvailabilityClosed: {
+    color: "#B42318"
+  },
   favoriteChipText: {
-    marginLeft: 8,
     fontSize: 13,
     fontWeight: "700",
     color: "#241D17"

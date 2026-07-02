@@ -20,7 +20,6 @@ import * as Location from "expo-location";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import { getPartners } from "../api/menu.api";
 import { getMyOrders } from "../api/order.api";
-import { addFavoriteRestaurant, getMyFavorites, removeFavoriteRestaurant } from "../api/user.api";
 import { useCart } from "../context/CartContext";
 import { getPublicAddressText, getPublicShopName } from "../utils/display";
 import { getOrderBadgeCount } from "../utils/orderBadges";
@@ -142,7 +141,6 @@ export default function HomeScreen({ navigation }: Props) {
   const [activeOrderCount, setActiveOrderCount] = useState(0);
   const [vegMode, setVegMode] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
-  const [favoriteRestaurantIds, setFavoriteRestaurantIds] = useState<Set<string>>(new Set());
 
   const loadOrderBadgeCount = useCallback(async () => {
     try {
@@ -154,22 +152,11 @@ export default function HomeScreen({ navigation }: Props) {
     }
   }, []);
 
-  const loadFavorites = useCallback(async () => {
-    try {
-      const response = await getMyFavorites();
-      const restaurants = response.data?.restaurants || [];
-      setFavoriteRestaurantIds(new Set(restaurants.map((restaurant) => restaurant._id)));
-    } catch {
-      setFavoriteRestaurantIds(new Set());
-    }
-  }, []);
-
   useEffect(() => {
     const locationTimer = setTimeout(() => {
       promptForLocationPermission();
     }, INITIAL_LOCATION_REQUEST_DELAY_MS);
     loadOrderBadgeCount();
-    loadFavorites();
     getVegModePreference().then(setVegMode).catch(() => {});
 
     return () => clearTimeout(locationTimer);
@@ -178,10 +165,9 @@ export default function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       loadOrderBadgeCount();
-      loadFavorites();
     });
     return unsubscribe;
-  }, [loadFavorites, loadOrderBadgeCount, navigation]);
+  }, [loadOrderBadgeCount, navigation]);
 
   const openLocationSettings = () => {
     Linking.openSettings().catch(() => {
@@ -386,28 +372,6 @@ export default function HomeScreen({ navigation }: Props) {
     setVegModePreference(enabled).catch(() => {});
   };
 
-  const toggleFavorite = async (shop: Shop) => {
-    const wasFavorite = favoriteRestaurantIds.has(shop._id);
-    const nextIds = new Set(favoriteRestaurantIds);
-    if (wasFavorite) {
-      nextIds.delete(shop._id);
-    } else {
-      nextIds.add(shop._id);
-    }
-    setFavoriteRestaurantIds(nextIds);
-
-    try {
-      const response = wasFavorite
-        ? await removeFavoriteRestaurant(shop._id)
-        : await addFavoriteRestaurant(shop._id);
-      const restaurants = response.data?.restaurants || [];
-      setFavoriteRestaurantIds(new Set(restaurants.map((restaurant) => restaurant._id)));
-    } catch (error: any) {
-      setFavoriteRestaurantIds(favoriteRestaurantIds);
-      Alert.alert("Favorites", error?.message || "Could not update favorites right now.");
-    }
-  };
-
   const renderCategoryChips = () => (
     <ScrollView
       horizontal
@@ -537,7 +501,6 @@ export default function HomeScreen({ navigation }: Props) {
     const displayName = getPublicShopName(item.shopName || item.restaurantName || "Local Shop");
     const category = categoryLabels[item.category] || item.category;
     const imageUrl = item.shopImageUrl || shopPlaceholders[item.category] || shopPlaceholders["mini-restaurant"];
-    const isFavorite = favoriteRestaurantIds.has(item._id);
 
     return (
       <TouchableOpacity
@@ -561,20 +524,6 @@ export default function HomeScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.shopCategory}>{category}</Text>
             </View>
-
-            <TouchableOpacity
-              style={[styles.favoriteButton, isFavorite && styles.favoriteButtonActive]}
-              onPress={() => toggleFavorite(item)}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel={isFavorite ? "Remove restaurant from favorites" : "Add restaurant to favorites"}
-            >
-              <MaterialCommunityIcons
-                name={isFavorite ? "heart" : "heart-outline"}
-                size={17}
-                color={isFavorite ? "#E11D48" : "#FF6B35"}
-              />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.shopMetaRow}>

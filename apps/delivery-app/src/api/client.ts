@@ -327,7 +327,15 @@ export const apiPatch = async <T = any>(url: string, data?: any, config?: any): 
   }
 };
 
-export const uploadMultipart = async <T = any>(path: string, formData: FormData): Promise<ApiResponse<T>> => {
+type MultipartPayload = FormData | (() => FormData);
+
+export const uploadMultipart = async <T = any>(
+  path: string,
+  formDataOrFactory: MultipartPayload
+): Promise<ApiResponse<T>> => {
+  const buildFormData = () =>
+    typeof formDataOrFactory === "function" ? formDataOrFactory() : formDataOrFactory;
+
   let token = await getAccessToken();
   let didRefresh = false;
 
@@ -338,7 +346,7 @@ export const uploadMultipart = async <T = any>(path: string, formData: FormData)
         Accept: "application/json",
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
       },
-      body: formData
+      body: buildFormData()
     });
     const responseText = await response.text();
     const data = responseText

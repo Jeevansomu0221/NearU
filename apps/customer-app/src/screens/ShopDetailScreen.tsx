@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,8 +16,14 @@ import {
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList, Shop } from "../navigation/AppNavigator";
-import { getPartnerDetails, getPartnerMenu } from "../api/menu.api";
+import { getPartnerDetails, getPartnerMenu, getPartnerReviews } from "../api/menu.api";
+import {
+  addFavoriteFoodItem,
+  getMyFavorites,
+  removeFavoriteFoodItem
+} from "../api/user.api";
 import { useCart } from "../context/CartContext";
 import { getPublicShopName } from "../utils/display";
 import { getVegModePreference } from "../utils/vegMode";
@@ -33,6 +39,14 @@ interface MenuItem {
   isAvailable: boolean;
   isVegetarian?: boolean;
   imageUrl?: string;
+}
+
+interface PartnerReview {
+  _id: string;
+  rating: number;
+  comment: string;
+  submittedAt?: string;
+  customerName: string;
 }
 
 interface Props {
@@ -96,6 +110,9 @@ interface MenuCardItemProps {
   handleIncrement: (item: MenuItem) => void;
   handleDecrement: (item: MenuItem) => void;
   setPreviewImage: (uri: string | null) => void;
+  isFavorite: boolean;
+  favoriteBusy: boolean;
+  onToggleFavorite: (item: MenuItem) => void;
 }
 
 function MenuCardItem({
@@ -106,7 +123,10 @@ function MenuCardItem({
   getMenuImage,
   handleIncrement,
   handleDecrement,
-  setPreviewImage
+  setPreviewImage,
+  isFavorite,
+  favoriteBusy,
+  onToggleFavorite
 }: MenuCardItemProps) {
   const [floaters, setFloaters] = useState<Array<{ id: number; animY: Animated.Value; animOpacity: Animated.Value }>>([]);
   const floaterIdRef = useRef(0);
@@ -167,7 +187,19 @@ function MenuCardItem({
                 <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
               </View>
-              <Text style={styles.itemPrice}>Rs {item.price}</Text>
+              <View style={styles.menuPriceActions}>
+                <TouchableOpacity
+                  style={[styles.menuFavoriteButton, isFavorite && styles.menuFavoriteButtonActive]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onToggleFavorite(item);
+                  }}
+                  disabled={favoriteBusy}
+                >
+                  <Feather name="heart" size={14} color={isFavorite ? "#E11D48" : "#A3968D"} />
+                </TouchableOpacity>
+                <Text style={styles.itemPrice}>Rs {item.price}</Text>
+              </View>
             </View>
 
             <View style={styles.menuCompactRow}>
@@ -235,6 +267,10 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [vegModeOnly, setVegModeOnly] = useState(Boolean(initialVegMode));
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [favoriteFoodItemIds, setFavoriteFoodItemIds] = useState<Set<string>>(new Set());
+  const [favoriteBusyId, setFavoriteBusyId] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<PartnerReview[]>([]);
+  const [reviewCount, setReviewCount] = useState(0);
   const { items, addItem, updateQuantity, getItemCount, getCartTotal } = useCart();
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -243,13 +279,48 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       try {
         setLoading(true);
 
-        const [menuResponse, shopResponse] = await Promise.all([
+        const [menuResponse, shopResponse, reviewsResponse] = await Promise.all([
           getPartnerMenu(shopId),
-          passedShop ? Promise.resolve(null) : getPartnerDetails(shopId)
+          passedShop ? Promise.resolve(null) : getPartnerDetails(shopId),
+          getPartnerReviews(shopId, { limit: 8 })
         ]);
 
         if (!passedShop && shopResponse && (shopResponse as any).success && (shopResponse as any).data) {
-          setShop((shopResponse as any).data);
+          const shopData = (shopResponse as any).data;
+          setShop(shopData);
+          setReviewCount(Number(shopData.ratingCount || 0));
+        }
+
+        if ((reviewsResponse as any)?.success && (reviewsResponse as any)?.data) {
+          const reviewData = (reviewsResponse as any).data;
+          setReviews(reviewData.reviews || []);
+          setReviewCount(Number(reviewData.ratingCount || reviewData.total || 0));
+          if (!passedShop && !(shopResponse as any)?.data && reviewData.rating) {
+            setShop((current) =>
+              current
+                ? { ...current, rating: reviewData.rating, ratingCount: reviewData.ratingCount }
+                : current
+            );
+          }
+        } else {
+          setReviews([]);
+          setReviewCount(0);
+        }
+
+        if ((menuResponse as any).partner) {
+          const partnerMeta = (menuResponse as any).partner;
+          setShop((current) =>
+            current
+              ? {
+                  ...current,
+                  rating: partnerMeta.rating ?? current.rating,
+                  ratingCount: partnerMeta.ratingCount ?? current.ratingCount
+                }
+              : current
+          );
+          if (!passedShop && !shopResponse) {
+            setReviewCount((current) => current || Number(partnerMeta.ratingCount || 0));
+          }
         }
 
         if ((menuResponse as any).data && Array.isArray((menuResponse as any).data)) {
@@ -267,6 +338,49 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
     loadData();
   }, [passedShop, shopId]);
+
+  const loadFavoriteFoodItems = useCallback(async () => {
+    try {
+      const response = await getMyFavorites();
+      const foodItems = response.data?.foodItems || [];
+      setFavoriteFoodItemIds(new Set(foodItems.map((item) => item._id)));
+    } catch {
+      setFavoriteFoodItemIds(new Set());
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadFavoriteFoodItems();
+    }, [loadFavoriteFoodItems])
+  );
+
+  const toggleFavoriteFoodItem = async (item: MenuItem) => {
+    if (favoriteBusyId) return;
+
+    const wasFavorite = favoriteFoodItemIds.has(item._id);
+    const nextIds = new Set(favoriteFoodItemIds);
+    if (wasFavorite) {
+      nextIds.delete(item._id);
+    } else {
+      nextIds.add(item._id);
+    }
+    setFavoriteFoodItemIds(nextIds);
+    setFavoriteBusyId(item._id);
+
+    try {
+      const response = wasFavorite
+        ? await removeFavoriteFoodItem(item._id)
+        : await addFavoriteFoodItem(item._id);
+      const foodItems = response.data?.foodItems || [];
+      setFavoriteFoodItemIds(new Set(foodItems.map((entry) => entry._id)));
+    } catch (error: any) {
+      setFavoriteFoodItemIds(favoriteFoodItemIds);
+      Alert.alert("Favorites", error?.message || "Could not update favorites right now.");
+    } finally {
+      setFavoriteBusyId(null);
+    }
+  };
 
   useEffect(() => {
     getVegModePreference()
@@ -416,12 +530,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
           <Feather name="arrow-left" size={18} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Restaurant Details</Text>
-        <TouchableOpacity
-          style={styles.topBarButton}
-          onPress={() => Alert.alert("Favorites", "Favorites are not available in this release.")}
-        >
-          <Feather name="heart" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.topBarButton} />
       </View>
 
       <ScrollView
@@ -469,7 +578,9 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                   <Feather name="star" size={15} color="#F2A514" />
                   <Text style={styles.ratingValue}>{shop.rating?.toFixed(1) || "4.0"}</Text>
                 </View>
-                <Text style={styles.reviewText}>(120 reviews)</Text>
+                <Text style={styles.reviewText}>
+                  ({reviewCount || (shop as any)?.ratingCount || 0} reviews)
+                </Text>
               </View>
             </View>
           </View>
@@ -544,11 +655,48 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                   handleIncrement={handleIncrement}
                   handleDecrement={handleDecrement}
                   setPreviewImage={setPreviewImage}
+                  isFavorite={favoriteFoodItemIds.has(item._id)}
+                  favoriteBusy={favoriteBusyId === item._id}
+                  onToggleFavorite={toggleFavoriteFoodItem}
                 />
               );
             })}
           </View>
         )}
+
+        <View style={styles.reviewsSection}>
+          <View style={styles.menuHeader}>
+            <Text style={styles.menuTitle}>Reviews</Text>
+            <Text style={styles.menuSubtitle}>
+              {reviewCount || (shop as any)?.ratingCount || reviews.length} customer reviews
+            </Text>
+          </View>
+          {reviews.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No reviews yet</Text>
+              <Text style={styles.emptyBody}>Reviews appear here after customers rate delivered orders.</Text>
+            </View>
+          ) : (
+            <View style={styles.reviewsList}>
+              {reviews.map((review) => (
+                <View key={review._id} style={styles.reviewCard}>
+                  <View style={styles.reviewTopRow}>
+                    <Text style={styles.reviewAuthor}>{review.customerName}</Text>
+                    <View style={styles.reviewStars}>
+                      <Feather name="star" size={12} color="#F2A514" />
+                      <Text style={styles.reviewRating}>{review.rating.toFixed(1)}</Text>
+                    </View>
+                  </View>
+                  {review.comment ? (
+                    <Text style={styles.reviewComment}>{review.comment}</Text>
+                  ) : (
+                    <Text style={styles.reviewCommentMuted}>No additional comments.</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -917,6 +1065,67 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "900",
     color: "#FF6B35"
+  },
+  menuPriceActions: {
+    alignItems: "flex-end",
+    gap: 6
+  },
+  menuFavoriteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F7F2EC"
+  },
+  menuFavoriteButtonActive: {
+    backgroundColor: "#FFE4E6"
+  },
+  reviewsSection: {
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 12
+  },
+  reviewsList: {
+    gap: 10
+  },
+  reviewCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#EFE7DE",
+    padding: 14
+  },
+  reviewTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8
+  },
+  reviewAuthor: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#201914"
+  },
+  reviewStars: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4
+  },
+  reviewRating: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#A15C00"
+  },
+  reviewComment: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#5C524B"
+  },
+  reviewCommentMuted: {
+    fontSize: 12,
+    color: "#A3968D",
+    fontStyle: "italic"
   },
   priceActionBlock: {
     alignItems: "flex-end",

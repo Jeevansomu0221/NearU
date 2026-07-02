@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Types } from "mongoose"; // Import Types from mongoose
 import MenuItem from "../models/MenuItem.model";
 import Partner from "../models/Partner.model";
+import User from "../models/User.model";
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
@@ -103,7 +104,8 @@ export const getPublicPartnerMenu = async (req: Request, res: Response) => {
       partner: {
         name: partner.restaurantName || partner.shopName,
         isOpen: partner.isOpen,
-        rating: partner.rating
+        rating: partner.rating,
+        ratingCount: partner.ratingCount || 0
       }
     });
   } catch (error: any) {
@@ -395,6 +397,8 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
         message: "Menu item not found"
       });
     }
+
+    await User.updateMany({}, { $pull: { favoriteFoodItems: menuItem._id } });
 
     // Update partner's menu items count
     if (partner.menuItemsCount > 0) {

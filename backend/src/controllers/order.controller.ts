@@ -1786,10 +1786,16 @@ export const submitOrderRating = async (req: AuthRequest, res: Response) => {
     }
 
     const restaurantRating = {
-      foodQuality: normalizeRatingScore(req.body?.restaurantRating?.foodQuality),
-      packaging: normalizeRatingScore(req.body?.restaurantRating?.packaging),
-      overallExperience: normalizeRatingScore(req.body?.restaurantRating?.overallExperience),
-      comment: String(req.body?.restaurantRating?.comment || "").trim()
+      foodQuality: normalizeRatingScore(
+        req.body?.restaurantRating?.foodQuality ?? req.body?.overallRating
+      ),
+      packaging: normalizeRatingScore(
+        req.body?.restaurantRating?.packaging ?? req.body?.overallRating
+      ),
+      overallExperience: normalizeRatingScore(
+        req.body?.restaurantRating?.overallExperience ?? req.body?.overallRating
+      ),
+      comment: String(req.body?.restaurantRating?.comment || req.body?.comment || "").trim()
     };
     const deliveryRating = {
       deliverySpeed: normalizeRatingScore(req.body?.deliveryRating?.deliverySpeed),
@@ -1797,16 +1803,14 @@ export const submitOrderRating = async (req: AuthRequest, res: Response) => {
       comment: String(req.body?.deliveryRating?.comment || "").trim()
     };
 
-    const hasInvalidScore = [
+    const hasInvalidRestaurantScore = [
       restaurantRating.foodQuality,
       restaurantRating.packaging,
-      restaurantRating.overallExperience,
-      deliveryRating.deliverySpeed,
-      deliveryRating.partnerBehavior
+      restaurantRating.overallExperience
     ].some((score) => score === null);
 
-    if (hasInvalidScore) {
-      return errorResponse(res, "All ratings must be between 1 and 5", 400);
+    if (hasInvalidRestaurantScore) {
+      return errorResponse(res, "Restaurant rating must be between 1 and 5", 400);
     }
 
     const order: any = await Order.findOne({ _id: orderId, customerId: user.id });
@@ -1820,6 +1824,18 @@ export const submitOrderRating = async (req: AuthRequest, res: Response) => {
 
     if (order.ratingSubmittedAt) {
       return errorResponse(res, "Ratings already submitted for this order", 400);
+    }
+
+    const requiresDeliveryRating = Boolean(order.deliveryPartnerId);
+    if (requiresDeliveryRating) {
+      if (deliveryRating.deliverySpeed === null || deliveryRating.partnerBehavior === null) {
+        const fallbackScore = restaurantRating.overallExperience || 5;
+        deliveryRating.deliverySpeed = deliveryRating.deliverySpeed ?? fallbackScore;
+        deliveryRating.partnerBehavior = deliveryRating.partnerBehavior ?? fallbackScore;
+      }
+    } else {
+      deliveryRating.deliverySpeed = deliveryRating.deliverySpeed ?? 5;
+      deliveryRating.partnerBehavior = deliveryRating.partnerBehavior ?? 5;
     }
 
     order.restaurantRating = restaurantRating;

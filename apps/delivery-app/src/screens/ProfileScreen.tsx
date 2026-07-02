@@ -220,10 +220,13 @@ const uploadAssetToServer = async (asset: UploadAsset, field: UploadField) => {
   const rawFileName = asset.name || asset.uri.split("/").pop() || null;
   const mimeType = getUploadMimeType(rawFileName || field, asset.mimeType);
   const fileName = createUploadFileName(field, mimeType, rawFileName);
-  const formData = new FormData();
-  // @ts-ignore React Native FormData file object
-  formData.append("image", { uri: asset.uri, type: mimeType, name: fileName });
-  const responseData = await uploadMultipart<{ url: string }>("/upload/image", formData);
+  const buildFormData = () => {
+    const formData = new FormData();
+    // @ts-ignore React Native FormData file object
+    formData.append("image", { uri: asset.uri, type: mimeType, name: fileName });
+    return formData;
+  };
+  const responseData = await uploadMultipart<{ url: string }>("/upload/image", buildFormData);
   if (!responseData?.success || !responseData?.data?.url) {
     throw new Error(responseData?.message || GENERIC_UPLOAD_ERROR);
   }
@@ -574,7 +577,12 @@ export default function ProfileScreen({ navigation, route }: any) {
   const pickImage = async (field?: UploadField): Promise<UploadAsset | null> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") { Alert.alert("Permission needed", "Please allow gallery access to upload images."); return null; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: field === "profilePhotoUrl", aspect: field === "profilePhotoUrl" ? [1, 1] : undefined, quality: 0.6 });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: field === "profilePhotoUrl",
+      aspect: field === "profilePhotoUrl" ? [1, 1] : undefined,
+      quality: field === "profilePhotoUrl" ? 0.7 : 0.5
+    });
     if (result.canceled || !result.assets[0]?.uri) return null;
     const asset = result.assets[0];
     return { uri: asset.uri, name: asset.fileName || asset.uri.split("/").pop() || `image-${Date.now()}.jpg`, mimeType: asset.mimeType };

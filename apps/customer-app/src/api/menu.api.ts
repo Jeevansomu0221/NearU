@@ -25,3 +25,10 @@ export const getPartners = (params?: {
 export const getPartnerDetails = (partnerId: string) => {
   return api.get(`/partners/${partnerId}`);
 };
+
+/**
+ * GET RESTAURANT REVIEWS
+ */
+export const getPartnerReviews = (partnerId: string, params?: { page?: number; limit?: number }) => {
+  return api.get(`/partners/${partnerId}/reviews`, { params });
+};

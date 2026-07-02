@@ -93,7 +93,8 @@ const uploadBufferToCloudinary = async (imageFile: UploadedFile, ownerId: string
     timeout: CLOUDINARY_UPLOAD_TIMEOUT_MS
   };
 
-  if (imageFile.mimetype.startsWith("image/")) {
+  const mimeType = (imageFile.mimetype || "").toLowerCase();
+  if (mimeType.startsWith("image/")) {
     uploadOptions.transformation = [
       { width: 800, height: 800, crop: "limit" }
     ];
@@ -170,6 +171,18 @@ export const uploadImage = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({
         success: false,
         message: "Only JPG, PNG, WEBP, HEIC, or PDF files are allowed"
+      });
+    }
+
+    const fileSize = Number(imageFile.size || imageFile.data?.length || 0);
+    if (!imageFile.data || fileSize === 0) {
+      console.warn("Rejected upload due to empty file payload:", {
+        name: imageFile.name,
+        mimetype: imageFile.mimetype
+      });
+      return res.status(400).json({
+        success: false,
+        message: "Uploaded file is empty. Please select the file again and retry."
       });
     }
 

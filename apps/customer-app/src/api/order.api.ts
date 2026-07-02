@@ -166,13 +166,15 @@ export const cancelOrder = (orderId: string): Promise<ApiResponse<any>> => {
 export const submitOrderRating = (
   orderId: string,
   payload: {
+    overallRating?: number;
+    comment?: string;
     restaurantRating: {
       foodQuality: number;
       packaging: number;
       overallExperience: number;
       comment?: string;
     };
-    deliveryRating: {
+    deliveryRating?: {
       deliverySpeed: number;
       partnerBehavior: number;
       comment?: string;

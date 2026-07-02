@@ -16,7 +16,7 @@ import {
   clearPartnerOnboardingDraft
 } from "../controllers/partner.controller";
 
-import { getShopsWithImages } from "../controllers/shop.controller";
+import { getShopsWithImages, getPartnerPublicProfile, getPartnerReviews } from "../controllers/shop.controller";
 
 import menuRoutes from "./menu.routes";
 import { authMiddleware } from "../middlewares/auth.middleware";
@@ -77,5 +77,7 @@ router.put("/admin/:partnerId/status",
    PUBLIC SHOP ROUTES (for customers)
 ====================================================== */
 router.get("/shops", getShopsWithImages);
+router.get("/:partnerId/reviews", getPartnerReviews);
+router.get("/:partnerId", getPartnerPublicProfile);
 
 export default router;

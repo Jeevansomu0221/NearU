@@ -24,8 +24,6 @@ type TimelineStep = {
   caption: string;
 };
 
-type RestaurantRatingKey = "foodQuality" | "packaging" | "overallExperience";
-type DeliveryRatingKey = "deliverySpeed" | "partnerBehavior";
 
 const STATUS_STEPS: TimelineStep[] = [
   { status: "CONFIRMED", label: "Order placed", caption: "Waiting for restaurant confirmation" },
@@ -51,17 +49,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
-  const [restaurantRatings, setRestaurantRatings] = useState<Record<RestaurantRatingKey, number>>({
-    foodQuality: 0,
-    packaging: 0,
-    overallExperience: 0
-  });
-  const [deliveryRatings, setDeliveryRatings] = useState<Record<DeliveryRatingKey, number>>({
-    deliverySpeed: 0,
-    partnerBehavior: 0
-  });
+  const [overallRating, setOverallRating] = useState(0);
   const [restaurantComment, setRestaurantComment] = useState("");
-  const [deliveryComment, setDeliveryComment] = useState("");
 
   const loadOrderDetails = useCallback(async (options?: { silent?: boolean }) => {
     try {
@@ -96,17 +85,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   useEffect(() => {
     if (!order?.ratingSubmittedAt) return;
 
-    setRestaurantRatings({
-      foodQuality: order.restaurantRating?.foodQuality || 0,
-      packaging: order.restaurantRating?.packaging || 0,
-      overallExperience: order.restaurantRating?.overallExperience || 0
-    });
-    setDeliveryRatings({
-      deliverySpeed: order.deliveryRating?.deliverySpeed || 0,
-      partnerBehavior: order.deliveryRating?.partnerBehavior || 0
-    });
+    setOverallRating(order.restaurantRating?.overallExperience || 0);
     setRestaurantComment(order.restaurantRating?.comment || "");
-    setDeliveryComment(order.deliveryRating?.comment || "");
   }, [order]);
 
   useFocusEffect(
@@ -295,32 +275,26 @@ export default function OrderStatusScreen({ route, navigation }: any) {
     );
   };
 
-  const canSubmitRatings = [
-    restaurantRatings.foodQuality,
-    restaurantRatings.packaging,
-    restaurantRatings.overallExperience,
-    deliveryRatings.deliverySpeed,
-    deliveryRatings.partnerBehavior
-  ].every((score) => score >= 1 && score <= 5);
+  const canSubmitRatings = overallRating >= 1 && overallRating <= 5;
 
   const handleSubmitRatings = async () => {
     if (!order || ratingSubmitting) return;
 
     if (!canSubmitRatings) {
-      Alert.alert("Ratings", "Please rate every restaurant and delivery category.");
+      Alert.alert("Review", "Please select a star rating before submitting.");
       return;
     }
 
     try {
       setRatingSubmitting(true);
       const response = await submitOrderRating(order._id, {
+        overallRating,
+        comment: restaurantComment.trim(),
         restaurantRating: {
-          ...restaurantRatings,
+          foodQuality: overallRating,
+          packaging: overallRating,
+          overallExperience: overallRating,
           comment: restaurantComment.trim()
-        },
-        deliveryRating: {
-          ...deliveryRatings,
-          comment: deliveryComment.trim()
         }
       });
 
@@ -594,77 +568,46 @@ export default function OrderStatusScreen({ route, navigation }: any) {
 
       {canRateOrder ? (
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Rate this order</Text>
+          <Text style={styles.sectionTitle}>Rate your order</Text>
           {hasSubmittedRating ? (
-            <Text style={styles.ratingSubmittedText}>Thanks for rating this order. Your feedback has been saved.</Text>
+            <View>
+              <Text style={styles.ratingSubmittedText}>Thanks for your review.</Text>
+              <View style={styles.ratingRowBlock}>
+                <Text style={styles.ratingLabel}>Your rating</Text>
+                {renderStars(overallRating, () => {}, true)}
+              </View>
+              {restaurantComment ? (
+                <Text style={styles.submittedReviewComment}>{restaurantComment}</Text>
+              ) : null}
+            </View>
           ) : (
-            <Text style={styles.ratingHint}>Rate the restaurant and delivery separately after completion.</Text>
+            <>
+              <Text style={styles.ratingHint}>Share a star rating and optional feedback for this restaurant.</Text>
+              <View style={styles.ratingRowBlock}>
+                <Text style={styles.ratingLabel}>Overall rating</Text>
+                {renderStars(overallRating, setOverallRating)}
+              </View>
+              <TextInput
+                style={styles.ratingCommentInput}
+                value={restaurantComment}
+                onChangeText={setRestaurantComment}
+                multiline
+                placeholder="Anything else to say? (optional)"
+                placeholderTextColor="#A3968D"
+              />
+              <TouchableOpacity
+                style={[styles.primaryButton, (!canSubmitRatings || ratingSubmitting) && styles.primaryButtonDisabled]}
+                onPress={handleSubmitRatings}
+                disabled={!canSubmitRatings || ratingSubmitting}
+              >
+                {ratingSubmitting ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Submit Review</Text>
+                )}
+              </TouchableOpacity>
+            </>
           )}
-
-          <View style={styles.ratingGroup}>
-            <Text style={styles.ratingGroupTitle}>Restaurant Rating</Text>
-            <View style={styles.ratingRowBlock}>
-              <Text style={styles.ratingLabel}>Food Quality</Text>
-              {renderStars(restaurantRatings.foodQuality, (score) =>
-                setRestaurantRatings((current) => ({ ...current, foodQuality: score })), hasSubmittedRating)}
-            </View>
-            <View style={styles.ratingRowBlock}>
-              <Text style={styles.ratingLabel}>Packaging</Text>
-              {renderStars(restaurantRatings.packaging, (score) =>
-                setRestaurantRatings((current) => ({ ...current, packaging: score })), hasSubmittedRating)}
-            </View>
-            <View style={styles.ratingRowBlock}>
-              <Text style={styles.ratingLabel}>Overall Experience</Text>
-              {renderStars(restaurantRatings.overallExperience, (score) =>
-                setRestaurantRatings((current) => ({ ...current, overallExperience: score })), hasSubmittedRating)}
-            </View>
-            <TextInput
-              style={styles.ratingCommentInput}
-              value={restaurantComment}
-              onChangeText={setRestaurantComment}
-              editable={!hasSubmittedRating}
-              multiline
-              placeholder="Optional restaurant feedback"
-              placeholderTextColor="#A3968D"
-            />
-          </View>
-
-          <View style={styles.ratingGroup}>
-            <Text style={styles.ratingGroupTitle}>Delivery Rating</Text>
-            <View style={styles.ratingRowBlock}>
-              <Text style={styles.ratingLabel}>Delivery Speed</Text>
-              {renderStars(deliveryRatings.deliverySpeed, (score) =>
-                setDeliveryRatings((current) => ({ ...current, deliverySpeed: score })), hasSubmittedRating)}
-            </View>
-            <View style={styles.ratingRowBlock}>
-              <Text style={styles.ratingLabel}>Delivery Partner Behavior</Text>
-              {renderStars(deliveryRatings.partnerBehavior, (score) =>
-                setDeliveryRatings((current) => ({ ...current, partnerBehavior: score })), hasSubmittedRating)}
-            </View>
-            <TextInput
-              style={styles.ratingCommentInput}
-              value={deliveryComment}
-              onChangeText={setDeliveryComment}
-              editable={!hasSubmittedRating}
-              multiline
-              placeholder="Optional delivery feedback"
-              placeholderTextColor="#A3968D"
-            />
-          </View>
-
-          {!hasSubmittedRating ? (
-            <TouchableOpacity
-              style={[styles.primaryButton, (!canSubmitRatings || ratingSubmitting) && styles.primaryButtonDisabled]}
-              onPress={handleSubmitRatings}
-              disabled={!canSubmitRatings || ratingSubmitting}
-            >
-              {ratingSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Submit Ratings</Text>
-              )}
-            </TouchableOpacity>
-          ) : null}
         </View>
       ) : null}
 
@@ -1058,6 +1001,12 @@ const styles = StyleSheet.create({
     color: "#216E39",
     fontWeight: "700",
     marginBottom: 14
+  },
+  submittedReviewComment: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#5C524B",
+    marginTop: 4
   },
   ratingGroup: {
     backgroundColor: "#FFFCF8",

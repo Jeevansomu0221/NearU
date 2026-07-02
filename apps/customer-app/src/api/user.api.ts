@@ -55,6 +55,19 @@ export interface FavoriteFoodItem {
   category?: string;
   partnerId?: string;
   rating?: number;
+  isAvailable?: boolean;
+  isOrderable?: boolean;
+  availabilityLabel?: string;
+  description?: string;
+  partner?: {
+    _id?: string;
+    restaurantName?: string;
+    shopName?: string;
+    isOpen?: boolean;
+    rating?: number;
+    shopImageUrl?: string;
+    category?: string;
+  };
 }
 
 export interface FavoritesResponse {
@@ -144,6 +157,14 @@ export const addFavoriteRestaurant = (partnerId: string): Promise<ApiResponse<Fa
 
 export const removeFavoriteRestaurant = (partnerId: string): Promise<ApiResponse<FavoritesResponse>> => {
   return apiDelete<FavoritesResponse>(`/users/favorites/restaurants/${partnerId}`);
+};
+
+export const addFavoriteFoodItem = (menuItemId: string): Promise<ApiResponse<FavoritesResponse>> => {
+  return apiPost<FavoritesResponse>(`/users/favorites/food-items/${menuItemId}`);
+};
+
+export const removeFavoriteFoodItem = (menuItemId: string): Promise<ApiResponse<FavoritesResponse>> => {
+  return apiDelete<FavoritesResponse>(`/users/favorites/food-items/${menuItemId}`);
 };
 
 export const deleteMyAccount = (): Promise<ApiResponse<null>> => {

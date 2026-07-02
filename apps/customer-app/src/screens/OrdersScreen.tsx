@@ -140,7 +140,12 @@ export default function OrdersScreen({ navigation }: any) {
       )}
 
       <View style={styles.orderFooter}>
-        <Text style={styles.totalLabel}>Total Amount</Text>
+        <View>
+          <Text style={styles.totalLabel}>Total Amount</Text>
+          {item.status === "DELIVERED" && !item.ratingSubmittedAt ? (
+            <Text style={styles.rateHint}>Tap to rate this order</Text>
+          ) : null}
+        </View>
         <Text style={styles.totalAmount}>₹{item.grandTotal}</Text>
       </View>
     </TouchableOpacity>
@@ -395,6 +400,12 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 14,
     color: '#666',
+  },
+  rateHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#F59E0B',
+    fontWeight: '700',
   },
   totalAmount: {
     fontSize: 18,

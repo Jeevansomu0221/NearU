@@ -15,6 +15,8 @@ import {
   getMyFavorites,
   addFavoriteRestaurant,
   removeFavoriteRestaurant,
+  addFavoriteFoodItem,
+  removeFavoriteFoodItem,
   deleteMyAccount
 } from "../controllers/user.controller";
 
@@ -103,6 +105,20 @@ router.delete(
   authMiddleware,
   roleMiddleware([...CONSUMER_APP_ROLES]),
   removeFavoriteRestaurant
+);
+
+router.post(
+  "/favorites/food-items/:menuItemId",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  addFavoriteFoodItem
+);
+
+router.delete(
+  "/favorites/food-items/:menuItemId",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  removeFavoriteFoodItem
 );
 
 // Get user's orders (customer only)
