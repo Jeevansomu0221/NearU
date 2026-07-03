@@ -29,6 +29,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import { getOrderRiderEarnings, getOrderTipAmount, parseMoneyInput } from "../utils/riderEarnings";
 
 type EarningHistoryItem = {
   id: string;
@@ -216,20 +217,35 @@ export default function EarningsScreen({ navigation }: any) {
       .map((order) => {
         const deliveredAt = new Date(order.deliveredAt || order.updatedAt || order.createdAt).getTime();
         const deliveries = Math.max(order.deliveryBundleSize || order.pickupStops?.length || order.bundleOrders?.length || 1, 1);
+        const tipAmount = getOrderTipAmount(order);
+        const earnings = getOrderRiderEarnings(order);
+        const orderLabel = order.isBundledDelivery
+          ? `Bundled #${order._id.slice(-6).toUpperCase()}`
+          : `Order #${order._id.slice(-6).toUpperCase()}`;
+
         return {
           id: order._id,
           date: Number.isNaN(deliveredAt) ? "Delivered" : formatEarningDate(deliveredAt),
-          orderLabel: order.isBundledDelivery ? `Bundled #${order._id.slice(-6).toUpperCase()}` : `Order #${order._id.slice(-6).toUpperCase()}`,
-          amount: Number(order.deliveryEarnings || order.estimatedEarnings || order.deliveryFee || 0),
+          orderLabel: tipAmount > 0 ? `${orderLabel} · incl. ₹${tipAmount} tip` : orderLabel,
+          amount: earnings,
           deliveries,
           deliveredAt: Number.isNaN(deliveredAt) ? 0 : deliveredAt
         };
       })
       .sort((left, right) => right.deliveredAt - left.deliveredAt);
 
+  const openDepositModal = () => {
+    const balance = cashLedger?.cashBalance || stats?.cashBalance || 0;
+    setDepositAmount(balance > 0 ? String(Math.round(balance)) : "");
+    setDepositReference("");
+    setDepositProofUrl("");
+    setDepositNote("");
+    setDepositModalVisible(true);
+  };
+
   const handleSubmitDeposit = async () => {
-    const amount = Number(depositAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const amount = parseMoneyInput(depositAmount);
+    if (amount <= 0) {
       Alert.alert("Invalid amount", "Enter the amount you deposited back to the platform.");
       return;
     }
@@ -344,7 +360,10 @@ export default function EarningsScreen({ navigation }: any) {
   const recentEarnings = earningsHistory.slice(0, 3);
   const recentCashEntries = cashLedger?.entries?.slice(0, 3) ?? [];
   const walletBalance = withdrawalWallet?.walletBalance ?? stats?.walletBalance ?? 0;
+  const grossPendingEarnings = withdrawalWallet?.grossEarnings ?? stats?.grossPendingEarnings ?? 0;
+  const cashOffset = withdrawalWallet?.cashOffset ?? stats?.cashOffset ?? 0;
   const totalPaidEarnings = withdrawalWallet?.totalPaidEarnings ?? stats?.totalEarnings ?? 0;
+  const codCashBalance = cashLedger?.cashBalance || stats?.cashBalance || 0;
 
   if (loading) {
     return (
@@ -364,8 +383,18 @@ export default function EarningsScreen({ navigation }: any) {
       >
         {/* Wallet Hero */}
         <View style={styles.todayCard}>
-        <Text style={styles.todayLabel}>WALLET</Text>
+        <Text style={styles.todayLabel}>WITHDRAWABLE WALLET</Text>
         <Text style={styles.todayAmount}>{formatCurrency(walletBalance)}</Text>
+        {grossPendingEarnings > 0 ? (
+          <Text style={styles.walletSubtext}>
+            Pending delivery earnings: {formatCurrency(grossPendingEarnings)}
+            {cashOffset > 0 ? ` · COD offset applied: ${formatCurrency(cashOffset)}` : ""}
+          </Text>
+        ) : walletBalance <= 0 && codCashBalance > 0 ? (
+          <Text style={styles.walletSubtext}>
+            Your delivery earnings are fully offset by COD cash held. Deposit cash back to unlock withdrawals.
+          </Text>
+        ) : null}
         <View style={styles.todayStats}>
           <View style={styles.todayStatItem}>
             <Ionicons name="bicycle" size={16} color="rgba(255,255,255,0.95)" />
@@ -419,7 +448,7 @@ export default function EarningsScreen({ navigation }: any) {
             )}
           </TouchableOpacity>
         </View>
-        <Text style={styles.cashAmount}>{formatCurrency(cashLedger?.cashBalance || stats?.cashBalance || 0)}</Text>
+        <Text style={styles.cashAmount}>{formatCurrency(codCashBalance)}</Text>
         <Text style={styles.withdrawalNote}>
           Cash collected from COD orders is adjusted against your rider earnings first. Any remaining amount must be deposited back to the platform.
         </Text>
@@ -436,9 +465,9 @@ export default function EarningsScreen({ navigation }: any) {
           </Text>
         </View>
         <TouchableOpacity
-          style={[styles.depositButton, (cashLedger?.cashBalance || stats?.cashBalance || 0) <= 0 && styles.disabledButton]}
-          disabled={(cashLedger?.cashBalance || stats?.cashBalance || 0) <= 0}
-          onPress={() => setDepositModalVisible(true)}
+          style={[styles.depositButton, codCashBalance <= 0 && styles.disabledButton]}
+          disabled={codCashBalance <= 0}
+          onPress={openDepositModal}
         >
           <Text style={styles.withdrawButtonText}>Submit Cash Deposit</Text>
         </TouchableOpacity>
@@ -608,14 +637,23 @@ export default function EarningsScreen({ navigation }: any) {
             <Text style={styles.modalDescription}>
               Enter details after depositing COD cash back to the platform. Admin will verify before your balance is reduced.
             </Text>
+            <Text style={styles.modalBalanceHint}>
+              Your COD cash balance: {formatCurrency(codCashBalance)}
+            </Text>
             <TextInput
               style={styles.modalInput}
-              keyboardType="numeric"
-              placeholder="Amount"
+              keyboardType="number-pad"
+              placeholder="Amount deposited"
               placeholderTextColor="#6B7280"
               value={depositAmount}
-              onChangeText={setDepositAmount}
+              onChangeText={(value) => setDepositAmount(value.replace(/[^\d]/g, ""))}
             />
+            <TouchableOpacity
+              style={styles.useFullBalanceButton}
+              onPress={() => setDepositAmount(codCashBalance > 0 ? String(Math.round(codCashBalance)) : "")}
+            >
+              <Text style={styles.useFullBalanceText}>Use full balance ({formatCurrency(codCashBalance)})</Text>
+            </TouchableOpacity>
             <TextInput
               style={styles.modalInput}
               placeholder="Reference / UTR"
@@ -854,6 +892,12 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '700',
     color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  walletSubtext: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: 'rgba(255, 255, 255, 0.92)',
     marginBottom: 16,
   },
   todayStats: {
@@ -1248,7 +1292,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     lineHeight: 18,
-    marginBottom: 16,
+    marginBottom: 8,
+  },
+  modalBalanceHint: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B45309',
+    marginBottom: 12,
+  },
+  useFullBalanceButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  useFullBalanceText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FF6B35',
   },
   modalInput: {
     borderWidth: 1,

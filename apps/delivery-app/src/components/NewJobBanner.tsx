@@ -12,10 +12,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress, type AddressLike } from "../utils/address";
+import { getOrderRiderEarnings } from "../utils/riderEarnings";
 
 type Job = {
   _id: string;
   grandTotal?: number;
+  tipAmount?: number;
   deliveryFee?: number;
   deliveryAddress?: string;
   paymentMethod?: string;
@@ -114,7 +116,7 @@ export default function NewJobBanner({
   const distanceText =
     typeof job.distance === "number" ? `${job.distance.toFixed(1)} km` : "Distance pending";
   const travelText = typeof job.travelTime === "number" ? `${Math.round(job.travelTime)} min` : "-- min";
-  const earnings = job.estimatedEarnings || job.deliveryFee || 49;
+  const earnings = getOrderRiderEarnings(job);
   const restaurantName = job.isBundledDelivery
     ? `${job.pickupStops?.length || job.deliveryBundleSize || 2} restaurant pickups`
     : job.partnerId?.restaurantName || job.partnerId?.shopName || "Restaurant";

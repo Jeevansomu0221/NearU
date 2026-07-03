@@ -61,8 +61,11 @@ export const getRiderPaidEarningsTotal = async (deliveryPartnerId: mongoose.Type
   return Number(result?.total || 0);
 };
 
-export const getRiderWalletSummary = async (deliveryPartner: any) => {
-  const orders = await getPendingDeliveryPayoutOrders(String(deliveryPartner.userId));
+export const getRiderWalletSummary = async (deliveryPartner: any, fallbackUserId?: string) => {
+  const deliveryUserId = String(deliveryPartner?.userId || fallbackUserId || "").trim();
+  const orders = deliveryUserId
+    ? await getPendingDeliveryPayoutOrders(deliveryUserId)
+    : [];
   const grossEarnings = orders.reduce((sum, order) => sum + getRiderOrderEarnings(order), 0);
   const breakdown = getRiderPayoutBreakdown(grossEarnings, Number(deliveryPartner.cashBalance || 0));
   const totalPaidEarnings = await getRiderPaidEarningsTotal(deliveryPartner._id);
@@ -80,10 +83,17 @@ export const getRiderWalletSummary = async (deliveryPartner: any) => {
 };
 
 export const getPendingDeliveryPayoutOrders = async (deliveryUserId: string) => {
+  const normalizedUserId = String(deliveryUserId || "").trim();
+  if (!normalizedUserId) return [];
+
+  const deliveryPartnerFilter = mongoose.Types.ObjectId.isValid(normalizedUserId)
+    ? new mongoose.Types.ObjectId(normalizedUserId)
+    : normalizedUserId;
+
   return Order.find({
     status: "DELIVERED",
     paymentStatus: "PAID",
-    deliveryPartnerId: deliveryUserId,
+    deliveryPartnerId: deliveryPartnerFilter,
     "deliveryPayout.status": { $ne: "PAID" }
   })
     .select("deliveryPartnerId deliveryFee tipAmount createdAt updatedAt deliveredAt")

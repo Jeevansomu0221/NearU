@@ -87,6 +87,8 @@ export interface DeliveryStats {
   totalDeliveries: number;
   totalEarnings: number;
   walletBalance?: number;
+  grossPendingEarnings?: number;
+  cashOffset?: number;
   lifetimeDeliveredEarnings?: number;
   todaysDeliveries: number;
   todaysEarnings: number;

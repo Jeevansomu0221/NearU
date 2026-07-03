@@ -636,7 +636,7 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
       Order.countDocuments({
         deliveryRejectedBy: deliveryUserId
       }),
-      getRiderWalletSummary(deliveryPartner)
+      getRiderWalletSummary(deliveryPartner, user.id)
     ]);
     const totalJobResponses = acceptedJobs + rejectedJobs;
     const acceptanceRate = totalJobResponses > 0 ? Math.round((acceptedJobs / totalJobResponses) * 100) : 0;
@@ -660,6 +660,8 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
         totalDeliveries: deliveredOrders.length,
         totalEarnings: walletSummary.totalPaidEarnings,
         walletBalance: walletSummary.walletBalance,
+        grossPendingEarnings: walletSummary.grossWalletEarnings,
+        cashOffset: walletSummary.cashOffset,
         lifetimeDeliveredEarnings: deliveredOrders.reduce(
           (sum, order) => sum + getRiderOrderEarnings(order),
           0

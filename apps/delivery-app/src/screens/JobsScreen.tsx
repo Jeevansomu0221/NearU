@@ -11,7 +11,7 @@ import {
   View,
   useWindowDimensions
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getOrderRiderEarnings } from "../utils/riderEarnings";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -119,14 +119,10 @@ export default function JobsScreen({ navigation }: any) {
         if (response.success && response.data) {
           const distance = response.data.distance;
           const travelTime = response.data.duration;
-          const baseFee = 49;
-          const extraDistance = Math.max(distance - 2, 0);
-          const estimatedEarnings = baseFee + extraDistance * 10 + (job.grandTotal > 500 ? 20 : 0);
           return {
             ...job,
             distance: Number(distance.toFixed(1)),
-            travelTime: Math.round(travelTime),
-            estimatedEarnings: Math.round(estimatedEarnings)
+            travelTime: Math.round(travelTime)
           };
         }
       } catch {
@@ -453,7 +449,7 @@ export default function JobsScreen({ navigation }: any) {
   );
 
   const renderJobItem = ({ item }: { item: CalculatedJob }) => {
-    const earnings = item.estimatedEarnings || item.deliveryFee || 49;
+    const earnings = getOrderRiderEarnings(item);
     const accepted = acceptingJobId === item._id;
     const pickupStops = item.pickupStops?.length
       ? item.pickupStops
@@ -636,7 +632,7 @@ export default function JobsScreen({ navigation }: any) {
                 <View style={styles.confirmMetaRow}>
                   <Text style={styles.confirmMetaLabel}>Earnings</Text>
                   <Text style={[styles.confirmMetaValue, { color: "#087443", fontWeight: "800" }]}>
-                    Rs {selectedJobAction.job.estimatedEarnings || selectedJobAction.job.deliveryFee || 49}
+                    Rs {getOrderRiderEarnings(selectedJobAction.job)}
                   </Text>
                 </View>
               </View>

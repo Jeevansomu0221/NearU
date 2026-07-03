@@ -381,15 +381,22 @@ const resolveCustomerSavedLocation = async (customerId: any): Promise<GeoPoint |
 const ensureDeliveryLocationForResponse = async (orderObj: any): Promise<any> => {
   if (!orderObj) return orderObj;
 
+  const enrichOrder = (order: any) => {
+    const deliveryFee = Number(order.deliveryFee || 0);
+    const tipAmount = Number(order.tipAmount || 0);
+    order.estimatedEarnings = roundMoney(deliveryFee + tipAmount);
+    return order;
+  };
+
   const existingLocation = normalizeLocationPayload(orderObj.deliveryLocation);
   if (existingLocation) {
     orderObj.deliveryLocation = existingLocation;
     orderObj.deliveryGoogleMapsLink = buildGoogleMapsDirectionsLink(existingLocation);
-    return orderObj;
+    return enrichOrder(orderObj);
   }
 
   const fallbackLocation = await resolveCustomerSavedLocation(orderObj.customerId);
-  if (!fallbackLocation) return orderObj;
+  if (!fallbackLocation) return enrichOrder(orderObj);
 
   orderObj.deliveryLocation = fallbackLocation;
   orderObj.deliveryGoogleMapsLink = buildGoogleMapsDirectionsLink(fallbackLocation);
@@ -400,7 +407,7 @@ const ensureDeliveryLocationForResponse = async (orderObj: any): Promise<any> =>
     });
   }
 
-  return orderObj;
+  return enrichOrder(orderObj);
 };
 
 const haversineKm = (from: [number, number], to: [number, number]) => {

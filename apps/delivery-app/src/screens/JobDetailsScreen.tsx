@@ -28,6 +28,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
 import { getCurrentRiderLocation } from "../utils/riderLocation";
+import { getOrderRiderEarnings } from "../utils/riderEarnings";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Props {
@@ -79,13 +80,7 @@ const RZPAY_IMG_H = RZPAY_IMG_W * 1.61;
 const RZPAY_IMG_LEFT = -((RZPAY_IMG_W - UPI_FOCUS_SIZE) / 2);
 const RZPAY_IMG_TOP = -(RZPAY_IMG_H * 0.22);
 
-const getJobRiderEarnings = (job: DeliveryOrder | null | undefined) => {
-  if (!job) return 0;
-  if (typeof job.estimatedEarnings === "number" && job.estimatedEarnings > 0) {
-    return job.estimatedEarnings;
-  }
-  return Number(job.deliveryFee || 0) + Number(job.tipAmount || 0);
-};
+const getJobRiderEarnings = getOrderRiderEarnings;
 
 const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (!session) return null;

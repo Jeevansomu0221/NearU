@@ -58,8 +58,8 @@ const maskAccountNumber = (accountNumber?: string) => {
   return `${"*".repeat(Math.max(value.length - 4, 0))}${value.slice(-4)}`;
 };
 
-const buildWalletPayload = async (deliveryPartner: any) => {
-  const walletSummary = await getRiderWalletSummary(deliveryPartner);
+const buildWalletPayload = async (deliveryPartner: any, fallbackUserId?: string) => {
+  const walletSummary = await getRiderWalletSummary(deliveryPartner, fallbackUserId);
   const bankDetails = getBankDetails(deliveryPartner, "DELIVERY_PARTNER");
 
   let pendingRequest = await WithdrawalRequest.findOne({
@@ -191,7 +191,7 @@ export const getMyWithdrawalWallet = async (req: AuthRequest, res: Response) => 
 
     res.json({
       success: true,
-      data: await buildWalletPayload(deliveryPartner)
+      data: await buildWalletPayload(deliveryPartner, user.id)
     });
   } catch (error: any) {
     console.error("getMyWithdrawalWallet error:", error);
