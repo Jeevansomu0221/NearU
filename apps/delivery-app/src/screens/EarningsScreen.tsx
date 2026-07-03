@@ -350,7 +350,10 @@ export default function EarningsScreen({ navigation }: any) {
         return;
       }
 
-      Alert.alert("Submitted", "Your cash deposit is waiting for admin verification.");
+      Alert.alert(
+        "Submitted",
+        "Your COD cash balance is cleared. Admin will verify your deposit — if rejected, the amount will be added back."
+      );
       setDepositModalVisible(false);
       setDepositAmount("");
       setDepositReference("");
@@ -532,7 +535,7 @@ export default function EarningsScreen({ navigation }: any) {
         </View>
         <Text style={styles.cashAmount}>{formatCurrency(codCashBalance)}</Text>
         <Text style={styles.withdrawalNote}>
-          Cash you collected from customers on COD orders. This includes food bill, delivery fee, and tips. Deposit this full amount back to Vyaha.
+          Cash you collected from customers on COD orders. This includes food bill, delivery fee, and tips. Deposit this full amount back to Vyaha. Your balance clears to ₹0 once submitted; admin verifies the deposit separately.
         </Text>
         <View style={styles.cashSummaryRow}>
           <Text style={styles.cashSummaryLabel}>Pending deposit verification</Text>
@@ -741,7 +744,7 @@ export default function EarningsScreen({ navigation }: any) {
               >
                 <Text style={styles.modalTitle}>Submit Cash Deposit</Text>
                 <Text style={styles.modalDescription}>
-                  Enter details after depositing COD cash back to the platform. Admin will verify before your balance is reduced.
+                  Enter details after depositing COD cash back to the platform. Your COD balance clears immediately; admin will verify the deposit. If rejected, the balance is restored.
                 </Text>
                 <Text style={styles.modalBalanceHint}>
                   Your COD cash balance: {formatCurrency(codCashBalance)}

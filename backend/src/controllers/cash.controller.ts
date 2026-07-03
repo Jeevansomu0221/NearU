@@ -99,13 +99,14 @@ export const submitCashDeposit = async (req: AuthRequest, res: Response) => {
       userId: deliveryPartner.userId,
       type: "CASH_DEPOSIT_SUBMITTED",
       amount,
-      balanceDelta: 0,
+      balanceDelta: -amount,
       status: "PENDING",
       reference: String(req.body.reference || "").trim(),
       proofUrl: String(req.body.proofUrl || "").trim(),
       note: String(req.body.note || "").trim()
     });
 
+    deliveryPartner.cashBalance = Math.max(cashBalance - amount, 0);
     deliveryPartner.pendingDepositAmount = Number(deliveryPartner.pendingDepositAmount || 0) + amount;
     deliveryPartner.lastCashActivityAt = new Date();
     deliveryPartner.lastCashActivityType = "CASH_DEPOSIT_SUBMITTED";
@@ -174,7 +175,10 @@ export const verifyCashDeposit = async (req: AuthRequest, res: Response) => {
     }
 
     const amount = Number(deposit.amount || 0);
-    const balanceReduction = Math.min(amount, Number(deliveryPartner.cashBalance || 0));
+    const balanceAlreadyCleared = Number(deposit.balanceDelta || 0) < 0;
+    const balanceReduction = balanceAlreadyCleared
+      ? 0
+      : Math.min(amount, Number(deliveryPartner.cashBalance || 0));
     const now = new Date();
 
     const verifiedEntry = await CashLedgerEntry.create({
@@ -182,7 +186,7 @@ export const verifyCashDeposit = async (req: AuthRequest, res: Response) => {
       userId: deliveryPartner.userId,
       type: "CASH_DEPOSIT_VERIFIED",
       amount,
-      balanceDelta: -balanceReduction,
+      balanceDelta: balanceAlreadyCleared ? 0 : -balanceReduction,
       status: "POSTED",
       relatedEntryId: deposit._id,
       reference: String(req.body.reference || deposit.reference || "").trim(),
@@ -198,7 +202,9 @@ export const verifyCashDeposit = async (req: AuthRequest, res: Response) => {
     deposit.relatedEntryId = verifiedEntry._id;
     await deposit.save();
 
-    deliveryPartner.cashBalance = Math.max(Number(deliveryPartner.cashBalance || 0) - balanceReduction, 0);
+    if (!balanceAlreadyCleared) {
+      deliveryPartner.cashBalance = Math.max(Number(deliveryPartner.cashBalance || 0) - balanceReduction, 0);
+    }
     deliveryPartner.pendingDepositAmount = Math.max(Number(deliveryPartner.pendingDepositAmount || 0) - amount, 0);
     deliveryPartner.lastCashActivityAt = now;
     deliveryPartner.lastCashActivityType = "CASH_DEPOSIT_VERIFIED";
@@ -234,10 +240,16 @@ export const rejectCashDeposit = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: "Pending deposit not found" });
     }
 
+    const amount = Number(deposit.amount || 0);
+    const restoreCashBalance = Number(deposit.balanceDelta || 0) < 0 ? amount : 0;
+
     await DeliveryPartner.updateOne(
       { _id: deposit.deliveryPartnerId },
       {
-        $inc: { pendingDepositAmount: -Number(deposit.amount || 0) },
+        $inc: {
+          pendingDepositAmount: -amount,
+          ...(restoreCashBalance > 0 ? { cashBalance: restoreCashBalance } : {})
+        },
         $set: {
           lastCashActivityAt: new Date(),
           lastCashActivityType: "CASH_DEPOSIT_REJECTED"
