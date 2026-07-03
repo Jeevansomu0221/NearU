@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -13,8 +13,10 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback,
-  Keyboard
+  Keyboard,
+  Pressable,
+  type LayoutChangeEvent,
+  type TextInput as TextInputType
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { uploadMultipart } from "../api/client";
@@ -65,6 +67,10 @@ export default function EarningsScreen({ navigation }: any) {
   const [cashLedgerModalVisible, setCashLedgerModalVisible] = useState(false);
   const [cashRefreshing, setCashRefreshing] = useState(false);
   const [walletRefreshing, setWalletRefreshing] = useState(false);
+  const depositScrollRef = useRef<ScrollView>(null);
+  const depositFieldOffsets = useRef<Record<string, number>>({});
+  const depositInputRefs = useRef<Record<string, TextInputType | null>>({});
+  const activeDepositField = useRef<string | null>(null);
 
   const refreshWithdrawalWallet = useCallback(async () => {
     try {
@@ -164,17 +170,62 @@ export default function EarningsScreen({ navigation }: any) {
     }
   };
 
+  const registerDepositFieldLayout = (fieldKey: string) => (event: LayoutChangeEvent) => {
+    depositFieldOffsets.current[fieldKey] = event.nativeEvent.layout.y;
+  };
+
+  const scrollDepositFieldIntoView = useCallback((fieldKey: string) => {
+    activeDepositField.current = fieldKey;
+    const offset = Math.max((depositFieldOffsets.current[fieldKey] || 0) - 16, 0);
+    requestAnimationFrame(() => {
+      depositScrollRef.current?.scrollTo({ y: offset, animated: true });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!depositModalVisible) return;
+
+    const eventName = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const subscription = Keyboard.addListener(eventName, () => {
+      if (activeDepositField.current) {
+        scrollDepositFieldIntoView(activeDepositField.current);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [depositModalVisible, scrollDepositFieldIntoView]);
+
   const pickDepositProof = async () => {
+    Keyboard.dismiss();
+    activeDepositField.current = null;
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") {
       Alert.alert("Permission needed", "Allow gallery access to upload your deposit proof.");
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8
-    });
-    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    setDepositModalVisible(false);
+    await new Promise((resolve) => setTimeout(resolve, Platform.OS === "android" ? 220 : 120));
+
+    let result;
+    try {
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: false
+      });
+    } catch (error: any) {
+      setDepositModalVisible(true);
+      Alert.alert("Upload failed", error?.message || "Could not open your photo library.");
+      return;
+    }
+
+    setDepositModalVisible(true);
+
+    if (result.canceled || !result.assets?.[0]?.uri) {
+      return;
+    }
 
     try {
       setUploadingProof(true);
@@ -368,6 +419,7 @@ export default function EarningsScreen({ navigation }: any) {
   const cashOffset = withdrawalWallet?.cashOffset ?? stats?.cashOffset ?? 0;
   const totalPaidEarnings = withdrawalWallet?.totalPaidEarnings ?? stats?.totalEarnings ?? 0;
   const codCashBalance = cashLedger?.cashBalance || stats?.cashBalance || 0;
+  const heroEarningsAmount = grossPendingEarnings > 0 ? grossPendingEarnings : walletBalance;
 
   if (loading) {
     return (
@@ -387,18 +439,16 @@ export default function EarningsScreen({ navigation }: any) {
       >
         {/* Wallet Hero */}
         <View style={styles.todayCard}>
-        <Text style={styles.todayLabel}>WITHDRAWABLE WALLET</Text>
-        <Text style={styles.todayAmount}>{formatCurrency(walletBalance)}</Text>
-        {grossPendingEarnings > 0 ? (
-          <Text style={styles.walletSubtext}>
-            Pending delivery earnings: {formatCurrency(grossPendingEarnings)}
-            {cashOffset > 0 ? ` · COD offset applied: ${formatCurrency(cashOffset)}` : ""}
-          </Text>
-        ) : walletBalance <= 0 && codCashBalance > 0 ? (
-          <Text style={styles.walletSubtext}>
-            Your delivery earnings are fully offset by COD cash held. Deposit cash back to unlock withdrawals.
-          </Text>
-        ) : null}
+        <Text style={styles.todayLabel}>PENDING DELIVERY EARNINGS</Text>
+        <Text style={styles.todayAmount}>{formatCurrency(heroEarningsAmount)}</Text>
+        <Text style={styles.walletSubtext}>
+          Withdrawable now: {formatCurrency(walletBalance)}
+          {cashOffset > 0
+            ? `\n${formatCurrency(cashOffset)} of your earnings is offset by COD cash you are holding. Deposit that cash back to Vyaha to unlock withdrawals.`
+            : walletBalance <= 0 && grossPendingEarnings <= 0 && codCashBalance > 0
+              ? "\nComplete deliveries and deposit COD cash back to build a withdrawable balance."
+              : ""}
+        </Text>
         <View style={styles.todayStats}>
           <View style={styles.todayStatItem}>
             <Ionicons name="bicycle" size={16} color="rgba(255,255,255,0.95)" />
@@ -633,87 +683,112 @@ export default function EarningsScreen({ navigation }: any) {
         visible={depositModalVisible}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={() => setDepositModalVisible(false)}
       >
-        <KeyboardAvoidingView
-          style={styles.modalBackdrop}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? insets.bottom : 0}
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.modalBackdropContent}>
+        <View style={styles.modalBackdrop}>
+          <Pressable style={styles.modalDismissArea} onPress={() => setDepositModalVisible(false)} />
+          <KeyboardAvoidingView
+            style={styles.modalSheetWrap}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 12 : 0}
+          >
+            <View style={styles.depositModal}>
               <ScrollView
+                ref={depositScrollRef}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                automaticallyAdjustKeyboardInsets
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.depositModalScroll}
               >
-                <View style={styles.depositModal}>
-                  <Text style={styles.modalTitle}>Submit Cash Deposit</Text>
-                  <Text style={styles.modalDescription}>
-                    Enter details after depositing COD cash back to the platform. Admin will verify before your balance is reduced.
-                  </Text>
-                  <Text style={styles.modalBalanceHint}>
-                    Your COD cash balance: {formatCurrency(codCashBalance)}
-                  </Text>
+                <Text style={styles.modalTitle}>Submit Cash Deposit</Text>
+                <Text style={styles.modalDescription}>
+                  Enter details after depositing COD cash back to the platform. Admin will verify before your balance is reduced.
+                </Text>
+                <Text style={styles.modalBalanceHint}>
+                  Your COD cash balance: {formatCurrency(codCashBalance)}
+                </Text>
+                <View onLayout={registerDepositFieldLayout("amount")}>
                   <TextInput
+                    ref={(ref) => {
+                      depositInputRefs.current.amount = ref;
+                    }}
                     style={styles.modalInput}
                     keyboardType="number-pad"
                     placeholder="Amount deposited"
                     placeholderTextColor="#6B7280"
                     value={depositAmount}
                     onChangeText={(value) => setDepositAmount(value.replace(/[^\d]/g, ""))}
+                    onPressIn={() => scrollDepositFieldIntoView("amount")}
+                    onFocus={() => scrollDepositFieldIntoView("amount")}
                   />
-                  <TouchableOpacity
-                    style={styles.useFullBalanceButton}
-                    onPress={() => setDepositAmount(codCashBalance > 0 ? String(Math.round(codCashBalance)) : "")}
-                  >
-                    <Text style={styles.useFullBalanceText}>Use full balance ({formatCurrency(codCashBalance)})</Text>
-                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={styles.useFullBalanceButton}
+                  onPress={() => setDepositAmount(codCashBalance > 0 ? String(Math.round(codCashBalance)) : "")}
+                >
+                  <Text style={styles.useFullBalanceText}>Use full balance ({formatCurrency(codCashBalance)})</Text>
+                </TouchableOpacity>
+                <View onLayout={registerDepositFieldLayout("reference")}>
                   <TextInput
+                    ref={(ref) => {
+                      depositInputRefs.current.reference = ref;
+                    }}
                     style={styles.modalInput}
                     placeholder="Reference / UTR"
                     placeholderTextColor="#6B7280"
                     value={depositReference}
                     onChangeText={setDepositReference}
                     returnKeyType="next"
+                    onPressIn={() => scrollDepositFieldIntoView("reference")}
+                    onFocus={() => scrollDepositFieldIntoView("reference")}
+                    onSubmitEditing={() => depositInputRefs.current.note?.focus()}
                   />
-                  <Text style={styles.proofLabel}>Deposit proof screenshot</Text>
-                  <TouchableOpacity style={styles.proofUploadButton} onPress={pickDepositProof} disabled={uploadingProof}>
-                    {uploadingProof ? (
-                      <ActivityIndicator color="#B45309" />
-                    ) : (
-                      <>
-                        <Ionicons name="image-outline" size={20} color="#B45309" />
-                        <Text style={styles.proofUploadText}>
-                          {depositProofUrl ? "Change proof screenshot" : "Upload proof screenshot"}
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                  {depositProofUrl ? (
-                    <Image source={{ uri: depositProofUrl }} style={styles.proofPreview} resizeMode="cover" />
-                  ) : null}
+                </View>
+                <Text style={styles.proofLabel}>Deposit proof screenshot</Text>
+                <TouchableOpacity style={styles.proofUploadButton} onPress={pickDepositProof} disabled={uploadingProof}>
+                  {uploadingProof ? (
+                    <ActivityIndicator color="#B45309" />
+                  ) : (
+                    <>
+                      <Ionicons name="image-outline" size={20} color="#B45309" />
+                      <Text style={styles.proofUploadText}>
+                        {depositProofUrl ? "Change proof screenshot" : "Upload proof screenshot"}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                {depositProofUrl ? (
+                  <Image source={{ uri: depositProofUrl }} style={styles.proofPreview} resizeMode="cover" />
+                ) : null}
+                <View onLayout={registerDepositFieldLayout("note")}>
                   <TextInput
+                    ref={(ref) => {
+                      depositInputRefs.current.note = ref;
+                    }}
                     style={[styles.modalInput, styles.modalTextarea]}
                     placeholder="Note (optional)"
                     placeholderTextColor="#6B7280"
                     multiline
                     value={depositNote}
                     onChangeText={setDepositNote}
+                    onPressIn={() => scrollDepositFieldIntoView("note")}
+                    onFocus={() => scrollDepositFieldIntoView("note")}
                   />
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDepositModalVisible(false)}>
-                      <Text style={styles.modalCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.modalSubmitButton} onPress={handleSubmitDeposit} disabled={submittingDeposit}>
-                      <Text style={styles.withdrawButtonText}>{submittingDeposit ? "Submitting..." : "Submit"}</Text>
-                    </TouchableOpacity>
-                  </View>
                 </View>
               </ScrollView>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDepositModalVisible(false)}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalSubmitButton} onPress={handleSubmitDeposit} disabled={submittingDeposit}>
+                  <Text style={styles.withdrawButtonText}>{submittingDeposit ? "Submitting..." : "Submit"}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       <Modal
@@ -1289,22 +1364,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
-  modalBackdropContent: {
+  modalDismissArea: {
     flex: 1,
-    justifyContent: 'flex-end',
+  },
+  modalSheetWrap: {
+    maxHeight: '88%',
   },
   depositModalScroll: {
-    flexGrow: 1,
-    justifyContent: 'flex-end',
-    paddingBottom: Platform.OS === "android" ? 8 : 0,
+    paddingBottom: 8,
   },
   depositModal: {
     backgroundColor: '#FFFFFF',
-    padding: 20,
-    paddingBottom: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '92%',
+    maxHeight: '100%',
   },
   modalTitle: {
     fontSize: 18,
