@@ -4,9 +4,8 @@ import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import Payout from "../models/Payout.model";
-import CashLedgerEntry from "../models/CashLedgerEntry.model";
 import { notifyPayoutPaid } from "../services/notification.service";
-import { getRiderOrderEarnings, markPendingWithdrawalRequestsPaid } from "../services/payout.service";
+import { getRiderOrderEarnings, getRiderPayoutBreakdown, markPendingWithdrawalRequestsPaid } from "../services/payout.service";
 
 interface AuthRequest extends Request {
   user?: {
@@ -113,18 +112,6 @@ const buildPartnerContactDetails = (partner: any) => ({
   restaurantPhone: partner?.restaurantPhone || partner?.phone || ""
 });
 
-const getRiderPayoutBreakdown = (grossEarnings: number, cashBalance: number) => {
-  const cashHeld = Math.max(Number(cashBalance || 0), 0);
-  const offsetApplied = Math.min(grossEarnings, cashHeld);
-  return {
-    grossEarnings,
-    cashHeld,
-    offsetApplied,
-    netPayable: grossEarnings - offsetApplied,
-    cashDueToPlatform: cashHeld - offsetApplied
-  };
-};
-
 const getPendingPayoutOrders = async (recipientType: RecipientType, recipientId?: string) => {
   const baseQuery: Record<string, unknown> = {
     status: "DELIVERED",
@@ -140,7 +127,7 @@ const getPendingPayoutOrders = async (recipientType: RecipientType, recipientId?
   }
 
   return Order.find(baseQuery)
-    .select("partnerId deliveryPartnerId itemTotal deliveryFee grandTotal createdAt updatedAt deliveredAt")
+    .select("partnerId deliveryPartnerId itemTotal deliveryFee tipAmount grandTotal createdAt updatedAt deliveredAt")
     .lean();
 };
 
@@ -467,13 +454,22 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
     const grossAmount = orders.reduce((sum, order: any) => {
       return sum + Number(recipientType === "PARTNER" ? order.itemTotal || 0 : getRiderOrderEarnings(order));
     }, 0);
+    const riderCashBalance =
+      recipientType === "DELIVERY_PARTNER" ? Number((recipient as any).cashBalance || 0) : 0;
+    if (recipientType === "DELIVERY_PARTNER" && riderCashBalance > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Rider must deposit the full COD cash balance back to Vyaha before wallet earnings can be paid out."
+      });
+    }
+
     const riderBreakdown =
       recipientType === "DELIVERY_PARTNER"
-        ? getRiderPayoutBreakdown(grossAmount, Number((recipient as any).cashBalance || 0))
+        ? getRiderPayoutBreakdown(grossAmount, riderCashBalance)
         : null;
     const amount = riderBreakdown ? riderBreakdown.netPayable : grossAmount;
 
-    if (grossAmount <= 0) {
+    if (grossAmount <= 0 || amount <= 0) {
       return res.status(400).json({ success: false, message: "Payout amount must be greater than zero" });
     }
 
@@ -557,30 +553,6 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
         }
       }))
     );
-
-    if (recipientType === "DELIVERY_PARTNER" && riderBreakdown && riderBreakdown.offsetApplied > 0) {
-      await CashLedgerEntry.create({
-        deliveryPartnerId: recipientId,
-        userId: (recipient as any).userId,
-        type: "EARNINGS_OFFSET",
-        amount: riderBreakdown.offsetApplied,
-        balanceDelta: -riderBreakdown.offsetApplied,
-        status: "POSTED",
-        payoutId: payout._id,
-        note: `Offset against payout #${String(payout._id).slice(-6)}`
-      });
-
-      await DeliveryPartner.updateOne(
-        { _id: recipientId },
-        {
-          $inc: { cashBalance: -riderBreakdown.offsetApplied },
-          $set: {
-            lastCashActivityAt: now,
-            lastCashActivityType: "EARNINGS_OFFSET"
-          }
-        }
-      );
-    }
 
     if (recipientType === "DELIVERY_PARTNER") {
       await markPendingWithdrawalRequestsPaid({

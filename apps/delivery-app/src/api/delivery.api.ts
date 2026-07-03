@@ -88,7 +88,8 @@ export interface DeliveryStats {
   totalEarnings: number;
   walletBalance?: number;
   grossPendingEarnings?: number;
-  cashOffset?: number;
+  canWithdraw?: boolean;
+  cashDueToPlatform?: number;
   lifetimeDeliveredEarnings?: number;
   todaysDeliveries: number;
   todaysEarnings: number;
@@ -291,6 +292,7 @@ export interface WithdrawalWallet {
   cashOffset: number;
   netPayable: number;
   cashDueToPlatform: number;
+  canWithdraw?: boolean;
   pendingPayoutOrderCount: number;
   pendingDepositAmount: number;
   hasBankDetails: boolean;

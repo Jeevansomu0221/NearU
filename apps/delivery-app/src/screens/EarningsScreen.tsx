@@ -404,7 +404,7 @@ export default function EarningsScreen({ navigation }: any) {
       Alert.alert(
         "No balance available",
         withdrawalWallet.cashDueToPlatform > 0
-          ? "Your COD cash balance offsets your earnings. Deposit cash back before withdrawing."
+          ? "Settle your COD cash balance with Vyaha before withdrawing wallet earnings."
           : "No delivered earnings are available for withdrawal yet."
       );
       return;
@@ -438,12 +438,11 @@ export default function EarningsScreen({ navigation }: any) {
 
   const recentEarnings = earningsHistory.slice(0, 3);
   const recentCashEntries = cashLedger?.entries?.slice(0, 3) ?? [];
-  const walletBalance = withdrawalWallet?.walletBalance ?? stats?.walletBalance ?? 0;
-  const grossPendingEarnings = withdrawalWallet?.grossEarnings ?? stats?.grossPendingEarnings ?? 0;
-  const cashOffset = withdrawalWallet?.cashOffset ?? stats?.cashOffset ?? 0;
+  const walletBalance = withdrawalWallet?.walletBalance ?? withdrawalWallet?.grossEarnings ?? stats?.walletBalance ?? stats?.grossPendingEarnings ?? 0;
+  const withdrawableNow = withdrawalWallet?.availableBalance ?? withdrawalWallet?.netPayable ?? 0;
   const totalPaidEarnings = withdrawalWallet?.totalPaidEarnings ?? stats?.totalEarnings ?? 0;
   const codCashBalance = cashLedger?.cashBalance || stats?.cashBalance || 0;
-  const heroEarningsAmount = grossPendingEarnings > 0 ? grossPendingEarnings : walletBalance;
+  const codDueToPlatform = withdrawalWallet?.cashDueToPlatform ?? codCashBalance;
   const depositSheetMaxHeight = Math.max(
     (keyboardHeight > 0
       ? windowHeight - keyboardHeight - insets.top - 12
@@ -469,15 +468,14 @@ export default function EarningsScreen({ navigation }: any) {
       >
         {/* Wallet Hero */}
         <View style={styles.todayCard}>
-        <Text style={styles.todayLabel}>PENDING DELIVERY EARNINGS</Text>
-        <Text style={styles.todayAmount}>{formatCurrency(heroEarningsAmount)}</Text>
+        <Text style={styles.todayLabel}>WALLET</Text>
+        <Text style={styles.todayAmount}>{formatCurrency(walletBalance)}</Text>
         <Text style={styles.walletSubtext}>
-          Withdrawable now: {formatCurrency(walletBalance)}
-          {cashOffset > 0
-            ? `\n${formatCurrency(cashOffset)} of your earnings is offset by COD cash you are holding. Deposit that cash back to Vyaha to unlock withdrawals.`
-            : walletBalance <= 0 && grossPendingEarnings <= 0 && codCashBalance > 0
-              ? "\nComplete deliveries and deposit COD cash back to build a withdrawable balance."
-              : ""}
+          Delivery fee + tips from completed orders{"\n"}
+          Withdrawable now: {formatCurrency(withdrawableNow)}
+          {codDueToPlatform > 0
+            ? `\nDeposit ${formatCurrency(codDueToPlatform)} COD cash to Vyaha first to unlock withdrawal.`
+            : ""}
         </Text>
         <View style={styles.todayStats}>
           <View style={styles.todayStatItem}>
@@ -534,7 +532,7 @@ export default function EarningsScreen({ navigation }: any) {
         </View>
         <Text style={styles.cashAmount}>{formatCurrency(codCashBalance)}</Text>
         <Text style={styles.withdrawalNote}>
-          Cash collected from COD orders is adjusted against your rider earnings first. Any remaining amount must be deposited back to the platform.
+          Cash you collected from customers on COD orders. This includes food bill, delivery fee, and tips. Deposit this full amount back to Vyaha.
         </Text>
         <View style={styles.cashSummaryRow}>
           <Text style={styles.cashSummaryLabel}>Pending deposit verification</Text>
@@ -628,12 +626,9 @@ export default function EarningsScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
         <Text style={styles.withdrawalNote}>
-          Request a payout from your wallet balance. After Vyaha pays you, wallet resets to ₹0 and the amount is added to Total Earnings.
+          Your wallet is separate from COD cash. Request a payout only after your COD cash balance is fully settled with Vyaha.
           {withdrawalWallet?.pendingPayoutOrderCount
             ? `\n\n${withdrawalWallet.pendingPayoutOrderCount} delivered order${withdrawalWallet.pendingPayoutOrderCount === 1 ? "" : "s"} in wallet`
-            : ""}
-          {withdrawalWallet?.cashOffset
-            ? ` · ₹${withdrawalWallet.cashOffset.toLocaleString("en-IN")} COD cash offset applied`
             : ""}
         </Text>
         {withdrawalWallet?.pendingRequest ? (

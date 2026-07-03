@@ -8,7 +8,6 @@ import {
   getBankDetails,
   getPendingDeliveryPayoutOrders,
   getRiderOrderEarnings,
-  getRiderPayoutBreakdown,
   getRiderWalletSummary,
   hasMissingBankDetails,
   hasVerifiedBankDetails
@@ -115,12 +114,13 @@ const buildWalletPayload = async (deliveryPartner: any, fallbackUserId?: string)
   return {
     walletBalance: walletSummary.walletBalance,
     totalPaidEarnings: walletSummary.totalPaidEarnings,
-    availableBalance: pendingRequest ? 0 : walletSummary.walletBalance,
+    availableBalance: pendingRequest ? 0 : walletSummary.netPayable,
     grossEarnings: walletSummary.grossWalletEarnings,
     cashHeld: walletSummary.cashHeld,
-    cashOffset: walletSummary.cashOffset,
+    cashOffset: 0,
     netPayable: walletSummary.netPayable,
     cashDueToPlatform: walletSummary.cashDueToPlatform,
+    canWithdraw: walletSummary.canWithdraw,
     pendingPayoutOrderCount: walletSummary.pendingPayoutOrderCount,
     pendingDepositAmount: Number(deliveryPartner.pendingDepositAmount || 0),
     hasBankDetails: !hasMissingBankDetails(bankDetails),
@@ -250,20 +250,27 @@ export const requestWithdrawal = async (req: AuthRequest, res: Response) => {
     }
 
     const grossEarnings = orders.reduce((sum, order) => sum + getRiderOrderEarnings(order), 0);
-    const breakdown = getRiderPayoutBreakdown(grossEarnings, Number(deliveryPartner.cashBalance || 0));
-    if (breakdown.netPayable <= 0) {
+    const cashBalance = Number(deliveryPartner.cashBalance || 0);
+    if (cashBalance > 0) {
       return res.status(400).json({
         success: false,
-        message: "Your COD cash balance offsets your earnings. Deposit cash back before withdrawing."
+        message: "Deposit your full COD cash balance back to Vyaha before withdrawing wallet earnings."
+      });
+    }
+
+    if (grossEarnings <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No delivered earnings are available for withdrawal yet."
       });
     }
 
     const request = await WithdrawalRequest.create({
       deliveryPartnerId: deliveryPartner._id,
       userId: deliveryPartner.userId,
-      amount: breakdown.netPayable,
-      grossEarnings: breakdown.grossEarnings,
-      cashOffset: breakdown.offsetApplied,
+      amount: grossEarnings,
+      grossEarnings,
+      cashOffset: 0,
       orderCount: orders.length,
       orderIds: orders.map((order) => order._id),
       bankSnapshot: {

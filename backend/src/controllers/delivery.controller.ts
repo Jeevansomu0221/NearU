@@ -661,7 +661,8 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
         totalEarnings: walletSummary.totalPaidEarnings,
         walletBalance: walletSummary.walletBalance,
         grossPendingEarnings: walletSummary.grossWalletEarnings,
-        cashOffset: walletSummary.cashOffset,
+        canWithdraw: walletSummary.canWithdraw,
+        cashDueToPlatform: walletSummary.cashDueToPlatform,
         lifetimeDeliveredEarnings: deliveredOrders.reduce(
           (sum, order) => sum + getRiderOrderEarnings(order),
           0

@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import Order from "../models/Order.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import Payout from "../models/Payout.model";
-import CashLedgerEntry from "../models/CashLedgerEntry.model";
 import WithdrawalRequest from "../models/WithdrawalRequest.model";
 import { notifyPayoutPaid } from "./notification.service";
 
@@ -11,13 +10,16 @@ export const getRiderOrderEarnings = (order: any) =>
 
 export const getRiderPayoutBreakdown = (grossEarnings: number, cashBalance: number) => {
   const cashHeld = Math.max(Number(cashBalance || 0), 0);
-  const offsetApplied = Math.min(grossEarnings, cashHeld);
+  const earnings = Math.max(Number(grossEarnings || 0), 0);
+  const canWithdraw = earnings > 0 && cashHeld <= 0;
+
   return {
-    grossEarnings,
+    grossEarnings: earnings,
     cashHeld,
-    offsetApplied,
-    netPayable: grossEarnings - offsetApplied,
-    cashDueToPlatform: cashHeld - offsetApplied
+    offsetApplied: 0,
+    netPayable: canWithdraw ? earnings : 0,
+    cashDueToPlatform: cashHeld,
+    canWithdraw
   };
 };
 
@@ -71,12 +73,13 @@ export const getRiderWalletSummary = async (deliveryPartner: any, fallbackUserId
   const totalPaidEarnings = await getRiderPaidEarningsTotal(deliveryPartner._id);
 
   return {
-    walletBalance: breakdown.netPayable,
-    grossWalletEarnings: breakdown.grossEarnings,
+    walletBalance: grossEarnings,
+    grossWalletEarnings: grossEarnings,
     cashHeld: breakdown.cashHeld,
-    cashOffset: breakdown.offsetApplied,
+    cashOffset: 0,
     netPayable: breakdown.netPayable,
     cashDueToPlatform: breakdown.cashDueToPlatform,
+    canWithdraw: breakdown.canWithdraw,
     pendingPayoutOrderCount: orders.length,
     totalPaidEarnings
   };
@@ -147,12 +150,21 @@ export const executeDeliveryPartnerPayout = async ({
   }
 
   const grossAmount = orders.reduce((sum, order) => sum + getRiderOrderEarnings(order), 0);
-  const riderBreakdown = getRiderPayoutBreakdown(grossAmount, Number(deliveryPartner.cashBalance || 0));
-  const amount = riderBreakdown.netPayable;
+  const cashBalance = Number(deliveryPartner.cashBalance || 0);
+  if (cashBalance > 0) {
+    throw Object.assign(
+      new Error("Rider must deposit the full COD cash balance back to Vyaha before wallet earnings can be paid out"),
+      { statusCode: 400 }
+    );
+  }
+
+  const amount = grossAmount;
 
   if (amount <= 0) {
     throw Object.assign(new Error("Payout amount must be greater than zero"), { statusCode: 400 });
   }
+
+  const riderBreakdown = getRiderPayoutBreakdown(grossAmount, cashBalance);
 
   const deliveredDates = orders
     .map(getOrderDeliveredAt)
@@ -209,30 +221,6 @@ export const executeDeliveryPartnerPayout = async ({
       }
     }))
   );
-
-  if (riderBreakdown.offsetApplied > 0) {
-    await CashLedgerEntry.create({
-      deliveryPartnerId: deliveryPartner._id,
-      userId: deliveryPartner.userId,
-      type: "EARNINGS_OFFSET",
-      amount: riderBreakdown.offsetApplied,
-      balanceDelta: -riderBreakdown.offsetApplied,
-      status: "POSTED",
-      payoutId: payout._id,
-      note: `Offset against payout #${String(payout._id).slice(-6)}`
-    });
-
-    await DeliveryPartner.updateOne(
-      { _id: deliveryPartner._id },
-      {
-        $inc: { cashBalance: -riderBreakdown.offsetApplied },
-        $set: {
-          lastCashActivityAt: now,
-          lastCashActivityType: "EARNINGS_OFFSET"
-        }
-      }
-    );
-  }
 
   await markPendingWithdrawalRequestsPaid({
     deliveryPartnerId: deliveryPartner._id,
