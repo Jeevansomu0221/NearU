@@ -677,8 +677,7 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
         acceptedJobs,
         rejectedJobs,
         cashBalance: deliveryPartner.cashBalance || 0,
-        pendingDepositAmount: deliveryPartner.pendingDepositAmount || 0,
-        cashDueToPlatform: Math.max((deliveryPartner.cashBalance || 0) - (deliveryPartner.pendingDepositAmount || 0), 0)
+        pendingDepositAmount: deliveryPartner.pendingDepositAmount || 0
       },
       "Delivery stats retrieved successfully"
     );
