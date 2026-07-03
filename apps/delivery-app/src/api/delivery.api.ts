@@ -373,3 +373,14 @@ export const calculateDistance = (
     destination
   });
 };
+
+export interface AppUpdateInfo {
+  latestVersion: string;
+  minVersion: string;
+  androidStoreUrl: string;
+  iosStoreUrl: string;
+}
+
+export const getAppUpdateInfo = (): Promise<ApiResponse<AppUpdateInfo>> => {
+  return apiGet<AppUpdateInfo>("/delivery/app-update-info");
+};

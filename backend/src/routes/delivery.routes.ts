@@ -18,7 +18,8 @@ import {
   updateBankDetails,
   updateBankVerificationByAdmin,
   updateDeliveryLocation,
-  calculateDeliveryDistance
+  calculateDeliveryDistance,
+  getDeliveryAppUpdateInfo
 } from "../controllers/delivery.controller";
 import {
   getMyCashLedger,
@@ -39,6 +40,7 @@ router.use(authMiddleware);
 router.get("/profile", getDeliveryProfile);
 router.put("/profile", updateDeliveryProfile);
 router.put("/bank-details", updateBankDetails);
+router.get("/app-update-info", getDeliveryAppUpdateInfo);
 
 // =================== STATS ===================
 router.get("/stats", getDeliveryStats);

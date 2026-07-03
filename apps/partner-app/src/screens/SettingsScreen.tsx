@@ -13,7 +13,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../api/client";
-import { deleteAccount, logout } from "../api/auth.api";
+import { logout } from "../api/auth.api";
+import DeleteAccountModal from "../components/DeleteAccountModal";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { buildLegalUrl, OFFICIAL_SITE_URL } from "../constants/legal";
 
@@ -44,6 +45,7 @@ export default function SettingsScreen({ navigation }: any) {
   const { isDarkMode, setDarkMode } = usePartnerTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
   const [profileMeta, setProfileMeta] = useState({
     restaurantName: "Your shop",
     status: "",
@@ -185,25 +187,7 @@ export default function SettingsScreen({ navigation }: any) {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete account",
-      "This will deactivate your partner login and anonymize profile, business, document, and payout details where possible. Some order, tax, payout, or dispute records may be retained where required.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteAccount();
-              navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-            } catch (error: any) {
-              Alert.alert("Error", error.response?.data?.message || error.message || "Failed to delete account");
-            }
-          }
-        }
-      ]
-    );
+    setDeleteAccountModalVisible(true);
   };
 
   const renderSectionTitle = (title: string, subtitle: string, icon: keyof typeof Ionicons.glyphMap) => (
@@ -239,6 +223,7 @@ export default function SettingsScreen({ navigation }: any) {
   const isDark = settings.darkMode;
 
   return (
+    <>
     <ScrollView style={[styles.container, isDark && styles.containerDark]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={[styles.heroCard, isDark && styles.heroCardDark]}>
         <View style={styles.heroTopRow}>
@@ -424,6 +409,12 @@ export default function SettingsScreen({ navigation }: any) {
         {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.footerSaveButtonText}>Save all settings</Text>}
       </TouchableOpacity>
     </ScrollView>
+    <DeleteAccountModal
+      visible={deleteAccountModalVisible}
+      onClose={() => setDeleteAccountModalVisible(false)}
+      isDark={isDark}
+    />
+    </>
   );
 }
 

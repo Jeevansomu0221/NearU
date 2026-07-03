@@ -6,6 +6,7 @@ import {
   ShoppingCartOutlined,
   DollarOutlined,
   CustomerServiceOutlined,
+  DeleteOutlined,
   LogoutOutlined
 } from "@ant-design/icons";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -43,6 +44,11 @@ const menuItems = [
     key: "/support",
     icon: <CustomerServiceOutlined />,
     label: <Link to="/support">Support</Link>
+  },
+  {
+    key: "/account-deletions",
+    icon: <DeleteOutlined />,
+    label: <Link to="/account-deletions">Account Deletions</Link>
   }
 ];
 
@@ -62,6 +68,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             ? "Payouts"
           : activeKey === "/support"
             ? "Customer Support"
+            : activeKey === "/account-deletions"
+              ? "Account Deletions"
             : "Order Management";
   const pageSubtitle =
     activeKey === "/"
@@ -74,6 +82,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             ? "Track restaurant and delivery rider settlements"
           : activeKey === "/support"
             ? "Reply to customer chats and reported issues"
+            : activeKey === "/account-deletions"
+              ? "Review partner and delivery account deletion requests"
             : "Monitor live orders and fulfillment";
 
   const handleLogout = () => {

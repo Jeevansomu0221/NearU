@@ -7,6 +7,7 @@ import Orders from "./pages/Orders";
 import OrderDetails from "./pages/OrderDetails";
 import Payouts from "./pages/Payouts";
 import Support from "./pages/Support";
+import AccountDeletions from "./pages/AccountDeletions";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminShell from "./components/AdminShell";
 import "./App.css";
@@ -77,6 +78,14 @@ export default function App() {
           element={
             <ProtectedPage>
               <Support />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/account-deletions"
+          element={
+            <ProtectedPage>
+              <AccountDeletions />
             </ProtectedPage>
           }
         />

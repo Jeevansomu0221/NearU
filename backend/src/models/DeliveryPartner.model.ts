@@ -63,6 +63,13 @@ export interface IDeliveryPartner extends Document {
   };
   rating: number;
   ratingCount: number;
+  notifications?: {
+    jobAlerts?: boolean;
+    payoutAlerts?: boolean;
+    promotionAlerts?: boolean;
+    offerAlerts?: boolean;
+    vibrationEnabled?: boolean;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -241,6 +248,13 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     ratingCount: {
       type: Number,
       default: 0
+    },
+    notifications: {
+      jobAlerts: { type: Boolean, default: true },
+      payoutAlerts: { type: Boolean, default: true },
+      promotionAlerts: { type: Boolean, default: false },
+      offerAlerts: { type: Boolean, default: false },
+      vibrationEnabled: { type: Boolean, default: true }
     }
   },
   {

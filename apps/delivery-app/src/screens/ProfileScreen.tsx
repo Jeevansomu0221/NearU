@@ -23,15 +23,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { uploadMultipart } from "../api/client";
 import { buildLegalUrl } from "../constants/legal";
 import { getDeliveryProfile, updateBankDetails, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
-import { deleteAccount } from "../api/auth.api";
 import { getDeliveryStats, getTodaysEarnings, getWithdrawalWallet, type DeliveryStats } from "../api/delivery.api";
 import SupportModal from "../components/SupportModal";
-import {
-  getNotificationPermissionLabel,
-  openNotificationSettings,
-  registerForPushNotifications,
-  unregisterPushNotifications
-} from "../services/notifications";
+import DeleteAccountModal from "../components/DeleteAccountModal";
+import SettingsModals, { type SettingsModalType } from "../components/SettingsModals";
+import { syncNotificationPreferencesFromProfile } from "../services/notificationPreferences";
+import { checkAppUpdateStatus, getCurrentAppVersion } from "../utils/appUpdate";
+import { unregisterPushNotifications } from "../services/notifications";
 
 const DRAFT_KEY = "delivery_registration_draft_v2";
 const AVAILABILITY_STORAGE_KEY = "driverAvailability";
@@ -264,7 +262,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
+  const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
   const [supportInitialMode, setSupportInitialMode] = useState<SupportInitialMode>("main");
+  const [settingsModal, setSettingsModal] = useState<SettingsModalType>(null);
+  const [appUpdateAvailable, setAppUpdateAvailable] = useState(false);
   const [stepAnim] = useState(() => new Animated.Value(0));
 
   const [name, setName] = useState("");
@@ -313,6 +314,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     setTermsAccepted(Boolean(data.termsAcceptedAt));
     setBankDetailsSkipped(false);
     setDocuments(normalizeDocuments(data.documents));
+    syncNotificationPreferencesFromProfile(data).catch(() => {});
   };
 
   const loadDashboardStats = async () => {
@@ -382,6 +384,11 @@ export default function ProfileScreen({ navigation, route }: any) {
             syncProfile(response.data);
             if (response.data.status === "ACTIVE") loadDashboardStats().catch(() => {});
           }
+        })
+        .catch(() => {});
+      checkAppUpdateStatus()
+        .then((status) => {
+          if (isActive) setAppUpdateAvailable(status.updateAvailable);
         })
         .catch(() => {});
       return () => {
@@ -455,26 +462,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert("Delete account", "This will deactivate your delivery login and anonymize profile, document, and address details where possible. Some payout, tax, or delivery records may be retained where required.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
-        try {
-          await deleteAccount();
-          navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-        } catch (error: any) {
-          Alert.alert("Error", error.response?.data?.message || error.message || "Failed to delete account");
-        }
-      }}
-    ]);
-  };
-
-  const handleNotificationPreferences = async () => {
-    await registerForPushNotifications().catch(() => {});
-    const permissionLabel = await getNotificationPermissionLabel();
-    Alert.alert("Notifications", permissionLabel, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Open Settings", onPress: openNotificationSettings }
-    ]);
+    setDeleteAccountModalVisible(true);
   };
 
   const handleSaveBankDetails = async () => {
@@ -705,13 +693,24 @@ export default function ProfileScreen({ navigation, route }: any) {
     </View>
   );
 
-  const renderShortcut = (icon: keyof typeof Ionicons.glyphMap, title: string, subtitle: string, onPress: () => void) => (
+  const renderShortcut = (
+    icon: keyof typeof Ionicons.glyphMap,
+    title: string,
+    subtitle: string,
+    onPress: () => void,
+    badge?: string
+  ) => (
     <TouchableOpacity style={s.shortcutCard} onPress={onPress} key={title} activeOpacity={0.7}>
       <View style={s.shortcutIcon}><Ionicons name={icon} size={20} color={GREEN_DEEP} /></View>
       <View style={{ flex: 1 }}>
         <Text style={s.shortcutTitle}>{title}</Text>
         <Text style={s.shortcutSubtitle}>{subtitle}</Text>
       </View>
+      {badge ? (
+        <View style={s.shortcutBadge}>
+          <Text style={s.shortcutBadgeText}>{badge}</Text>
+        </View>
+      ) : null}
       <Ionicons name="chevron-forward" size={18} color="#D0D5DD" />
     </TouchableOpacity>
   );
@@ -839,22 +838,38 @@ export default function ProfileScreen({ navigation, route }: any) {
           {/* Support */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Support & Help</Text>
-            {renderShortcut("help-circle-outline", "Help center", "FAQs, chat, and support tickets", () => openSupport("faq"))}
+            {renderShortcut("help-circle-outline", "FAQs", "Questions and answers", () => openSupport("faq"))}
             {renderShortcut("flag-outline", "Report an issue", "Tell us if something is broken", () => openSupport("report"))}
-            {renderShortcut("chatbubble-ellipses-outline", "Chat with admin", "Send a message to the Vyaha team", () => openSupport("chat"))}
-            {renderShortcut("mail-outline", "My support tickets", "View previous admin conversations", () => openSupport("tickets"))}
+            {renderShortcut("chatbubble-ellipses-outline", "Chat with Support Team", "Send a message to the Vyaha support team", () => openSupport("chat"))}
+            {renderShortcut("mail-outline", "My support tickets", "View your past support conversations", () => openSupport("tickets"))}
           </View>
 
           {/* Settings */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Settings</Text>
-            {renderShortcut("notifications-outline", "Notifications", "Manage job and payout alerts", handleNotificationPreferences)}
-            {renderShortcut("person-circle-outline", "Profile details", "View your rider account details", () => Alert.alert("Profile details", `Name: ${name || "Not added"}\nPhone: ${profile?.phone || "Not added"}\nEmail: ${safeValue(email)}\nVehicle: ${vehicleType}${vehicleNumber ? ` (${vehicleNumber})` : ""}`))}
+            {renderShortcut(
+              "notifications-outline",
+              "Notifications",
+              "Jobs, payouts, promotions, offers, and vibrations",
+              () => setSettingsModal("notifications")
+            )}
+            {renderShortcut(
+              "person-circle-outline",
+              "Profile details",
+              "View your rider account information",
+              () => setSettingsModal("profile")
+            )}
             {renderShortcut("document-text-outline", "Delivery partner terms", "Read delivery partner terms", () => Linking.openURL(DELIVERY_POLICY_URL))}
             {renderShortcut("reader-outline", "Terms & conditions", "Read Vyaha terms", () => Linking.openURL(TERMS_URL))}
             {renderShortcut("lock-closed-outline", "Privacy policy", "Read how data is handled", () => Linking.openURL(PRIVACY_URL))}
             {renderShortcut("document-text-outline", "Account deletion policy", "Read how account deletion works", () => Linking.openURL(DELETE_ACCOUNT_URL))}
-            {renderShortcut("information-circle-outline", "App version", "Delivery app version 1.0.10", () => Alert.alert("App version", "Delivery app version 1.0.10"))}
+            {renderShortcut(
+              "information-circle-outline",
+              "App version",
+              appUpdateAvailable ? "Update available — tap to install" : `Version ${getCurrentAppVersion()} — up to date`,
+              () => setSettingsModal("appVersion"),
+              appUpdateAvailable ? "Update" : undefined
+            )}
           </View>
 
           {/* Logout / Delete */}
@@ -864,6 +879,24 @@ export default function ProfileScreen({ navigation, route }: any) {
           </View>
         </ScrollView>
         <SupportModal visible={supportModalVisible} initialMode={supportInitialMode} onClose={() => setSupportModalVisible(false)} />
+        <SettingsModals
+          visibleType={settingsModal}
+          onClose={() => setSettingsModal(null)}
+          profile={profile}
+          employeeId={employeeId}
+          profileName={name || profile?.name || "Delivery Partner"}
+          profilePhone={profile?.phone || "Not added"}
+          profileEmail={safeValue(email)}
+          vehicleType={vehicleType}
+          vehicleNumber={vehicleNumber}
+          verificationStatusLabel={verificationStatusLabel}
+          onUpdateAvailableChange={setAppUpdateAvailable}
+        />
+        <DeleteAccountModal
+          visible={deleteAccountModalVisible}
+          onClose={() => setDeleteAccountModalVisible(false)}
+          onDeleted={() => navigation.reset({ index: 0, routes: [{ name: "Login" }] })}
+        />
       </View>
     );
   };
@@ -1210,6 +1243,18 @@ const s = StyleSheet.create({
   shortcutIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: GREEN_SOFT, alignItems: "center", justifyContent: "center" },
   shortcutTitle: { fontSize: 14, fontWeight: "700", color: "#1D2939" },
   shortcutSubtitle: { fontSize: 12, color: "#667085", marginTop: 2 },
+  shortcutBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FFFBEB",
+    marginRight: 4
+  },
+  shortcutBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#B45309"
+  },
 
   logoutBtn: { paddingVertical: 15, borderRadius: 14, alignItems: "center", backgroundColor: "#1D2939" },
   logoutBtnText: { fontSize: 15, fontWeight: "800", color: "#fff" },

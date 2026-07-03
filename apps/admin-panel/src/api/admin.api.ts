@@ -599,3 +599,81 @@ export const rejectWithdrawalRequest = async (requestId: string, rejectionReason
   });
   return response.data;
 };
+
+export type AccountDeletionAppRole = "partner" | "delivery";
+export type AccountDeletionStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export interface AccountDeletionPayoutCheck {
+  pendingPayoutAmount: number;
+  pendingPayoutOrderCount: number;
+  pendingWithdrawals: number;
+  cashBalance: number;
+  pendingDepositAmount: number;
+  activeOrders: number;
+  hasOutstandingPayouts: boolean;
+  checkedAt: string;
+}
+
+export interface AccountDeletionRequestRecord {
+  _id: string;
+  userId?: {
+    _id: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+  };
+  appRole: AccountDeletionAppRole;
+  profileId: string;
+  reasonCategory?: string;
+  reason: string;
+  status: AccountDeletionStatus;
+  snapshot: {
+    name: string;
+    phone: string;
+    businessName: string;
+  };
+  payoutCheck: AccountDeletionPayoutCheck;
+  reviewedBy?: {
+    _id: string;
+    name?: string;
+    phone?: string;
+  };
+  reviewedAt?: string;
+  adminNotes?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const getAccountDeletionRequests = async (
+  appRole: AccountDeletionAppRole,
+  status: AccountDeletionStatus | "ALL" = "PENDING"
+) => {
+  const response = await api.get<ApiEnvelope<AccountDeletionRequestRecord[]>>("/admin/account-deletions", {
+    params: { appRole, status }
+  });
+  return response.data.data;
+};
+
+export const refreshAccountDeletionPayoutCheck = async (requestId: string) => {
+  const response = await api.post<ApiEnvelope<AccountDeletionRequestRecord>>(
+    `/admin/account-deletions/${requestId}/refresh-payouts`
+  );
+  return response.data.data;
+};
+
+export const approveAccountDeletion = async (requestId: string, adminNotes?: string) => {
+  const response = await api.post<ApiEnvelope<AccountDeletionRequestRecord>>(
+    `/admin/account-deletions/${requestId}/approve`,
+    { adminNotes }
+  );
+  return response.data;
+};
+
+export const rejectAccountDeletion = async (requestId: string, rejectionReason: string, adminNotes?: string) => {
+  const response = await api.post<ApiEnvelope<AccountDeletionRequestRecord>>(
+    `/admin/account-deletions/${requestId}/reject`,
+    { rejectionReason, adminNotes }
+  );
+  return response.data;
+};

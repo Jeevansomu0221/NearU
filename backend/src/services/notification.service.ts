@@ -102,6 +102,39 @@ const getAvailableDeliveryUserIds = async (userIds?: string[]) => {
   return compactIds(riders.map((rider: any) => rider.userId));
 };
 
+type DeliveryNotificationPreference = "jobs" | "payouts" | "promotions" | "offers";
+
+const filterDeliveryUsersByPreference = async (
+  userIds: string[],
+  preference: DeliveryNotificationPreference
+) => {
+  const normalizedIds = compactIds(userIds);
+  if (!normalizedIds.length) return [];
+
+  const partners = await DeliveryPartner.find({
+    userId: {
+      $in: normalizedIds
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        .map((id) => new mongoose.Types.ObjectId(id))
+    }
+  })
+    .select("userId notifications")
+    .lean();
+
+  const partnerByUserId = new Map(
+    partners.map((partner: any) => [idString(partner.userId), partner.notifications || {}])
+  );
+
+  return normalizedIds.filter((userId) => {
+    const notifications = partnerByUserId.get(userId) || {};
+    if (preference === "promotions" || preference === "offers") {
+      return Boolean(notifications[`${preference === "promotions" ? "promotionAlerts" : "offerAlerts"}`]);
+    }
+    const key = preference === "jobs" ? "jobAlerts" : "payoutAlerts";
+    return notifications[key] !== false;
+  });
+};
+
 const compactStrings = (values: any[]) =>
   values
     .map((value) => (typeof value === "string" ? value.trim() : ""))
@@ -315,7 +348,11 @@ export const notifyCustomerOrderStatus = async (order: any, status: string) => {
 export const notifyDeliveryJobReady = async (order: any) => {
   const selfDelivery = order.selfDelivery || {};
   const reservedFor = compactIds(Array.isArray(selfDelivery.reservedFor) ? selfDelivery.reservedFor : []);
-  const targetUserIds = await getAvailableDeliveryUserIds(reservedFor.length ? reservedFor : undefined);
+  const targetUserIds = await filterDeliveryUsersByPreference(
+    await getAvailableDeliveryUserIds(reservedFor.length ? reservedFor : undefined),
+    "jobs"
+  );
+  if (!targetUserIds.length) return;
   const details = await getDeliveryJobNotificationDetails(order);
   const bodyParts = [
     `Pickup: ${details.restaurantName}${details.pickupAddress ? ` - ${details.pickupAddress}` : ""}`,
@@ -371,7 +408,10 @@ export const notifyDeliveryAssigned = async (order: any) => {
 };
 
 export const notifyAssignedDeliveryPartner = async (order: any) => {
-  await sendNotificationToUsers([order.deliveryPartnerId], {
+  const allowedUserIds = await filterDeliveryUsersByPreference([idString(order.deliveryPartnerId)], "jobs");
+  if (!allowedUserIds.length) return;
+
+  await sendNotificationToUsers(allowedUserIds, {
     app: "delivery",
     title: "Delivery assigned",
     body: `Order #${idString(order._id).slice(-6)} has been assigned to you.`,
@@ -492,8 +532,14 @@ export const notifyPayoutPaid = async (payout: any) => {
   const userId = idString((recipient as any)?.userId);
   if (!userId) return;
 
+  let targetUserIds = [userId];
+  if (recipientType === "DELIVERY_PARTNER") {
+    targetUserIds = await filterDeliveryUsersByPreference([userId], "payouts");
+    if (!targetUserIds.length) return;
+  }
+
   const amount = Number(payout?.amount || 0);
-  await sendNotificationToUsers([userId], {
+  await sendNotificationToUsers(targetUserIds, {
     app: recipientType === "PARTNER" ? "partner" : "delivery",
     title: "Wallet money paid",
     body:

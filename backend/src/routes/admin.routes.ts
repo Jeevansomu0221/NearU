@@ -32,6 +32,12 @@ import {
   rejectCashDeposit,
   verifyCashDeposit
 } from "../controllers/cash.controller";
+import {
+  approveAccountDeletion,
+  getAccountDeletionRequests,
+  refreshAccountDeletionPayoutCheck,
+  rejectAccountDeletion
+} from "../controllers/accountDeletion.controller";
 
 const router = Router();
 
@@ -63,6 +69,12 @@ router.get("/partners", getPartnerRequests);
 router.get("/partners/:partnerId", getPartnerDetails);
 router.put("/partners/:partnerId/status", updatePartnerStatus);
 router.put("/partners/:partnerId/documents/reupload", requestPartnerDocumentReupload);
+
+// Account Deletion Requests
+router.get("/account-deletions", getAccountDeletionRequests);
+router.post("/account-deletions/:requestId/refresh-payouts", refreshAccountDeletionPayoutCheck);
+router.post("/account-deletions/:requestId/approve", approveAccountDeletion);
+router.post("/account-deletions/:requestId/reject", rejectAccountDeletion);
 
 // Customer Support
 router.get("/support/tickets", getAllSupportTickets);

@@ -15,7 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
-import { deleteAccount, logout } from "../api/auth.api";
+import { logout } from "../api/auth.api";
+import DeleteAccountModal from "../components/DeleteAccountModal";
 import { buildLegalUrl } from "../constants/legal";
 
 type MenuItem = {
@@ -47,6 +48,7 @@ export default function AccountProfileScreen({ navigation }: any) {
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [emailOffers, setEmailOffers] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -81,25 +83,7 @@ export default function AccountProfileScreen({ navigation }: any) {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete account",
-      "This will deactivate your delivery login and anonymize profile, document, and address details where possible. Some payout, tax, or delivery records may be retained where required.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteAccount();
-              navigation.getParent()?.reset({ index: 0, routes: [{ name: "Login" }] });
-            } catch (error: any) {
-              Alert.alert("Error", error.response?.data?.message || error.message || "Failed to delete account");
-            }
-          }
-        }
-      ]
-    );
+    setDeleteAccountModalVisible(true);
   };
 
   const displayName = profile?.name || storedUser?.name || "Delivery Partner";
@@ -290,6 +274,7 @@ export default function AccountProfileScreen({ navigation }: any) {
           </View>
         ))}
       </ScrollView>
+      <DeleteAccountModal visible={deleteAccountModalVisible} onClose={() => setDeleteAccountModalVisible(false)} />
     </View>
   );
 }

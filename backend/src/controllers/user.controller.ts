@@ -4,10 +4,10 @@ import User from "../models/User.model";
 import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
 import MenuItem from "../models/MenuItem.model";
-import DeliveryPartner from "../models/DeliveryPartner.model";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { successResponse, errorResponse } from "../utils/response";
 import { ROLES } from "../config/roles";
+import { executeAccountDeletion } from "../services/accountDeletion.service";
 
 const FAVORITE_RESTAURANT_FIELDS =
   "restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime";
@@ -626,109 +626,8 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * DELETE CURRENT ACCOUNT (scoped to the app role in the JWT)
+ * DELETE CURRENT ACCOUNT (customer only — partner/delivery must use deletion request flow)
  */
-const emptyAddress = {
-  recipientName: "",
-  houseFlatDoorNo: "",
-  buildingApartmentName: "",
-  streetRoadName: "",
-  street: "",
-  city: "",
-  cityTownVillage: "",
-  state: "",
-  pincode: "",
-  area: "",
-  landmark: "",
-  district: "",
-  country: "India"
-};
-
-const buildDeletionMarker = (userId: string) => `deleted_${userId}_${Date.now()}`;
-
-const deleteCustomerAccount = async (userId: string, deletionMarker: string) => {
-  const [partner, deliveryPartner] = await Promise.all([
-    Partner.findOne({ userId }).select("_id").lean(),
-    DeliveryPartner.findOne({ userId }).select("_id").lean()
-  ]);
-  const hasOtherAppProfiles = Boolean(partner || deliveryPartner);
-
-  await User.findByIdAndUpdate(userId, {
-    $set: {
-      address: emptyAddress,
-      addresses: [],
-      favoriteRestaurants: [],
-      favoriteFoodItems: [],
-      fcmToken: "",
-      notificationTokens: [],
-      ...(hasOtherAppProfiles ? { name: "" } : { phone: deletionMarker, name: "Deleted User", isActive: false })
-    },
-    $addToSet: { deletedRoles: "customer" },
-    $unset: { email: "" },
-    $inc: { sessionVersion: 1 }
-  });
-
-  await Order.updateMany(
-    { customerId: userId },
-    {
-      $set: {
-        deliveryAddress: "Deleted by user",
-        note: ""
-      }
-    }
-  );
-};
-
-const deletePartnerAccount = async (userId: string, deletionMarker: string) => {
-  await Partner.updateOne(
-    { userId },
-    {
-      $set: {
-        phone: deletionMarker,
-        ownerName: "Deleted Partner",
-        restaurantName: "Deleted Partner",
-        shopName: "Deleted Partner",
-        shopImageUrl: "",
-        isOpen: false,
-        status: "SUSPENDED",
-        documents: {},
-        rejectionReason: "Account deleted by user"
-      }
-    }
-  );
-
-  await User.findByIdAndUpdate(userId, {
-    $addToSet: { deletedRoles: "partner" },
-    $inc: { sessionVersion: 1 }
-  });
-};
-
-const deleteDeliveryAccount = async (userId: string, deletionMarker: string) => {
-  await DeliveryPartner.updateOne(
-    { userId },
-    {
-      $set: {
-        phone: deletionMarker,
-        name: "Deleted Delivery Partner",
-        email: "",
-        address: "",
-        vehicleNumber: "",
-        licenseNumber: "",
-        profilePhotoUrl: "",
-        documents: {},
-        isAvailable: false,
-        status: "INACTIVE",
-        reviewComment: "Account deleted by user"
-      }
-    }
-  );
-
-  await User.findByIdAndUpdate(userId, {
-    $addToSet: { deletedRoles: "delivery" },
-    $inc: { sessionVersion: 1 }
-  });
-};
-
 export const deleteMyAccount = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
@@ -738,17 +637,20 @@ export const deleteMyAccount = async (req: AuthRequest, res: Response) => {
     }
 
     const appRole = user.role;
-    const deletionMarker = buildDeletionMarker(user.id);
 
-    if (appRole === ROLES.CUSTOMER) {
-      await deleteCustomerAccount(user.id, deletionMarker);
-    } else if (appRole === ROLES.PARTNER) {
-      await deletePartnerAccount(user.id, deletionMarker);
-    } else if (appRole === ROLES.DELIVERY) {
-      await deleteDeliveryAccount(user.id, deletionMarker);
-    } else {
+    if (appRole === ROLES.PARTNER || appRole === ROLES.DELIVERY) {
+      return errorResponse(
+        res,
+        "Please submit an account deletion request with a reason. Our team will review pending payouts before processing.",
+        400
+      );
+    }
+
+    if (appRole !== ROLES.CUSTOMER) {
       return errorResponse(res, "Account deletion is not supported for this role", 403);
     }
+
+    await executeAccountDeletion(user.id, appRole);
 
     return successResponse(res, null, "Account deleted successfully");
   } catch (err: any) {
@@ -756,3 +658,4 @@ export const deleteMyAccount = async (req: AuthRequest, res: Response) => {
     return errorResponse(res, "Failed to delete account");
   }
 };
+

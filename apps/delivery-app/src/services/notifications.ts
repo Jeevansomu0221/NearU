@@ -1,8 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../utils/authStorage";
-import { Alert, Linking, PermissionsAndroid, Platform } from "react-native";
+import { Alert, Linking, PermissionsAndroid, Platform, Vibration } from "react-native";
 import api from "../api/client";
 import { acceptJob, rejectJob } from "../api/delivery.api";
+import {
+  getNotificationPreferences,
+  shouldShowClientNotification
+} from "./notificationPreferences";
 
 const NOTIFICATION_APP = "delivery";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:delivery";
@@ -160,6 +164,11 @@ const navigateFromData = (navigationRef: any, data?: Record<string, any> | null)
 const displayDeliveryJobNotification = async (remoteMessage: any) => {
   if (!isDeliveryJobMessage(remoteMessage)) return false;
 
+  const prefs = await getNotificationPreferences();
+  if (!shouldShowClientNotification(remoteMessage?.data?.type || "DELIVERY_JOB_READY", prefs)) {
+    return false;
+  }
+
   const notifee = getNotifee();
   if (!notifee) return false;
 
@@ -178,7 +187,8 @@ const displayDeliveryJobNotification = async (remoteMessage: any) => {
         id: ANDROID_NOTIFICATION_CHANNEL_ID,
         name: "Vyaha Delivery alerts",
         importance: AndroidImportance?.HIGH ?? 4,
-        vibration: true,
+        vibration: prefs.vibrationEnabled,
+        vibrationPattern: prefs.vibrationEnabled ? [250, 250, 250, 250] : undefined,
         sound: "default"
       })
     : ANDROID_NOTIFICATION_CHANNEL_ID;
@@ -203,6 +213,10 @@ const displayDeliveryJobNotification = async (remoteMessage: any) => {
       categoryId: "delivery_job_actions"
     }
   });
+
+  if (prefs.vibrationEnabled) {
+    Vibration.vibrate(250);
+  }
 
   return true;
 };
@@ -301,7 +315,12 @@ const setupForegroundNotificationActionHandler = (navigationRef: any) => {
   });
 };
 
-const showForegroundAlert = (navigationRef: any, remoteMessage: any) => {
+const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
+  const prefs = await getNotificationPreferences();
+  if (!shouldShowClientNotification(remoteMessage?.data?.type, prefs)) {
+    return;
+  }
+
   const title = remoteMessage?.notification?.title || "Notification";
   const body = remoteMessage?.notification?.body || "You have a new update.";
   const orderId = getNotificationOrderId(remoteMessage?.data);
@@ -407,7 +426,7 @@ export const setupNotificationHandlers = (navigationRef: any) => {
     if (await displayDeliveryJobNotification(remoteMessage)) {
       return;
     }
-    showForegroundAlert(navigationRef, remoteMessage);
+    await showForegroundAlert(navigationRef, remoteMessage);
   });
 
   const unsubscribeNotifeeForeground = setupForegroundNotificationActionHandler(navigationRef);

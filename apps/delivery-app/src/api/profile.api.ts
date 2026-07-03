@@ -74,7 +74,16 @@ export interface DeliveryProfile {
   rating: number;
   ratingCount: number;
   isProfileComplete: boolean;
+  notifications?: DeliveryNotificationPreferences;
 }
+
+export type DeliveryNotificationPreferences = {
+  jobAlerts: boolean;
+  payoutAlerts: boolean;
+  promotionAlerts: boolean;
+  offerAlerts: boolean;
+  vibrationEnabled: boolean;
+};
 
 export const getDeliveryProfile = (): Promise<ApiResponse<DeliveryProfile>> => {
   return apiGet<DeliveryProfile>("/delivery/profile");
@@ -96,6 +105,7 @@ export const updateDeliveryProfile = (payload: {
   status?: DeliveryProfile["status"];
   documents?: DeliveryProfile["documents"];
   isAvailable?: boolean;
+  notifications?: DeliveryNotificationPreferences;
 }): Promise<ApiResponse<DeliveryProfile>> => {
   return apiPut<DeliveryProfile>("/delivery/profile", payload);
 };

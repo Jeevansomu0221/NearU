@@ -40,6 +40,14 @@ const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const emergencyPhoneRegex = /^[0-9]{10}$/;
 const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z][a-zA-Z0-9.\-_]{2,64}$/;
 
+const serializeDeliveryNotifications = (notifications?: Record<string, any>) => ({
+  jobAlerts: notifications?.jobAlerts !== false,
+  payoutAlerts: notifications?.payoutAlerts !== false,
+  promotionAlerts: Boolean(notifications?.promotionAlerts),
+  offerAlerts: Boolean(notifications?.offerAlerts),
+  vibrationEnabled: notifications?.vibrationEnabled !== false
+});
+
 const firstString = (...values: any[]) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() || "";
 
@@ -234,6 +242,7 @@ export const getDeliveryProfile = async (req: AuthRequest, res: Response) => {
         lastCashActivityType: deliveryPartner.lastCashActivityType,
         rating: deliveryPartner.rating,
         ratingCount: deliveryPartner.ratingCount,
+        notifications: serializeDeliveryNotifications((deliveryPartner as any).notifications),
         isProfileComplete: isDeliveryProfileComplete({
           name: userDoc.name,
           dateOfBirth: deliveryPartner.dateOfBirth,
@@ -276,7 +285,8 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       profilePhotoUrl,
       documents,
       status,
-      reviewComment
+      reviewComment,
+      notifications
     } = req.body;
 
     const updateUser: Record<string, unknown> = {};
@@ -364,7 +374,8 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       updateDelivery.isAvailable = isAvailable;
     }
 
-    const needsCurrentPartner = profilePhotoUrl !== undefined || documents !== undefined;
+    const needsCurrentPartner =
+      profilePhotoUrl !== undefined || documents !== undefined || (notifications && typeof notifications === "object");
     const currentPartner = needsCurrentPartner ? await findDeliveryPartnerForUser(user)?.lean() : null;
     if (needsCurrentPartner && !currentPartner) {
       return errorResponse(res, "Delivery profile not found", 404);
@@ -535,6 +546,26 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
       updateDelivery.reviewComment = typeof reviewComment === "string" ? reviewComment.trim() : "";
     }
 
+    if (notifications && typeof notifications === "object") {
+      const currentNotifications = serializeDeliveryNotifications((currentPartner as any)?.notifications);
+      updateDelivery.notifications = {
+        jobAlerts:
+          notifications.jobAlerts !== undefined ? Boolean(notifications.jobAlerts) : currentNotifications.jobAlerts,
+        payoutAlerts:
+          notifications.payoutAlerts !== undefined ? Boolean(notifications.payoutAlerts) : currentNotifications.payoutAlerts,
+        promotionAlerts:
+          notifications.promotionAlerts !== undefined
+            ? Boolean(notifications.promotionAlerts)
+            : currentNotifications.promotionAlerts,
+        offerAlerts:
+          notifications.offerAlerts !== undefined ? Boolean(notifications.offerAlerts) : currentNotifications.offerAlerts,
+        vibrationEnabled:
+          notifications.vibrationEnabled !== undefined
+            ? Boolean(notifications.vibrationEnabled)
+            : currentNotifications.vibrationEnabled
+      };
+    }
+
     const [userDoc, deliveryPartner] = await Promise.all([
       User.findByIdAndUpdate(user.id, updateUser, {
         new: true,
@@ -579,6 +610,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         lastCashActivityType: deliveryPartner.lastCashActivityType,
         rating: deliveryPartner.rating,
         ratingCount: deliveryPartner.ratingCount,
+        notifications: serializeDeliveryNotifications((deliveryPartner as any).notifications),
         isProfileComplete: isDeliveryProfileComplete({
           name: userDoc.name,
           dateOfBirth: deliveryPartner.dateOfBirth,
@@ -1203,5 +1235,26 @@ export const updateBankVerificationByAdmin = async (req: AuthRequest, res: Respo
   } catch (error) {
     console.error("updateBankVerificationByAdmin error:", error);
     return errorResponse(res, "Failed to update bank verification");
+  }
+};
+
+export const getDeliveryAppUpdateInfo = async (_req: AuthRequest, res: Response) => {
+  try {
+    const latestVersion = process.env.DELIVERY_APP_LATEST_VERSION || "1.0.11";
+    const minVersion = process.env.DELIVERY_APP_MIN_VERSION || "1.0.10";
+
+    return successResponse(
+      res,
+      {
+        latestVersion,
+        minVersion,
+        androidStoreUrl: "https://play.google.com/store/apps/details?id=com.vyaha.delivery",
+        iosStoreUrl: process.env.DELIVERY_APP_IOS_STORE_URL || ""
+      },
+      "App update info retrieved successfully"
+    );
+  } catch (error) {
+    console.error("getDeliveryAppUpdateInfo error:", error);
+    return errorResponse(res, "Failed to get app update info");
   }
 };

@@ -19,6 +19,13 @@ import {
   removeFavoriteFoodItem,
   deleteMyAccount
 } from "../controllers/user.controller";
+import {
+  cancelMyDeletionRequest,
+  getMyDeletionEligibility,
+  getMyDeletionRequest,
+  requestAccountDeletion
+} from "../controllers/accountDeletion.controller";
+import { ROLES } from "../config/roles";
 
 const router = Router();
 
@@ -26,6 +33,34 @@ router.delete(
   "/me",
   authMiddleware,
   deleteMyAccount
+);
+
+router.get(
+  "/me/deletion-eligibility",
+  authMiddleware,
+  roleMiddleware([ROLES.PARTNER, ROLES.DELIVERY]),
+  getMyDeletionEligibility
+);
+
+router.post(
+  "/me/deletion-request",
+  authMiddleware,
+  roleMiddleware([ROLES.PARTNER, ROLES.DELIVERY]),
+  requestAccountDeletion
+);
+
+router.get(
+  "/me/deletion-request",
+  authMiddleware,
+  roleMiddleware([ROLES.PARTNER, ROLES.DELIVERY]),
+  getMyDeletionRequest
+);
+
+router.delete(
+  "/me/deletion-request",
+  authMiddleware,
+  roleMiddleware([ROLES.PARTNER, ROLES.DELIVERY]),
+  cancelMyDeletionRequest
 );
 
 /**
