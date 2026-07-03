@@ -11,10 +11,10 @@ import {
   Modal,
   TextInput,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   Keyboard,
   Pressable,
+  Dimensions,
+  Platform,
   type LayoutChangeEvent,
   type TextInput as TextInputType
 } from "react-native";
@@ -71,6 +71,9 @@ export default function EarningsScreen({ navigation }: any) {
   const depositFieldOffsets = useRef<Record<string, number>>({});
   const depositInputRefs = useRef<Record<string, TextInputType | null>>({});
   const activeDepositField = useRef<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const windowHeight = Dimensions.get("window").height;
+  const depositActionsHeight = 72;
 
   const refreshWithdrawalWallet = useCallback(async () => {
     try {
@@ -176,23 +179,44 @@ export default function EarningsScreen({ navigation }: any) {
 
   const scrollDepositFieldIntoView = useCallback((fieldKey: string) => {
     activeDepositField.current = fieldKey;
-    const offset = Math.max((depositFieldOffsets.current[fieldKey] || 0) - 16, 0);
     requestAnimationFrame(() => {
+      if (fieldKey === "reference" || fieldKey === "note") {
+        depositScrollRef.current?.scrollToEnd({ animated: true });
+        return;
+      }
+      const offset = Math.max((depositFieldOffsets.current[fieldKey] || 0) - 24, 0);
       depositScrollRef.current?.scrollTo({ y: offset, animated: true });
     });
   }, []);
 
   useEffect(() => {
-    if (!depositModalVisible) return;
+    if (!depositModalVisible) {
+      setKeyboardHeight(0);
+      return;
+    }
 
-    const eventName = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const subscription = Keyboard.addListener(eventName, () => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
       if (activeDepositField.current) {
-        scrollDepositFieldIntoView(activeDepositField.current);
+        setTimeout(() => {
+          if (activeDepositField.current) {
+            scrollDepositFieldIntoView(activeDepositField.current);
+          }
+        }, Platform.OS === "ios" ? 0 : 60);
       }
     });
 
-    return () => subscription.remove();
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
   }, [depositModalVisible, scrollDepositFieldIntoView]);
 
   const pickDepositProof = async () => {
@@ -420,6 +444,12 @@ export default function EarningsScreen({ navigation }: any) {
   const totalPaidEarnings = withdrawalWallet?.totalPaidEarnings ?? stats?.totalEarnings ?? 0;
   const codCashBalance = cashLedger?.cashBalance || stats?.cashBalance || 0;
   const heroEarningsAmount = grossPendingEarnings > 0 ? grossPendingEarnings : walletBalance;
+  const depositSheetMaxHeight = Math.max(
+    (keyboardHeight > 0
+      ? windowHeight - keyboardHeight - insets.top - 12
+      : windowHeight * 0.88) - depositActionsHeight,
+    220
+  );
 
   if (loading) {
     return (
@@ -687,20 +717,32 @@ export default function EarningsScreen({ navigation }: any) {
         onRequestClose={() => setDepositModalVisible(false)}
       >
         <View style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setDepositModalVisible(false)} />
-          <KeyboardAvoidingView
-            style={styles.modalSheetWrap}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 12 : 0}
+          <Pressable
+            style={[styles.modalDismissArea, keyboardHeight > 0 && styles.modalDismissAreaCompact]}
+            onPress={() => setDepositModalVisible(false)}
+          />
+          <View
+            style={[
+              styles.modalSheetWrap,
+              {
+                marginBottom: keyboardHeight,
+                maxHeight: keyboardHeight > 0
+                  ? windowHeight - keyboardHeight - insets.top
+                  : windowHeight * 0.88
+              }
+            ]}
           >
             <View style={styles.depositModal}>
               <ScrollView
                 ref={depositScrollRef}
                 keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="interactive"
-                automaticallyAdjustKeyboardInsets
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.depositModalScroll}
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator
+                style={{ maxHeight: depositSheetMaxHeight }}
+                contentContainerStyle={[
+                  styles.depositModalScroll,
+                  { paddingBottom: keyboardHeight > 0 ? 12 : 8 }
+                ]}
               >
                 <Text style={styles.modalTitle}>Submit Cash Deposit</Text>
                 <Text style={styles.modalDescription}>
@@ -787,7 +829,7 @@ export default function EarningsScreen({ navigation }: any) {
                 </TouchableOpacity>
               </View>
             </View>
-          </KeyboardAvoidingView>
+          </View>
         </View>
       </Modal>
 
@@ -1367,8 +1409,12 @@ const styles = StyleSheet.create({
   modalDismissArea: {
     flex: 1,
   },
+  modalDismissAreaCompact: {
+    flex: 0,
+    minHeight: 28,
+  },
   modalSheetWrap: {
-    maxHeight: '88%',
+    width: "100%",
   },
   depositModalScroll: {
     paddingBottom: 8,
@@ -1380,7 +1426,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '100%',
   },
   modalTitle: {
     fontSize: 18,
