@@ -446,6 +446,26 @@ export default function EarningsScreen({ navigation }: any) {
   const totalPaidEarnings = withdrawalWallet?.totalPaidEarnings ?? stats?.totalEarnings ?? 0;
   const codCashBalance = cashLedger?.cashBalance || stats?.cashBalance || 0;
   const codDueToPlatform = withdrawalWallet?.cashDueToPlatform ?? codCashBalance;
+  const withdrawBlockReason = (() => {
+    if (!withdrawalWallet) return "Loading withdrawal status...";
+    if (withdrawalWallet.pendingRequest) return null;
+    if (!withdrawalWallet.bankVerified) {
+      if (withdrawalWallet.bankVerificationStatus === "PENDING") {
+        return "Bank details are under admin verification.";
+      }
+      if (withdrawalWallet.bankVerificationStatus === "REJECTED") {
+        return withdrawalWallet.bankReviewComment || "Update bank details in Profile.";
+      }
+      return "Add and verify bank or UPI in Profile first.";
+    }
+    if (codDueToPlatform > 0) {
+      return `Settle ${formatCurrency(codDueToPlatform)} COD cash with Vyaha first (see COD Cash Balance above).`;
+    }
+    if ((withdrawalWallet.availableBalance || 0) <= 0) {
+      return "No delivered earnings are available for withdrawal yet.";
+    }
+    return null;
+  })();
   const depositSheetMaxHeight = Math.max(
     (keyboardHeight > 0
       ? windowHeight - keyboardHeight - insets.top - 12
@@ -675,6 +695,16 @@ export default function EarningsScreen({ navigation }: any) {
                 : "Add and verify bank or UPI details in Profile to withdraw earnings."}
           </Text>
         )}
+        <View style={styles.withdrawSummaryRow}>
+          <Text style={styles.withdrawSummaryLabel}>Available to withdraw</Text>
+          <Text style={styles.withdrawSummaryValue}>{formatCurrency(withdrawableNow)}</Text>
+        </View>
+        {withdrawBlockReason ? (
+          <View style={styles.withdrawBlockBanner}>
+            <Ionicons name="information-circle-outline" size={16} color="#B45309" />
+            <Text style={styles.withdrawBlockText}>{withdrawBlockReason}</Text>
+          </View>
+        ) : null}
         <TouchableOpacity
           style={[
             styles.withdrawButton,
@@ -1536,6 +1566,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#166534',
     fontWeight: '500',
+  },
+  withdrawSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  withdrawSummaryLabel: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  withdrawSummaryValue: {
+    fontSize: 18,
+    color: '#166534',
+    fontWeight: '700',
+  },
+  withdrawBlockBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  withdrawBlockText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400E',
+    lineHeight: 18,
   },
   bankHint: {
     fontSize: 12,
