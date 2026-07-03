@@ -171,16 +171,24 @@ function MenuCardItem({
           </TouchableOpacity>
 
           <View style={styles.menuInfo}>
-            <View style={styles.menuInfoTop}>
+            <View style={styles.menuInfoRow}>
               <TouchableOpacity
-                style={styles.menuTitleBlock}
                 activeOpacity={0.9}
+                style={styles.menuTextStack}
                 onPress={handlePress}
               >
                 <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
+                <Text style={styles.itemDescription} numberOfLines={2}>
+                  {item.description || "Freshly prepared in-store with quality ingredients."}
+                </Text>
+                <View style={styles.readyRow}>
+                  <Feather name="clock" size={11} color="#7C7168" />
+                  <Text style={styles.readyText}>Ready in a few minutes</Text>
+                </View>
               </TouchableOpacity>
-              <View style={styles.menuPriceActions}>
+
+              <View style={styles.menuRightColumn}>
                 <TouchableOpacity
                   style={[styles.menuFavoriteButton, isFavorite && styles.menuFavoriteButtonActive]}
                   onPress={() => onToggleFavorite(item)}
@@ -197,39 +205,22 @@ function MenuCardItem({
                   />
                 </TouchableOpacity>
                 <Text style={styles.itemPrice}>Rs {item.price}</Text>
-              </View>
-            </View>
-
-            <View style={styles.menuCompactRow}>
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={styles.menuTextStack}
-                onPress={handlePress}
-              >
-                <Text style={styles.itemDescription} numberOfLines={2}>
-                  {item.description || "Freshly prepared in-store with quality ingredients."}
-                </Text>
-                <View style={styles.readyRow}>
-                  <Feather name="clock" size={11} color="#7C7168" />
-                  <Text style={styles.readyText}>Ready in a few minutes</Text>
+                <View style={styles.stepper}>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={() => handleDecrement(item)}
+                    disabled={quantity === 0}
+                  >
+                    <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.stepperValue}>{quantity}</Text>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={handlePress}
+                  >
+                    <Text style={styles.stepperButtonText}>+</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-
-              <View style={styles.stepper}>
-                <TouchableOpacity
-                  style={styles.stepperButton}
-                  onPress={() => handleDecrement(item)}
-                  disabled={quantity === 0}
-                >
-                  <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
-                </TouchableOpacity>
-                <Text style={styles.stepperValue}>{quantity}</Text>
-                <TouchableOpacity
-                  style={styles.stepperButton}
-                  onPress={handlePress}
-                >
-                  <Text style={styles.stepperButtonText}>+</Text>
-                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -990,14 +981,21 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingLeft: 9
   },
-  menuInfoTop: {
+  menuInfoRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start"
+    alignItems: "flex-start",
+    gap: 8
   },
-  menuTitleBlock: {
+  menuTextStack: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 6
+  },
+  menuRightColumn: {
+    alignItems: "flex-end",
+    alignSelf: "stretch",
+    justifyContent: "space-between",
+    gap: 6
   },
   itemName: {
     fontSize: 15,
@@ -1016,10 +1014,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "900",
     color: "#FF6B35"
-  },
-  menuPriceActions: {
-    alignItems: "flex-end",
-    gap: 6
   },
   menuFavoriteButton: {
     width: 32,
@@ -1083,17 +1077,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     minWidth: 92
   },
-  menuCompactRow: {
-    marginTop: 5,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8
-  },
-  menuTextStack: {
-    flex: 1,
-    minWidth: 0
-  },
   itemDescription: {
+    marginTop: 1,
     fontSize: 11,
     lineHeight: 14,
     color: "#72675E"
@@ -1123,7 +1108,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 1,
     height: 28,
-    alignSelf: "center"
+    marginTop: "auto"
   },
   stepperButton: {
     width: 24,

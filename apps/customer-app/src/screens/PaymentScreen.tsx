@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Modal
+  Modal,
+  TextInput
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
@@ -66,6 +67,15 @@ const getOnlinePaymentFailureMessage = (error: any) => describeRazorpayPaymentEr
 const createDeliveryBundleId = () =>
   `bundle_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
+const TIP_PRESETS = [0, 10, 20, 50] as const;
+const MAX_TIP_AMOUNT = 500;
+
+const parseTipAmount = (value: string) => {
+  const parsed = Number.parseInt(value.replace(/[^\d]/g, ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.min(parsed, MAX_TIP_AMOUNT);
+};
+
 export default function PaymentScreen({ route, navigation }: any) {
   const { userProfile, orderSummary } = route.params;
   const { items, clear } = useCart();
@@ -78,6 +88,9 @@ export default function PaymentScreen({ route, navigation }: any) {
   const [selectedUpiApp, setSelectedUpiApp] = useState<UpiApp | null>(null);
   const [loadingUpiApps, setLoadingUpiApps] = useState(false);
   const [successOrders, setSuccessOrders] = useState<any[] | null>(null);
+  const [selectedTipPreset, setSelectedTipPreset] = useState<number>(0);
+  const [showCustomTip, setShowCustomTip] = useState(false);
+  const [customTipText, setCustomTipText] = useState("");
 
   const paymentMethods = [
     { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
@@ -154,6 +167,18 @@ export default function PaymentScreen({ route, navigation }: any) {
   const platformFee = orderSummary?.platformFee ?? 0;
   const taxDiscount = orderSummary?.taxDiscount ?? foodGst + deliveryGst + platformFee;
 
+  const tipAmount = useMemo(() => {
+    if (showCustomTip) {
+      return parseTipAmount(customTipText);
+    }
+    return Math.max(0, selectedTipPreset);
+  }, [showCustomTip, customTipText, selectedTipPreset]);
+
+  const payableTotal = useMemo(
+    () => Number(orderSummary?.total || 0) + tipAmount,
+    [orderSummary?.total, tipAmount]
+  );
+
   const getDeliveryTime = () => {
     const now = new Date();
     const deliveryTime = new Date(now.getTime() + 45 * 60000);
@@ -186,7 +211,8 @@ export default function PaymentScreen({ route, navigation }: any) {
     group: CheckoutGroup,
     selectedMethod: string,
     orderDeliveryLocation?: { latitude: number; longitude: number },
-    bundle?: { id: string; size: number; sequence: number }
+    bundle?: { id: string; size: number; sequence: number },
+    orderTipAmount = 0
   ) => {
     if (
       !orderDeliveryLocation ||
@@ -211,7 +237,8 @@ export default function PaymentScreen({ route, navigation }: any) {
       orderSummary.note || "",
       selectedMethod,
       orderDeliveryLocation,
-      bundle
+      bundle,
+      orderTipAmount > 0 ? orderTipAmount : undefined
     );
 
     if (!response.success || !response.data) {
@@ -232,7 +259,8 @@ export default function PaymentScreen({ route, navigation }: any) {
           group,
           selectedMethod,
           orderDeliveryLocation,
-          deliveryBundleId ? { id: deliveryBundleId, size: groupedShops.length, sequence: index + 1 } : undefined
+          deliveryBundleId ? { id: deliveryBundleId, size: groupedShops.length, sequence: index + 1 } : undefined,
+          index === 0 ? tipAmount : 0
         )
       );
     }
@@ -265,7 +293,8 @@ export default function PaymentScreen({ route, navigation }: any) {
         group,
         "RAZORPAY",
         orderDeliveryLocation,
-        deliveryBundleId ? { id: deliveryBundleId, size: groupedShops.length, sequence: index + 1 } : undefined
+        deliveryBundleId ? { id: deliveryBundleId, size: groupedShops.length, sequence: index + 1 } : undefined,
+        index === 0 ? tipAmount : 0
       );
       pendingOnlineOrders.push(createdOrder);
 
@@ -527,6 +556,54 @@ export default function PaymentScreen({ route, navigation }: any) {
         ) : null}
 
         <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Tip your delivery partner</Text>
+          <Text style={styles.tipHint}>100% of your tip goes to the rider after successful delivery.</Text>
+          <View style={styles.tipPresetRow}>
+            {TIP_PRESETS.map((preset) => {
+              const isSelected = !showCustomTip && selectedTipPreset === preset;
+              return (
+                <TouchableOpacity
+                  key={preset}
+                  style={[styles.tipChip, isSelected && styles.tipChipSelected]}
+                  onPress={() => {
+                    setShowCustomTip(false);
+                    setSelectedTipPreset(preset);
+                    setCustomTipText("");
+                  }}
+                >
+                  <Text style={[styles.tipChipText, isSelected && styles.tipChipTextSelected]}>
+                    {preset === 0 ? "No tip" : `Rs ${preset}`}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={[styles.tipChip, showCustomTip && styles.tipChipSelected]}
+              onPress={() => {
+                setShowCustomTip(true);
+                setSelectedTipPreset(0);
+              }}
+            >
+              <Text style={[styles.tipChipText, showCustomTip && styles.tipChipTextSelected]}>Other</Text>
+            </TouchableOpacity>
+          </View>
+          {showCustomTip ? (
+            <View style={styles.customTipRow}>
+              <Text style={styles.customTipPrefix}>Rs</Text>
+              <TextInput
+                style={styles.customTipInput}
+                value={customTipText}
+                onChangeText={(value) => setCustomTipText(value.replace(/[^\d]/g, ""))}
+                keyboardType="number-pad"
+                placeholder="Enter amount"
+                placeholderTextColor="#A3968D"
+                maxLength={3}
+              />
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Payment method</Text>
           {renderPaymentMethod()}
         </View>
@@ -540,6 +617,12 @@ export default function PaymentScreen({ route, navigation }: any) {
             <Text style={styles.priceLabel}>Delivery fee {orderSummary.deliveryDistanceKm ? `(${orderSummary.deliveryDistanceKm} km)` : ""}</Text>
             <Text style={styles.priceValue}>{formatAmount(orderSummary.deliveryFee)}</Text>
           </View>
+          {tipAmount > 0 ? (
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Tip for rider</Text>
+              <Text style={styles.priceValue}>{formatAmount(tipAmount)}</Text>
+            </View>
+          ) : null}
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Food GST (5%)</Text>
             <View style={styles.waivedValueGroup}>
@@ -563,7 +646,7 @@ export default function PaymentScreen({ route, navigation }: any) {
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Amount to pay</Text>
-            <Text style={styles.totalValue}>{formatAmount(orderSummary.total)}</Text>
+            <Text style={styles.totalValue}>{formatAmount(payableTotal)}</Text>
           </View>
           <Text style={styles.taxNote}>You saved {formatAmount(taxDiscount)}. GST and platform fee are waived for this offer.</Text>
         </View>
@@ -597,7 +680,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         ) : (
           <View style={styles.footerSummary}>
             <Text style={styles.footerEstimate}>Estimated by {getDeliveryTime()}</Text>
-            <Text style={styles.footerTotal}>{formatAmount(orderSummary.total)}</Text>
+            <Text style={styles.footerTotal}>{formatAmount(payableTotal)}</Text>
           </View>
         )}
 
@@ -612,7 +695,7 @@ export default function PaymentScreen({ route, navigation }: any) {
             <View style={styles.payButtonInner}>
               <View style={styles.payButtonAmountBlock}>
                 <Text style={styles.payButtonAmountLabel}>Total</Text>
-                <Text style={styles.payButtonAmountValue}>{formatAmount(orderSummary.total)}</Text>
+                <Text style={styles.payButtonAmountValue}>{formatAmount(payableTotal)}</Text>
               </View>
               <View style={styles.payButtonActionBlock}>
                 <Text style={styles.payButtonText}>Place Order</Text>
@@ -652,7 +735,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         loading={loadingUpiApps}
         apps={upiApps}
         selectedAppId={selectedUpiApp?.id}
-        totalLabel={formatAmount(orderSummary.total)}
+        totalLabel={formatAmount(payableTotal)}
         onClose={() => setShowUpiPicker(false)}
         onSelect={handleUpiAppSelection}
       />
@@ -825,6 +908,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     color: "#6B5E55"
+  },
+  tipHint: {
+    marginTop: 4,
+    marginBottom: 12,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#7B6D63"
+  },
+  tipPresetRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  tipChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    backgroundColor: "#FFFCF8"
+  },
+  tipChipSelected: {
+    borderColor: "#FF6B35",
+    backgroundColor: "#FFF1EA"
+  },
+  tipChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#5E5148"
+  },
+  tipChipTextSelected: {
+    color: "#FF6B35"
+  },
+  customTipRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#EFE5DA",
+    borderRadius: 14,
+    backgroundColor: "#FFFCF8",
+    paddingHorizontal: 14
+  },
+  customTipPrefix: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#FF6B35",
+    marginRight: 8
+  },
+  customTipInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#2C2018"
   },
   selectedMethod: {
     flexDirection: "row",

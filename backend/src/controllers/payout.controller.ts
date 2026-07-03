@@ -6,7 +6,7 @@ import DeliveryPartner from "../models/DeliveryPartner.model";
 import Payout from "../models/Payout.model";
 import CashLedgerEntry from "../models/CashLedgerEntry.model";
 import { notifyPayoutPaid } from "../services/notification.service";
-import { markPendingWithdrawalRequestsPaid } from "../services/payout.service";
+import { getRiderOrderEarnings, markPendingWithdrawalRequestsPaid } from "../services/payout.service";
 
 interface AuthRequest extends Request {
   user?: {
@@ -306,7 +306,7 @@ export const getPayoutSummary = async (req: AuthRequest, res: Response) => {
       const deliveryPartner = deliveryPartnerByUserId.get(String(order.deliveryPartnerId));
       if (!deliveryPartner) return;
 
-      const grossAmount = Number(order.deliveryFee || 0);
+      const grossAmount = getRiderOrderEarnings(order);
       const key = String(deliveryPartner._id);
       const bankDetails = getBankDetails(deliveryPartner, "DELIVERY_PARTNER");
       const current = deliveryGroups.get(key) || {
@@ -465,7 +465,7 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
     }
 
     const grossAmount = orders.reduce((sum, order: any) => {
-      return sum + Number(recipientType === "PARTNER" ? order.itemTotal || 0 : order.deliveryFee || 0);
+      return sum + Number(recipientType === "PARTNER" ? order.itemTotal || 0 : getRiderOrderEarnings(order));
     }, 0);
     const riderBreakdown =
       recipientType === "DELIVERY_PARTNER"
@@ -551,7 +551,7 @@ export const createPayout = async (req: AuthRequest, res: Response) => {
               ...payoutUpdate,
               ...(recipientType === "PARTNER"
                 ? { "partnerPayout.amount": Number(order.itemTotal || 0) }
-                : { "deliveryPayout.amount": Number(order.deliveryFee || 0) })
+                : { "deliveryPayout.amount": getRiderOrderEarnings(order) })
             }
           }
         }

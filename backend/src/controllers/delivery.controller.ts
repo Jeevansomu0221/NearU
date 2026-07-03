@@ -11,7 +11,7 @@ import {
   clearSuspensionFields,
   type SuspensionType
 } from "../utils/suspension.util";
-import { getRiderWalletSummary } from "../services/payout.service";
+import { getRiderOrderEarnings, getRiderWalletSummary } from "../services/payout.service";
 
 interface AuthRequest extends Request {
   user?: {
@@ -629,7 +629,7 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
       Order.find({
         deliveryPartnerId: deliveryUserId,
         status: "DELIVERED"
-      }).select("createdAt updatedAt deliveryFee").lean(),
+      }).select("createdAt updatedAt deliveryFee tipAmount").lean(),
       Order.countDocuments({
         deliveryPartnerId: deliveryUserId
       }),
@@ -661,12 +661,12 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
         totalEarnings: walletSummary.totalPaidEarnings,
         walletBalance: walletSummary.walletBalance,
         lifetimeDeliveredEarnings: deliveredOrders.reduce(
-          (sum, order) => sum + (typeof order.deliveryFee === "number" ? order.deliveryFee : 0),
+          (sum, order) => sum + getRiderOrderEarnings(order),
           0
         ),
         todaysDeliveries: todaysOrders.length,
         todaysEarnings: todaysOrders.reduce(
-          (sum, order) => sum + (typeof order.deliveryFee === "number" ? order.deliveryFee : 0),
+          (sum, order) => sum + getRiderOrderEarnings(order),
           0
         ),
         averageDeliveryTime,
@@ -703,11 +703,11 @@ export const getTodaysEarnings = async (req: AuthRequest, res: Response) => {
       status: "DELIVERED",
       updatedAt: { $gte: todayStart }
     })
-      .select("deliveryFee")
+      .select("deliveryFee tipAmount")
       .lean();
 
     const earnings = deliveredToday.reduce(
-      (sum, order) => sum + (typeof order.deliveryFee === "number" ? order.deliveryFee : 0),
+      (sum, order) => sum + getRiderOrderEarnings(order),
       0
     );
 

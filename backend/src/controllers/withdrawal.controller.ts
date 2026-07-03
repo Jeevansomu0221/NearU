@@ -7,6 +7,7 @@ import {
   executeDeliveryPartnerPayout,
   getBankDetails,
   getPendingDeliveryPayoutOrders,
+  getRiderOrderEarnings,
   getRiderPayoutBreakdown,
   getRiderWalletSummary,
   hasMissingBankDetails,
@@ -248,7 +249,7 @@ export const requestWithdrawal = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const grossEarnings = orders.reduce((sum, order) => sum + Number(order.deliveryFee || 0), 0);
+    const grossEarnings = orders.reduce((sum, order) => sum + getRiderOrderEarnings(order), 0);
     const breakdown = getRiderPayoutBreakdown(grossEarnings, Number(deliveryPartner.cashBalance || 0));
     if (breakdown.netPayable <= 0) {
       return res.status(400).json({

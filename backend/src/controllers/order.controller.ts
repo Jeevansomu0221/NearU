@@ -19,6 +19,7 @@ import {
   notifyPartnerNewOrder
 } from "../services/notification.service";
 import { PaymentService } from "../services/payment.service";
+import { getRiderOrderEarnings } from "../services/payout.service";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
@@ -446,6 +447,7 @@ const buildBundledDeliveryJob = (orders: any[]) => {
 
   const itemTotal = sortedOrders.reduce((sum, order) => sum + Number(order.itemTotal || 0), 0);
   const deliveryFee = sortedOrders.reduce((sum, order) => sum + Number(order.deliveryFee || 0), 0);
+  const tipAmount = sortedOrders.reduce((sum, order) => sum + Number(order.tipAmount || 0), 0);
   const grandTotal = sortedOrders.reduce((sum, order) => sum + Number(order.grandTotal || 0), 0);
   const deliveryDistanceKm = sortedOrders.reduce((sum, order) => sum + Number(order.deliveryDistanceKm || 0), 0);
   const paymentMethod = sortedOrders.some((order) => order.paymentMethod === "CASH_ON_DELIVERY")
@@ -462,6 +464,8 @@ const buildBundledDeliveryJob = (orders: any[]) => {
     deliveryBundleSize: sortedOrders.length,
     itemTotal: roundMoney(itemTotal),
     deliveryFee: roundMoney(deliveryFee),
+    tipAmount: roundMoney(tipAmount),
+    estimatedEarnings: roundMoney(deliveryFee + tipAmount),
     grandTotal: roundMoney(grandTotal),
     deliveryDistanceKm: roundDistance(deliveryDistanceKm),
     paymentMethod,
@@ -483,6 +487,7 @@ const buildBundledDeliveryJob = (orders: any[]) => {
       items: order.items || [],
       itemTotal: order.itemTotal || 0,
       deliveryFee: order.deliveryFee || 0,
+      tipAmount: order.tipAmount || 0,
       grandTotal: order.grandTotal || 0
     }))
   };
@@ -849,7 +854,8 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       paymentMethod = "RAZORPAY",
       deliveryBundleId,
       deliveryBundleSize,
-      deliveryBundleSequence
+      deliveryBundleSequence,
+      tipAmount
     } = req.body;
 
     // Validate required fields
@@ -934,7 +940,17 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     const deliveryPricing = await calculateDeliveryPricing(partner, normalizedDeliveryLocation);
     const deliveryFee = deliveryPricing.deliveryFee;
     const taxOffer = calculateTaxOffer(itemTotal, deliveryFee);
-    const grandTotal = roundMoney(itemTotal + deliveryFee);
+    const normalizedTipAmount = Math.max(0, roundMoney(Number(tipAmount || 0)));
+
+    if (normalizedTipAmount > 500) {
+      return errorResponse(res, "Tip amount cannot exceed Rs 500", 400);
+    }
+
+    if (normalizedBundleId && normalizedBundleSequence !== 1 && normalizedTipAmount > 0) {
+      return errorResponse(res, "Tip can only be added to the first order in a bundled delivery", 400);
+    }
+
+    const grandTotal = roundMoney(itemTotal + deliveryFee + normalizedTipAmount);
 
     // Determine payment status based on payment method
     let paymentStatus: string;
@@ -964,6 +980,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       items: validatedItems,
       itemTotal,
       deliveryFee,
+      tipAmount: normalizedTipAmount,
       foodGst: taxOffer.foodGst,
       deliveryGst: taxOffer.deliveryGst,
       platformFee: taxOffer.platformFee,
@@ -1402,7 +1419,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
     if (status === "DELIVERED" && deliveryPartner) {
       const totalDeliveryEarnings = deliveryOrders.reduce(
-        (sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.deliveryFee || 0),
+        (sum: number, deliveryOrder: any) => sum + getRiderOrderEarnings(deliveryOrder),
         0
       );
       const deliveryIncrement: Record<string, number> = {
@@ -1440,7 +1457,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     const responseOrder = isBundledDeliveryOrder(order) ? buildBundledDeliveryJob(responseOrders) : responseOrders[0];
     if (status === "DELIVERED") {
       responseOrder.deliveryEarnings = responseOrders.reduce(
-        (sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.deliveryFee || 0),
+        (sum: number, deliveryOrder: any) => sum + getRiderOrderEarnings(deliveryOrder),
         0
       );
       responseOrder.collectedAmount = collectedAmount ? Number(collectedAmount) : undefined;

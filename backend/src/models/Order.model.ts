@@ -133,6 +133,12 @@ const OrderSchema = new Schema({
     default: 0
   },
 
+  tipAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
   foodGst: {
     type: Number,
     default: 0,

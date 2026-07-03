@@ -18,6 +18,7 @@ interface CreateOrderRequest {
   items: OrderItem[];
   note?: string;
   paymentMethod?: string;
+  tipAmount?: number;
   deliveryBundleId?: string;
   deliveryBundleSize?: number;
   deliveryBundleSequence?: number;
@@ -69,6 +70,7 @@ export interface Order {
   items: OrderItem[];
   itemTotal?: number;
   deliveryFee?: number;
+  tipAmount?: number;
   foodGst?: number;
   deliveryGst?: number;
   platformFee?: number;
@@ -108,7 +110,8 @@ export const createShopOrder = (
   note: string | undefined,
   paymentMethod: string | undefined,
   deliveryLocation: { latitude: number; longitude: number },
-  bundle?: { id: string; size: number; sequence: number }
+  bundle?: { id: string; size: number; sequence: number },
+  tipAmount?: number
 ): Promise<ApiResponse<Order>> => {
   const requestData: CreateOrderRequest = {
     partnerId,
@@ -121,6 +124,10 @@ export const createShopOrder = (
   // Add payment method if provided
   if (paymentMethod) {
     requestData.paymentMethod = paymentMethod;
+  }
+
+  if (typeof tipAmount === "number" && tipAmount > 0) {
+    requestData.tipAmount = tipAmount;
   }
 
   if (bundle?.id) {

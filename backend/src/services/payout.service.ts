@@ -6,6 +6,9 @@ import CashLedgerEntry from "../models/CashLedgerEntry.model";
 import WithdrawalRequest from "../models/WithdrawalRequest.model";
 import { notifyPayoutPaid } from "./notification.service";
 
+export const getRiderOrderEarnings = (order: any) =>
+  Number(order?.deliveryFee || 0) + Number(order?.tipAmount || 0);
+
 export const getRiderPayoutBreakdown = (grossEarnings: number, cashBalance: number) => {
   const cashHeld = Math.max(Number(cashBalance || 0), 0);
   const offsetApplied = Math.min(grossEarnings, cashHeld);
@@ -60,7 +63,7 @@ export const getRiderPaidEarningsTotal = async (deliveryPartnerId: mongoose.Type
 
 export const getRiderWalletSummary = async (deliveryPartner: any) => {
   const orders = await getPendingDeliveryPayoutOrders(String(deliveryPartner.userId));
-  const grossEarnings = orders.reduce((sum, order) => sum + Number(order.deliveryFee || 0), 0);
+  const grossEarnings = orders.reduce((sum, order) => sum + getRiderOrderEarnings(order), 0);
   const breakdown = getRiderPayoutBreakdown(grossEarnings, Number(deliveryPartner.cashBalance || 0));
   const totalPaidEarnings = await getRiderPaidEarningsTotal(deliveryPartner._id);
 
@@ -83,7 +86,7 @@ export const getPendingDeliveryPayoutOrders = async (deliveryUserId: string) => 
     deliveryPartnerId: deliveryUserId,
     "deliveryPayout.status": { $ne: "PAID" }
   })
-    .select("deliveryPartnerId deliveryFee createdAt updatedAt deliveredAt")
+    .select("deliveryPartnerId deliveryFee tipAmount createdAt updatedAt deliveredAt")
     .lean();
 };
 
@@ -133,7 +136,7 @@ export const executeDeliveryPartnerPayout = async ({
     throw Object.assign(new Error("No payment-successful orders are pending payout"), { statusCode: 400 });
   }
 
-  const grossAmount = orders.reduce((sum, order) => sum + Number(order.deliveryFee || 0), 0);
+  const grossAmount = orders.reduce((sum, order) => sum + getRiderOrderEarnings(order), 0);
   const riderBreakdown = getRiderPayoutBreakdown(grossAmount, Number(deliveryPartner.cashBalance || 0));
   const amount = riderBreakdown.netPayable;
 
@@ -189,7 +192,7 @@ export const executeDeliveryPartnerPayout = async ({
           $set: {
             "deliveryPayout.status": "PAID",
             "deliveryPayout.payoutId": payout._id,
-            "deliveryPayout.amount": Number(order.deliveryFee || 0),
+            "deliveryPayout.amount": getRiderOrderEarnings(order),
             "deliveryPayout.settledAt": now
           }
         }

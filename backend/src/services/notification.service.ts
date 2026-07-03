@@ -5,6 +5,7 @@ import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
 import User from "../models/User.model";
 import { getFirebaseApp } from "./firebaseAuth.service";
+import { getRiderOrderEarnings } from "./payout.service";
 
 export type NotificationApp = "customer" | "partner" | "delivery";
 
@@ -136,7 +137,7 @@ const getDeliveryJobNotificationDetails = async (order: any) => {
     ? await Order.findById(orderId)
         .populate("customerId", "name phone")
         .populate("partnerId", "restaurantName shopName address")
-        .select("customerId partnerId deliveryAddress deliveryFee grandTotal paymentMethod")
+        .select("customerId partnerId deliveryAddress deliveryFee tipAmount grandTotal paymentMethod")
         .lean()
     : null;
   const source = populatedOrder || order;
@@ -145,7 +146,7 @@ const getDeliveryJobNotificationDetails = async (order: any) => {
   const restaurantName = partner.restaurantName || partner.shopName || "Restaurant";
   const pickupAddress = formatAddressForNotification(partner.address);
   const dropAddress = formatAddressForNotification(source.deliveryAddress);
-  const earnings = Number(source.deliveryFee || 0) || 49;
+  const earnings = getRiderOrderEarnings(source) || 49;
   const orderTotal = Number(source.grandTotal || 0);
   const paymentLabel = source.paymentMethod === "CASH_ON_DELIVERY" ? "COD" : "Pre-paid";
 

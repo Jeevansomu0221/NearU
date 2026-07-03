@@ -79,6 +79,14 @@ const RZPAY_IMG_H = RZPAY_IMG_W * 1.61;
 const RZPAY_IMG_LEFT = -((RZPAY_IMG_W - UPI_FOCUS_SIZE) / 2);
 const RZPAY_IMG_TOP = -(RZPAY_IMG_H * 0.22);
 
+const getJobRiderEarnings = (job: DeliveryOrder | null | undefined) => {
+  if (!job) return 0;
+  if (typeof job.estimatedEarnings === "number" && job.estimatedEarnings > 0) {
+    return job.estimatedEarnings;
+  }
+  return Number(job.deliveryFee || 0) + Number(job.tipAmount || 0);
+};
+
 const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (!session) return null;
   if (session.provider === "razorpay_qr" && session.qrImageUrl) {
@@ -540,7 +548,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       );
 
       if (response.success) {
-        const earnedAmount = response.data?.deliveryEarnings || response.data?.deliveryFee || job?.deliveryFee || 49;
+        const earnedAmount = response.data?.deliveryEarnings || getJobRiderEarnings(response.data || job);
         const collectedText = collectionMethod === "UPI"
           ? ` UPI payment of Rs ${job?.grandTotal || collectedAmount || 0} received by Vyaha.`
           : collectedAmount
@@ -745,6 +753,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             <Text style={styles.totalLabel}>Delivery Fee</Text>
             <Text style={styles.totalValue}>₹{job.deliveryFee}</Text>
           </View>
+          {Number(job.tipAmount || 0) > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Customer Tip</Text>
+              <Text style={styles.totalValue}>₹{job.tipAmount}</Text>
+            </View>
+          ) : null}
           <View style={styles.grandTotalRow}>
             <Text style={styles.grandTotalLabel}>Total Amount</Text>
             <Text style={styles.grandTotalValue}>₹{job.grandTotal}</Text>
@@ -795,10 +809,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             <Text style={styles.earningLabel}>Delivery Fee</Text>
             <Text style={styles.earningValue}>₹{job.deliveryFee}</Text>
           </View>
+          {Number(job.tipAmount || 0) > 0 ? (
+            <View style={styles.earningRow}>
+              <Text style={styles.earningLabel}>Customer Tip</Text>
+              <Text style={styles.earningValue}>₹{job.tipAmount}</Text>
+            </View>
+          ) : null}
           <View style={styles.divider} />
           <View style={styles.totalEarningRow}>
             <Text style={styles.totalEarningLabel}>You'll Earn</Text>
-            <Text style={styles.totalEarningValue}>₹{job.deliveryFee}</Text>
+            <Text style={styles.totalEarningValue}>₹{getJobRiderEarnings(job)}</Text>
           </View>
         </View>
       </View>

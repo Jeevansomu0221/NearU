@@ -54,6 +54,7 @@ export interface DeliveryOrder {
   grandTotal: number;
   itemTotal: number;
   deliveryFee: number;
+  tipAmount?: number;
   paymentMethod: string;
   paymentStatus: string;
   estimatedDistance?: number;
