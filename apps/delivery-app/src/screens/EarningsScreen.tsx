@@ -10,7 +10,11 @@ import {
   RefreshControl,
   Modal,
   TextInput,
-  Image
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { uploadMultipart } from "../api/client";
@@ -631,70 +635,85 @@ export default function EarningsScreen({ navigation }: any) {
         animationType="slide"
         onRequestClose={() => setDepositModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.depositModal}>
-            <Text style={styles.modalTitle}>Submit Cash Deposit</Text>
-            <Text style={styles.modalDescription}>
-              Enter details after depositing COD cash back to the platform. Admin will verify before your balance is reduced.
-            </Text>
-            <Text style={styles.modalBalanceHint}>
-              Your COD cash balance: {formatCurrency(codCashBalance)}
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              keyboardType="number-pad"
-              placeholder="Amount deposited"
-              placeholderTextColor="#6B7280"
-              value={depositAmount}
-              onChangeText={(value) => setDepositAmount(value.replace(/[^\d]/g, ""))}
-            />
-            <TouchableOpacity
-              style={styles.useFullBalanceButton}
-              onPress={() => setDepositAmount(codCashBalance > 0 ? String(Math.round(codCashBalance)) : "")}
-            >
-              <Text style={styles.useFullBalanceText}>Use full balance ({formatCurrency(codCashBalance)})</Text>
-            </TouchableOpacity>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Reference / UTR"
-              placeholderTextColor="#6B7280"
-              value={depositReference}
-              onChangeText={setDepositReference}
-            />
-            <Text style={styles.proofLabel}>Deposit proof screenshot</Text>
-            <TouchableOpacity style={styles.proofUploadButton} onPress={pickDepositProof} disabled={uploadingProof}>
-              {uploadingProof ? (
-                <ActivityIndicator color="#B45309" />
-              ) : (
-                <>
-                  <Ionicons name="image-outline" size={20} color="#B45309" />
-                  <Text style={styles.proofUploadText}>
-                    {depositProofUrl ? "Change proof screenshot" : "Upload proof screenshot"}
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.bottom : 0}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalBackdropContent}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.depositModalScroll}
+              >
+                <View style={styles.depositModal}>
+                  <Text style={styles.modalTitle}>Submit Cash Deposit</Text>
+                  <Text style={styles.modalDescription}>
+                    Enter details after depositing COD cash back to the platform. Admin will verify before your balance is reduced.
                   </Text>
-                </>
-              )}
-            </TouchableOpacity>
-            {depositProofUrl ? (
-              <Image source={{ uri: depositProofUrl }} style={styles.proofPreview} resizeMode="cover" />
-            ) : null}
-            <TextInput
-              style={[styles.modalInput, styles.modalTextarea]}
-              placeholder="Note (optional)"
-              placeholderTextColor="#6B7280"
-              multiline
-              value={depositNote}
-              onChangeText={setDepositNote}
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDepositModalVisible(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSubmitButton} onPress={handleSubmitDeposit} disabled={submittingDeposit}>
-                <Text style={styles.withdrawButtonText}>{submittingDeposit ? "Submitting..." : "Submit"}</Text>
-              </TouchableOpacity>
+                  <Text style={styles.modalBalanceHint}>
+                    Your COD cash balance: {formatCurrency(codCashBalance)}
+                  </Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    keyboardType="number-pad"
+                    placeholder="Amount deposited"
+                    placeholderTextColor="#6B7280"
+                    value={depositAmount}
+                    onChangeText={(value) => setDepositAmount(value.replace(/[^\d]/g, ""))}
+                  />
+                  <TouchableOpacity
+                    style={styles.useFullBalanceButton}
+                    onPress={() => setDepositAmount(codCashBalance > 0 ? String(Math.round(codCashBalance)) : "")}
+                  >
+                    <Text style={styles.useFullBalanceText}>Use full balance ({formatCurrency(codCashBalance)})</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Reference / UTR"
+                    placeholderTextColor="#6B7280"
+                    value={depositReference}
+                    onChangeText={setDepositReference}
+                    returnKeyType="next"
+                  />
+                  <Text style={styles.proofLabel}>Deposit proof screenshot</Text>
+                  <TouchableOpacity style={styles.proofUploadButton} onPress={pickDepositProof} disabled={uploadingProof}>
+                    {uploadingProof ? (
+                      <ActivityIndicator color="#B45309" />
+                    ) : (
+                      <>
+                        <Ionicons name="image-outline" size={20} color="#B45309" />
+                        <Text style={styles.proofUploadText}>
+                          {depositProofUrl ? "Change proof screenshot" : "Upload proof screenshot"}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  {depositProofUrl ? (
+                    <Image source={{ uri: depositProofUrl }} style={styles.proofPreview} resizeMode="cover" />
+                  ) : null}
+                  <TextInput
+                    style={[styles.modalInput, styles.modalTextarea]}
+                    placeholder="Note (optional)"
+                    placeholderTextColor="#6B7280"
+                    multiline
+                    value={depositNote}
+                    onChangeText={setDepositNote}
+                  />
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDepositModalVisible(false)}>
+                      <Text style={styles.modalCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.modalSubmitButton} onPress={handleSubmitDeposit} disabled={submittingDeposit}>
+                      <Text style={styles.withdrawButtonText}>{submittingDeposit ? "Submitting..." : "Submit"}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1270,11 +1289,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
+  modalBackdropContent: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  depositModalScroll: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+    paddingBottom: Platform.OS === "android" ? 8 : 0,
+  },
   depositModal: {
     backgroundColor: '#FFFFFF',
     padding: 20,
+    paddingBottom: 24,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    maxHeight: '92%',
   },
   modalTitle: {
     fontSize: 18,

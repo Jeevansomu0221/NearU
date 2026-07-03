@@ -12,6 +12,7 @@ import {
   useWindowDimensions
 } from "react-native";
 import { getOrderRiderEarnings } from "../utils/riderEarnings";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
