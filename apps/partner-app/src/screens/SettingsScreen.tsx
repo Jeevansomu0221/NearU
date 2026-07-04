@@ -192,7 +192,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   const handleDeleteAccount = async () => {
     try {
       const request = await getMyDeletionRequest();
-      if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
+      if (request && ["PENDING", "APPROVED"].includes(request.status)) {
         openAccountDeletionReview(navigation);
         return;
       }
@@ -426,9 +426,6 @@ export default function SettingsScreen({ navigation, route }: any) {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={[styles.footerSaveButton, saving && styles.smallSaveButtonDisabled]} onPress={saveAllSettings} disabled={saving}>
-        {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.footerSaveButtonText}>Save all settings</Text>}
-      </TouchableOpacity>
     </ScrollView>
     <DeleteAccountModal
       visible={deleteAccountModalVisible}
@@ -682,14 +679,5 @@ const styles = StyleSheet.create({
   rowDark: { borderBottomColor: "#263449" },
   rowText: { fontSize: 14, fontWeight: "700", color: "#143A66" },
   logoutText: { fontSize: 14, fontWeight: "800", color: "#60A5FA" },
-  deleteText: { fontSize: 14, fontWeight: "800", color: "#B42318" },
-  footerSaveButton: {
-    backgroundColor: "#60A5FA",
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 15,
-    marginTop: 2
-  },
-  footerSaveButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" }
+  deleteText: { fontSize: 14, fontWeight: "800", color: "#B42318" }
 });

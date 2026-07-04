@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,7 +26,7 @@ import { getDeliveryProfile, updateBankDetails, updateDeliveryProfile, type Deli
 import { getDeliveryStats, getTodaysEarnings, getWithdrawalWallet, type DeliveryStats } from "../api/delivery.api";
 import SupportModal from "../components/SupportModal";
 import DeleteAccountModal from "../components/DeleteAccountModal";
-import { getMyDeletionRequest } from "../api/accountDeletion.api";
+import { getMyDeletionRequest, cacheDeletionRequest } from "../api/accountDeletion.api";
 import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 import SettingsModals, { type SettingsModalType } from "../components/SettingsModals";
 import { syncNotificationPreferencesFromProfile } from "../services/notificationPreferences";
@@ -109,6 +109,36 @@ type AddressForm = {
   city: string;
   state: string;
   pincode: string;
+};
+
+type RegistrationDraft = {
+  name?: string;
+  email?: string;
+  dateOfBirth?: string;
+  address?: string;
+  addressForm?: AddressForm;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  vehicleType?: DeliveryProfile["vehicleType"];
+  vehicleNumber?: string;
+  licenseNumber?: string;
+  profilePhotoUrl?: string;
+  isAvailable?: boolean;
+  termsAccepted?: boolean;
+  bankDetailsSkipped?: boolean;
+  documents?: Partial<Docs>;
+  step?: number;
+  updatedAt?: string;
+};
+
+const loadStoredRegistrationDraft = async (): Promise<RegistrationDraft | null> => {
+  const draft = await AsyncStorage.getItem(DRAFT_KEY);
+  if (!draft) return null;
+  try {
+    return JSON.parse(draft) as RegistrationDraft;
+  } catch {
+    return null;
+  }
 };
 
 type UploadAsset = { uri: string; name: string; mimeType?: string | null };
@@ -269,6 +299,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [settingsModal, setSettingsModal] = useState<SettingsModalType>(null);
   const [appUpdateAvailable, setAppUpdateAvailable] = useState(false);
   const [stepAnim] = useState(() => new Animated.Value(0));
+  const draftHydratedRef = useRef(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -319,6 +350,48 @@ export default function ProfileScreen({ navigation, route }: any) {
     syncNotificationPreferencesFromProfile(data).catch(() => {});
   };
 
+  const applyRegistrationDraft = (parsed: RegistrationDraft, profile?: DeliveryProfile | null) => {
+    setName(parsed.name || profile?.name || "");
+    setEmail(parsed.email || profile?.email || "");
+    setDateOfBirth(parsed.dateOfBirth || (profile?.dateOfBirth ? profile.dateOfBirth.slice(0, 10) : ""));
+    setAddressForm(parsed.addressForm || parseAddressString(parsed.address || profile?.address || ""));
+    setEmergencyContactName(parsed.emergencyContactName || profile?.emergencyContactName || "");
+    setEmergencyContactPhone(parsed.emergencyContactPhone || profile?.emergencyContactPhone || "");
+    setVehicleType(normalizeVehicleType(parsed.vehicleType || profile?.vehicleType));
+    setVehicleNumber(parsed.vehicleNumber || profile?.vehicleNumber || "");
+    setLicenseNumber(parsed.licenseNumber || profile?.licenseNumber || "");
+    setProfilePhotoUrl(parsed.profilePhotoUrl || profile?.profilePhotoUrl || "");
+    setIsAvailable(typeof parsed.isAvailable === "boolean" ? parsed.isAvailable : (profile?.isAvailable ?? true));
+    setTermsAccepted(typeof parsed.termsAccepted === "boolean" ? parsed.termsAccepted : Boolean(profile?.termsAcceptedAt));
+    setBankDetailsSkipped(Boolean(parsed.bankDetailsSkipped));
+    setDocuments(normalizeDocuments({ ...(profile?.documents || {}), ...(parsed.documents || {}) }));
+    setStep(typeof parsed.step === "number" ? Math.min(Math.max(parsed.step, 0), 3) : 0);
+  };
+
+  const buildRegistrationDraft = (): RegistrationDraft => ({
+    name,
+    email,
+    dateOfBirth,
+    address: formattedAddress,
+    addressForm,
+    emergencyContactName,
+    emergencyContactPhone,
+    vehicleType,
+    vehicleNumber,
+    licenseNumber,
+    profilePhotoUrl,
+    isAvailable,
+    termsAccepted,
+    bankDetailsSkipped,
+    documents,
+    step,
+    updatedAt: new Date().toISOString()
+  });
+
+  const persistRegistrationDraft = async () => {
+    await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(buildRegistrationDraft()));
+  };
+
   const loadDashboardStats = async () => {
     try {
       const [statsResponse, earningsResponse, walletResponse] = await Promise.all([
@@ -341,35 +414,31 @@ export default function ProfileScreen({ navigation, route }: any) {
   useEffect(() => {
     const load = async () => {
       try {
+        const storedDraft = await loadStoredRegistrationDraft();
         const response = await getDeliveryProfile();
+
         if (response.success && response.data) {
-          syncProfile(response.data);
-          if (response.data.status === "ACTIVE") loadDashboardStats().catch(() => {});
-          const draft = await AsyncStorage.getItem(DRAFT_KEY);
-          if ((forceComplete || !response.data.isProfileComplete) && draft) {
-            const parsed = JSON.parse(draft);
-            setName(parsed.name || response.data.name || "");
-            setEmail(parsed.email || response.data.email || "");
-            setDateOfBirth(parsed.dateOfBirth || (response.data.dateOfBirth ? response.data.dateOfBirth.slice(0, 10) : ""));
-            setAddressForm(parsed.addressForm || parseAddressString(parsed.address || response.data.address || ""));
-            setEmergencyContactName(parsed.emergencyContactName || response.data.emergencyContactName || "");
-            setEmergencyContactPhone(parsed.emergencyContactPhone || response.data.emergencyContactPhone || "");
-            setVehicleType(normalizeVehicleType(parsed.vehicleType || response.data.vehicleType));
-            setVehicleNumber(parsed.vehicleNumber || response.data.vehicleNumber || "");
-            setLicenseNumber(parsed.licenseNumber || response.data.licenseNumber || "");
-            setProfilePhotoUrl(parsed.profilePhotoUrl || response.data.profilePhotoUrl || "");
-            setIsAvailable(typeof parsed.isAvailable === "boolean" ? parsed.isAvailable : response.data.isAvailable);
-            setTermsAccepted(typeof parsed.termsAccepted === "boolean" ? parsed.termsAccepted : Boolean(response.data.termsAcceptedAt));
-            setBankDetailsSkipped(Boolean(parsed.bankDetailsSkipped));
-            setDocuments(normalizeDocuments({ ...(response.data.documents || {}), ...(parsed.documents || {}) }));
-            setStep(typeof parsed.step === "number" ? Math.min(Math.max(parsed.step, 0), 3) : 0);
+          const profileData = response.data;
+          syncProfile(profileData);
+          if (profileData.status === "ACTIVE") loadDashboardStats().catch(() => {});
+
+          if (forceComplete || !profileData.isProfileComplete) {
+            if (storedDraft) applyRegistrationDraft(storedDraft, profileData);
           }
+        } else if (storedDraft) {
+          applyRegistrationDraft(storedDraft, null);
         } else {
           Alert.alert("Error", response.message || "Failed to load profile");
         }
       } catch (error: any) {
-        Alert.alert("Error", error.message || "Failed to load profile");
+        const storedDraft = await loadStoredRegistrationDraft();
+        if (storedDraft) {
+          applyRegistrationDraft(storedDraft, null);
+        } else {
+          Alert.alert("Error", error.message || "Failed to load profile");
+        }
       } finally {
+        draftHydratedRef.current = true;
         setLoading(false);
       }
     };
@@ -378,16 +447,30 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   useFocusEffect(
     useCallback(() => {
-      if (loading) return;
+      if (loading || !draftHydratedRef.current) return;
       let isActive = true;
-      getDeliveryProfile()
-        .then((response) => {
-          if (isActive && response.success && response.data) {
-            syncProfile(response.data);
-            if (response.data.status === "ACTIVE") loadDashboardStats().catch(() => {});
-          }
-        })
-        .catch(() => {});
+
+      const refresh = async () => {
+        const response = await getDeliveryProfile().catch(() => ({ success: false as const }));
+        if (!isActive || !response.success || !response.data) return;
+
+        const profileData = response.data;
+        const isRegistrationFlow = forceComplete || !profileData.isProfileComplete || profileData.status !== "ACTIVE";
+
+        if (!isRegistrationFlow) {
+          syncProfile(profileData);
+          if (profileData.status === "ACTIVE") loadDashboardStats().catch(() => {});
+          return;
+        }
+
+        setProfile(profileData);
+        const storedDraft = await loadStoredRegistrationDraft();
+        if (storedDraft) {
+          applyRegistrationDraft(storedDraft, profileData);
+        }
+      };
+
+      refresh().catch(() => {});
       checkAppUpdateStatus()
         .then((status) => {
           if (isActive) setAppUpdateAvailable(status.updateAvailable);
@@ -396,15 +479,13 @@ export default function ProfileScreen({ navigation, route }: any) {
       return () => {
         isActive = false;
       };
-    }, [loading])
+    }, [loading, forceComplete])
   );
 
   useEffect(() => {
-    AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
-      name, email, dateOfBirth, address: formattedAddress, addressForm,
-      emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber,
-      licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, bankDetailsSkipped, documents, step
-    })).catch(() => {});
+    if (!draftHydratedRef.current) return;
+
+    persistRegistrationDraft().catch(() => {});
   }, [name, email, dateOfBirth, formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, bankDetailsSkipped, documents, step]);
 
   const isActiveDashboard = !forceComplete && profile?.status === "ACTIVE";
@@ -459,6 +540,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const handleLogout = async () => {
     await unregisterPushNotifications().catch(() => {});
+    await cacheDeletionRequest(null);
     await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
   };
@@ -466,7 +548,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const handleDeleteAccount = async () => {
     try {
       const request = await getMyDeletionRequest();
-      if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
+      if (request && ["PENDING", "APPROVED"].includes(request.status)) {
         openAccountDeletionReview(navigation);
         return;
       }
@@ -643,8 +725,12 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const handleSaveDraft = async () => {
-    await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email, dateOfBirth, address: formattedAddress, addressForm, emergencyContactName, emergencyContactPhone, vehicleType, vehicleNumber, licenseNumber, profilePhotoUrl, isAvailable, termsAccepted, bankDetailsSkipped, documents, step }));
-    Alert.alert("Saved", "Your draft is saved on this device.");
+    try {
+      await persistRegistrationDraft();
+      Alert.alert("Saved", "Your draft is saved on this device. You can continue later.");
+    } catch {
+      Alert.alert("Could not save", "Please try again.");
+    }
   };
 
   const handleSubmit = async () => {

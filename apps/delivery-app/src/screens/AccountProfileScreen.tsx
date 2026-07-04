@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { logout } from "../api/auth.api";
 import DeleteAccountModal from "../components/DeleteAccountModal";
-import { getMyDeletionRequest } from "../api/accountDeletion.api";
+import { getMyDeletionRequest, cacheDeletionRequest } from "../api/accountDeletion.api";
 import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 import { buildLegalUrl } from "../constants/legal";
 
@@ -80,6 +80,7 @@ export default function AccountProfileScreen({ navigation }: any) {
   };
 
   const handleLogout = async () => {
+    await cacheDeletionRequest(null);
     await logout();
     navigation.getParent()?.reset({ index: 0, routes: [{ name: "Login" }] });
   };
@@ -87,7 +88,7 @@ export default function AccountProfileScreen({ navigation }: any) {
   const handleDeleteAccount = async () => {
     try {
       const request = await getMyDeletionRequest();
-      if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
+      if (request && ["PENDING", "APPROVED"].includes(request.status)) {
         openAccountDeletionReview(navigation);
         return;
       }

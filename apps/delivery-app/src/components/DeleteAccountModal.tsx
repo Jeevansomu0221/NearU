@@ -154,12 +154,12 @@ export default function DeleteAccountModal({ visible, onClose, navigation, onSub
       const created = await requestAccountDeletion(payload);
       let latest = created || null;
       if (!latest) {
-        latest = (await getMyDeletionRequest()) || null;
+        latest = (await getMyDeletionRequest().catch(() => null)) || null;
       }
 
       onClose();
       InteractionManager.runAfterInteractions(() => {
-        openAccountDeletionReview(navigation);
+        openAccountDeletionReview(navigation, latest);
         onSubmitted?.(latest);
       });
     } catch (error: any) {

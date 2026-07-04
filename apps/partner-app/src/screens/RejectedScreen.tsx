@@ -1,31 +1,44 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../api/client";
 import { partnerTheme } from "../theme";
+import { subscribeReviewStatusRefresh } from "../services/reviewStatusRefresh";
 
 export default function RejectedScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [rejectionReason, setRejectionReason] = useState("");
 
-  useEffect(() => {
-    const loadReason = async () => {
-      try {
-        const res = await api.get("/partners/my-status");
-        const data = res.data as { success: boolean; data?: { rejectionReason?: string } };
-        if (data.success && data.data?.rejectionReason) {
-          setRejectionReason(data.data.rejectionReason);
-        }
-      } catch (error) {
-        console.error("Failed to load rejection reason:", error);
-      } finally {
-        setLoading(false);
+  const loadReason = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get("/partners/my-status");
+      const data = res.data as { success: boolean; data?: { rejectionReason?: string; status?: string } };
+      if (data.success && data.data?.rejectionReason) {
+        setRejectionReason(data.data.rejectionReason);
       }
-    };
+      if (data.success && data.data?.status === "APPROVED") {
+        navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
+      } else if (data.success && data.data?.status === "PENDING") {
+        navigation.reset({ index: 0, routes: [{ name: "PendingApproval" }] });
+      }
+    } catch (error) {
+      console.error("Failed to load rejection reason:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [navigation]);
 
-    loadReason();
-  }, []);
+  useEffect(() => {
+    void loadReason();
+  }, [loadReason]);
+
+  useEffect(() => {
+    return subscribeReviewStatusRefresh(() => {
+      void loadReason();
+    });
+  }, [loadReason]);
 
   return (
     <ScrollView

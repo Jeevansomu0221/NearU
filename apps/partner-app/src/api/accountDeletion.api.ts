@@ -67,9 +67,15 @@ export const getMyDeletionRequest = async () => {
     const request = response.data.data;
     if (isActiveDeletionRequest(request)) {
       await cacheDeletionRequest(request);
-    } else {
-      await cacheDeletionRequest(null);
+      return request;
     }
+
+    const cached = await getCachedDeletionRequest();
+    if (cached?.status === "REJECTED") {
+      return cached;
+    }
+
+    await cacheDeletionRequest(null);
     return request;
   } catch {
     const cached = await getCachedDeletionRequest();

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,8 +11,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
+import { cacheDeletionRequest } from "../api/accountDeletion.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { unregisterPushNotifications } from "../services/notifications";
+import { subscribeReviewStatusRefresh } from "../services/reviewStatusRefresh";
 
 const statusContent: Record<DeliveryProfile["status"], { title: string; body: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
   PENDING: {
@@ -65,7 +67,7 @@ export default function ReviewStatusScreen({ navigation, route }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const cameFromSubmission = Boolean(route?.params?.submitted);
 
-  const syncProfile = async (showLoader = false) => {
+  const syncProfile = useCallback(async (showLoader = false) => {
     try {
       if (showLoader) setRefreshing(true);
       const response = await getDeliveryProfile();
@@ -92,11 +94,17 @@ export default function ReviewStatusScreen({ navigation, route }: any) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [cameFromSubmission, navigation]);
 
   useEffect(() => {
-    syncProfile();
-  }, []);
+    void syncProfile();
+  }, [syncProfile]);
+
+  useEffect(() => {
+    return subscribeReviewStatusRefresh(() => {
+      void syncProfile(true);
+    });
+  }, [syncProfile]);
 
   const content = useMemo(() => {
     const base = statusContent[profile?.status || "INACTIVE"];
@@ -118,6 +126,7 @@ export default function ReviewStatusScreen({ navigation, route }: any) {
 
   const handleLogout = async () => {
     await unregisterPushNotifications().catch(() => {});
+    await cacheDeletionRequest(null);
     await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
   };

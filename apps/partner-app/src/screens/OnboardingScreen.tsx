@@ -11,7 +11,8 @@ import {
   Platform,
   ActivityIndicator,
   Image,
-  Modal
+  Modal,
+  AppState
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -147,6 +148,25 @@ type OnboardingDraft = {
   documents: DocumentState;
   selectedCategory: string;
   shopLocation: { latitude: number; longitude: number } | null;
+  updatedAt?: string;
+};
+
+const parseDraftUpdatedAt = (draft: { updatedAt?: string } | null | undefined) => {
+  if (!draft?.updatedAt) return 0;
+  const parsed = Date.parse(draft.updatedAt);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const pickNewerDraft = (
+  remoteDraft: OnboardingDraft | null,
+  localDraft: OnboardingDraft | null,
+  remoteUpdatedAt = 0,
+  localUpdatedAt = 0
+): OnboardingDraft | null => {
+  if (!remoteDraft && !localDraft) return null;
+  if (!remoteDraft) return localDraft;
+  if (!localDraft) return remoteDraft;
+  return localUpdatedAt >= remoteUpdatedAt ? localDraft : remoteDraft;
 };
 
 const mandatoryDocs: Array<{ key: keyof DocumentState; title: string; subtitle: string }> = [
@@ -318,8 +338,55 @@ export default function OnboardingScreen({ navigation }: any) {
   const [shopLocation, setShopLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [capturingLocation, setCapturingLocation] = useState(false);
   const [hydratingDraft, setHydratingDraft] = useState(true);
+  const [savingDraft, setSavingDraft] = useState(false);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftReadyRef = useRef(false);
+  const latestDraftRef = useRef<OnboardingDraft | null>(null);
+
+  const buildOnboardingDraft = (): OnboardingDraft => ({
+    activeStep,
+    form,
+    address,
+    documents,
+    selectedCategory,
+    shopLocation,
+    updatedAt: new Date().toISOString()
+  });
+
+  const saveOnboardingDraft = async (draft: OnboardingDraft, options?: { syncRemote?: boolean }) => {
+    const draftWithMeta = { ...draft, updatedAt: draft.updatedAt || new Date().toISOString() };
+    latestDraftRef.current = draftWithMeta;
+    await AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftWithMeta));
+    if (options?.syncRemote !== false) {
+      await api.put("/partners/onboarding-draft", { draft: draftWithMeta });
+    }
+  };
+
+  const flushOnboardingDraft = async () => {
+    if (!draftReadyRef.current || hydratingDraft) return;
+    if (draftSaveTimerRef.current) {
+      clearTimeout(draftSaveTimerRef.current);
+      draftSaveTimerRef.current = null;
+    }
+    const draft = latestDraftRef.current || buildOnboardingDraft();
+    try {
+      await saveOnboardingDraft(draft);
+    } catch (error: any) {
+      console.log("Draft flush skipped:", error?.message || error);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      setSavingDraft(true);
+      await flushOnboardingDraft();
+      Alert.alert("Saved", "Your onboarding draft is saved. You can continue later.");
+    } catch (error: any) {
+      Alert.alert("Could not save", error?.message || "Please try again.");
+    } finally {
+      setSavingDraft(false);
+    }
+  };
 
   useEffect(() => {
     const fetchPhone = async () => {
@@ -343,16 +410,32 @@ export default function OnboardingScreen({ navigation }: any) {
     const restoreDraft = async () => {
       try {
         const localDraftRaw = await AsyncStorage.getItem(DRAFT_STORAGE_KEY);
-        let remoteDraft: OnboardingDraft | null = null;
+        let localParsed: any = null;
+        if (localDraftRaw) {
+          try {
+            localParsed = JSON.parse(localDraftRaw);
+          } catch {
+            localParsed = null;
+          }
+        }
 
+        let remoteParsed: any = null;
         try {
           const response = await api.get<any>("/partners/onboarding-draft");
-          remoteDraft = normalizeDraft(response.data?.data);
+          remoteParsed = response.data?.data ?? null;
         } catch (error: any) {
           console.log("Could not load remote onboarding draft:", error?.message || error);
         }
 
-        const draft = remoteDraft || normalizeDraft(localDraftRaw ? JSON.parse(localDraftRaw) : null);
+        const localDraft = normalizeDraft(localParsed);
+        const remoteDraft = normalizeDraft(remoteParsed);
+        const draft = pickNewerDraft(
+          remoteDraft,
+          localDraft,
+          parseDraftUpdatedAt(remoteParsed),
+          parseDraftUpdatedAt(localParsed)
+        );
+
         if (cancelled || !draft) {
           return;
         }
@@ -363,6 +446,7 @@ export default function OnboardingScreen({ navigation }: any) {
         setDocuments(draft.documents);
         setSelectedCategory(draft.selectedCategory);
         setShopLocation(draft.shopLocation);
+        latestDraftRef.current = draft;
         if (draft.form.phone) {
           setAutoFilledPhone(draft.form.phone);
         }
@@ -386,38 +470,39 @@ export default function OnboardingScreen({ navigation }: any) {
   useEffect(() => {
     if (!draftReadyRef.current || hydratingDraft) return;
 
-    const draft: OnboardingDraft = {
-      activeStep,
-      form,
-      address,
-      documents,
-      selectedCategory,
-      shopLocation
-    };
+    const draft = buildOnboardingDraft();
+    latestDraftRef.current = draft;
 
     if (draftSaveTimerRef.current) {
       clearTimeout(draftSaveTimerRef.current);
     }
 
     draftSaveTimerRef.current = setTimeout(() => {
-      const persistDraft = async () => {
-        try {
-          await AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-          await api.put("/partners/onboarding-draft", { draft });
-        } catch (error: any) {
-          console.log("Draft autosave skipped:", error?.message || error);
-        }
-      };
-
-      persistDraft();
+      saveOnboardingDraft(draft).catch((error: any) => {
+        console.log("Draft autosave skipped:", error?.message || error);
+      });
     }, 700);
 
     return () => {
       if (draftSaveTimerRef.current) {
         clearTimeout(draftSaveTimerRef.current);
+        draftSaveTimerRef.current = null;
       }
     };
   }, [activeStep, form, address, documents, selectedCategory, shopLocation, hydratingDraft]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background" || nextState === "inactive") {
+        flushOnboardingDraft().catch(() => {});
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      flushOnboardingDraft().catch(() => {});
+    };
+  }, [hydratingDraft]);
 
   const filteredCities = useMemo(() => {
     if (!address.city || address.city.length < 2) return [];
@@ -1112,6 +1197,10 @@ export default function OnboardingScreen({ navigation }: any) {
             <Text style={styles.secondaryButtonText}>Back</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.draftButton} onPress={handleSaveDraft} disabled={submitting || savingDraft || uploadingKey !== null}>
+            {savingDraft ? <ActivityIndicator color={partnerTheme.colors.primary} size="small" /> : <Text style={styles.draftButtonText}>Save draft</Text>}
+          </TouchableOpacity>
+
           {activeStep === STEPS.length - 1 ? (
             <TouchableOpacity style={styles.skipButton} onPress={skipToNext} disabled={submitting}>
               <Text style={styles.skipButtonText}>Skip & Submit</Text>
@@ -1520,6 +1609,22 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: partnerTheme.colors.primaryDark,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  draftButton: {
+    flex: 0.9,
+    backgroundColor: partnerTheme.colors.card,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 15,
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    minHeight: 48
+  },
+  draftButtonText: {
+    color: partnerTheme.colors.primary,
     fontSize: 14,
     fontWeight: "800"
   },

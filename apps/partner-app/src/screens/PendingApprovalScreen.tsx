@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getAccessToken } from "../utils/authStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
+import { subscribeReviewStatusRefresh } from "../services/reviewStatusRefresh";
 
 interface PartnerData {
   _id: string;
@@ -46,7 +47,7 @@ export default function PendingApprovalScreen({ navigation }: any) {
     });
   };
 
-  const checkStatus = async (isManual = false) => {
+  const checkStatus = useCallback(async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
       const token = await getAccessToken();
@@ -84,13 +85,21 @@ export default function PendingApprovalScreen({ navigation }: any) {
       if (isManual) setRefreshing(false);
       setLoading(false);
     }
-  };
+  }, [navigation]);
 
   useEffect(() => {
-    checkStatus();
-    const interval = setInterval(checkStatus, 30000);
+    void checkStatus();
+    const interval = setInterval(() => {
+      void checkStatus();
+    }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkStatus]);
+
+  useEffect(() => {
+    return subscribeReviewStatusRefresh(() => {
+      void checkStatus(true);
+    });
+  }, [checkStatus]);
 
   if (loading) {
     return (

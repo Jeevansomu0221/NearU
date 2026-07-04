@@ -172,7 +172,10 @@ export default function AccountDeletionReviewScreen({ navigation, route }: Props
     }
   };
 
-  const handleGoToApp = () => {
+  const handleGoToApp = async () => {
+    if (request?.status === "REJECTED") {
+      await cacheDeletionRequest(null);
+    }
     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
   };
 

@@ -11,6 +11,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { persistAuthSession } from "../api/auth.api";
 import { getDeliveryProfile } from "../api/profile.api";
+import { resolveStartupDeletionRequest } from "../api/accountDeletion.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import {
   clearFirebaseOtpSession,
@@ -133,6 +134,15 @@ export default function OtpScreen({ route, navigation }: any) {
       });
 
       const profileResponse = await getDeliveryProfile();
+      const deletionRequest = await resolveStartupDeletionRequest();
+      if (deletionRequest) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "AccountDeletionReview", params: { initialRequest: deletionRequest } }]
+        });
+        return;
+      }
+
       const nextRoute =
         profileResponse.success && profileResponse.data
           ? resolveDeliveryRoute(profileResponse.data)

@@ -3,6 +3,7 @@ import { getAccessToken } from "../utils/authStorage";
 import { Alert, PermissionsAndroid, Platform } from "react-native";
 import api from "../api/client";
 import { notifyDeletionRequestRefresh, applyDeletionStatusFromNotification } from "../api/accountDeletion.api";
+import { notifyReviewStatusRefresh } from "./reviewStatusRefresh";
 
 const NOTIFICATION_APP = "partner";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:partner";
@@ -89,7 +90,9 @@ const postToken = async (token: string) => {
 const handleDeletionNotification = async (navigationRef: any, data?: Record<string, any> | null) => {
   const updated = await applyDeletionStatusFromNotification(data as Record<string, string> | null);
   notifyDeletionRequestRefresh(updated);
-  if (navigationRef?.isReady?.()) {
+
+  const isApproved = data?.type === "ACCOUNT_DELETION_APPROVED";
+  if (isApproved && navigationRef?.isReady?.()) {
     navigationRef.navigate("AccountDeletionReview");
   }
 };
@@ -128,6 +131,13 @@ const navigateFromData = async (navigationRef: any, data?: Record<string, any> |
 const isDeletionNotification = (data?: Record<string, any> | null) =>
   data?.type === "ACCOUNT_DELETION_APPROVED" || data?.type === "ACCOUNT_DELETION_REJECTED";
 
+const isVerificationStatusNotification = (data?: Record<string, any> | null) =>
+  data?.type === "PARTNER_STATUS" || data?.type === "PARTNER_REUPLOAD";
+
+const acknowledgeVerificationStatusNotification = () => {
+  notifyReviewStatusRefresh();
+};
+
 const showForegroundAlert = (navigationRef: any, remoteMessage: any) => {
   const title = remoteMessage?.notification?.title || "Notification";
   const body = remoteMessage?.notification?.body || "You have a new update.";
@@ -137,6 +147,16 @@ const showForegroundAlert = (navigationRef: any, remoteMessage: any) => {
       {
         text: "OK",
         onPress: () => void handleDeletionNotification(navigationRef, remoteMessage?.data)
+      }
+    ]);
+    return;
+  }
+
+  if (isVerificationStatusNotification(remoteMessage?.data)) {
+    Alert.alert(title, body, [
+      {
+        text: "OK",
+        onPress: () => acknowledgeVerificationStatusNotification()
       }
     ]);
     return;

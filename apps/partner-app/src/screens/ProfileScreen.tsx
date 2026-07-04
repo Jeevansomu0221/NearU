@@ -458,15 +458,15 @@ export default function ProfileScreen({ navigation }: any) {
   const handleSaveBasics = async () => {
     const locked = isProfileVerificationLocked(profile, kyc);
     const payload: Record<string, any> = {
-      shopDescription: basics.shopDescription.trim()
+      shopDescription: basics.shopDescription.trim(),
+      email: basics.email.trim()
     };
 
     if (!locked) {
       payload.ownerName = basics.ownerName.trim();
-      payload.email = basics.email.trim();
     }
 
-    await saveUpdate(payload, locked ? "Shop description updated" : "Basic shop details updated");
+    await saveUpdate(payload, "Basic shop details updated");
     setActiveEditSection(null);
   };
 
@@ -499,12 +499,21 @@ export default function ProfileScreen({ navigation }: any) {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude
       });
-      Alert.alert("Shop location captured", "Tap Save address to apply this GPS pin.");
+      Alert.alert("Shop location captured", "Tap Save location to apply this GPS pin.");
     } catch (error: any) {
       Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
     } finally {
       setCapturingLocation(false);
     }
+  };
+
+  const handleSaveLocation = async () => {
+    if (!capturedLocation) {
+      Alert.alert("No location", "Tap Mark my location while standing at your shop first.");
+      return;
+    }
+    await saveUpdate({ location: capturedLocation }, "Shop location updated");
+    setCapturedLocation(null);
   };
 
   const handleSaveAddress = async () => {
@@ -788,6 +797,14 @@ export default function ProfileScreen({ navigation }: any) {
   const bankEditing = activeEditSection === "bank" && !verificationDetailsLocked;
   const lockedDetailsCopy =
     "Verified registration, document, address, phone, and payout details are locked for account safety. Send a support request with the reason if anything must change.";
+  const savedShopLocation = (() => {
+    const coords = profile.location?.coordinates;
+    if (!coords || coords.length < 2) return null;
+    const [lng, lat] = coords;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
+    return { latitude: lat, longitude: lng };
+  })();
+  const activeShopLocation = capturedLocation || savedShopLocation;
 
   const renderSectionHeader = (title: string, hint?: string, action?: React.ReactNode) => (
     <View style={styles.sectionHeader}>
@@ -1033,17 +1050,20 @@ export default function ProfileScreen({ navigation }: any) {
     const selected = activeTimeField === field;
     return (
       <TouchableOpacity
-        style={[styles.timeCard, isDarkMode && styles.surfaceDark, selected && styles.timeCardSelected, selected && isDarkMode && styles.timeCardSelectedDark]}
+        style={[styles.timeCard, isDarkMode && styles.surfaceDark, selected && hoursEditing && styles.timeCardSelected, selected && hoursEditing && isDarkMode && styles.timeCardSelectedDark]}
         onPress={() => setActiveTimeField(field)}
         disabled={!hoursEditing}
+        activeOpacity={hoursEditing ? 0.7 : 1}
       >
-        <Text style={[styles.timeCardLabel, isDarkMode && styles.mutedTextDark, selected && styles.timeCardLabelSelected]}>{label}</Text>
-        <Text style={[styles.timeCardValue, isDarkMode && styles.textDark, selected && styles.timeCardValueSelected]}>
+        <Text style={[styles.timeCardLabel, isDarkMode && styles.mutedTextDark, selected && hoursEditing && styles.timeCardLabelSelected]}>{label}</Text>
+        <Text style={[styles.timeCardValue, isDarkMode && styles.textDark, selected && hoursEditing && styles.timeCardValueSelected]}>
           {formatTwelveHourTime(hours[field])}
         </Text>
-        <Text style={[styles.timeCardHint, isDarkMode && styles.mutedTextDark, selected && styles.timeCardHintSelected]}>
-          Tap to select
-        </Text>
+        {hoursEditing ? (
+          <Text style={[styles.timeCardHint, isDarkMode && styles.mutedTextDark, selected && styles.timeCardHintSelected]}>
+            {selected ? "Adjust below" : "Tap to adjust"}
+          </Text>
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -1173,7 +1193,9 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader(
           "Basic Shop Details",
-          verificationDetailsLocked ? "Verified identity and contact details are locked after approval." : "Shop name and phone stay fixed after registration.",
+          verificationDetailsLocked
+            ? "Shop name, phone, and category are fixed. You can update email and shop description."
+            : "Shop name, phone, and category stay fixed after registration.",
           renderEditAction("basics", basicsEditing)
         )}
         {verificationDetailsLocked ? (
@@ -1186,29 +1208,48 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         ) : null}
         <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
-          <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Shop name</Text>
+          <View style={styles.readOnlyFieldHeader}>
+            <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Shop name</Text>
+            <View style={[styles.fixedBadge, isDarkMode && styles.fixedBadgeDark]}>
+              <Ionicons name="lock-closed" size={10} color="#5E7897" />
+              <Text style={[styles.fixedBadgeText, isDarkMode && styles.mutedTextDark]}>Fixed</Text>
+            </View>
+          </View>
           <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{profile.restaurantName}</Text>
         </View>
         <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
-          <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Phone number</Text>
+          <View style={styles.readOnlyFieldHeader}>
+            <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Phone number</Text>
+            <View style={[styles.fixedBadge, isDarkMode && styles.fixedBadgeDark]}>
+              <Ionicons name="lock-closed" size={10} color="#5E7897" />
+              <Text style={[styles.fixedBadgeText, isDarkMode && styles.mutedTextDark]}>Fixed</Text>
+            </View>
+          </View>
           <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{profile.phone}</Text>
+          <Text style={[styles.fieldHint, isDarkMode && styles.mutedTextDark]}>Login number — contact support to change.</Text>
         </View>
         <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
-          <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Category</Text>
+          <View style={styles.readOnlyFieldHeader}>
+            <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Category</Text>
+            <View style={[styles.fixedBadge, isDarkMode && styles.fixedBadgeDark]}>
+              <Ionicons name="lock-closed" size={10} color="#5E7897" />
+              <Text style={[styles.fixedBadgeText, isDarkMode && styles.mutedTextDark]}>Fixed</Text>
+            </View>
+          </View>
           <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{CATEGORY_LABELS[profile.category] || profile.category}</Text>
         </View>
 
         {verificationDetailsLocked ? (
-          <>
-            <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
+          <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
+            <View style={styles.readOnlyFieldHeader}>
               <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Owner name</Text>
-              <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{basics.ownerName || "Not provided"}</Text>
+              <View style={[styles.fixedBadge, isDarkMode && styles.fixedBadgeDark]}>
+                <Ionicons name="lock-closed" size={10} color="#5E7897" />
+                <Text style={[styles.fixedBadgeText, isDarkMode && styles.mutedTextDark]}>Verified</Text>
+              </View>
             </View>
-            <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
-              <Text style={[styles.readOnlyLabel, isDarkMode && styles.mutedTextDark]}>Email</Text>
-              <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{basics.email || "Not provided"}</Text>
-            </View>
-          </>
+            <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{basics.ownerName || "Not provided"}</Text>
+          </View>
         ) : (
           <>
             <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Owner name</Text>
@@ -1220,19 +1261,25 @@ export default function ProfileScreen({ navigation }: any) {
               onChangeText={(text) => setBasics({ ...basics, ownerName: text })}
               editable={basicsEditing}
             />
-
-            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Email</Text>
-            <TextInput
-              style={[styles.input, isDarkMode && styles.inputDark, !basicsEditing && styles.inputDisabled, !basicsEditing && isDarkMode && styles.inputDisabledDark]}
-              placeholder="Business email"
-              placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
-              value={basics.email}
-              onChangeText={(text) => setBasics({ ...basics, email: text })}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={basicsEditing}
-            />
           </>
+        )}
+
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Email</Text>
+        {basicsEditing ? (
+          <TextInput
+            style={[styles.input, isDarkMode && styles.inputDark]}
+            placeholder="Business email"
+            placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
+            value={basics.email}
+            onChangeText={(text) => setBasics({ ...basics, email: text })}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            editable
+          />
+        ) : (
+          <View style={[styles.readOnlyField, isDarkMode && styles.surfaceDark]}>
+            <Text style={[styles.readOnlyValue, isDarkMode && styles.textDark]}>{basics.email || "Not provided"}</Text>
+          </View>
         )}
 
         <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Shop description</Text>
@@ -1261,7 +1308,9 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader(
           "Address & Location",
-          verificationDetailsLocked ? "Verified shop address changes require support review." : "Keep the address and map link accurate for customer deliveries.",
+          verificationDetailsLocked
+            ? "Address text is locked after verification. You can still update your shop GPS pin for riders."
+            : "Keep the address and GPS pin accurate for customer deliveries.",
           verificationDetailsLocked ? null : renderEditAction("address", addressEditing)
         )}
         {verificationDetailsLocked ? (
@@ -1353,32 +1402,54 @@ export default function ProfileScreen({ navigation }: any) {
           editable={addressEditing}
         />
 
-        {addressEditing ? (
-          <>
-            <TouchableOpacity
-              style={[styles.secondaryButton, isDarkMode && styles.secondaryButtonDark]}
-              onPress={captureShopLocation}
-              disabled={saving || capturingLocation}
-            >
-              {capturingLocation ? (
-                <ActivityIndicator color="#60A5FA" />
-              ) : (
-                <Text style={styles.secondaryButtonText}>
-                  {capturedLocation ? "Re-capture shop GPS pin" : "Use current shop GPS pin"}
-                </Text>
-              )}
-            </TouchableOpacity>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Shop GPS pin</Text>
+        <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>
+          Stand inside your shop and tap Mark my location. Riders and nearby delivery use this latitude and longitude.
+        </Text>
+        {activeShopLocation ? (
+          <View style={[styles.locationPinCard, isDarkMode && styles.surfaceDark]}>
+            <Ionicons name="location" size={18} color="#0E8A4A" />
+            <View style={styles.locationPinCopy}>
+              <Text style={[styles.locationPinTitle, isDarkMode && styles.textDark]}>
+                {capturedLocation ? "New location captured" : "Location on file"}
+              </Text>
+              <Text style={[styles.locationPinCoords, isDarkMode && styles.mutedTextDark]}>
+                {activeShopLocation.latitude.toFixed(6)}, {activeShopLocation.longitude.toFixed(6)}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>No GPS pin saved yet.</Text>
+        )}
+        <TouchableOpacity
+          style={[styles.secondaryButton, isDarkMode && styles.secondaryButtonDark]}
+          onPress={captureShopLocation}
+          disabled={saving || capturingLocation}
+        >
+          {capturingLocation ? (
+            <ActivityIndicator color="#60A5FA" />
+          ) : (
+            <Text style={styles.secondaryButtonText}>
+              {activeShopLocation ? "Re-mark my location" : "Mark my location"}
+            </Text>
+          )}
+        </TouchableOpacity>
+        {capturedLocation ? (
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSaveLocation} disabled={saving}>
+            {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save location</Text>}
+          </TouchableOpacity>
+        ) : null}
 
-            <TouchableOpacity style={styles.primaryButton} onPress={handleSaveAddress} disabled={saving}>
-              {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save address</Text>}
-            </TouchableOpacity>
-          </>
+        {addressEditing ? (
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSaveAddress} disabled={saving}>
+            {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save address</Text>}
+          </TouchableOpacity>
         ) : null}
       </View>
 
       {/* Store Images */}
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
-        {renderSectionHeader("Store Images", "Logo, banner, and food/product photos shown to customers.")}
+        {renderSectionHeader("Store Images", "Logo and banner shown to customers.")}
 
         {renderImageSlot(
           "Shop logo",
@@ -1403,53 +1474,13 @@ export default function ProfileScreen({ navigation }: any) {
           "banner",
           "banner"
         )}
-
-        <View style={styles.imageSlotHeader}>
-          <Text style={[styles.imageSlotLabel, isDarkMode && styles.textDark]}>Food / product photos</Text>
-          <TouchableOpacity
-            disabled={pickerBusy || saving || Boolean(uploadingKey)}
-            onPress={() =>
-              uploadAndSave("restaurantPhoto", async (uploadedUrl) => {
-                const nextPhotos = [...images.restaurantPhotosUrls, uploadedUrl];
-                setImages((prev) => ({ ...prev, restaurantPhotosUrls: nextPhotos }));
-                await saveUpdate({
-                  documents: { ...kyc, restaurantPhotosUrls: nextPhotos }
-                });
-              })
-            }
-          >
-            <Text style={styles.linkText}>{uploadingKey === "restaurantPhoto" ? "Uploading..." : "Add photo"}</Text>
-          </TouchableOpacity>
-        </View>
-        {images.restaurantPhotosUrls.length ? (
-          <View style={styles.photoGrid}>
-            {images.restaurantPhotosUrls.map((url, index) => (
-              <View style={styles.photoThumbWrap} key={`${url}-${index}`}>
-                <Image source={{ uri: url }} style={styles.photoThumb} />
-                <TouchableOpacity
-                  style={styles.removePhotoButton}
-                  onPress={async () => {
-                    const next = images.restaurantPhotosUrls.filter((_, i) => i !== index);
-                    setImages((prev) => ({ ...prev, restaurantPhotosUrls: next }));
-                    await saveUpdate({ documents: { ...kyc, restaurantPhotosUrls: next } });
-                  }}
-                  disabled={saving}
-                >
-                  <Text style={styles.removePhotoText}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>Add at least 3 photos of your bestsellers for higher conversion.</Text>
-        )}
       </View>
 
       {/* Business Hours */}
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader(
           "Business Hours",
-          "Select opening hours in 12-hour AM/PM format and set weekly off days.",
+          "Set daily opening hours and mark which days your shop stays closed.",
           renderEditAction("hours", hoursEditing)
         )}
 
@@ -1464,18 +1495,54 @@ export default function ProfileScreen({ navigation }: any) {
 
         {hoursEditing ? renderTimePicker() : null}
 
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Weekly holidays</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Weekly off days</Text>
+        <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>
+          {hoursEditing
+            ? "Tap a day to mark it closed. Days without the Closed badge stay open."
+            : hours.weeklyHolidays.length === 0
+            ? "Your shop is open every day of the week."
+            : `Closed on: ${hours.weeklyHolidays.join(", ")}`}
+        </Text>
+        <View style={styles.holidayLegendRow}>
+          <View style={styles.holidayLegendItem}>
+            <View style={[styles.holidayLegendDot, styles.holidayLegendDotOpen]} />
+            <Text style={[styles.holidayLegendText, isDarkMode && styles.mutedTextDark]}>Open</Text>
+          </View>
+          <View style={styles.holidayLegendItem}>
+            <View style={[styles.holidayLegendDot, styles.holidayLegendDotClosed]} />
+            <Text style={[styles.holidayLegendText, isDarkMode && styles.mutedTextDark]}>Closed (off day)</Text>
+          </View>
+        </View>
         <View style={styles.pillRow}>
           {WEEK_DAYS.map((day) => {
-            const selected = hours.weeklyHolidays.includes(day);
+            const isClosed = hours.weeklyHolidays.includes(day);
             return (
               <TouchableOpacity
                 key={day}
-                style={[styles.dayPill, isDarkMode && styles.timeOptionChipDark, selected && styles.dayPillSelected]}
+                style={[
+                  styles.dayPill,
+                  isDarkMode && styles.dayPillDark,
+                  isClosed ? styles.dayPillClosed : styles.dayPillOpen,
+                  isClosed && isDarkMode && styles.dayPillClosedDark,
+                  !isClosed && isDarkMode && styles.dayPillOpenDark,
+                  !hoursEditing && styles.dayPillReadOnly
+                ]}
                 onPress={() => toggleWeeklyHoliday(day)}
                 disabled={!hoursEditing}
+                activeOpacity={hoursEditing ? 0.7 : 1}
               >
-                <Text style={[styles.dayPillText, isDarkMode && styles.mutedTextDark, selected && styles.dayPillTextSelected]}>{day}</Text>
+                <Ionicons
+                  name={isClosed ? "close-circle" : "checkmark-circle"}
+                  size={14}
+                  color={isClosed ? (isDarkMode ? "#FCA5A5" : "#B42318") : (isDarkMode ? "#6EE7A8" : "#0E8A4A")}
+                  style={styles.dayPillIcon}
+                />
+                <Text style={[styles.dayPillText, isDarkMode && !isClosed && styles.dayPillTextDark, isClosed && styles.dayPillTextClosed]}>
+                  {day}
+                </Text>
+                <Text style={[styles.dayPillStatus, isClosed ? styles.dayPillStatusClosed : styles.dayPillStatusOpen]}>
+                  {isClosed ? "Closed" : "Open"}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -1971,6 +2038,36 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 10
   },
+  readOnlyFieldHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4
+  },
+  fixedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EEF4FB",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 4
+  },
+  fixedBadgeDark: {
+    backgroundColor: "#1D2A3D"
+  },
+  fixedBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#5E7897",
+    textTransform: "uppercase"
+  },
+  fieldHint: {
+    marginTop: 4,
+    fontSize: 11,
+    color: "#6A7F98",
+    lineHeight: 15
+  },
   readOnlyLabel: {
     fontSize: 11,
     fontWeight: "700",
@@ -2208,6 +2305,31 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center"
   },
+  locationPinCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10
+  },
+  locationPinCopy: {
+    flex: 1,
+    marginLeft: 10
+  },
+  locationPinTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#143A66"
+  },
+  locationPinCoords: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#486887",
+    fontWeight: "700"
+  },
   secondaryButton: {
     marginTop: 10,
     backgroundColor: "#EAF3FF",
@@ -2381,24 +2503,92 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     marginBottom: 12
   },
-  dayPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#EAF3FF",
-    borderRadius: 999,
-    marginRight: 8,
-    marginBottom: 8
+  holidayLegendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 16
   },
-  dayPillSelected: {
-    backgroundColor: "#60A5FA"
+  holidayLegendItem: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  holidayLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginRight: 6
+  },
+  holidayLegendDotOpen: {
+    backgroundColor: "#0E8A4A"
+  },
+  holidayLegendDotClosed: {
+    backgroundColor: "#B42318"
+  },
+  holidayLegendText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#5E7897"
+  },
+  dayPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    marginRight: 8,
+    marginBottom: 8,
+    minWidth: 88
+  },
+  dayPillDark: {
+    borderColor: "#263449"
+  },
+  dayPillOpen: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#86EFAC"
+  },
+  dayPillOpenDark: {
+    backgroundColor: "#0F1F17",
+    borderColor: "#166534"
+  },
+  dayPillClosed: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FCA5A5"
+  },
+  dayPillClosedDark: {
+    backgroundColor: "#2A1215",
+    borderColor: "#991B1B"
+  },
+  dayPillReadOnly: {
+    opacity: 0.92
+  },
+  dayPillIcon: {
+    marginRight: 5
   },
   dayPillText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#44678E"
+    color: "#143A66",
+    marginRight: 6
   },
-  dayPillTextSelected: {
-    color: "#FFFFFF"
+  dayPillTextDark: {
+    color: "#CFE0F5"
+  },
+  dayPillTextClosed: {
+    color: "#B42318"
+  },
+  dayPillStatus: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3
+  },
+  dayPillStatusOpen: {
+    color: "#0E8A4A"
+  },
+  dayPillStatusClosed: {
+    color: "#B42318"
   },
   choicePill: {
     paddingHorizontal: 14,

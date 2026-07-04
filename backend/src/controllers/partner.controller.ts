@@ -1412,9 +1412,6 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     }
 
     if (email !== undefined) {
-      if (verificationLocked && firstString(email).toLowerCase() !== firstString(partner.email).toLowerCase()) {
-        throw lockedProfileError();
-      }
       updates.email = String(email || "").trim().toLowerCase();
     }
 
@@ -1474,11 +1471,8 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
       }
     }
 
-    // Direct GPS pin (from "Use my shop location" button) always wins.
+    // Direct GPS pin (from "Mark my location") — allowed even when verified address text is locked.
     if (incomingLocation && typeof incomingLocation === "object") {
-      if (verificationLocked) {
-        throw lockedProfileError();
-      }
       const lat = Number(incomingLocation.latitude);
       const lng = Number(incomingLocation.longitude);
       if (

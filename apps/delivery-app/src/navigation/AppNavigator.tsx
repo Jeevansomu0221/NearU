@@ -6,6 +6,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../utils/authStorage";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { AccountDeletionRequest } from "../api/accountDeletion.api";
+import { resolveStartupDeletionRequest } from "../api/accountDeletion.api";
 
 // Import screens
 import LoginScreen from "../screens/LoginScreen";
@@ -92,8 +94,16 @@ function MainTabs() {
 }
 
 // Stack Navigator
+type StartupState =
+  | { status: "loading" }
+  | {
+      status: "ready";
+      route: string;
+      deletionRequest?: AccountDeletionRequest;
+    };
+
 export default function AppNavigator() {
-  const [initialRoute, setInitialRoute] = useState("Loading");
+  const [startup, setStartup] = useState<StartupState>({ status: "loading" });
 
   useEffect(() => {
     const checkSession = async () => {
@@ -101,33 +111,47 @@ export default function AppNavigator() {
         const token = await getAccessToken();
         const cachedUser = await AsyncStorage.getItem("user");
         if (!token) {
-          setInitialRoute("Login");
+          setStartup({ status: "ready", route: "Login" });
           return;
         }
 
-        const profileResponse = await getDeliveryProfile();
+        const [deletionRequest, profileResponse] = await Promise.all([
+          resolveStartupDeletionRequest(),
+          getDeliveryProfile().catch(() => ({ success: false as const }))
+        ]);
+
+        if (deletionRequest) {
+          setStartup({
+            status: "ready",
+            route: "AccountDeletionReview",
+            deletionRequest
+          });
+          return;
+        }
+
         if (profileResponse.success && profileResponse.data) {
-          setInitialRoute(resolveDeliveryRoute(profileResponse.data));
+          setStartup({
+            status: "ready",
+            route: resolveDeliveryRoute(profileResponse.data)
+          });
           return;
         }
 
         if (cachedUser) {
-          // If profile fetch fails, keep user inside app using last known signed-in route.
-          setInitialRoute("Main");
+          setStartup({ status: "ready", route: "Main" });
           return;
         }
 
-        setInitialRoute("Main");
-      } catch (error) {
-        // Do not force logout on startup network hiccups.
-        setInitialRoute("Main");
+        setStartup({ status: "ready", route: "Main" });
+      } catch {
+        setStartup({ status: "ready", route: "Main" });
       }
     };
 
     checkSession();
   }, []);
 
-  if (initialRoute === "Loading") {
+  if (startup.status === "loading") {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4CAF50" />
@@ -139,7 +163,7 @@ export default function AppNavigator() {
 
   return (
     <Stack.Navigator
-      initialRouteName={initialRoute}
+      initialRouteName={startup.route}
       screenOptions={{
         headerStyle: {
           backgroundColor: "#4CAF50",
@@ -185,7 +209,16 @@ export default function AppNavigator() {
       <Stack.Screen
         name="AccountDeletionReview"
         component={AccountDeletionReviewScreen}
-        options={{ title: "Account Deletion" }}
+        initialParams={
+          startup.deletionRequest
+            ? { initialRequest: startup.deletionRequest }
+            : undefined
+        }
+        options={{
+          title: "Deletion Review",
+          headerLeft: startup.route === "AccountDeletionReview" ? () => null : undefined,
+          gestureEnabled: startup.route !== "AccountDeletionReview"
+        }}
       />
       {/* ADD JobDetailsScreen as a separate screen */}
       <Stack.Screen

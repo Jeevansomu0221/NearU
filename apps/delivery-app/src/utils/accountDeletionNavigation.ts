@@ -1,4 +1,5 @@
 import { StackActions } from "@react-navigation/native";
+import type { AccountDeletionRequest } from "../api/accountDeletion.api";
 
 const getRootNavigation = (navigation: any) => {
   let current = navigation;
@@ -8,11 +9,16 @@ const getRootNavigation = (navigation: any) => {
   return current;
 };
 
-export const openAccountDeletionReview = (navigation: any) => {
+export const openAccountDeletionReview = (
+  navigation: any,
+  initialRequest?: AccountDeletionRequest | null
+) => {
   const rootNavigation = getRootNavigation(navigation);
 
   if (typeof rootNavigation.navigate === "function") {
-    rootNavigation.navigate("AccountDeletionReview");
+    rootNavigation.navigate("AccountDeletionReview", {
+      initialRequest: initialRequest || undefined
+    });
     return;
   }
 

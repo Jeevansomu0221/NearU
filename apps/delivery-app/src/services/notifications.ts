@@ -8,6 +8,7 @@ import {
   shouldShowClientNotification
 } from "./notificationPreferences";
 import { notifyDeletionRequestRefresh, applyDeletionStatusFromNotification } from "../api/accountDeletion.api";
+import { notifyReviewStatusRefresh } from "./reviewStatusRefresh";
 
 const NOTIFICATION_APP = "delivery";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:delivery";
@@ -142,7 +143,9 @@ const postToken = async (token: string) => {
 const handleDeletionNotification = async (navigationRef: any, data?: Record<string, any> | null) => {
   const updated = await applyDeletionStatusFromNotification(data as Record<string, string> | null);
   notifyDeletionRequestRefresh(updated);
-  if (navigationRef?.isReady?.()) {
+
+  const isApproved = data?.type === "ACCOUNT_DELETION_APPROVED";
+  if (isApproved && navigationRef?.isReady?.()) {
     navigationRef.navigate("AccountDeletionReview");
   }
 };
@@ -335,8 +338,15 @@ const setupForegroundNotificationActionHandler = (navigationRef: any) => {
 const isDeletionNotification = (data?: Record<string, any> | null) =>
   data?.type === "ACCOUNT_DELETION_APPROVED" || data?.type === "ACCOUNT_DELETION_REJECTED";
 
+const isVerificationStatusNotification = (data?: Record<string, any> | null) =>
+  data?.type === "DELIVERY_STATUS" || data?.type === "DELIVERY_REUPLOAD";
+
 const acknowledgeDeletionNotification = (navigationRef: any, data?: Record<string, any> | null) => {
   void handleDeletionNotification(navigationRef, data);
+};
+
+const acknowledgeVerificationStatusNotification = () => {
+  notifyReviewStatusRefresh();
 };
 
 const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
@@ -354,6 +364,16 @@ const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
       {
         text: "OK",
         onPress: () => acknowledgeDeletionNotification(navigationRef, remoteMessage?.data)
+      }
+    ]);
+    return;
+  }
+
+  if (isVerificationStatusNotification(remoteMessage?.data)) {
+    Alert.alert(title, body, [
+      {
+        text: "OK",
+        onPress: () => acknowledgeVerificationStatusNotification()
       }
     ]);
     return;

@@ -192,7 +192,7 @@ export const getMyDeletionRequest = async (req: AuthRequest, res: Response) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    if (request && request.status !== "PENDING") {
+    if (request?.status === "APPROVED") {
       const userRecord = await User.findById(user.id).select("deletedRoles").lean();
       if (!isRoleDeletedForApp(userRecord?.deletedRoles, appRole)) {
         return successResponse(res, null);
