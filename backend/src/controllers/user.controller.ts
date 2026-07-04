@@ -625,6 +625,8 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const ONGOING_ORDER_STATUSES = ["PENDING", "CONFIRMED", "ACCEPTED", "PREPARING", "READY", "ASSIGNED", "PICKED_UP"];
+
 /**
  * DELETE CURRENT ACCOUNT (customer only — partner/delivery must use deletion request flow)
  */
@@ -648,6 +650,19 @@ export const deleteMyAccount = async (req: AuthRequest, res: Response) => {
 
     if (appRole !== ROLES.CUSTOMER) {
       return errorResponse(res, "Account deletion is not supported for this role", 403);
+    }
+
+    const ongoingOrderCount = await Order.countDocuments({
+      customerId: user.id,
+      status: { $in: ONGOING_ORDER_STATUSES }
+    });
+
+    if (ongoingOrderCount > 0) {
+      return errorResponse(
+        res,
+        `You have ${ongoingOrderCount} ongoing order${ongoingOrderCount > 1 ? "s" : ""}. Please wait for your order${ongoingOrderCount > 1 ? "s" : ""} to be delivered or cancelled before deleting your account.`,
+        400
+      );
     }
 
     await executeAccountDeletion(user.id, appRole);

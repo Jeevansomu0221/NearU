@@ -6,6 +6,7 @@ import {
   confirmFirebaseOtp,
   isFirebaseOtpSessionExpiredError
 } from "../services/firebasePhoneAuth";
+import { resolveStartupDeletionRequest } from "../api/accountDeletion.api";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone, role } = route.params;
@@ -76,6 +77,18 @@ export default function OtpScreen({ route, navigation }: any) {
     try {
       const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
       await verifyFirebaseOtp(phone, firebaseIdToken, role);
+
+      // Check for pending/approved deletion before navigating to main app
+      try {
+        const deletionRequest = await resolveStartupDeletionRequest();
+        if (deletionRequest) {
+          navigation.replace("AccountDeletionReview", { initialRequest: deletionRequest });
+          return;
+        }
+      } catch {
+        // Ignore — go to normal flow if check fails
+      }
+
       navigation.replace("Orders");
     } catch (err: any) {
       if (isFirebaseOtpSessionExpiredError(err)) {

@@ -67,6 +67,11 @@ export const shouldShowClientNotification = (
 ) => {
   const type = String(notificationType || "").toUpperCase();
 
+  // Account deletion notifications are always shown regardless of preferences
+  if (type === "ACCOUNT_DELETION_APPROVED" || type === "ACCOUNT_DELETION_REJECTED") {
+    return true;
+  }
+
   if (type === "PAYOUT_PAID") {
     return prefs.payoutAlerts;
   }

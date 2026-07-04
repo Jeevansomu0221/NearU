@@ -563,3 +563,32 @@ export const notifyPaymentConfirmed = async (orderId: string) => {
     await notifyPartnerNewOrder(order);
   }
 };
+
+export const notifyAccountDeletionApproved = async (userId: string, appRole: "partner" | "delivery") => {
+  await sendNotificationToUsers([userId], {
+    app: appRole,
+    title: "Account deleted",
+    body: "Your account deletion request has been approved. Your account has been deleted.",
+    data: {
+      type: "ACCOUNT_DELETION_APPROVED",
+      appRole
+    }
+  });
+};
+
+export const notifyAccountDeletionRejected = async (
+  userId: string,
+  appRole: "partner" | "delivery",
+  rejectionReason: string
+) => {
+  await sendNotificationToUsers([userId], {
+    app: appRole,
+    title: "Deletion request rejected",
+    body: rejectionReason || "Your account deletion request was not approved. Please check the app for details.",
+    data: {
+      type: "ACCOUNT_DELETION_REJECTED",
+      appRole,
+      rejectionReason: truncate(rejectionReason, 200)
+    }
+  });
+};

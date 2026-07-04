@@ -88,6 +88,14 @@ const postToken = async (token: string) => {
 const navigateFromData = (navigationRef: any, data?: Record<string, any> | null) => {
   if (!navigationRef?.isReady?.()) return false;
 
+  if (
+    data?.type === "ACCOUNT_DELETION_APPROVED" ||
+    data?.type === "ACCOUNT_DELETION_REJECTED"
+  ) {
+    navigationRef.navigate("AccountDeletionReview");
+    return true;
+  }
+
   if (data?.type === "PAYOUT_PAID") {
     navigationRef.navigate("PaymentHistory");
     return true;
@@ -111,11 +119,15 @@ const navigateFromData = (navigationRef: any, data?: Record<string, any> | null)
 const showForegroundAlert = (navigationRef: any, remoteMessage: any) => {
   const title = remoteMessage?.notification?.title || "Notification";
   const body = remoteMessage?.notification?.body || "You have a new update.";
+  const type = remoteMessage?.data?.type;
+
+  const isDeletionNotification =
+    type === "ACCOUNT_DELETION_APPROVED" || type === "ACCOUNT_DELETION_REJECTED";
 
   Alert.alert(title, body, [
-    { text: "Later", style: "cancel" },
+    { text: isDeletionNotification ? "Dismiss" : "Later", style: "cancel" },
     {
-      text: "View",
+      text: isDeletionNotification ? "View status" : "View",
       onPress: () => navigateFromData(navigationRef, remoteMessage?.data)
     }
   ]);

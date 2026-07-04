@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,8 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  cacheDeletionRequest,
   cancelAccountDeletionRequest,
   getMyDeletionRequest,
+  resolveDeletionRequest,
   type AccountDeletionRequest
 } from "../api/accountDeletion.api";
 import { unregisterPushNotifications } from "../services/notifications";
@@ -25,6 +28,11 @@ const GREEN_SOFT = "#F0FDF4";
 
 type Props = {
   navigation: any;
+  route: {
+    params?: {
+      initialRequest?: AccountDeletionRequest;
+    };
+  };
 };
 
 const formatDateTime = (value?: string) => {
@@ -38,55 +46,86 @@ const formatDateTime = (value?: string) => {
   });
 };
 
-export default function AccountDeletionReviewScreen({ navigation }: Props) {
+export default function AccountDeletionReviewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const [loading, setLoading] = useState(true);
+  const initialRequest = route.params?.initialRequest;
+  const [loading, setLoading] = useState(!initialRequest);
   const [refreshing, setRefreshing] = useState(false);
-  const [request, setRequest] = useState<AccountDeletionRequest | null>(null);
+  const [request, setRequest] = useState<AccountDeletionRequest | null>(initialRequest || null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadRequest = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const data = await getMyDeletionRequest();
+      const data = await resolveDeletionRequest(initialRequest);
       setRequest(data);
+      setLoadError(null);
       return data;
-    } catch {
+    } catch (error: any) {
+      if (initialRequest) {
+        setRequest(initialRequest);
+        setLoadError(null);
+        return initialRequest;
+      }
+      setLoadError(error?.message || "Could not load your deletion request.");
       setRequest(null);
       return null;
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [initialRequest]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadRequest(true);
-    setRefreshing(false);
+    try {
+      // Force-fetch from API, bypassing cache and initialRequest
+      const data = await getMyDeletionRequest();
+      setRequest(data);
+      setLoadError(null);
+    } catch {
+      // Keep current state on refresh failure
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   useFocusEffect(
     useCallback(() => {
-      void loadRequest();
+      void loadRequest(Boolean(initialRequest));
       pollRef.current = setInterval(() => {
-        void loadRequest(true);
+        getMyDeletionRequest()
+          .then((data) => setRequest(data))
+          .catch(() => {});
       }, 30000);
 
       return () => {
         if (pollRef.current) clearInterval(pollRef.current);
       };
-    }, [loadRequest])
+    }, [initialRequest, loadRequest])
   );
 
   useEffect(() => {
-    navigation.setOptions({ title: "Account Deletion" });
-  }, [navigation]);
+    const isPending = request?.status === "PENDING";
+    navigation.setOptions({
+      title: "Deletion Review",
+      headerLeft: isPending ? () => null : undefined,
+      gestureEnabled: !isPending
+    });
+  }, [navigation, request?.status]);
+
+  useEffect(() => {
+    if (request?.status !== "PENDING") return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
+    return () => subscription.remove();
+  }, [request?.status]);
 
   const handleLogout = async () => {
     setActionLoading(true);
     try {
       await unregisterPushNotifications().catch(() => {});
+      await cacheDeletionRequest(null);
       await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
       navigation.reset({ index: 0, routes: [{ name: "Login" }] });
     } finally {
@@ -98,19 +137,15 @@ export default function AccountDeletionReviewScreen({ navigation }: Props) {
     setActionLoading(true);
     try {
       await cancelAccountDeletionRequest();
-      navigation.goBack();
-    } catch {
-      // keep user on screen if cancel fails
+      await cacheDeletionRequest(null);
+      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleSubmitAgain = () => {
-    navigation.navigate("Main", {
-      screen: "Profile",
-      params: { openDeleteAccount: true }
-    });
+  const handleGoToApp = () => {
+    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
   };
 
   const renderEmpty = () => (
@@ -118,10 +153,15 @@ export default function AccountDeletionReviewScreen({ navigation }: Props) {
       <View style={[styles.iconCircle, styles.iconNeutral]}>
         <Ionicons name="document-text-outline" size={28} color="#667085" />
       </View>
-      <Text style={styles.stateTitle}>No deletion request</Text>
-      <Text style={styles.stateText}>You have not submitted an account deletion request yet.</Text>
-      <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.goBack()}>
-        <Text style={styles.primaryBtnText}>Go back</Text>
+      <Text style={styles.stateTitle}>No deletion request found</Text>
+      <Text style={styles.stateText}>
+        {loadError || "We could not find an active account deletion request for this delivery profile."}
+      </Text>
+      <TouchableOpacity style={styles.primaryBtn} onPress={() => void loadRequest()}>
+        <Text style={styles.primaryBtnText}>Try again</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.linkBtn} onPress={() => navigation.goBack()}>
+        <Text style={styles.linkBtnText}>Go back</Text>
       </TouchableOpacity>
     </View>
   );
@@ -145,7 +185,7 @@ export default function AccountDeletionReviewScreen({ navigation }: Props) {
 
       <View style={styles.infoStrip}>
         <Ionicons name="refresh-outline" size={16} color={GREEN_DEEP} />
-        <Text style={styles.infoStripText}>This page refreshes automatically. You can also pull down to check for updates.</Text>
+        <Text style={styles.infoStripText}>This page refreshes automatically. Pull down to check for updates.</Text>
       </View>
 
       <TouchableOpacity style={styles.secondaryBtn} onPress={handleCancelRequest} disabled={actionLoading}>
@@ -196,16 +236,13 @@ export default function AccountDeletionReviewScreen({ navigation }: Props) {
 
       <View style={styles.stepsBox}>
         <Text style={styles.stepsTitle}>What to do next</Text>
-        <Text style={styles.stepItem}>1. Stay signed in and complete the required actions.</Text>
-        <Text style={styles.stepItem}>2. Return here or open Delete Account again.</Text>
-        <Text style={styles.stepItem}>3. Submit a new account deletion request.</Text>
+        <Text style={styles.stepItem}>1. Complete the required actions mentioned above.</Text>
+        <Text style={styles.stepItem}>2. Continue using the app as usual.</Text>
+        <Text style={styles.stepItem}>3. Submit a new deletion request from Profile when you are ready.</Text>
       </View>
 
-      <TouchableOpacity style={styles.primaryBtn} onPress={handleSubmitAgain}>
-        <Text style={styles.primaryBtnText}>Submit again</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.linkBtn} onPress={() => navigation.goBack()}>
-        <Text style={styles.linkBtnText}>Back to profile</Text>
+      <TouchableOpacity style={styles.primaryBtn} onPress={handleGoToApp}>
+        <Text style={styles.primaryBtnText}>Get in app</Text>
       </TouchableOpacity>
     </View>
   );
@@ -379,9 +416,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center"
-  },
-  primaryBtnDanger: {
-    backgroundColor: "#B42318"
   },
   primaryBtnText: {
     color: "#FFFFFF",

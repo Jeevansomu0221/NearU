@@ -162,6 +162,12 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [faqs, setFaqs] = useState<FAQEntry[]>([]);
   const [favoriteFoodItems, setFavoriteFoodItems] = useState<FavoriteFoodItem[]>([]);
 
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteReasonCategory, setDeleteReasonCategory] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [accountDeletedVisible, setAccountDeletedVisible] = useState(false);
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [addressLabel, setAddressLabel] = useState("Home");
@@ -481,38 +487,50 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete Account",
-      "This will deactivate your login and remove or anonymize your profile details. Order records may be retained where required for payments, disputes, or legal compliance.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete Account",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setSaving(true);
-              await unregisterPushNotifications().catch(() => {});
-              const response = await deleteMyAccount();
-              if (!response.success) {
-                Alert.alert("Error", response.message || "Failed to delete account");
-                return;
-              }
+    // Block deletion if there are ongoing orders
+    if (ongoingOrders.length > 0) {
+      Alert.alert(
+        "Cannot Delete Account",
+        `You have ${ongoingOrders.length} ongoing order${ongoingOrders.length > 1 ? "s" : ""}. Please wait for your order${ongoingOrders.length > 1 ? "s" : ""} to be delivered or cancelled before deleting your account.`
+      );
+      return;
+    }
+    setDeleteReason("");
+    setDeleteReasonCategory("");
+    setDeleteModalVisible(true);
+  };
 
-              await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "Login" }]
-              });
-            } catch (error: any) {
-              Alert.alert("Error", error.message || "Failed to delete account");
-            } finally {
-              setSaving(false);
-            }
-          }
-        }
-      ]
-    );
+  const handleConfirmDelete = async () => {
+    if (!deleteReasonCategory) {
+      Alert.alert("Select a reason", "Please select a reason for deleting your account.");
+      return;
+    }
+    if (!deleteReason.trim() || deleteReason.trim().length < 5) {
+      Alert.alert("Add a reason", "Please provide at least a short reason (5+ characters).");
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      await unregisterPushNotifications().catch(() => {});
+      const response = await deleteMyAccount();
+      if (!response.success) {
+        Alert.alert("Error", response.message || "Failed to delete account");
+        return;
+      }
+      await AsyncStorage.multiRemove(["token", "refreshToken", "user"]);
+      setDeleteModalVisible(false);
+      setAccountDeletedVisible(true);
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to delete account");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleGoToLoginAfterDeletion = () => {
+    setAccountDeletedVisible(false);
+    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
   };
 
   const handlePlaceholderAction = (title: string, message: string) => {
@@ -553,6 +571,133 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Text style={styles.successText}>Your Vyaha profile is ready. You can now explore nearby food shops and place your first order.</Text>
           <TouchableOpacity style={styles.successButton} onPress={goHomeAfterRegistration} activeOpacity={0.85}>
             <Text style={styles.successButtonText}>Start Exploring</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const DELETE_REASON_CATEGORIES = [
+    "Switching to another service",
+    "Privacy concerns",
+    "Too many notifications",
+    "Bad experience with orders",
+    "App quality issues",
+    "No longer needed",
+    "Other"
+  ];
+
+  const renderDeleteAccountModal = () => (
+    <Modal
+      visible={deleteModalVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        if (!deleting) setDeleteModalVisible(false);
+      }}
+    >
+      <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ width: "100%" }}
+        >
+          <View style={styles.deleteModal}>
+            <View style={styles.deleteModalHeader}>
+              <Text style={styles.deleteModalTitle}>Delete Account</Text>
+              <TouchableOpacity
+                onPress={() => { if (!deleting) setDeleteModalVisible(false); }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialCommunityIcons name="close" size={22} color="#475467" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.deleteModalSubtitle}>
+              This will permanently remove your profile details and deactivate your login. Order records may be retained for compliance purposes.
+            </Text>
+
+            <Text style={styles.deleteReasonLabel}>Why are you deleting your account?</Text>
+            <View style={styles.deleteChipGrid}>
+              {DELETE_REASON_CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.deleteChip,
+                    deleteReasonCategory === cat && styles.deleteChipSelected
+                  ]}
+                  onPress={() => setDeleteReasonCategory(cat)}
+                  disabled={deleting}
+                >
+                  <Text
+                    style={[
+                      styles.deleteChipText,
+                      deleteReasonCategory === cat && styles.deleteChipTextSelected
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={[styles.deleteReasonInput, deleting && styles.inputDisabled]}
+              placeholder="Tell us a bit more (required)"
+              placeholderTextColor="#98A2B3"
+              multiline
+              numberOfLines={3}
+              value={deleteReason}
+              onChangeText={setDeleteReason}
+              editable={!deleting}
+            />
+
+            <TouchableOpacity
+              style={[styles.deleteConfirmBtn, deleting && styles.btnDisabled]}
+              onPress={handleConfirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.deleteConfirmBtnText}>Delete my account</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.deleteCancelBtn}
+              onPress={() => { if (!deleting) setDeleteModalVisible(false); }}
+              disabled={deleting}
+            >
+              <Text style={styles.deleteCancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+
+  const renderAccountDeletedModal = () => (
+    <Modal
+      visible={accountDeletedVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {}}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.accountDeletedModal}>
+          <View style={styles.accountDeletedIconWrap}>
+            <MaterialCommunityIcons name="check-circle-outline" size={40} color="#FFFFFF" />
+          </View>
+          <Text style={styles.accountDeletedTitle}>Account Deleted</Text>
+          <Text style={styles.accountDeletedText}>
+            Your account has been successfully deleted. All your profile details have been removed. Thank you for using Vyaha.
+          </Text>
+          <TouchableOpacity
+            style={styles.accountDeletedBtn}
+            onPress={handleGoToLoginAfterDeletion}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.accountDeletedBtnText}>Go to Login</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -777,6 +922,8 @@ export default function ProfileScreen({ navigation, route }: any) {
         </View>
         {renderRegistrationSuccessModal()}
         {renderSupportModal()}
+        {renderDeleteAccountModal()}
+        {renderAccountDeletedModal()}
       </KeyboardAvoidingView>
     );
   }
@@ -1341,6 +1488,8 @@ export default function ProfileScreen({ navigation, route }: any) {
       )}
       {renderRegistrationSuccessModal()}
       {renderSupportModal()}
+      {renderDeleteAccountModal()}
+      {renderAccountDeletedModal()}
     </KeyboardAvoidingView>
   );
 }
@@ -2217,5 +2366,152 @@ const styles = StyleSheet.create({
     color: "#7A6F65",
     marginLeft: 4,
     fontWeight: "600"
+  },
+  deleteModal: {
+    width: "100%",
+    maxHeight: "90%",
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#F2D8C6"
+  },
+  deleteModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#241D17"
+  },
+  deleteModalSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#7A6F65",
+    marginBottom: 16
+  },
+  deleteReasonLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#344054",
+    marginBottom: 10
+  },
+  deleteChipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14
+  },
+  deleteChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E0D5CC",
+    backgroundColor: "#FAF6F2"
+  },
+  deleteChipSelected: {
+    borderColor: "#B42318",
+    backgroundColor: "#FEF3F2"
+  },
+  deleteChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475467"
+  },
+  deleteChipTextSelected: {
+    color: "#B42318"
+  },
+  deleteReasonInput: {
+    borderWidth: 1,
+    borderColor: "#D9D0C5",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#1A120B",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 14,
+    minHeight: 80,
+    textAlignVertical: "top"
+  },
+  inputDisabled: {
+    opacity: 0.5
+  },
+  deleteConfirmBtn: {
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: "#B42318",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10
+  },
+  deleteConfirmBtnText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  deleteCancelBtn: {
+    minHeight: 44,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F1F3F5"
+  },
+  deleteCancelBtnText: {
+    color: "#475467",
+    fontSize: 15,
+    fontWeight: "700"
+  },
+  btnDisabled: {
+    opacity: 0.6
+  },
+  accountDeletedModal: {
+    width: "100%",
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    padding: 24,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F2D8C6"
+  },
+  accountDeletedIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "#2B9C4A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16
+  },
+  accountDeletedTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#241D17",
+    textAlign: "center",
+    marginBottom: 10
+  },
+  accountDeletedText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#6B5E55",
+    textAlign: "center",
+    marginBottom: 24
+  },
+  accountDeletedBtn: {
+    width: "100%",
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: "#FF6B35",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  accountDeletedBtnText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "900"
   }
 });

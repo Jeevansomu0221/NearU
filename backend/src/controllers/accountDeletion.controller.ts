@@ -10,6 +10,10 @@ import {
   executeAccountDeletion,
   refreshDeletionRequestPayoutCheck
 } from "../services/accountDeletion.service";
+import {
+  notifyAccountDeletionApproved,
+  notifyAccountDeletionRejected
+} from "../services/notification.service";
 
 const DELETION_REQUEST_ROLES = [ROLES.PARTNER, ROLES.DELIVERY] as const;
 
@@ -181,7 +185,8 @@ export const getMyDeletionRequest = async (req: AuthRequest, res: Response) => {
 
     const request = await AccountDeletionRequest.findOne({
       userId: user.id,
-      appRole
+      appRole,
+      status: { $in: ["PENDING", "APPROVED", "REJECTED"] }
     })
       .sort({ createdAt: -1 })
       .lean();
@@ -275,6 +280,11 @@ export const approveAccountDeletion = async (req: AuthRequest, res: Response) =>
     request.adminNotes = adminNotes;
     await request.save();
 
+    notifyAccountDeletionApproved(
+      String(request.userId),
+      request.appRole as "partner" | "delivery"
+    ).catch((err) => console.error("notifyAccountDeletionApproved error:", err));
+
     const populated = await AccountDeletionRequest.findById(request._id)
       .populate("userId", "name phone email")
       .populate("reviewedBy", "name phone")
@@ -314,6 +324,12 @@ export const rejectAccountDeletion = async (req: AuthRequest, res: Response) => 
     request.rejectionReason = rejectionReason;
     request.adminNotes = normalizeReason(req.body?.adminNotes);
     await request.save();
+
+    notifyAccountDeletionRejected(
+      String(request.userId),
+      request.appRole as "partner" | "delivery",
+      rejectionReason
+    ).catch((err) => console.error("notifyAccountDeletionRejected error:", err));
 
     const populated = await AccountDeletionRequest.findById(request._id)
       .populate("userId", "name phone email")

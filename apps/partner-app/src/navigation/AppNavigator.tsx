@@ -6,6 +6,10 @@ import { getAccessToken } from "../utils/authStorage";
 import api, { bootstrapSessionRefresh } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { clearAuthData } from "../utils/storage";
+import {
+  resolveStartupDeletionRequest,
+  type AccountDeletionRequest
+} from "../api/accountDeletion.api";
 
 // Import screens
 import LoginScreen from "../screens/LoginScreen";
@@ -58,6 +62,7 @@ type PartnerStatusResponse = PartnerStatusSuccessResponse | PartnerStatusErrorRe
 export default function AppNavigator() {
   const { theme } = usePartnerTheme();
   const [initialRoute, setInitialRoute] = useState<string>("Loading");
+  const [startupDeletionRequest, setStartupDeletionRequest] = useState<AccountDeletionRequest | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -101,13 +106,11 @@ export default function AppNavigator() {
       // Check if the response indicates no partner found
       if (!responseData.success) {
         logNavDebug("📝 Partner not found - message:", responseData.message);
-        // If partner not found, go to onboarding
         setInitialRoute("Onboarding");
         setLoading(false);
         return;
       }
       
-      // At this point, we know responseData has the 'data' property
       const partnerData = responseData.data;
       
       // Determine initial route based on partner status
@@ -116,13 +119,19 @@ export default function AppNavigator() {
           logNavDebug("📝 Status: PENDING");
           setInitialRoute("PendingApproval");
           break;
-        case "APPROVED":
-          logNavDebug("✅ Status: APPROVED", { 
-            hasCompletedSetup: partnerData.hasCompletedSetup, 
-            menuItemsCount: partnerData.menuItemsCount 
-          });
-          setInitialRoute("Dashboard");
+        case "APPROVED": {
+          logNavDebug("✅ Status: APPROVED");
+          // Check for an active deletion request before sending to Dashboard
+          const deletionRequest = await resolveStartupDeletionRequest().catch(() => null);
+          if (deletionRequest) {
+            logNavDebug("🗑️ Active deletion request found, routing to AccountDeletionReview");
+            setStartupDeletionRequest(deletionRequest);
+            setInitialRoute("AccountDeletionReview");
+          } else {
+            setInitialRoute("Dashboard");
+          }
           break;
+        }
         case "REJECTED":
           logNavDebug("❌ Status: REJECTED");
           setInitialRoute("Rejected");
@@ -143,20 +152,18 @@ export default function AppNavigator() {
         data: error.response?.data,
       });
       
-      // Handle specific error cases
       if (error.response?.status === 401) {
         logNavDebug("🔒 Unauthorized - clearing auth data");
         await clearAuthData();
         setInitialRoute("Login");
       } else if (error.response?.status === 404) {
         logNavDebug("📝 Partner not found - needs onboarding");
-        // If partner not found (404), go to onboarding
         setInitialRoute("Onboarding");
       } else if (!error.response) {
         logNavDebug("🌐 Network error - keeping previous signed-in session");
         setInitialRoute("Dashboard");
       } else {
-        logNavDebug("⚠️ Other error, redirecting to Onboarding");
+        logNavDebug("⚠️ Other error, redirecting to Dashboard");
         setInitialRoute("Dashboard");
       }
     } finally {
@@ -271,6 +278,11 @@ export default function AppNavigator() {
       <Stack.Screen
         name="AccountDeletionReview"
         component={AccountDeletionReviewScreen}
+        initialParams={
+          startupDeletionRequest
+            ? { initialRequest: startupDeletionRequest, isStartupRoute: true }
+            : undefined
+        }
         options={{ title: "Account Deletion" }}
       />
     </Stack.Navigator>

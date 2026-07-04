@@ -141,6 +141,14 @@ const postToken = async (token: string) => {
 const navigateFromData = (navigationRef: any, data?: Record<string, any> | null) => {
   if (!navigationRef?.isReady?.()) return false;
 
+  if (
+    data?.type === "ACCOUNT_DELETION_APPROVED" ||
+    data?.type === "ACCOUNT_DELETION_REJECTED"
+  ) {
+    navigationRef.navigate("AccountDeletionReview");
+    return true;
+  }
+
   if (data?.type === "PAYOUT_PAID") {
     navigationRef.navigate("Main", { screen: "Earnings" });
     return true;
