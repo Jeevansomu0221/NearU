@@ -5,12 +5,18 @@ export interface AccountDeletionRequest {
   reasonCategory?: string;
   reason: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  rejectionReason?: string;
+  reviewedAt?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface DeletionEligibility {
   canDelete: boolean;
   blockers: string[];
+  payoutCheck?: {
+    hasOutstandingPayouts?: boolean;
+  };
 }
 
 export const getDeletionEligibility = async () => {
@@ -18,8 +24,12 @@ export const getDeletionEligibility = async () => {
   return response.data?.data;
 };
 
-export const requestAccountDeletion = async (payload: { reason: string; reasonCategory?: string }) => {
-  const response = await api.post<ApiResponse<AccountDeletionRequest | null>>("/users/me/deletion-request", payload);
+export const requestAccountDeletion = async (payload: {
+  reason: string;
+  reasonCategory?: string;
+  codBalanceAcknowledged?: boolean;
+}) => {
+  const response = await api.post<ApiResponse<AccountDeletionRequest>>("/users/me/deletion-request", payload);
   return response.data?.data;
 };
 

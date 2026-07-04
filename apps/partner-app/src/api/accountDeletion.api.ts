@@ -5,7 +5,10 @@ export interface AccountDeletionRequest {
   reasonCategory?: string;
   reason: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  rejectionReason?: string;
+  reviewedAt?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 interface ApiEnvelope<T> {

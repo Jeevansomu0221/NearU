@@ -21,6 +21,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 import WelcomeApprovedScreen from "../screens/WelcomeApprovedScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import AccountDeletionReviewScreen from "../screens/AccountDeletionReviewScreen";
 import PaymentHistoryScreen from "../screens/PaymentHistoryScreen";
 import ReviewsScreen from "../screens/ReviewsScreen";
 
@@ -266,6 +267,11 @@ export default function AppNavigator() {
         name="Reviews"
         component={ReviewsScreen}
         options={{ title: "Customer Reviews" }}
+      />
+      <Stack.Screen
+        name="AccountDeletionReview"
+        component={AccountDeletionReviewScreen}
+        options={{ title: "Account Deletion" }}
       />
     </Stack.Navigator>
   );

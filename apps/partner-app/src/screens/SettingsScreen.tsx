@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Linking,
@@ -12,9 +12,11 @@ import {
   ActivityIndicator
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import api from "../api/client";
 import { logout } from "../api/auth.api";
 import DeleteAccountModal from "../components/DeleteAccountModal";
+import { getMyDeletionRequest } from "../api/accountDeletion.api";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { buildLegalUrl, OFFICIAL_SITE_URL } from "../constants/legal";
 
@@ -41,7 +43,7 @@ type SettingsState = {
   language: string;
 };
 
-export default function SettingsScreen({ navigation }: any) {
+export default function SettingsScreen({ navigation, route }: any) {
   const { isDarkMode, setDarkMode } = usePartnerTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -186,9 +188,27 @@ export default function SettingsScreen({ navigation }: any) {
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
+    try {
+      const request = await getMyDeletionRequest();
+      if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
+        navigation.navigate("AccountDeletionReview");
+        return;
+      }
+    } catch {
+      // fall through to modal
+    }
     setDeleteAccountModalVisible(true);
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (route?.params?.openDeleteAccount) {
+        setDeleteAccountModalVisible(true);
+        navigation.setParams({ openDeleteAccount: undefined });
+      }
+    }, [navigation, route?.params?.openDeleteAccount])
+  );
 
   const renderSectionTitle = (title: string, subtitle: string, icon: keyof typeof Ionicons.glyphMap) => (
     <View style={styles.sectionHeaderRow}>
@@ -413,6 +433,7 @@ export default function SettingsScreen({ navigation }: any) {
       visible={deleteAccountModalVisible}
       onClose={() => setDeleteAccountModalVisible(false)}
       isDark={isDark}
+      onSubmitted={() => navigation.navigate("AccountDeletionReview")}
     />
     </>
   );

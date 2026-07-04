@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { logout } from "../api/auth.api";
 import DeleteAccountModal from "../components/DeleteAccountModal";
+import { getMyDeletionRequest } from "../api/accountDeletion.api";
 import { buildLegalUrl } from "../constants/legal";
 
 type MenuItem = {
@@ -82,7 +83,16 @@ export default function AccountProfileScreen({ navigation }: any) {
     navigation.getParent()?.reset({ index: 0, routes: [{ name: "Login" }] });
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
+    try {
+      const request = await getMyDeletionRequest();
+      if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
+        navigation.getParent()?.navigate("AccountDeletionReview");
+        return;
+      }
+    } catch {
+      // fall through to modal
+    }
     setDeleteAccountModalVisible(true);
   };
 
@@ -274,7 +284,11 @@ export default function AccountProfileScreen({ navigation }: any) {
           </View>
         ))}
       </ScrollView>
-      <DeleteAccountModal visible={deleteAccountModalVisible} onClose={() => setDeleteAccountModalVisible(false)} />
+      <DeleteAccountModal
+        visible={deleteAccountModalVisible}
+        onClose={() => setDeleteAccountModalVisible(false)}
+        onSubmitted={() => navigation.getParent()?.navigate("AccountDeletionReview")}
+      />
     </View>
   );
 }

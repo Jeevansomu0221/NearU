@@ -16,6 +16,7 @@ import JobDetailsScreen from "../screens/JobDetailsScreen"; // Make sure this im
 import EarningsScreen from "../screens/EarningsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import ReviewStatusScreen from "../screens/ReviewStatusScreen";
+import AccountDeletionReviewScreen from "../screens/AccountDeletionReviewScreen";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { requestRiderLocationPermission } from "../utils/riderLocation";
@@ -180,6 +181,11 @@ export default function AppNavigator() {
           title: "Verification Status",
           headerLeft: () => null
         }}
+      />
+      <Stack.Screen
+        name="AccountDeletionReview"
+        component={AccountDeletionReviewScreen}
+        options={{ title: "Account Deletion" }}
       />
       {/* ADD JobDetailsScreen as a separate screen */}
       <Stack.Screen

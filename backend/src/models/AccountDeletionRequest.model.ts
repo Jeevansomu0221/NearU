@@ -48,6 +48,10 @@ const AccountDeletionRequestSchema = new Schema(
       trim: true,
       maxlength: 1000
     },
+    codBalanceAcknowledged: {
+      type: Boolean,
+      default: false
+    },
     status: {
       type: String,
       enum: ["PENDING", "APPROVED", "REJECTED", "CANCELLED"],

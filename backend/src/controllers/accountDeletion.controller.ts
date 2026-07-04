@@ -120,6 +120,7 @@ export const requestAccountDeletion = async (req: AuthRequest, res: Response) =>
 
     const reason = normalizeReason(req.body?.reason);
     const reasonCategory = normalizeReason(req.body?.reasonCategory);
+    const codBalanceAcknowledged = Boolean(req.body?.codBalanceAcknowledged);
 
     if (!reason || reason.length < 10) {
       return errorResponse(res, "Please provide a deletion reason of at least 10 characters", 400);
@@ -142,17 +143,13 @@ export const requestAccountDeletion = async (req: AuthRequest, res: Response) =>
 
     const payoutCheck = await buildPayoutCheck(appRole as "partner" | "delivery", String(profile.profileId), user.id);
 
-    if (!payoutCheck.hasOutstandingPayouts) {
-      await executeAccountDeletion(user.id, appRole);
-      return successResponse(res, null, "Account deleted successfully");
-    }
-
     const request = await AccountDeletionRequest.create({
       userId: user.id,
       appRole,
       profileId: profile.profileId,
       reasonCategory,
       reason,
+      codBalanceAcknowledged: appRole === ROLES.DELIVERY ? codBalanceAcknowledged : false,
       snapshot: profile.snapshot,
       payoutCheck,
       status: "PENDING"

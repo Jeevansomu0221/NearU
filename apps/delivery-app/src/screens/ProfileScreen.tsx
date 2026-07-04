@@ -26,6 +26,7 @@ import { getDeliveryProfile, updateBankDetails, updateDeliveryProfile, type Deli
 import { getDeliveryStats, getTodaysEarnings, getWithdrawalWallet, type DeliveryStats } from "../api/delivery.api";
 import SupportModal from "../components/SupportModal";
 import DeleteAccountModal from "../components/DeleteAccountModal";
+import { getMyDeletionRequest } from "../api/accountDeletion.api";
 import SettingsModals, { type SettingsModalType } from "../components/SettingsModals";
 import { syncNotificationPreferencesFromProfile } from "../services/notificationPreferences";
 import { checkAppUpdateStatus, getCurrentAppVersion } from "../utils/appUpdate";
@@ -461,9 +462,27 @@ export default function ProfileScreen({ navigation, route }: any) {
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
+    try {
+      const request = await getMyDeletionRequest();
+      if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
+        navigation.getParent()?.navigate("AccountDeletionReview");
+        return;
+      }
+    } catch {
+      // fall through to modal
+    }
     setDeleteAccountModalVisible(true);
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (route?.params?.openDeleteAccount) {
+        setDeleteAccountModalVisible(true);
+        navigation.setParams({ openDeleteAccount: undefined });
+      }
+    }, [navigation, route?.params?.openDeleteAccount])
+  );
 
   const handleSaveBankDetails = async () => {
     const hasBankInput = Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim());
@@ -895,7 +914,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         <DeleteAccountModal
           visible={deleteAccountModalVisible}
           onClose={() => setDeleteAccountModalVisible(false)}
-          onDeleted={() => navigation.reset({ index: 0, routes: [{ name: "Login" }] })}
+          onSubmitted={() => navigation.getParent()?.navigate("AccountDeletionReview")}
         />
       </View>
     );
