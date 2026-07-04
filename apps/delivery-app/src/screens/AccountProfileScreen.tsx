@@ -18,6 +18,7 @@ import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { logout } from "../api/auth.api";
 import DeleteAccountModal from "../components/DeleteAccountModal";
 import { getMyDeletionRequest } from "../api/accountDeletion.api";
+import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 import { buildLegalUrl } from "../constants/legal";
 
 type MenuItem = {
@@ -87,7 +88,7 @@ export default function AccountProfileScreen({ navigation }: any) {
     try {
       const request = await getMyDeletionRequest();
       if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
-        navigation.getParent()?.navigate("AccountDeletionReview");
+        openAccountDeletionReview(navigation);
         return;
       }
     } catch {
@@ -286,8 +287,8 @@ export default function AccountProfileScreen({ navigation }: any) {
       </ScrollView>
       <DeleteAccountModal
         visible={deleteAccountModalVisible}
+        navigation={navigation}
         onClose={() => setDeleteAccountModalVisible(false)}
-        onSubmitted={() => navigation.getParent()?.navigate("AccountDeletionReview")}
       />
     </View>
   );

@@ -17,6 +17,7 @@ import api from "../api/client";
 import { logout } from "../api/auth.api";
 import DeleteAccountModal from "../components/DeleteAccountModal";
 import { getMyDeletionRequest } from "../api/accountDeletion.api";
+import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { buildLegalUrl, OFFICIAL_SITE_URL } from "../constants/legal";
 
@@ -192,7 +193,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     try {
       const request = await getMyDeletionRequest();
       if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
-        navigation.navigate("AccountDeletionReview");
+        openAccountDeletionReview(navigation);
         return;
       }
     } catch {
@@ -433,7 +434,7 @@ export default function SettingsScreen({ navigation, route }: any) {
       visible={deleteAccountModalVisible}
       onClose={() => setDeleteAccountModalVisible(false)}
       isDark={isDark}
-      onSubmitted={() => navigation.navigate("AccountDeletionReview")}
+      onSubmitted={() => openAccountDeletionReview(navigation)}
     />
     </>
   );

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -23,11 +24,13 @@ import {
   requestAccountDeletion,
   type AccountDeletionRequest
 } from "../api/accountDeletion.api";
+import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onSubmitted?: (request: AccountDeletionRequest) => void;
+  navigation: any;
+  onSubmitted?: (request: AccountDeletionRequest | null) => void;
 }
 
 const REASON_OPTIONS = [
@@ -52,7 +55,7 @@ const GREEN_PRIMARY = "#16A34A";
 const GREEN_DEEP = "#166534";
 const GREEN_SOFT = "#F0FDF4";
 
-export default function DeleteAccountModal({ visible, onClose, onSubmitted }: Props) {
+export default function DeleteAccountModal({ visible, onClose, navigation, onSubmitted }: Props) {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -149,17 +152,16 @@ export default function DeleteAccountModal({ visible, onClose, onSubmitted }: Pr
     setSubmitting(true);
     try {
       const created = await requestAccountDeletion(payload);
-      if (created) {
-        onSubmitted?.(created);
-        onClose();
-        return;
+      let latest = created || null;
+      if (!latest) {
+        latest = (await getMyDeletionRequest()) || null;
       }
 
-      const latest = await getMyDeletionRequest();
-      if (latest) {
-        onSubmitted?.(latest);
-      }
       onClose();
+      InteractionManager.runAfterInteractions(() => {
+        openAccountDeletionReview(navigation);
+        onSubmitted?.(latest);
+      });
     } catch (error: any) {
       Alert.alert("Error", error.response?.data?.message || error.message || "Failed to submit deletion request");
     } finally {

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -129,17 +130,13 @@ export default function DeleteAccountModal({ visible, onClose, onSubmitted, isDa
     setSubmitting(true);
     try {
       const created = await requestAccountDeletion(payload);
-      if (created) {
-        onSubmitted?.(created);
-        onClose();
-        return;
-      }
-
-      const latest = await getMyDeletionRequest();
-      if (latest) {
-        onSubmitted?.(latest);
-      }
+      const latest = created || (await getMyDeletionRequest());
       onClose();
+      InteractionManager.runAfterInteractions(() => {
+        if (latest) {
+          onSubmitted?.(latest);
+        }
+      });
     } catch (error: any) {
       Alert.alert("Error", error.response?.data?.message || error.message || "Failed to submit deletion request");
     } finally {

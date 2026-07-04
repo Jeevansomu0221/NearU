@@ -27,6 +27,7 @@ import { getDeliveryStats, getTodaysEarnings, getWithdrawalWallet, type Delivery
 import SupportModal from "../components/SupportModal";
 import DeleteAccountModal from "../components/DeleteAccountModal";
 import { getMyDeletionRequest } from "../api/accountDeletion.api";
+import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 import SettingsModals, { type SettingsModalType } from "../components/SettingsModals";
 import { syncNotificationPreferencesFromProfile } from "../services/notificationPreferences";
 import { checkAppUpdateStatus, getCurrentAppVersion } from "../utils/appUpdate";
@@ -466,7 +467,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     try {
       const request = await getMyDeletionRequest();
       if (request && ["PENDING", "APPROVED", "REJECTED"].includes(request.status)) {
-        navigation.getParent()?.navigate("AccountDeletionReview");
+        openAccountDeletionReview(navigation);
         return;
       }
     } catch {
@@ -913,8 +914,8 @@ export default function ProfileScreen({ navigation, route }: any) {
         />
         <DeleteAccountModal
           visible={deleteAccountModalVisible}
+          navigation={navigation}
           onClose={() => setDeleteAccountModalVisible(false)}
-          onSubmitted={() => navigation.getParent()?.navigate("AccountDeletionReview")}
         />
       </View>
     );
