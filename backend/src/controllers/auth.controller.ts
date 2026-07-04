@@ -9,6 +9,7 @@ import { successResponse, errorResponse } from "../utils/response";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { isRoleDeletedForApp, ROLES } from "../config/roles";
+import { reactivateUserAppRole } from "../services/accountDeletion.service";
 import { config } from "../config/env";
 
 const phoneRegex = /^[0-9]{10}$/;
@@ -252,11 +253,11 @@ export const verifyOTP = async (req: Request, res: Response) => {
     } else if (role === ROLES.ADMIN && user.role !== ROLES.ADMIN) {
       return errorResponse(res, "Admin account not found", 403);
     } else if (isRoleDeletedForApp(user.deletedRoles, role)) {
-      return errorResponse(
-        res,
-        "This account has been deleted for this app. Contact support if you need help.",
-        403
-      );
+      await reactivateUserAppRole(String(user._id), role, phone);
+      user = await User.findById(user._id);
+      if (!user) {
+        return errorResponse(res, "User not found", 404);
+      }
     }
 
     user.lastLogin = new Date();

@@ -4,7 +4,8 @@ import Partner from "../models/Partner.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { successResponse, errorResponse } from "../utils/response";
-import { ROLES } from "../config/roles";
+import { ROLES, isRoleDeletedForApp } from "../config/roles";
+import User from "../models/User.model";
 import {
   buildPayoutCheck,
   executeAccountDeletion,
@@ -191,6 +192,13 @@ export const getMyDeletionRequest = async (req: AuthRequest, res: Response) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    if (request && request.status !== "PENDING") {
+      const userRecord = await User.findById(user.id).select("deletedRoles").lean();
+      if (!isRoleDeletedForApp(userRecord?.deletedRoles, appRole)) {
+        return successResponse(res, null);
+      }
+    }
+
     return successResponse(res, request || null);
   } catch (err: any) {
     console.error("getMyDeletionRequest error:", err);
@@ -282,7 +290,8 @@ export const approveAccountDeletion = async (req: AuthRequest, res: Response) =>
 
     notifyAccountDeletionApproved(
       String(request.userId),
-      request.appRole as "partner" | "delivery"
+      request.appRole as "partner" | "delivery",
+      String(request._id)
     ).catch((err) => console.error("notifyAccountDeletionApproved error:", err));
 
     const populated = await AccountDeletionRequest.findById(request._id)
@@ -328,7 +337,8 @@ export const rejectAccountDeletion = async (req: AuthRequest, res: Response) => 
     notifyAccountDeletionRejected(
       String(request.userId),
       request.appRole as "partner" | "delivery",
-      rejectionReason
+      rejectionReason,
+      String(request._id)
     ).catch((err) => console.error("notifyAccountDeletionRejected error:", err));
 
     const populated = await AccountDeletionRequest.findById(request._id)

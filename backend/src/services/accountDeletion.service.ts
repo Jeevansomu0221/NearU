@@ -3,6 +3,7 @@ import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import WithdrawalRequest from "../models/WithdrawalRequest.model";
+import AccountDeletionRequest from "../models/AccountDeletionRequest.model";
 import { getRiderWalletSummary } from "./payout.service";
 import { ROLES } from "../config/roles";
 
@@ -40,7 +41,8 @@ export const deleteCustomerAccount = async (userId: string, deletionMarker: stri
       favoriteFoodItems: [],
       fcmToken: "",
       notificationTokens: [],
-      ...(hasOtherAppProfiles ? { name: "" } : { phone: deletionMarker, name: "Deleted User", isActive: false })
+      name: "",
+      ...(hasOtherAppProfiles ? {} : { isActive: false })
     },
     $addToSet: { deletedRoles: ROLES.CUSTOMER },
     $unset: { email: "" },
@@ -122,6 +124,57 @@ export const executeAccountDeletion = async (userId: string, appRole: string) =>
   } else {
     throw new Error("Account deletion is not supported for this role");
   }
+};
+
+/**
+ * Allow a previously deleted app role to register again with the same phone number.
+ */
+export const reactivateUserAppRole = async (userId: string, appRole: string, phone: string) => {
+  const User = (await import("../models/User.model")).default;
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  if (appRole === ROLES.PARTNER) {
+    await Partner.deleteOne({ userId: userObjectId });
+    await AccountDeletionRequest.updateMany(
+      { userId: userObjectId, appRole: "partner" },
+      { $set: { status: "CANCELLED" } }
+    );
+  } else if (appRole === ROLES.DELIVERY) {
+    await DeliveryPartner.deleteOne({ userId: userObjectId });
+    await AccountDeletionRequest.updateMany(
+      { userId: userObjectId, appRole: "delivery" },
+      { $set: { status: "CANCELLED" } }
+    );
+  } else if (appRole === ROLES.CUSTOMER) {
+    const phoneRestore =
+      String(user.phone || "").startsWith("deleted_") && phone ? { phone } : {};
+
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        address: emptyAddress,
+        addresses: [],
+        favoriteRestaurants: [],
+        favoriteFoodItems: [],
+        fcmToken: "",
+        notificationTokens: [],
+        name: "",
+        isActive: true,
+        ...phoneRestore
+      },
+      $unset: { email: "" }
+    });
+  }
+
+  await User.findByIdAndUpdate(userId, {
+    $pull: { deletedRoles: appRole },
+    $set: { isActive: true },
+    $inc: { sessionVersion: 1 }
+  });
 };
 
 const getPartnerPayoutCheck = async (partnerId: mongoose.Types.ObjectId | string, userId?: string) => {

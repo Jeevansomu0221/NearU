@@ -62,14 +62,46 @@ export const requestAccountDeletion = async (payload: { reason: string; reasonCa
 };
 
 export const getMyDeletionRequest = async () => {
-  const response = await api.get<ApiEnvelope<AccountDeletionRequest | null>>("/users/me/deletion-request");
-  const request = response.data.data;
-  if (isActiveDeletionRequest(request)) {
-    await cacheDeletionRequest(request);
-  } else {
-    await cacheDeletionRequest(null);
+  try {
+    const response = await api.get<ApiEnvelope<AccountDeletionRequest | null>>("/users/me/deletion-request");
+    const request = response.data.data;
+    if (isActiveDeletionRequest(request)) {
+      await cacheDeletionRequest(request);
+    } else {
+      await cacheDeletionRequest(null);
+    }
+    return request;
+  } catch {
+    const cached = await getCachedDeletionRequest();
+    if (isActiveDeletionRequest(cached)) {
+      return cached;
+    }
+    throw new Error("Failed to fetch deletion request");
   }
-  return request;
+};
+
+export const applyDeletionStatusFromNotification = async (
+  data?: Record<string, string> | null
+): Promise<AccountDeletionRequest | null> => {
+  const type = String(data?.type || "");
+  if (type !== "ACCOUNT_DELETION_APPROVED" && type !== "ACCOUNT_DELETION_REJECTED") {
+    return null;
+  }
+
+  const status = type === "ACCOUNT_DELETION_APPROVED" ? "APPROVED" : "REJECTED";
+  const cached = await getCachedDeletionRequest();
+  const updated: AccountDeletionRequest = {
+    _id: data?.requestId || cached?._id || "unknown",
+    reason: cached?.reason || "",
+    reasonCategory: cached?.reasonCategory,
+    status,
+    rejectionReason: data?.rejectionReason || cached?.rejectionReason,
+    reviewedAt: new Date().toISOString(),
+    createdAt: cached?.createdAt || new Date().toISOString()
+  };
+
+  await cacheDeletionRequest(updated);
+  return updated;
 };
 
 export const cancelAccountDeletionRequest = async () => {
@@ -81,15 +113,12 @@ export const cancelAccountDeletionRequest = async () => {
 export const resolveDeletionRequest = async (
   initialRequest?: AccountDeletionRequest | null
 ): Promise<AccountDeletionRequest | null> => {
-  if (isActiveDeletionRequest(initialRequest)) {
-    return initialRequest;
-  }
-
   try {
     const remote = await getMyDeletionRequest();
     if (isActiveDeletionRequest(remote)) {
       return remote;
     }
+    return null;
   } catch {
     // fall back to cache below
   }
@@ -97,6 +126,14 @@ export const resolveDeletionRequest = async (
   const cached = await getCachedDeletionRequest();
   if (isActiveDeletionRequest(cached)) {
     return cached;
+  }
+
+  if (
+    initialRequest &&
+    initialRequest.status !== "PENDING" &&
+    isActiveDeletionRequest(initialRequest)
+  ) {
+    return initialRequest;
   }
 
   return null;
@@ -116,4 +153,16 @@ export const resolveStartupDeletionRequest = async (): Promise<AccountDeletionRe
     }
     return null;
   }
+};
+
+type DeletionRefreshListener = (request?: AccountDeletionRequest | null) => void;
+const deletionRefreshListeners = new Set<DeletionRefreshListener>();
+
+export const subscribeDeletionRequestRefresh = (listener: DeletionRefreshListener) => {
+  deletionRefreshListeners.add(listener);
+  return () => deletionRefreshListeners.delete(listener);
+};
+
+export const notifyDeletionRequestRefresh = (request?: AccountDeletionRequest | null) => {
+  deletionRefreshListeners.forEach((listener) => listener(request));
 };

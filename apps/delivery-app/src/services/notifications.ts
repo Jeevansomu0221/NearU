@@ -7,6 +7,7 @@ import {
   getNotificationPreferences,
   shouldShowClientNotification
 } from "./notificationPreferences";
+import { notifyDeletionRequestRefresh, applyDeletionStatusFromNotification } from "../api/accountDeletion.api";
 
 const NOTIFICATION_APP = "delivery";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:delivery";
@@ -138,14 +139,22 @@ const postToken = async (token: string) => {
   await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
 };
 
-const navigateFromData = (navigationRef: any, data?: Record<string, any> | null) => {
+const handleDeletionNotification = async (navigationRef: any, data?: Record<string, any> | null) => {
+  const updated = await applyDeletionStatusFromNotification(data as Record<string, string> | null);
+  notifyDeletionRequestRefresh(updated);
+  if (navigationRef?.isReady?.()) {
+    navigationRef.navigate("AccountDeletionReview");
+  }
+};
+
+const navigateFromData = async (navigationRef: any, data?: Record<string, any> | null) => {
   if (!navigationRef?.isReady?.()) return false;
 
   if (
     data?.type === "ACCOUNT_DELETION_APPROVED" ||
     data?.type === "ACCOUNT_DELETION_REJECTED"
   ) {
-    navigationRef.navigate("AccountDeletionReview");
+    await handleDeletionNotification(navigationRef, data);
     return true;
   }
 
@@ -323,6 +332,13 @@ const setupForegroundNotificationActionHandler = (navigationRef: any) => {
   });
 };
 
+const isDeletionNotification = (data?: Record<string, any> | null) =>
+  data?.type === "ACCOUNT_DELETION_APPROVED" || data?.type === "ACCOUNT_DELETION_REJECTED";
+
+const acknowledgeDeletionNotification = (navigationRef: any, data?: Record<string, any> | null) => {
+  void handleDeletionNotification(navigationRef, data);
+};
+
 const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
   const prefs = await getNotificationPreferences();
   if (!shouldShowClientNotification(remoteMessage?.data?.type, prefs)) {
@@ -332,6 +348,16 @@ const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
   const title = remoteMessage?.notification?.title || "Notification";
   const body = remoteMessage?.notification?.body || "You have a new update.";
   const orderId = getNotificationOrderId(remoteMessage?.data);
+
+  if (isDeletionNotification(remoteMessage?.data)) {
+    Alert.alert(title, body, [
+      {
+        text: "OK",
+        onPress: () => acknowledgeDeletionNotification(navigationRef, remoteMessage?.data)
+      }
+    ]);
+    return;
+  }
 
   const actions: any[] = [
     { text: "Later", style: "cancel" },
@@ -433,6 +459,10 @@ export const setupNotificationHandlers = (navigationRef: any) => {
   const unsubscribeMessage = messaging.onMessage(async (remoteMessage: any) => {
     if (await displayDeliveryJobNotification(remoteMessage)) {
       return;
+    }
+    if (isDeletionNotification(remoteMessage?.data)) {
+      const updated = await applyDeletionStatusFromNotification(remoteMessage?.data);
+      notifyDeletionRequestRefresh(updated);
     }
     await showForegroundAlert(navigationRef, remoteMessage);
   });

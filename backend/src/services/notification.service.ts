@@ -564,14 +564,20 @@ export const notifyPaymentConfirmed = async (orderId: string) => {
   }
 };
 
-export const notifyAccountDeletionApproved = async (userId: string, appRole: "partner" | "delivery") => {
+export const notifyAccountDeletionApproved = async (
+  userId: string,
+  appRole: "partner" | "delivery",
+  requestId: string
+) => {
   await sendNotificationToUsers([userId], {
     app: appRole,
     title: "Account deleted",
     body: "Your account deletion request has been approved. Your account has been deleted.",
     data: {
       type: "ACCOUNT_DELETION_APPROVED",
-      appRole
+      appRole,
+      status: "APPROVED",
+      requestId
     }
   });
 };
@@ -579,7 +585,8 @@ export const notifyAccountDeletionApproved = async (userId: string, appRole: "pa
 export const notifyAccountDeletionRejected = async (
   userId: string,
   appRole: "partner" | "delivery",
-  rejectionReason: string
+  rejectionReason: string,
+  requestId: string
 ) => {
   await sendNotificationToUsers([userId], {
     app: appRole,
@@ -588,6 +595,8 @@ export const notifyAccountDeletionRejected = async (
     data: {
       type: "ACCOUNT_DELETION_REJECTED",
       appRole,
+      status: "REJECTED",
+      requestId,
       rejectionReason: truncate(rejectionReason, 200)
     }
   });

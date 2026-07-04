@@ -15,8 +15,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   cacheDeletionRequest,
   cancelAccountDeletionRequest,
+  getCachedDeletionRequest,
   getMyDeletionRequest,
-  resolveDeletionRequest,
+  subscribeDeletionRequestRefresh,
   type AccountDeletionRequest
 } from "../api/accountDeletion.api";
 import { clearAuthData } from "../utils/storage";
@@ -61,11 +62,17 @@ export default function AccountDeletionReviewScreen({ navigation, route }: Props
   const loadRequest = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const data = await resolveDeletionRequest(initialRequest);
+      const data = await getMyDeletionRequest();
       setRequest(data);
       setLoadError(null);
       return data;
     } catch (error: any) {
+      const cached = await getCachedDeletionRequest();
+      if (cached) {
+        setRequest(cached);
+        setLoadError(null);
+        return cached;
+      }
       if (initialRequest) {
         setRequest(initialRequest);
         setLoadError(null);
@@ -92,6 +99,27 @@ export default function AccountDeletionReviewScreen({ navigation, route }: Props
       setRefreshing(false);
     }
   };
+
+  const refreshFromApi = useCallback(async () => {
+    try {
+      const data = await getMyDeletionRequest();
+      setRequest(data);
+      setLoadError(null);
+    } catch {
+      // Keep current state on refresh failure
+    }
+  }, []);
+
+  useEffect(() => {
+    return subscribeDeletionRequestRefresh((request) => {
+      if (request) {
+        setRequest(request);
+        setLoadError(null);
+        return;
+      }
+      void refreshFromApi();
+    });
+  }, [refreshFromApi]);
 
   useFocusEffect(
     useCallback(() => {

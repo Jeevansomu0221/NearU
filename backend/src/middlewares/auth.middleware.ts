@@ -32,6 +32,24 @@ export const authMiddleware = async (
 
     const token = authHeader.split(" ")[1];
     const decoded = verifyAccessToken(token);
+
+    const isDeletionStatusRead =
+      req.method === "GET" &&
+      (req.path === "/me/deletion-request" || req.originalUrl?.includes("/me/deletion-request"));
+
+    if (isDeletionStatusRead) {
+      req.user = {
+        id: decoded.id,
+        phone: decoded.phone,
+        role: decoded.role,
+        name: decoded.name,
+        partnerId: decoded.partnerId,
+        deliveryPartnerId: decoded.deliveryPartnerId,
+        sessionVersion: decoded.sessionVersion
+      };
+      return next();
+    }
+
     const userRecord = await User.findById(decoded.id).select("isActive sessionVersion deletedRoles").lean();
 
     if (!userRecord || !userRecord.isActive) {

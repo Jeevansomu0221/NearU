@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../utils/authStorage";
 import { Alert, PermissionsAndroid, Platform } from "react-native";
 import api from "../api/client";
+import { notifyDeletionRequestRefresh, applyDeletionStatusFromNotification } from "../api/accountDeletion.api";
 
 const NOTIFICATION_APP = "partner";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:partner";
@@ -85,14 +86,22 @@ const postToken = async (token: string) => {
   await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
 };
 
-const navigateFromData = (navigationRef: any, data?: Record<string, any> | null) => {
+const handleDeletionNotification = async (navigationRef: any, data?: Record<string, any> | null) => {
+  const updated = await applyDeletionStatusFromNotification(data as Record<string, string> | null);
+  notifyDeletionRequestRefresh(updated);
+  if (navigationRef?.isReady?.()) {
+    navigationRef.navigate("AccountDeletionReview");
+  }
+};
+
+const navigateFromData = async (navigationRef: any, data?: Record<string, any> | null) => {
   if (!navigationRef?.isReady?.()) return false;
 
   if (
     data?.type === "ACCOUNT_DELETION_APPROVED" ||
     data?.type === "ACCOUNT_DELETION_REJECTED"
   ) {
-    navigationRef.navigate("AccountDeletionReview");
+    await handleDeletionNotification(navigationRef, data);
     return true;
   }
 
@@ -116,18 +125,27 @@ const navigateFromData = (navigationRef: any, data?: Record<string, any> | null)
   return true;
 };
 
+const isDeletionNotification = (data?: Record<string, any> | null) =>
+  data?.type === "ACCOUNT_DELETION_APPROVED" || data?.type === "ACCOUNT_DELETION_REJECTED";
+
 const showForegroundAlert = (navigationRef: any, remoteMessage: any) => {
   const title = remoteMessage?.notification?.title || "Notification";
   const body = remoteMessage?.notification?.body || "You have a new update.";
-  const type = remoteMessage?.data?.type;
 
-  const isDeletionNotification =
-    type === "ACCOUNT_DELETION_APPROVED" || type === "ACCOUNT_DELETION_REJECTED";
+  if (isDeletionNotification(remoteMessage?.data)) {
+    Alert.alert(title, body, [
+      {
+        text: "OK",
+        onPress: () => void handleDeletionNotification(navigationRef, remoteMessage?.data)
+      }
+    ]);
+    return;
+  }
 
   Alert.alert(title, body, [
-    { text: isDeletionNotification ? "Dismiss" : "Later", style: "cancel" },
+    { text: "Later", style: "cancel" },
     {
-      text: isDeletionNotification ? "View status" : "View",
+      text: "View",
       onPress: () => navigateFromData(navigationRef, remoteMessage?.data)
     }
   ]);
@@ -176,6 +194,10 @@ export const setupNotificationHandlers = (navigationRef: any) => {
   if (!messaging) return () => {};
 
   const unsubscribeMessage = messaging.onMessage(async (remoteMessage: any) => {
+    if (isDeletionNotification(remoteMessage?.data)) {
+      const updated = await applyDeletionStatusFromNotification(remoteMessage?.data);
+      notifyDeletionRequestRefresh(updated);
+    }
     showForegroundAlert(navigationRef, remoteMessage);
   });
 
