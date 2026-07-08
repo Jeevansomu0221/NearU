@@ -3,7 +3,7 @@
     "name": "Vyaha Delivery",
     "slug": "vyaha-delivery",
     "scheme": "vyaha-delivery",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "orientation": "portrait",
     "icon": "./assets/vyaha-delivery-app-icon.png",
     "userInterfaceStyle": "light",
