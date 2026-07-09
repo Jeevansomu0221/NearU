@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
@@ -13,7 +14,7 @@ import {
   View
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   createSupportTicket,
   getMySupportTickets,
@@ -41,6 +42,7 @@ export default function SupportChatScreen({ route }: any) {
   const [sending, setSending] = useState(false);
   const [subject, setSubject] = useState(route?.params?.subject || defaultSubject);
   const [message, setMessage] = useState("");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const activeTicket = useMemo(
     () => tickets.find((ticket) => !CLOSED_STATUSES.has(ticket.status)) || tickets[0],
@@ -67,12 +69,32 @@ export default function SupportChatScreen({ route }: any) {
   }, [loadTickets]);
 
   useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!activeTicket?.messages?.length) return;
     const timer = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: true });
     }, 100);
     return () => clearTimeout(timer);
   }, [activeTicket?.messages?.length]);
+
+  const scrollToLatestMessage = () => {
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+  };
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -117,8 +139,8 @@ export default function SupportChatScreen({ route }: any) {
   const renderMessage = ({ item, index }: { item: SupportMessage; index: number }) => {
     const isCustomer = item.senderRole === "customer";
     return (
-      <View style={[styles.chatBubble, isCustomer ? styles.customerBubble : styles.adminBubble]}>
-        <Text style={styles.chatSender}>{isCustomer ? "You" : "Vyaha Admin"}</Text>
+      <View style={[styles.chatBubble, isCustomer ? styles.customerBubble : styles.supportBubble]}>
+        <Text style={styles.chatSender}>{isCustomer ? "You" : "Vyaha Support"}</Text>
         <Text style={styles.chatText}>{item.message}</Text>
       </View>
     );
@@ -138,7 +160,7 @@ export default function SupportChatScreen({ route }: any) {
         <Text style={styles.headerText}>
           {isReport
             ? "App bugs, UI issues, payment issues, feature requests, and platform problems stay here."
-            : "Order related help stays in this chat with Vyaha admin."}
+            : "Order related help stays in this chat with Vyaha Support."}
         </Text>
         {activeTicket ? (
           <Text style={styles.ticketMeta}>Ticket: {activeTicket.subject} - {activeTicket.status}</Text>
@@ -158,66 +180,80 @@ export default function SupportChatScreen({ route }: any) {
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
-    >
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(item, index) => `${item.createdAt || "message"}-${index}`}
-        renderItem={renderMessage}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Start a conversation</Text>
-            <Text style={styles.emptyText}>
-              {isReport
-                ? "Describe the platform issue and admin will reply here."
-                : "Ask about an order and admin replies will appear here."}
-            </Text>
-          </View>
-        }
-        contentContainerStyle={styles.chatList}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#FF6B35"]} />}
-      />
+  const headerOffset = insets.top + 44;
 
-      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        {isReport && !activeTicket ? (
-          <TextInput
-            style={styles.subjectInput}
-            value={subject}
-            onChangeText={setSubject}
-            placeholder="Issue subject"
-            placeholderTextColor="#9A8E84"
+  return (
+    <SafeAreaView style={styles.container} edges={["left", "right"]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? headerOffset : 0}
+      >
+        <View
+          style={[
+            styles.flex,
+            Platform.OS === "android" && keyboardHeight > 0 && { marginBottom: keyboardHeight }
+          ]}
+        >
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(item, index) => `${item.createdAt || "message"}-${index}`}
+            renderItem={renderMessage}
+            ListHeaderComponent={renderHeader}
+            ListEmptyComponent={
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>Start a conversation</Text>
+                <Text style={styles.emptyText}>
+                  {isReport
+                    ? "Describe the platform issue and our team will reply here."
+                    : "Ask about an order and support replies will appear here."}
+                </Text>
+              </View>
+            }
+            contentContainerStyle={styles.chatList}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#FF6B35"]} />}
           />
-        ) : null}
-        <View style={styles.composerRow}>
-          <TextInput
-            style={styles.messageInput}
-            value={message}
-            onChangeText={setMessage}
-            placeholder={isReport ? "Describe the issue..." : "Type your message..."}
-            placeholderTextColor="#9A8E84"
-            multiline
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, sending && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={sending}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <MaterialCommunityIcons name="send" size={20} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
+
+          <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            {isReport && !activeTicket ? (
+              <TextInput
+                style={styles.subjectInput}
+                value={subject}
+                onChangeText={setSubject}
+                placeholder="Issue subject"
+                placeholderTextColor="#9A8E84"
+                onFocus={scrollToLatestMessage}
+              />
+            ) : null}
+            <View style={styles.composerRow}>
+              <TextInput
+                style={styles.messageInput}
+                value={message}
+                onChangeText={setMessage}
+                placeholder={isReport ? "Describe the issue..." : "Type your message..."}
+                placeholderTextColor="#9A8E84"
+                multiline
+                onFocus={scrollToLatestMessage}
+              />
+              <TouchableOpacity
+                style={[styles.sendButton, sending && styles.sendButtonDisabled]}
+                onPress={handleSend}
+                disabled={sending}
+              >
+                {sending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <MaterialCommunityIcons name="send" size={20} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -225,6 +261,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F6F2EC"
+  },
+  flex: {
+    flex: 1
   },
   loadingContainer: {
     flex: 1,
@@ -310,7 +349,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     backgroundColor: "#FFF1E6"
   },
-  adminBubble: {
+  supportBubble: {
     alignSelf: "flex-start",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,

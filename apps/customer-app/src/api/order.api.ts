@@ -6,6 +6,8 @@ interface OrderItem {
   quantity: number;
   price: number;
   menuItemId?: string;
+  selectedExtras?: { name: string; price: number }[];
+  cookingRequest?: string;
 }
 
 interface CreateOrderRequest {

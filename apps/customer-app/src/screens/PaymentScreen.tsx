@@ -227,7 +227,9 @@ export default function PaymentScreen({ route, navigation }: any) {
       name: item.name,
       quantity: item.quantity,
       price: item.price,
-      menuItemId: item.menuItemId || item._id || "temp-id"
+      menuItemId: item.menuItemId || item._id || "temp-id",
+      selectedExtras: item.selectedExtras || [],
+      cookingRequest: item.cookingRequest || ""
     }));
 
     const response = await createShopOrder(

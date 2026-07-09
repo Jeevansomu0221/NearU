@@ -3,7 +3,7 @@
     "name": "Vyaha",
     "slug": "vyaha-customer",
     "scheme": "vyaha-customer",
-    "version": "1.0.15",
+    "version": "1.0.16",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -47,7 +47,7 @@
     },
     "android": {
       "package": "com.vyaha.customer",
-      "versionCode": 29,
+      "versionCode": 30,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
@@ -59,6 +59,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "blockedPermissions": [
         "android.permission.READ_PHONE_STATE"

@@ -40,7 +40,7 @@ import { getPublicShopName } from "../utils/display";
 import { unregisterPushNotifications } from "../services/notifications";
 
 const supportItems = [
-  { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha admin." },
+  { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha Support." },
   { icon: "help-circle-outline", title: "FAQs", detail: "Delivery timings, cancellations, refunds, and account help." },
   { icon: "alert-circle-outline", title: "Report an Issue", detail: "App bugs, UI issues, payments, feature requests, and platform problems." }
 ] as const;
@@ -1003,16 +1003,6 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
             <Text style={styles.shortcutTitle}>Addresses</Text>
             <Text style={styles.shortcutDetail}>{addressLines.length > 0 ? "Primary saved" : "Add now"}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.shortcutCard}
-            onPress={() => handlePlaceholderAction("Payments", "Payments are handled securely during checkout. Saved payment methods are not stored in this release.")}
-          >
-            <View style={styles.shortcutIconWrap}>
-              <MaterialCommunityIcons name="wallet-outline" size={20} color="#7C3AED" />
-            </View>
-            <Text style={styles.shortcutTitle}>Payments</Text>
-            <Text style={styles.shortcutDetail}>Manage methods</Text>
           </TouchableOpacity>
         </View>
 

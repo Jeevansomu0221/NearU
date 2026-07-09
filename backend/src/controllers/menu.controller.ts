@@ -224,8 +224,18 @@ export const addMenuItem = async (req: Request, res: Response) => {
       imageUrl,
       isVegetarian,
       preparationTime,
-      isAvailable
+      isAvailable,
+      extraChoices
     } = req.body;
+
+    const normalizedExtraChoices = Array.isArray(extraChoices)
+      ? extraChoices
+          .map((choice: { name?: string; price?: number }) => ({
+            name: typeof choice?.name === "string" ? choice.name.trim() : "",
+            price: Number.isFinite(Number(choice?.price)) ? Math.max(0, Number(choice?.price)) : 0
+          }))
+          .filter((choice: { name: string }) => choice.name.length > 0)
+      : [];
 
     // Validate required fields
     if (!name || !price) {
@@ -252,7 +262,8 @@ export const addMenuItem = async (req: Request, res: Response) => {
       imageUrl: imageUrl || "",
       isVegetarian: isVegetarian !== false, // Default to true
       preparationTime: preparationTime || 15,
-      isAvailable: isAvailable !== false // Default to true
+      isAvailable: isAvailable !== false, // Default to true
+      extraChoices: normalizedExtraChoices
     });
 
     // Update partner's menu items count
@@ -319,6 +330,17 @@ export const updateMenuItem = async (req: Request, res: Response) => {
     }
 
     const updateData = { ...req.body } as Record<string, any>;
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "extraChoices")) {
+      updateData.extraChoices = Array.isArray(updateData.extraChoices)
+        ? updateData.extraChoices
+            .map((choice: { name?: string; price?: number }) => ({
+              name: typeof choice?.name === "string" ? choice.name.trim() : "",
+              price: Number.isFinite(Number(choice?.price)) ? Math.max(0, Number(choice?.price)) : 0
+            }))
+            .filter((choice: { name: string }) => choice.name.length > 0)
+        : [];
+    }
 
     if (Object.prototype.hasOwnProperty.call(updateData, "category")) {
       const resolvedCategory = resolveMenuCategory(partner.category, updateData.category);

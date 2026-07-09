@@ -25,11 +25,17 @@ import {
   removeFavoriteFoodItem
 } from "../api/user.api";
 import { useCart } from "../context/CartContext";
+import ProductDetailSheet from "../components/ProductDetailSheet";
 import { getPublicShopName } from "../utils/display";
 import { getVegModePreference } from "../utils/vegMode";
 import { getAccessToken } from "../utils/authStorage";
 
 type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, "ShopDetail">;
+
+interface ExtraChoice {
+  name: string;
+  price: number;
+}
 
 interface MenuItem {
   _id: string;
@@ -40,6 +46,7 @@ interface MenuItem {
   isAvailable: boolean;
   isVegetarian?: boolean;
   imageUrl?: string;
+  extraChoices?: ExtraChoice[];
 }
 
 interface Props {
@@ -100,9 +107,7 @@ interface MenuCardItemProps {
   quantity: number;
   selectedCategory: string;
   getMenuImage: (item: MenuItem, index: number) => string;
-  handleIncrement: (item: MenuItem) => void;
-  handleDecrement: (item: MenuItem) => void;
-  setPreviewImage: (uri: string | null) => void;
+  onOpenDetail: (item: MenuItem) => void;
   isFavorite: boolean;
   favoriteBusy: boolean;
   onToggleFavorite: (item: MenuItem) => void;
@@ -114,134 +119,72 @@ function MenuCardItem({
   quantity,
   selectedCategory,
   getMenuImage,
-  handleIncrement,
-  handleDecrement,
-  setPreviewImage,
+  onOpenDetail,
   isFavorite,
   favoriteBusy,
   onToggleFavorite
 }: MenuCardItemProps) {
-  const [floaters, setFloaters] = useState<Array<{ id: number; animY: Animated.Value; animOpacity: Animated.Value }>>([]);
-  const floaterIdRef = useRef(0);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handlePress = () => {
-    handleIncrement(item);
-
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.96, duration: 80, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true })
-    ]).start();
-
-    const id = floaterIdRef.current++;
-    const animY = new Animated.Value(0);
-    const animOpacity = new Animated.Value(1);
-
-    setFloaters((prev) => [...prev, { id, animY, animOpacity }]);
-
-    Animated.parallel([
-      Animated.timing(animY, {
-        toValue: -55,
-        duration: 750,
-        useNativeDriver: true
-      }),
-      Animated.timing(animOpacity, {
-        toValue: 0,
-        duration: 750,
-        useNativeDriver: true
-      })
-    ]).start(() => {
-      setFloaters((prev) => prev.filter((f) => f.id !== id));
-    });
-  };
-
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <View style={styles.menuCard}>
-        {index === 0 ? (
-          <View style={styles.bestSellerChip}>
-            <Feather name="star" size={11} color="#F59E0B" />
-            <Text style={styles.bestSellerText}>Best Seller</Text>
-          </View>
-        ) : null}
+    <TouchableOpacity
+      activeOpacity={0.92}
+      onPress={() => onOpenDetail(item)}
+      style={styles.menuCard}
+    >
+      {index === 0 ? (
+        <View style={styles.bestSellerChip}>
+          <Feather name="star" size={11} color="#F59E0B" />
+          <Text style={styles.bestSellerText}>Best Seller</Text>
+        </View>
+      ) : null}
 
-        <View style={styles.menuCardRow}>
-          <TouchableOpacity activeOpacity={0.9} onPress={() => setPreviewImage(getMenuImage(item, index))}>
-            <Image source={{ uri: getMenuImage(item, index) }} style={styles.menuImage} resizeMode="cover" />
-          </TouchableOpacity>
+      <View style={styles.menuCardRow}>
+        <Image source={{ uri: getMenuImage(item, index) }} style={styles.menuImage} resizeMode="cover" />
 
-          <View style={styles.menuInfo}>
-            <View style={styles.menuInfoRow}>
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={styles.menuTextStack}
-                onPress={handlePress}
-              >
-                <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
-                <Text style={styles.itemDescription} numberOfLines={2}>
-                  {item.description || "Freshly prepared in-store with quality ingredients."}
-                </Text>
-                <View style={styles.readyRow}>
-                  <Feather name="clock" size={11} color="#7C7168" />
-                  <Text style={styles.readyText}>Ready in a few minutes</Text>
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.menuRightColumn}>
-                <TouchableOpacity
-                  style={[styles.menuFavoriteButton, isFavorite && styles.menuFavoriteButtonActive]}
-                  onPress={() => onToggleFavorite(item)}
-                  disabled={favoriteBusy}
-                  activeOpacity={0.8}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
-                >
-                  <MaterialCommunityIcons
-                    name={isFavorite ? "heart" : "heart-outline"}
-                    size={18}
-                    color={isFavorite ? "#E11D48" : "#A3968D"}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.itemPrice}>Rs {item.price}</Text>
-                <View style={styles.stepper}>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
-                    onPress={() => handleDecrement(item)}
-                    disabled={quantity === 0}
-                  >
-                    <Text style={[styles.stepperButtonText, quantity === 0 && styles.stepperButtonDisabled]}>-</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.stepperValue}>{quantity}</Text>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
-                    onPress={handlePress}
-                  >
-                    <Text style={styles.stepperButtonText}>+</Text>
-                  </TouchableOpacity>
-                </View>
+        <View style={styles.menuInfo}>
+          <View style={styles.menuInfoRow}>
+            <View style={styles.menuTextStack}>
+              <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+              <Text style={styles.itemSubtext}>{item.category || selectedCategory}</Text>
+              <Text style={styles.itemDescription} numberOfLines={2}>
+                {item.description || "Freshly prepared in-store with quality ingredients."}
+              </Text>
+              <View style={styles.readyRow}>
+                <Feather name="clock" size={11} color="#7C7168" />
+                <Text style={styles.readyText}>Ready in a few minutes</Text>
               </View>
+            </View>
+
+            <View style={styles.menuRightColumn}>
+              <TouchableOpacity
+                style={[styles.menuFavoriteButton, isFavorite && styles.menuFavoriteButtonActive]}
+                onPress={() => onToggleFavorite(item)}
+                disabled={favoriteBusy}
+                activeOpacity={0.8}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
+              >
+                <MaterialCommunityIcons
+                  name={isFavorite ? "heart" : "heart-outline"}
+                  size={18}
+                  color={isFavorite ? "#E11D48" : "#A3968D"}
+                />
+              </TouchableOpacity>
+              <Text style={styles.itemPrice}>Rs {item.price}</Text>
+              {quantity > 0 ? (
+                <View style={styles.inCartBadge}>
+                  <Text style={styles.inCartBadgeText}>{quantity} in cart</Text>
+                </View>
+              ) : (
+                <View style={styles.addPill}>
+                  <Text style={styles.addPillText}>ADD</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
-
-        {floaters.map((f) => (
-          <Animated.View
-            key={f.id}
-            style={[
-              styles.floaterBubble,
-              {
-                transform: [{ translateY: f.animY }],
-                opacity: f.animOpacity
-              }
-            ]}
-          >
-            <Text style={styles.floaterText}>+1 Added</Text>
-          </Animated.View>
-        ))}
       </View>
-    </Animated.View>
+    </TouchableOpacity>
   );
 }
 
@@ -254,9 +197,11 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [vegModeOnly, setVegModeOnly] = useState(Boolean(initialVegMode));
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
+  const [detailImageIndex, setDetailImageIndex] = useState(0);
   const [favoriteFoodItemIds, setFavoriteFoodItemIds] = useState<Set<string>>(new Set());
   const [favoriteBusyId, setFavoriteBusyId] = useState<string | null>(null);
-  const { items, addItem, updateQuantity, getItemCount, getCartTotal } = useCart();
+  const { items, addItem, getItemCount, getCartTotal } = useCart();
   const cartScaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -421,53 +366,38 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   };
 
   const getCartQuantity = (item: MenuItem) => {
-    const cartItem = items.find(
-      (cartEntry) => cartEntry.shopId === shopId && (cartEntry.menuItemId || cartEntry._id) === item._id
-    );
-    return cartItem?.quantity || 0;
+    return items
+      .filter(
+        (cartEntry) =>
+          cartEntry.shopId === shopId && (cartEntry.menuItemId || cartEntry._id) === item._id
+      )
+      .reduce((sum, cartEntry) => sum + cartEntry.quantity, 0);
   };
 
-  const handleIncrement = (item: MenuItem) => {
-    if (!shop) return;
-
-    const quantity = getCartQuantity(item);
-    if (quantity === 0) {
-      addItem({
-        _id: item._id,
-        menuItemId: item._id,
-        name: item.name,
-        price: item.price,
-        quantity: 1,
-        shopId: shop._id,
-        shopName: getShopName()
-      });
-      return;
-    }
-
-    updateQuantity(
-      {
-        shopId: shop._id,
-        menuItemId: item._id,
-        name: item.name
-      },
-      quantity + 1
-    );
+  const openProductDetail = (item: MenuItem, index: number) => {
+    setDetailImageIndex(index);
+    setDetailItem(item);
   };
 
-  const handleDecrement = (item: MenuItem) => {
-    if (!shop) return;
+  const handleAddFromDetail = (payload: {
+    quantity: number;
+    selectedExtras: { name: string; price: number }[];
+    cookingRequest: string;
+    unitPrice: number;
+  }) => {
+    if (!shop || !detailItem) return;
 
-    const quantity = getCartQuantity(item);
-    if (quantity <= 0) return;
-
-    updateQuantity(
-      {
-        shopId: shop._id,
-        menuItemId: item._id,
-        name: item.name
-      },
-      quantity - 1
-    );
+    addItem({
+      _id: detailItem._id,
+      menuItemId: detailItem._id,
+      name: detailItem.name,
+      price: payload.unitPrice,
+      quantity: payload.quantity,
+      shopId: shop._id,
+      shopName: getShopName(),
+      selectedExtras: payload.selectedExtras,
+      cookingRequest: payload.cookingRequest
+    });
   };
 
   const itemCount = getItemCount();
@@ -624,9 +554,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                   quantity={quantity}
                   selectedCategory={selectedCategory}
                   getMenuImage={getMenuImage}
-                  handleIncrement={handleIncrement}
-                  handleDecrement={handleDecrement}
-                  setPreviewImage={setPreviewImage}
+                  onOpenDetail={(menuItem) => openProductDetail(menuItem, index)}
                   isFavorite={favoriteFoodItemIds.has(item._id)}
                   favoriteBusy={favoriteBusyId === item._id}
                   onToggleFavorite={toggleFavoriteFoodItem}
@@ -667,6 +595,14 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
           <Feather name="chevron-right" size={16} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      <ProductDetailSheet
+        visible={Boolean(detailItem)}
+        item={detailItem}
+        imageUri={detailItem ? getMenuImage(detailItem, detailImageIndex) : ""}
+        onClose={() => setDetailItem(null)}
+        onAdd={handleAddFromDetail}
+      />
 
       <Modal visible={Boolean(previewImage)} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
         <Pressable style={styles.imagePreviewOverlay} onPress={() => setPreviewImage(null)}>
@@ -1100,37 +1036,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between"
   },
-  stepper: {
-    flexDirection: "row",
-    alignItems: "center",
+  addPill: {
+    marginTop: "auto",
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: "#F1C3AA",
-    borderRadius: 999,
-    paddingHorizontal: 1,
-    height: 28,
-    marginTop: "auto"
+    backgroundColor: "#FFF7F2"
   },
-  stepperButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  stepperButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
+  addPillText: {
+    fontSize: 11,
+    fontWeight: "800",
     color: "#D76E35"
   },
-  stepperButtonDisabled: {
-    color: "#CFB8A8"
+  inCartBadge: {
+    marginTop: "auto",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#FFF1E6"
   },
-  stepperValue: {
-    minWidth: 20,
-    textAlign: "center",
-    fontSize: 12,
+  inCartBadgeText: {
+    fontSize: 10,
     fontWeight: "800",
-    color: "#201914"
+    color: "#C96C2F"
   },
   addButton: {
     flexDirection: "row",

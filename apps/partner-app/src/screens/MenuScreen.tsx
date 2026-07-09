@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  Pressable,
   TouchableOpacity,
   TextInput,
   Modal,
@@ -20,6 +21,11 @@ import api, { uploadMultipart } from "../api/client";
 import NotificationButton from "../components/NotificationButton";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 
+interface ExtraChoice {
+  name: string;
+  price: number;
+}
+
 interface MenuItem {
   _id: string;
   name: string;
@@ -30,6 +36,7 @@ interface MenuItem {
   isAvailable: boolean;
   isVegetarian?: boolean;
   preparationTime?: number;
+  extraChoices?: ExtraChoice[];
 }
 
 interface ApiResponse<T = any> {
@@ -138,6 +145,7 @@ export default function MenuScreen({ navigation }: any) {
     preparationTime: "",
     isAvailable: true
   });
+  const [extraChoices, setExtraChoices] = useState<ExtraChoice[]>([]);
 
   useEffect(() => {
     loadPartnerProfile();
@@ -253,6 +261,7 @@ export default function MenuScreen({ navigation }: any) {
       preparationTime: "",
       isAvailable: true
     });
+    setExtraChoices([]);
     setImageUri(null);
     setSelectedImageAsset(null);
   };
@@ -269,6 +278,7 @@ export default function MenuScreen({ navigation }: any) {
         preparationTime: item.preparationTime?.toString() || "",
         isAvailable: item.isAvailable
       });
+      setExtraChoices(item.extraChoices || []);
       setImageUri(item.imageUrl || null);
       setSelectedImageAsset(null);
     } else {
@@ -296,6 +306,13 @@ export default function MenuScreen({ navigation }: any) {
           : await uploadImageToCloudinary(selectedImageAsset || { uri: imageUri });
       }
 
+      const normalizedExtras = extraChoices
+        .map((choice) => ({
+          name: choice.name.trim(),
+          price: Number.isFinite(choice.price) ? Math.max(0, choice.price) : 0
+        }))
+        .filter((choice) => choice.name.length > 0);
+
       const menuData = {
         name: form.name.trim(),
         description: form.description.trim(),
@@ -304,7 +321,8 @@ export default function MenuScreen({ navigation }: any) {
         isVegetarian: form.isVegetarian,
         preparationTime: form.preparationTime ? parseInt(form.preparationTime, 10) : undefined,
         isAvailable: form.isAvailable,
-        imageUrl
+        imageUrl,
+        extraChoices: normalizedExtras
       };
 
       if (editingItem) {
@@ -514,16 +532,39 @@ export default function MenuScreen({ navigation }: any) {
 
       <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => !saving && setModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <ScrollView
-            contentContainerStyle={[
-              styles.modalScroll,
-              { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 18 }
-            ]}
-            keyboardShouldPersistTaps="handled"
-          >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => {
+              if (!saving) {
+                setModalVisible(false);
+                resetForm();
+              }
+            }}
+          />
+          <View style={[styles.modalSheetWrap, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 12 }]}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => {
+                    if (!saving) {
+                      setModalVisible(false);
+                      resetForm();
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  <Ionicons name="close" size={20} color="#5E7897" />
+                </TouchableOpacity>
+              </View>
 
+              <ScrollView
+                style={styles.modalBodyScroll}
+                contentContainerStyle={styles.modalBodyContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
               <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving || pickerBusy}>
                 {imageUri ? (
                   <>
@@ -612,6 +653,70 @@ export default function MenuScreen({ navigation }: any) {
                 <Switch value={form.isAvailable} onValueChange={(value) => setForm({ ...form, isAvailable: value })} disabled={saving} />
               </View>
 
+              <View style={styles.extrasSectionCard}>
+                <Text style={styles.modalLabel}>Extra choices (optional)</Text>
+                <Text style={styles.modalHint}>
+                  Add options like extra cheese or larger portion. These options show only for this item.
+                </Text>
+
+                {extraChoices.length === 0 ? (
+                  <View style={styles.emptyExtrasState}>
+                    <Ionicons name="list-outline" size={16} color="#7B8DA6" />
+                    <Text style={styles.emptyExtrasText}>No extra choices added yet</Text>
+                  </View>
+                ) : null}
+
+                {extraChoices.map((choice, index) => (
+                  <View key={`extra-${index}`} style={styles.extraChoiceRow}>
+                    <TextInput
+                      style={[styles.input, styles.extraChoiceNameInput]}
+                      placeholder="Choice name (e.g. Extra cheese)"
+                      placeholderTextColor="#98A2B3"
+                      value={choice.name}
+                      onChangeText={(text) => {
+                        const next = [...extraChoices];
+                        next[index] = { ...next[index], name: text };
+                        setExtraChoices(next);
+                      }}
+                      editable={!saving}
+                    />
+                    <TextInput
+                      style={[styles.input, styles.extraChoicePriceInput]}
+                      placeholder="+Rs"
+                      placeholderTextColor="#98A2B3"
+                      value={choice.price > 0 ? String(choice.price) : ""}
+                      onChangeText={(text) => {
+                        const next = [...extraChoices];
+                        next[index] = {
+                          ...next[index],
+                          price: text ? parseFloat(text.replace(/[^0-9.]/g, "")) || 0 : 0
+                        };
+                        setExtraChoices(next);
+                      }}
+                      keyboardType="decimal-pad"
+                      editable={!saving}
+                    />
+                    <TouchableOpacity
+                      style={styles.extraChoiceRemove}
+                      onPress={() => setExtraChoices(extraChoices.filter((_, rowIndex) => rowIndex !== index))}
+                      disabled={saving}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                <TouchableOpacity
+                  style={styles.addExtraChoiceButton}
+                  onPress={() => setExtraChoices([...extraChoices, { name: "", price: 0 }])}
+                  disabled={saving}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+                  <Text style={styles.addExtraChoiceText}>Add extra choice</Text>
+                </TouchableOpacity>
+              </View>
+              </ScrollView>
+
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={styles.cancelButton}
@@ -631,7 +736,7 @@ export default function MenuScreen({ navigation }: any) {
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
+          </View>
         </View>
       </Modal>
 
@@ -979,30 +1084,53 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)"
   },
-  modalScroll: {
-    flexGrow: 1,
-    justifyContent: "flex-start",
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject
+  },
+  modalSheetWrap: {
+    flex: 1,
+    justifyContent: "center",
     paddingHorizontal: 14
   },
   modalContent: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
-    padding: 14,
     borderWidth: 1,
-    borderColor: "#D9E6F7"
+    borderColor: "#D9E6F7",
+    maxHeight: "100%",
+    overflow: "hidden"
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E7EEF8"
+  },
+  modalCloseButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEF5FF"
+  },
+  modalBodyScroll: {
+    flex: 1
+  },
+  modalBodyContent: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8
   },
   modalTitle: {
     fontSize: 19,
     fontWeight: "800",
     color: "#143A66",
-    marginBottom: 12,
-    textAlign: "center"
-  },
-  modalHint: {
-    fontSize: 12,
-    color: "#5E7897",
-    textAlign: "center",
-    marginBottom: 12
+    textAlign: "left"
   },
   imagePicker: {
     minHeight: 78,
@@ -1067,6 +1195,66 @@ const styles = StyleSheet.create({
     color: "#486887",
     marginBottom: 8
   },
+  modalHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#7B8DA6",
+    marginBottom: 10
+  },
+  extraChoiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8
+  },
+  extraChoiceNameInput: {
+    flex: 1,
+    marginBottom: 0
+  },
+  extraChoicePriceInput: {
+    width: 88,
+    marginBottom: 0
+  },
+  extraChoiceRemove: {
+    width: 36,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  addExtraChoiceButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 14
+  },
+  addExtraChoiceText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2563EB"
+  },
+  extrasSectionCard: {
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    borderRadius: 14,
+    backgroundColor: "#F8FBFF",
+    padding: 12,
+    marginBottom: 8
+  },
+  emptyExtrasState: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EEF5FF",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10
+  },
+  emptyExtrasText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: "#5E7897",
+    fontWeight: "600"
+  },
   categoryWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1104,7 +1292,12 @@ const styles = StyleSheet.create({
   },
   modalButtons: {
     flexDirection: "row",
-    marginTop: 12
+    marginTop: 0,
+    borderTopWidth: 1,
+    borderTopColor: "#E7EEF8",
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14
   },
   cancelButton: {
     flex: 1,

@@ -11,19 +11,9 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useCart } from "../context/CartContext";
+import { useCart, type CartItem, type CartItemRef } from "../context/CartContext";
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
-
-interface CartItem {
-  _id?: string;
-  name: string;
-  price: number;
-  quantity: number;
-  shopId: string;
-  shopName: string;
-  menuItemId?: string;
-}
 
 const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
@@ -303,15 +293,22 @@ export default function CartScreen({ route, navigation }: any) {
   const canCheckout =
     Boolean(getSelectedAddress()) && !loading && !pricingLoading && items.length > 0;
 
-  const handleRemoveItem = (item: CartItem) => {
+  const handleRemoveItem = (item: CartItemRef) => {
       Alert.alert("Remove Item", "Remove this item from cart?", [
         { text: "Cancel", style: "cancel" },
         { text: "Remove", style: "destructive", onPress: () => removeItem(item) }
       ]);
   };
 
-  const handleQuantityChange = (item: CartItem, change: number) => {
-    const newQuantity = item.quantity + change;
+  const handleQuantityChange = (item: CartItemRef, change: number) => {
+    const cartLine = items.find(
+      (entry) =>
+        entry.shopId === item.shopId &&
+        (item.lineKey ? entry.lineKey === item.lineKey : (entry.menuItemId || entry.name) === (item.menuItemId || item.name))
+    );
+    if (!cartLine) return;
+
+    const newQuantity = cartLine.quantity + change;
     if (newQuantity > 0) {
       updateQuantity(item, newQuantity);
     } else {
@@ -372,23 +369,66 @@ export default function CartScreen({ route, navigation }: any) {
                 </View>
 
                 {group.items.map((item) => (
-                  <View key={`${item.shopId}-${item.menuItemId || item.name}`} style={styles.itemCard}>
+                  <View key={`${item.shopId}-${item.lineKey || item.menuItemId || item.name}`} style={styles.itemCard}>
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemName}>{item.name}</Text>
+                      {item.selectedExtras && item.selectedExtras.length > 0 ? (
+                        <Text style={styles.itemMeta}>
+                          {item.selectedExtras.map((extra) => extra.name).join(", ")}
+                        </Text>
+                      ) : null}
+                      {item.cookingRequest ? (
+                        <Text style={styles.itemMeta}>Note: {item.cookingRequest}</Text>
+                      ) : null}
                       <Text style={styles.itemPrice}>{formatAmount(item.price)} each</Text>
                     </View>
 
                     <View style={styles.itemActions}>
                       <View style={styles.quantityControls}>
-                        <TouchableOpacity style={styles.quantityButton} onPress={() => handleQuantityChange(item, -1)}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() =>
+                            handleQuantityChange(
+                              {
+                                shopId: item.shopId,
+                                menuItemId: item.menuItemId,
+                                name: item.name,
+                                lineKey: item.lineKey
+                              },
+                              -1
+                            )
+                          }
+                        >
                           <Text style={styles.quantityButtonText}>-</Text>
                         </TouchableOpacity>
                         <Text style={styles.quantityText}>{item.quantity}</Text>
-                        <TouchableOpacity style={styles.quantityButton} onPress={() => handleQuantityChange(item, 1)}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() =>
+                            handleQuantityChange(
+                              {
+                                shopId: item.shopId,
+                                menuItemId: item.menuItemId,
+                                name: item.name,
+                                lineKey: item.lineKey
+                              },
+                              1
+                            )
+                          }
+                        >
                           <Text style={styles.quantityButtonText}>+</Text>
                         </TouchableOpacity>
                       </View>
-                      <TouchableOpacity onPress={() => handleRemoveItem(item)}>
+                      <TouchableOpacity
+                        onPress={() =>
+                          handleRemoveItem({
+                            shopId: item.shopId,
+                            menuItemId: item.menuItemId,
+                            name: item.name,
+                            lineKey: item.lineKey
+                          })
+                        }
+                      >
                         <Text style={styles.removeButtonText}>Remove</Text>
                       </TouchableOpacity>
                     </View>
@@ -609,6 +649,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#2C2018",
+    marginBottom: 4
+  },
+  itemMeta: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: "#8B7E74",
     marginBottom: 4
   },
   itemPrice: {

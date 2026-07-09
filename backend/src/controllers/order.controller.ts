@@ -929,16 +929,36 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         return errorResponse(res, `Item "${item.name}" is currently unavailable`, 400);
       }
 
-      if (menuItem.price !== item.price) {
+      const selectedExtras = Array.isArray(item.selectedExtras) ? item.selectedExtras : [];
+      let expectedUnitPrice = menuItem.price;
+
+      for (const extra of selectedExtras) {
+        const validExtra = (menuItem.extraChoices || []).find(
+          (choice: { name: string; price: number }) => choice.name === extra.name
+        );
+
+        if (!validExtra) {
+          return errorResponse(res, `Invalid extra "${extra.name}" for "${item.name}"`, 400);
+        }
+
+        expectedUnitPrice += validExtra.price;
+      }
+
+      if (expectedUnitPrice !== item.price) {
         return errorResponse(res, `Price mismatch for "${item.name}"`, 400);
       }
 
-      itemTotal += menuItem.price * item.quantity;
+      itemTotal += expectedUnitPrice * item.quantity;
       validatedItems.push({
         menuItemId: menuItem._id,
         name: menuItem.name,
         quantity: item.quantity,
-        price: menuItem.price
+        price: expectedUnitPrice,
+        selectedExtras: selectedExtras.map((extra: { name: string; price: number }) => ({
+          name: extra.name,
+          price: extra.price
+        })),
+        cookingRequest: typeof item.cookingRequest === "string" ? item.cookingRequest.trim() : ""
       });
     }
 

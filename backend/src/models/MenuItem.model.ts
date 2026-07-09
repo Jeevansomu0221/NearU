@@ -50,6 +50,15 @@ const MenuItemSchema = new Schema(
       default: 4,
       min: 1,
       max: 5
+    },
+    extraChoices: {
+      type: [
+        {
+          name: { type: String, required: true, trim: true },
+          price: { type: Number, default: 0, min: 0 }
+        }
+      ],
+      default: []
     }
   },
   { timestamps: true }

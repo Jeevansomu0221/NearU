@@ -8,18 +8,32 @@ const TOKEN_STORAGE_KEY = "notification:fcmToken:customer";
 
 let messagingModule: any | null | undefined;
 let didSetBackgroundHandler = false;
+let messagingPackage: any | null | undefined;
+
+const getMessagingPackage = () => {
+  if (messagingPackage !== undefined) return messagingPackage;
+
+  try {
+    messagingPackage = require("@react-native-firebase/messaging");
+    return messagingPackage;
+  } catch (error: any) {
+    console.log("Firebase Messaging native module is not ready. Rebuild the native app to enable push notifications.", error?.message || error);
+    messagingPackage = null;
+    return null;
+  }
+};
 
 const getMessagingModule = () => {
   if (messagingModule !== undefined) return messagingModule;
 
-  try {
-    messagingModule = require("@react-native-firebase/messaging").default;
-    return messagingModule;
-  } catch (error: any) {
-    console.log("Firebase Messaging native module is not ready. Rebuild the native app to enable push notifications.", error?.message || error);
+  const pkg = getMessagingPackage();
+  if (!pkg) {
     messagingModule = null;
     return null;
   }
+
+  messagingModule = pkg.default;
+  return messagingModule;
 };
 
 const getMessaging = () => {
@@ -66,7 +80,11 @@ const hasNotificationPermission = async () => {
   if (!androidPermission) return false;
   if (Platform.OS === "android") return true;
 
-  const status = await messaging.requestPermission();
+  const messagingPkg = getMessagingPackage();
+  const status =
+    typeof messagingPkg?.requestPermission === "function"
+      ? await messagingPkg.requestPermission(messaging)
+      : await messaging.requestPermission();
   return (
     status === messagingModule.AuthorizationStatus.AUTHORIZED ||
     status === messagingModule.AuthorizationStatus.PROVISIONAL
@@ -126,7 +144,11 @@ export const registerForPushNotifications = async () => {
     await messaging.registerDeviceForRemoteMessages();
   }
 
-  const fcmToken = await messaging.getToken();
+  const messagingPkg = getMessagingPackage();
+  const fcmToken =
+    typeof messagingPkg?.getToken === "function"
+      ? await messagingPkg.getToken(messaging)
+      : await messaging.getToken();
   await postToken(fcmToken);
 };
 

@@ -804,7 +804,6 @@ export default function ProfileScreen({ navigation }: any) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
     return { latitude: lat, longitude: lng };
   })();
-  const activeShopLocation = capturedLocation || savedShopLocation;
 
   const renderSectionHeader = (title: string, hint?: string, action?: React.ReactNode) => (
     <View style={styles.sectionHeader}>
@@ -1402,24 +1401,27 @@ export default function ProfileScreen({ navigation }: any) {
           editable={addressEditing}
         />
 
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Shop GPS pin</Text>
+        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Shop location</Text>
         <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>
-          Stand inside your shop and tap Mark my location. Riders and nearby delivery use this latitude and longitude.
+          Stand inside your shop and tap Mark my location. Riders use this pin for pickup and delivery.
         </Text>
-        {activeShopLocation ? (
+        {capturedLocation ? (
           <View style={[styles.locationPinCard, isDarkMode && styles.surfaceDark]}>
-            <Ionicons name="location" size={18} color="#0E8A4A" />
+            <Ionicons name="location" size={18} color="#1D4E89" />
             <View style={styles.locationPinCopy}>
-              <Text style={[styles.locationPinTitle, isDarkMode && styles.textDark]}>
-                {capturedLocation ? "New location captured" : "Location on file"}
-              </Text>
-              <Text style={[styles.locationPinCoords, isDarkMode && styles.mutedTextDark]}>
-                {activeShopLocation.latitude.toFixed(6)}, {activeShopLocation.longitude.toFixed(6)}
-              </Text>
+              <Text style={[styles.locationPinTitle, isDarkMode && styles.textDark]}>New location captured</Text>
+              <Text style={[styles.locationPinSubtitle, isDarkMode && styles.mutedTextDark]}>Tap Save location to apply.</Text>
+            </View>
+          </View>
+        ) : savedShopLocation ? (
+          <View style={[styles.locationPinCard, isDarkMode && styles.surfaceDark]}>
+            <Ionicons name="checkmark-circle" size={18} color="#0E8A4A" />
+            <View style={styles.locationPinCopy}>
+              <Text style={[styles.locationPinTitle, isDarkMode && styles.textDark]}>Location saved</Text>
             </View>
           </View>
         ) : (
-          <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>No GPS pin saved yet.</Text>
+          <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>No location saved yet.</Text>
         )}
         <TouchableOpacity
           style={[styles.secondaryButton, isDarkMode && styles.secondaryButtonDark]}
@@ -1430,7 +1432,7 @@ export default function ProfileScreen({ navigation }: any) {
             <ActivityIndicator color="#60A5FA" />
           ) : (
             <Text style={styles.secondaryButtonText}>
-              {activeShopLocation ? "Re-mark my location" : "Mark my location"}
+              {savedShopLocation || capturedLocation ? "Re-mark my location" : "Mark my location"}
             </Text>
           )}
         </TouchableOpacity>
@@ -2324,11 +2326,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#143A66"
   },
-  locationPinCoords: {
+  locationPinSubtitle: {
     marginTop: 4,
     fontSize: 12,
     color: "#486887",
-    fontWeight: "700"
+    fontWeight: "600"
   },
   secondaryButton: {
     marginTop: 10,
