@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  TextInput
+  TextInput,
+  InteractionManager
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
@@ -81,6 +82,7 @@ export default function PaymentScreen({ route, navigation }: any) {
   const { items, clear } = useCart();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH_ON_DELIVERY");
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
   const [showUpiPicker, setShowUpiPicker] = useState(false);
@@ -270,7 +272,7 @@ export default function PaymentScreen({ route, navigation }: any) {
     return createdOrders;
   };
 
-  const placeOnlineOrders = async (upiApp: UpiApp) => {
+  const placeOnlineOrders = async (upiApp: UpiApp, onStage?: (stage: string) => void) => {
     const paidOrders = [];
     let pendingOnlineOrders: any[] = [];
     const orderDeliveryLocation = await getDeliveryPin();
@@ -291,6 +293,7 @@ export default function PaymentScreen({ route, navigation }: any) {
     };
 
     for (const [index, group] of groupedShops.entries()) {
+      onStage?.("Creating order...");
       const createdOrder = await createOrderForGroup(
         group,
         "RAZORPAY",
@@ -301,6 +304,7 @@ export default function PaymentScreen({ route, navigation }: any) {
       pendingOnlineOrders.push(createdOrder);
 
       try {
+        onStage?.("Starting payment...");
         const paymentOrderResponse = await createRazorpayOrder({ orderId: createdOrder._id });
 
         if (!paymentOrderResponse.success || !paymentOrderResponse.data) {
@@ -314,16 +318,23 @@ export default function PaymentScreen({ route, navigation }: any) {
 
         let paymentResult: any;
         try {
-          paymentResult = await openUpiIntentPayment({
-            keyId: paymentOrder.keyId,
-            amountPaise: paymentOrder.amount,
-            orderId: createdOrder._id,
-            razorpayOrderId: paymentOrder.id,
-            description: `Order from ${group.shopName}`,
-            customerName: userProfile.name,
-            customerPhone: userProfile.phone,
-            customerEmail: userProfile.email,
-            upiApp
+          onStage?.(`Opening ${upiApp.name}...`);
+          paymentResult = await new Promise<any>((resolve, reject) => {
+            InteractionManager.runAfterInteractions(() => {
+              openUpiIntentPayment({
+                keyId: paymentOrder.keyId,
+                amountPaise: paymentOrder.amount,
+                orderId: createdOrder._id,
+                razorpayOrderId: paymentOrder.id,
+                description: `Order from ${group.shopName}`,
+                customerName: userProfile.name,
+                customerPhone: userProfile.phone,
+                customerEmail: userProfile.email,
+                upiApp
+              })
+                .then(resolve)
+                .catch(reject);
+            });
           });
         } catch (paymentError: any) {
           throw new OnlinePaymentFailedError(getOnlinePaymentFailureMessage(paymentError));
@@ -333,6 +344,7 @@ export default function PaymentScreen({ route, navigation }: any) {
           throw new OnlinePaymentFailedError("Payment was not completed. Please try again or switch to Cash on Delivery.");
         }
 
+        onStage?.("Verifying payment...");
         const verifyResponse = await verifyPayment({
           orderId: createdOrder._id,
           razorpay_order_id: paymentResult.razorpay_order_id,
@@ -426,9 +438,10 @@ export default function PaymentScreen({ route, navigation }: any) {
       }
 
       setLoading(true);
+      setLoadingStage(paymentMethod === "RAZORPAY" ? "Preparing payment..." : "Placing order...");
 
       if (paymentMethod === "RAZORPAY") {
-        const paidOrders = await placeOnlineOrders(checkoutUpiApp!);
+        const paidOrders = await placeOnlineOrders(checkoutUpiApp!, setLoadingStage);
         handleSuccessfulCheckout(paidOrders);
       } else {
         const createdOrders = await placeOrders("CASH_ON_DELIVERY");
@@ -459,6 +472,7 @@ export default function PaymentScreen({ route, navigation }: any) {
       Alert.alert("Order Failed", errorMessage);
     } finally {
       setLoading(false);
+      setLoadingStage("");
     }
   };
 
@@ -692,7 +706,10 @@ export default function PaymentScreen({ route, navigation }: any) {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <View style={styles.payButtonLoading}>
+              <ActivityIndicator color="#FFFFFF" />
+              {loadingStage ? <Text style={styles.payButtonLoadingText}>{loadingStage}</Text> : null}
+            </View>
           ) : (
             <View style={styles.payButtonInner}>
               <View style={styles.payButtonAmountBlock}>
@@ -1176,6 +1193,16 @@ const styles = StyleSheet.create({
   },
   payButtonDisabled: {
     backgroundColor: "#FFB08F"
+  },
+  payButtonLoading: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6
+  },
+  payButtonLoadingText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700"
   },
   payButtonText: {
     color: "#FFFFFF",

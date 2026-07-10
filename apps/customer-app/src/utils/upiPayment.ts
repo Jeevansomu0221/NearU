@@ -122,19 +122,22 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 };
 
 let razorpayCustomInitKey: string | null = null;
-let razorpayCustomInitPromise: Promise<void> | null = null;
 
-const ensureRazorpayCustomInitialized = async (keyId: string) => {
+const tryInitializeRazorpayCustom = async (keyId: string) => {
   if (!hasCustomRazorpayModule()) return;
 
-  if (razorpayCustomInitKey === keyId && razorpayCustomInitPromise) {
-    await razorpayCustomInitPromise;
-    return;
-  }
+  if (razorpayCustomInitKey === keyId) return;
 
-  razorpayCustomInitKey = keyId;
-  razorpayCustomInitPromise = RazorpayCustom.initRazorpay(keyId);
-  await razorpayCustomInitPromise;
+  try {
+    await withTimeout(
+      RazorpayCustom.initRazorpay(keyId),
+      5000,
+      "Razorpay initialization timed out."
+    );
+    razorpayCustomInitKey = keyId;
+  } catch (error) {
+    console.warn("[upiPayment] Razorpay custom init skipped:", error);
+  }
 };
 
 const detectUpiAppsOnce = async (): Promise<UpiApp[]> => {
@@ -200,10 +203,9 @@ export const resolvePreferredUpiApp = async (apps: UpiApp[]) => {
   if (saved) {
     const matched = apps.find((app) => app.packageName === saved.packageName || app.id === saved.id);
     if (matched) return matched;
-    return saved;
   }
 
-  return apps[0] || null;
+  return apps.find((app) => app.source === "detected") || apps[0] || null;
 };
 
 export type UpiIntentPaymentInput = {
@@ -280,28 +282,43 @@ const openStandardUpiCheckout = async (input: UpiIntentPaymentInput): Promise<Up
   return normalizePaymentSuccess(result as unknown as Record<string, string>, input.razorpayOrderId);
 };
 
-const resolvePaymentUpiApp = async (selected?: UpiApp | null) => {
+const resolvePaymentUpiApp = async (selected?: UpiApp | null): Promise<UpiApp> => {
   if (!selected?.packageName) {
     throw new Error("Please choose a UPI app before paying.");
   }
 
-  const apps = await getInstalledUpiApps();
-  const matched = apps.find(
-    (app) =>
-      app.packageName === selected.packageName ||
-      app.id === selected.id ||
-      app.name.toLowerCase() === selected.name.toLowerCase()
-  );
+  if (selected.source === "detected") {
+    return selected;
+  }
 
-  return matched || selected;
+  try {
+    const detected = await withTimeout(
+      detectUpiAppsOnce(),
+      10000,
+      "Timed out while detecting UPI apps."
+    );
+    const matched = detected.find(
+      (app) =>
+        app.packageName === selected.packageName ||
+        app.id === selected.id ||
+        app.name.toLowerCase() === selected.name.toLowerCase()
+    );
+    if (matched) {
+      return matched;
+    }
+  } catch (error) {
+    console.warn("[upiPayment] Could not refresh detected UPI apps:", error);
+  }
+
+  throw new Error(
+    `${selected.name} is not available for payment on this phone. Choose Google Pay, PhonePe, or Paytm.`
+  );
 };
 
 const openCustomUpiIntent = async (input: UpiIntentPaymentInput, upiApp: UpiApp): Promise<UpiIntentPaymentResult> => {
   if (!hasCustomRazorpayModule()) {
     throw new Error("CUSTOM_RAZORPAY_UNAVAILABLE");
   }
-
-  await ensureRazorpayCustomInitialized(input.keyId);
 
   const contact = formatRazorpayContact(input.customerPhone);
   const options: Record<string, string | number> = {
@@ -317,10 +334,13 @@ const openCustomUpiIntent = async (input: UpiIntentPaymentInput, upiApp: UpiApp)
 
   if (contact) options.contact = contact;
   if (input.customerEmail) options.email = input.customerEmail;
+  if (input.customerName) options.name = input.customerName;
+
+  void tryInitializeRazorpayCustom(input.keyId);
 
   const result = (await withTimeout(
     RazorpayCustom.open(options),
-    180000,
+    120000,
     "Payment timed out. Complete payment in your UPI app or try again."
   )) as Record<string, string>;
 
@@ -369,8 +389,10 @@ export const openUpiIntentPayment = async (input: UpiIntentPaymentInput): Promis
 
 export const prepareCheckoutUpiSelection = async () => {
   const apps = await getInstalledUpiApps();
-  const selected = await resolvePreferredUpiApp(apps);
-  return { apps, selected };
+  const detectedApps = apps.filter((app) => app.source === "detected");
+  const checkoutApps = detectedApps.length > 0 ? detectedApps : apps;
+  const selected = await resolvePreferredUpiApp(checkoutApps);
+  return { apps: checkoutApps, selected };
 };
 
 export const describeRazorpayPaymentError = (error: unknown) => {

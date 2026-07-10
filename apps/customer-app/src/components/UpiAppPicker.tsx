@@ -37,8 +37,10 @@ export default function UpiAppPicker({
   onClose,
   onSelect
 }: Props) {
-  const recommendedApps = apps.slice(0, 4);
-  const otherApps = apps.slice(4);
+  const detectedApps = apps.filter((app) => app.source === "detected");
+  const selectableApps = detectedApps.length > 0 ? detectedApps : apps;
+  const recommendedApps = selectableApps.slice(0, 4);
+  const otherApps = selectableApps.slice(4);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -56,7 +58,7 @@ export default function UpiAppPicker({
               <ActivityIndicator color="#FF6B35" />
               <Text style={styles.loadingText}>Finding UPI apps on your phone...</Text>
             </View>
-          ) : apps.length === 0 ? (
+          ) : selectableApps.length === 0 ? (
             <View style={styles.loadingState}>
               <Text style={styles.emptyTitle}>No UPI apps found</Text>
               <Text style={styles.emptyText}>
@@ -65,6 +67,11 @@ export default function UpiAppPicker({
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.listContent}>
+              {detectedApps.length === 0 ? (
+                <Text style={styles.detectedHint}>
+                  We could not verify installed UPI apps. Try Google Pay, PhonePe, or Paytm.
+                </Text>
+              ) : null}
               {recommendedApps.length > 0 ? (
                 <View style={styles.section}>
                   <Text style={styles.sectionLabel}>Recommended</Text>
@@ -168,6 +175,12 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 12
+  },
+  detectedHint: {
+    marginBottom: 10,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#8B6A54"
   },
   section: {
     backgroundColor: "#FFFFFF",
