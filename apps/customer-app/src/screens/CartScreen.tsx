@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ const formatAmount = (value = 0) => {
 };
 
 const MAX_PIN_DRIFT_KM = 5;
+const LOCATION_CACHE_MS = 2 * 60 * 1000;
+const LAST_KNOWN_MAX_AGE_MS = 5 * 60 * 1000;
 
 const haversineKmClient = (
   a: { latitude: number; longitude: number },
@@ -48,13 +50,19 @@ export default function CartScreen({ route, navigation }: any) {
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const insets = useSafeAreaInsets();
+  const hasProfileRef = useRef(false);
+  const locationCacheRef = useRef<{ location: { latitude: number; longitude: number }; at: number } | null>(null);
 
   const loadUserProfile = useCallback(async () => {
     try {
-      setLoadingProfile(true);
+      // Full-screen loader only on the first load; focus refreshes are silent.
+      if (!hasProfileRef.current) {
+        setLoadingProfile(true);
+      }
       const response = await getUserProfile();
       if (response.success && response.data) {
         setUserProfile(response.data);
+        hasProfileRef.current = true;
       }
     } catch (error) {
       console.error("CartScreen: Error loading profile:", error);
@@ -252,18 +260,42 @@ export default function CartScreen({ route, navigation }: any) {
     }
   };
 
+  const readDeviceLocationFast = async () => {
+    // Last-known position returns instantly; a fresh GPS fix can take 10+ seconds.
+    try {
+      const lastKnown = await Location.getLastKnownPositionAsync({
+        maxAge: LAST_KNOWN_MAX_AGE_MS
+      });
+      if (lastKnown) {
+        return {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude
+        };
+      }
+    } catch {
+      // Ignore and fall through to a fresh fix.
+    }
+
+    const device = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced
+    });
+    return {
+      latitude: device.coords.latitude,
+      longitude: device.coords.longitude
+    };
+  };
+
   const resolveDeliveryLocationForPricing = useCallback(async () => {
+    const cached = locationCacheRef.current;
+    if (cached && Date.now() - cached.at < LOCATION_CACHE_MS) {
+      return cached.location;
+    }
+
     const permission = await Location.requestForegroundPermissionsAsync();
 
     if (permission.status === "granted") {
       try {
-        const device = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced
-        });
-        const deviceLocation = {
-          latitude: device.coords.latitude,
-          longitude: device.coords.longitude
-        };
+        const deviceLocation = await readDeviceLocationFast();
 
         const saved = getDeliveryLocation();
         if (saved) {
@@ -273,6 +305,7 @@ export default function CartScreen({ route, navigation }: any) {
           }
         }
 
+        locationCacheRef.current = { location: deviceLocation, at: Date.now() };
         return deviceLocation;
       } catch {
         // Fall back to saved pin when GPS read fails.
@@ -390,13 +423,13 @@ export default function CartScreen({ route, navigation }: any) {
   };
 
   const hasAddressPin = Boolean(getDeliveryLocation());
-  const isPricingPending = pricingLoading || locationResolving;
+  // Show the spinner only while we have no fee yet; silent refreshes keep the old fee visible.
+  const isPricingPending = (pricingLoading || locationResolving) && !pricingQuote;
   const canCheckout =
     Boolean(getSelectedAddress()) &&
     Boolean(pricingQuote) &&
     !pricingError &&
     !loading &&
-    !isPricingPending &&
     items.length > 0;
 
   const handleRemoveItem = (item: CartItemRef) => {

@@ -84,7 +84,22 @@ const mergeUpiApps = (...groups: UpiApp[][]) => {
 
   groups.flat().forEach((app) => {
     const existing = merged.get(app.packageName);
-    merged.set(app.packageName, existing ? { ...existing, ...app, name: app.name || existing.name, source: app.source || existing.source } : app);
+    if (!existing) {
+      merged.set(app.packageName, app);
+      return;
+    }
+
+    // Never downgrade a detected app back to fallback when merging lists.
+    const source: UpiApp["source"] =
+      existing.source === "detected" || app.source === "detected" ? "detected" : app.source || existing.source;
+
+    merged.set(app.packageName, {
+      ...existing,
+      ...app,
+      name: app.name || existing.name,
+      iconUrl: app.iconUrl || existing.iconUrl,
+      source
+    });
   });
 
   return sortUpiApps(Array.from(merged.values()));
@@ -121,25 +136,6 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMes
   }
 };
 
-let razorpayCustomInitKey: string | null = null;
-
-const tryInitializeRazorpayCustom = async (keyId: string) => {
-  if (!hasCustomRazorpayModule()) return;
-
-  if (razorpayCustomInitKey === keyId) return;
-
-  try {
-    await withTimeout(
-      RazorpayCustom.initRazorpay(keyId),
-      5000,
-      "Razorpay initialization timed out."
-    );
-    razorpayCustomInitKey = keyId;
-  } catch (error) {
-    console.warn("[upiPayment] Razorpay custom init skipped:", error);
-  }
-};
-
 const detectUpiAppsOnce = async (): Promise<UpiApp[]> => {
   const payload = await withTimeout(
     RazorpayCustom.getAppsWhichSupportUPI(),
@@ -149,23 +145,35 @@ const detectUpiAppsOnce = async (): Promise<UpiApp[]> => {
   return parseUpiAppsResponse(payload);
 };
 
-let upiDetectionQueue = Promise.resolve();
+const DETECTION_CACHE_MS = 5 * 60 * 1000;
+let cachedDetection: { apps: UpiApp[]; at: number } | null = null;
+let upiDetectionQueue = Promise.resolve<UpiApp[]>([]);
 
 const runUpiDetection = async () => {
+  if (cachedDetection && Date.now() - cachedDetection.at < DETECTION_CACHE_MS) {
+    return cachedDetection.apps;
+  }
+
   upiDetectionQueue = upiDetectionQueue.then(async () => {
+    if (cachedDetection && Date.now() - cachedDetection.at < DETECTION_CACHE_MS) {
+      return cachedDetection.apps;
+    }
+
     let lastError: unknown;
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const detected = await detectUpiAppsOnce();
         if (detected.length > 0) {
-          return mergeUpiApps(detected, KNOWN_UPI_APPS);
+          const apps = mergeUpiApps(KNOWN_UPI_APPS, detected);
+          cachedDetection = { apps, at: Date.now() };
+          return apps;
         }
       } catch (error) {
         lastError = error;
       }
 
-      if (attempt < 2) {
+      if (attempt < 1) {
         await sleep(350);
       }
     }
@@ -255,12 +263,11 @@ const openStandardUpiCheckout = async (input: UpiIntentPaymentInput): Promise<Up
     throw new Error("STANDARD_RAZORPAY_UNAVAILABLE");
   }
 
-  const contact = formatRazorpayContact(input.customerPhone);
-  const prefill: { name?: string; email?: string; contact?: string } = {};
+  const contact = formatRazorpayContact(input.customerPhone) || "9999999999";
+  const email = isValidEmail(input.customerEmail) ? String(input.customerEmail).trim() : `${contact}@vyaha.app`;
+  const prefill: { name?: string; email?: string; contact?: string } = { email, contact };
 
   if (input.customerName) prefill.name = input.customerName;
-  if (input.customerEmail) prefill.email = input.customerEmail;
-  if (contact) prefill.contact = contact;
 
   const result = await RazorpayCheckout.open({
     key: input.keyId,
@@ -315,28 +322,30 @@ const resolvePaymentUpiApp = async (selected?: UpiApp | null): Promise<UpiApp> =
   );
 };
 
+const isValidEmail = (value?: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+
 const openCustomUpiIntent = async (input: UpiIntentPaymentInput, upiApp: UpiApp): Promise<UpiIntentPaymentResult> => {
   if (!hasCustomRazorpayModule()) {
     throw new Error("CUSTOM_RAZORPAY_UNAVAILABLE");
   }
 
-  const contact = formatRazorpayContact(input.customerPhone);
+  // Razorpay's payment-create API requires contact and email; missing either
+  // fails the payment instantly before the UPI app can open.
+  const contact = formatRazorpayContact(input.customerPhone) || "9999999999";
+  const email = isValidEmail(input.customerEmail) ? String(input.customerEmail).trim() : `${contact}@vyaha.app`;
+
   const options: Record<string, string | number> = {
     description: input.description,
     currency: "INR",
     key_id: input.keyId,
     amount: String(input.amountPaise),
     order_id: input.razorpayOrderId,
+    contact,
+    email,
     method: "upi",
     upi_app_package_name: upiApp.packageName,
     "_[flow]": "intent"
   };
-
-  if (contact) options.contact = contact;
-  if (input.customerEmail) options.email = input.customerEmail;
-  if (input.customerName) options.name = input.customerName;
-
-  void tryInitializeRazorpayCustom(input.keyId);
 
   const result = (await withTimeout(
     RazorpayCustom.open(options),

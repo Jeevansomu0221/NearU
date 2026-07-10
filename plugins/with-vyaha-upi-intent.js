@@ -74,6 +74,28 @@ const ensureAndroidQueries = (manifest) => {
   });
 
   queriesNode.package = packages;
+
+  // Intent-based visibility: lets PackageManager list EVERY app that handles
+  // upi://pay (required on Android 11+ so Razorpay can detect all UPI apps,
+  // not just the packages declared above).
+  if (!queriesNode.intent) {
+    queriesNode.intent = [];
+  }
+  const intents = Array.isArray(queriesNode.intent) ? queriesNode.intent : [queriesNode.intent];
+  const hasUpiIntent = intents.some((intent) =>
+    (Array.isArray(intent?.data) ? intent.data : [intent?.data])
+      .filter(Boolean)
+      .some((data) => data.$?.["android:scheme"] === "upi")
+  );
+
+  if (!hasUpiIntent) {
+    intents.push({
+      action: [{ $: { "android:name": "android.intent.action.VIEW" } }],
+      data: [{ $: { "android:scheme": "upi", "android:host": "pay" } }]
+    });
+  }
+
+  queriesNode.intent = intents;
   manifest.queries = [queriesNode];
 };
 
