@@ -121,7 +121,21 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMes
   }
 };
 
-let upiDetectionQueue = Promise.resolve();
+let razorpayCustomInitKey: string | null = null;
+let razorpayCustomInitPromise: Promise<void> | null = null;
+
+const ensureRazorpayCustomInitialized = async (keyId: string) => {
+  if (!hasCustomRazorpayModule()) return;
+
+  if (razorpayCustomInitKey === keyId && razorpayCustomInitPromise) {
+    await razorpayCustomInitPromise;
+    return;
+  }
+
+  razorpayCustomInitKey = keyId;
+  razorpayCustomInitPromise = RazorpayCustom.initRazorpay(keyId);
+  await razorpayCustomInitPromise;
+};
 
 const detectUpiAppsOnce = async (): Promise<UpiApp[]> => {
   const payload = await withTimeout(
@@ -131,6 +145,8 @@ const detectUpiAppsOnce = async (): Promise<UpiApp[]> => {
   );
   return parseUpiAppsResponse(payload);
 };
+
+let upiDetectionQueue = Promise.resolve();
 
 const runUpiDetection = async () => {
   upiDetectionQueue = upiDetectionQueue.then(async () => {
@@ -285,6 +301,8 @@ const openCustomUpiIntent = async (input: UpiIntentPaymentInput, upiApp: UpiApp)
     throw new Error("CUSTOM_RAZORPAY_UNAVAILABLE");
   }
 
+  await ensureRazorpayCustomInitialized(input.keyId);
+
   const contact = formatRazorpayContact(input.customerPhone);
   const options: Record<string, string | number> = {
     description: input.description,
@@ -312,6 +330,19 @@ const openCustomUpiIntent = async (input: UpiIntentPaymentInput, upiApp: UpiApp)
 export const openUpiIntentPayment = async (input: UpiIntentPaymentInput): Promise<UpiIntentPaymentResult> => {
   if (input.upiApp) {
     await savePreferredUpiApp(input.upiApp);
+  }
+
+  if (input.upiApp && hasCustomRazorpayModule()) {
+    try {
+      const upiApp = await resolvePaymentUpiApp(input.upiApp);
+      return await openCustomUpiIntent(input, upiApp);
+    } catch (error) {
+      const message = describeRazorpayPaymentError(error);
+      if (message.toLowerCase().includes("cancel")) {
+        throw error;
+      }
+      console.warn("[upiPayment] Custom UPI intent failed, trying standard checkout:", error);
+    }
   }
 
   if (hasStandardRazorpayModule()) {

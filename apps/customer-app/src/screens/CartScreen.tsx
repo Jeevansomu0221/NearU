@@ -44,6 +44,8 @@ export default function CartScreen({ route, navigation }: any) {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [pricingQuote, setPricingQuote] = useState<OrderPricingQuote | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
+  const [locationResolving, setLocationResolving] = useState(false);
+  const [pricingError, setPricingError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const insets = useSafeAreaInsets();
 
@@ -64,11 +66,6 @@ export default function CartScreen({ route, navigation }: any) {
   useEffect(() => {
     loadUserProfile();
   }, [loadUserProfile]);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", loadUserProfile);
-    return unsubscribe;
-  }, [navigation, loadUserProfile]);
 
   const groupedItems = useMemo(() => {
     const groups = new Map<string, { shopId: string; shopName: string; items: CartItem[] }>();
@@ -154,11 +151,13 @@ export default function CartScreen({ route, navigation }: any) {
     ) => {
       if (groupedItems.length === 0) {
         setPricingQuote(null);
+        setPricingError(null);
         return null;
       }
 
       try {
         setPricingLoading(true);
+        setPricingError(null);
         const response = await quoteOrderPricing(
           groupedItems.map((group) => ({
             partnerId: group.shopId,
@@ -175,8 +174,10 @@ export default function CartScreen({ route, navigation }: any) {
         return response.data;
       } catch (error: any) {
         setPricingQuote(null);
+        const message = error.message || "Could not calculate delivery fee.";
+        setPricingError(message);
         if (options?.showAlert) {
-          Alert.alert("Pricing Error", error.message || "Could not calculate delivery fee.");
+          Alert.alert("Pricing Error", message);
         }
         return null;
       } finally {
@@ -229,42 +230,9 @@ export default function CartScreen({ route, navigation }: any) {
     return deliveryLocation;
   };
 
-  const resolveDeliveryLocationForPricing = useCallback(async () => {
-    const permission = await Location.requestForegroundPermissionsAsync();
-
-    let deviceLocation: { latitude: number; longitude: number } | undefined;
-    if (permission.status === "granted") {
-      try {
-        const device = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced
-        });
-        deviceLocation = {
-          latitude: device.coords.latitude,
-          longitude: device.coords.longitude
-        };
-      } catch {
-        // Fall back to saved pin when GPS read fails.
-      }
-    }
-
-    const saved = getDeliveryLocation();
-    if (!saved) {
-      return deviceLocation || (await captureAndSaveDeliveryLocation());
-    }
-
-    if (!deviceLocation) {
-      return saved;
-    }
-
-    const driftKm = haversineKmClient(saved, deviceLocation);
-    if (driftKm <= MAX_PIN_DRIFT_KM) {
-      return saved;
-    }
-
+  const refreshSavedPinInBackground = async (deviceLocation: { latitude: number; longitude: number }) => {
     const address = getSelectedAddress();
-    if (!address || typeof address === "string") {
-      return deviceLocation;
-    }
+    if (!address || typeof address === "string") return;
 
     try {
       const payload: SavedAddress = {
@@ -280,38 +248,80 @@ export default function CartScreen({ route, navigation }: any) {
         setUserProfile(response.data);
       }
     } catch {
-      // Use current device location for pricing even if profile save fails.
+      // Non-blocking background refresh.
+    }
+  };
+
+  const resolveDeliveryLocationForPricing = useCallback(async () => {
+    const permission = await Location.requestForegroundPermissionsAsync();
+
+    if (permission.status === "granted") {
+      try {
+        const device = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced
+        });
+        const deviceLocation = {
+          latitude: device.coords.latitude,
+          longitude: device.coords.longitude
+        };
+
+        const saved = getDeliveryLocation();
+        if (saved) {
+          const driftKm = haversineKmClient(saved, deviceLocation);
+          if (driftKm > MAX_PIN_DRIFT_KM) {
+            void refreshSavedPinInBackground(deviceLocation);
+          }
+        }
+
+        return deviceLocation;
+      } catch {
+        // Fall back to saved pin when GPS read fails.
+      }
     }
 
-    return deviceLocation;
+    const saved = getDeliveryLocation();
+    if (saved) {
+      return saved;
+    }
+
+    return captureAndSaveDeliveryLocation();
   }, [userProfile]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadDeliveryPricing = useCallback(async () => {
+    if (groupedItems.length === 0) {
+      setPricingQuote(null);
+      setPricingError(null);
+      return;
+    }
 
-    (async () => {
-      if (groupedItems.length === 0) {
-        setPricingQuote(null);
-        return;
-      }
+    setLocationResolving(true);
+    setPricingError(null);
 
+    try {
       const deliveryLocation = await resolveDeliveryLocationForPricing();
-      if (cancelled) {
-        return;
-      }
-
       if (!deliveryLocation) {
         setPricingQuote(null);
+        setPricingError("Allow location access to calculate delivery fee.");
         return;
       }
 
-      fetchPricingQuote(deliveryLocation);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+      await fetchPricingQuote(deliveryLocation);
+    } finally {
+      setLocationResolving(false);
+    }
   }, [fetchPricingQuote, groupedItems.length, resolveDeliveryLocationForPricing]);
+
+  useEffect(() => {
+    void loadDeliveryPricing();
+  }, [loadDeliveryPricing]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      loadUserProfile();
+      void loadDeliveryPricing();
+    });
+    return unsubscribe;
+  }, [navigation, loadUserProfile, loadDeliveryPricing]);
 
   const proceedToPayment = async () => {
     try {
@@ -380,8 +390,14 @@ export default function CartScreen({ route, navigation }: any) {
   };
 
   const hasAddressPin = Boolean(getDeliveryLocation());
+  const isPricingPending = pricingLoading || locationResolving;
   const canCheckout =
-    Boolean(getSelectedAddress()) && !loading && !pricingLoading && items.length > 0;
+    Boolean(getSelectedAddress()) &&
+    Boolean(pricingQuote) &&
+    !pricingError &&
+    !loading &&
+    !isPricingPending &&
+    items.length > 0;
 
   const handleRemoveItem = (item: CartItemRef) => {
       Alert.alert("Remove Item", "Remove this item from cart?", [
@@ -566,11 +582,27 @@ export default function CartScreen({ route, navigation }: any) {
                 <Text style={styles.summaryValue}>{formatAmount(subtotal)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Delivery Fee ({pricingQuote?.deliveryDistanceKm ? `${pricingQuote.deliveryDistanceKm} km` : "distance based"})</Text>
-                <Text style={styles.summaryValue}>
-                  {pricingLoading ? "Calculating..." : pricingQuote ? formatAmount(deliveryFee) : "After GPS pin"}
+                <Text style={styles.summaryLabel}>
+                  {pricingQuote?.deliveryDistanceKm
+                    ? `Delivery Fee (${pricingQuote.deliveryDistanceKm} km)`
+                    : "Delivery Fee"}
                 </Text>
+                {isPricingPending ? (
+                  <View style={styles.calculatingRow}>
+                    <ActivityIndicator size="small" color="#FF6B35" />
+                    <Text style={styles.summaryValueMuted}>Calculating...</Text>
+                  </View>
+                ) : pricingError ? (
+                  <TouchableOpacity onPress={() => void loadDeliveryPricing()}>
+                    <Text style={styles.pricingErrorText}>Tap to retry</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.summaryValue}>{formatAmount(deliveryFee)}</Text>
+                )}
               </View>
+              {pricingError ? (
+                <Text style={styles.pricingErrorHint}>{pricingError}</Text>
+              ) : null}
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Food GST (5%)</Text>
                 <View style={styles.waivedValueGroup}>
@@ -610,7 +642,9 @@ export default function CartScreen({ route, navigation }: any) {
               onPress={proceedToPayment}
               disabled={!canCheckout}
             >
-              <Text style={styles.checkoutButtonText}>Continue to Payment</Text>
+              <Text style={styles.checkoutButtonText}>
+                {isPricingPending ? "Calculating fee..." : "Continue to Payment"}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -863,6 +897,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#2C2018"
+  },
+  summaryValueMuted: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#8B6A54",
+    marginLeft: 8
+  },
+  calculatingRow: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  pricingErrorText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#C7362E"
+  },
+  pricingErrorHint: {
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#C7362E"
   },
   waivedValueGroup: {
     flexDirection: "row",

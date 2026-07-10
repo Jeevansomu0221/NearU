@@ -478,7 +478,7 @@ export default function PaymentScreen({ route, navigation }: any) {
             {paymentMethod === "CASH_ON_DELIVERY"
               ? "Pay when your order arrives"
               : selectedUpiApp
-                ? "Opens your UPI app via Razorpay — pick the same app if asked"
+                ? `Opens ${selectedUpiApp.name} directly for payment`
                 : loadingUpiApps
                   ? "Detecting UPI apps on your phone..."
                   : "Choose a UPI app to pay in one tap"}
