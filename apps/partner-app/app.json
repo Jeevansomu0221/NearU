@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.vyaha.partner",
-      "versionCode": 26,
+      "versionCode": 27,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
@@ -26,7 +26,8 @@
         "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/vyaha-partner-adaptive-icon.png",
+        "foregroundImage": "./assets/vyaha-partner-adaptive-icon-foreground.png",
+        "backgroundImage": "./assets/vyaha-partner-adaptive-icon-background.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
