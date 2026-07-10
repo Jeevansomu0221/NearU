@@ -20,6 +20,23 @@ const formatAmount = (value = 0) => {
   return `Rs ${rounded || "0"}`;
 };
 
+const MAX_PIN_DRIFT_KM = 5;
+
+const haversineKmClient = (
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number }
+) => {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+};
+
 export default function CartScreen({ route, navigation }: any) {
   const { items, clear, removeItem, updateQuantity } = useCart();
   const [loading, setLoading] = useState(false);
@@ -169,17 +186,6 @@ export default function CartScreen({ route, navigation }: any) {
     [groupedItems]
   );
 
-  useEffect(() => {
-    const deliveryLocation = getDeliveryLocation();
-
-    if (!deliveryLocation || groupedItems.length === 0) {
-      setPricingQuote(null);
-      return;
-    }
-
-    fetchPricingQuote(deliveryLocation);
-  }, [fetchPricingQuote, groupedItems.length, userProfile]);
-
   const captureAndSaveDeliveryLocation = async () => {
     const address = getSelectedAddress();
     if (!address || typeof address === "string") {
@@ -223,6 +229,90 @@ export default function CartScreen({ route, navigation }: any) {
     return deliveryLocation;
   };
 
+  const resolveDeliveryLocationForPricing = useCallback(async () => {
+    const permission = await Location.requestForegroundPermissionsAsync();
+
+    let deviceLocation: { latitude: number; longitude: number } | undefined;
+    if (permission.status === "granted") {
+      try {
+        const device = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced
+        });
+        deviceLocation = {
+          latitude: device.coords.latitude,
+          longitude: device.coords.longitude
+        };
+      } catch {
+        // Fall back to saved pin when GPS read fails.
+      }
+    }
+
+    const saved = getDeliveryLocation();
+    if (!saved) {
+      return deviceLocation || (await captureAndSaveDeliveryLocation());
+    }
+
+    if (!deviceLocation) {
+      return saved;
+    }
+
+    const driftKm = haversineKmClient(saved, deviceLocation);
+    if (driftKm <= MAX_PIN_DRIFT_KM) {
+      return saved;
+    }
+
+    const address = getSelectedAddress();
+    if (!address || typeof address === "string") {
+      return deviceLocation;
+    }
+
+    try {
+      const payload: SavedAddress = {
+        ...address,
+        addressId: address._id,
+        latitude: deviceLocation.latitude,
+        longitude: deviceLocation.longitude,
+        isDefault: address.isDefault ?? true
+      } as SavedAddress & { addressId?: string };
+
+      const response = await updateUserAddress(payload);
+      if (response.success && response.data) {
+        setUserProfile(response.data);
+      }
+    } catch {
+      // Use current device location for pricing even if profile save fails.
+    }
+
+    return deviceLocation;
+  }, [userProfile]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (groupedItems.length === 0) {
+        setPricingQuote(null);
+        return;
+      }
+
+      const deliveryLocation = await resolveDeliveryLocationForPricing();
+      if (cancelled) {
+        return;
+      }
+
+      if (!deliveryLocation) {
+        setPricingQuote(null);
+        return;
+      }
+
+      fetchPricingQuote(deliveryLocation);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchPricingQuote, groupedItems.length, resolveDeliveryLocationForPricing]);
+
   const proceedToPayment = async () => {
     try {
       setLoading(true);
@@ -240,7 +330,7 @@ export default function CartScreen({ route, navigation }: any) {
         return;
       }
 
-      const deliveryLocation = getDeliveryLocation() || await captureAndSaveDeliveryLocation();
+      const deliveryLocation = await resolveDeliveryLocationForPricing();
       if (!deliveryLocation) {
         return;
       }

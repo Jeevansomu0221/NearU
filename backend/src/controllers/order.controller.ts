@@ -29,6 +29,7 @@ const DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const DELIVERY_FIRST_KM_FEE = 15;
 const DELIVERY_ADDITIONAL_KM_FEE = 10;
+const MAX_DELIVERY_DISTANCE_KM = 10;
 const FOOD_GST_RATE = 0.05;
 
 const parseOrderPagination = (req: AuthRequest) => {
@@ -637,6 +638,14 @@ const calculateDeliveryPricing = async (partner: any, deliveryLocation: GeoPoint
   }
 
   const shopToCustomerDistanceKm = haversineKm(shopCoordinates, customerCoordinates);
+
+  if (shopToCustomerDistanceKm > MAX_DELIVERY_DISTANCE_KM) {
+    const shopName = partner?.restaurantName || partner?.shopName || "this restaurant";
+    throw new Error(
+      `Delivery address is ${roundDistance(shopToCustomerDistanceKm)} km from ${shopName} (max ${MAX_DELIVERY_DISTANCE_KM} km). Please update your delivery location in Profile.`
+    );
+  }
+
   const deliveryDistanceKm = shopToCustomerDistanceKm;
 
   return {
