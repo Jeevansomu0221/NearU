@@ -1577,6 +1577,47 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
     const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
     const amountPaise = Math.round(totalCodAmount * 100);
     const orderRef = String(order._id).slice(-6).toUpperCase();
+
+    // Reuse an unexpired session for the same amount: reopening the QR is
+    // instant, and a payment the customer already made on it stays trackable.
+    const REUSE_MIN_VALIDITY_MS = 5 * 60 * 1000;
+    const existingSession = codOrders
+      .map((deliveryOrder: any) => deliveryOrder.codUpiSession)
+      .find(
+        (candidate: any) =>
+          candidate?.provider &&
+          (candidate.qrImageUrl || candidate.qrDataUrl || candidate.upiUri) &&
+          Number(candidate.amount) === Number(totalCodAmount) &&
+          candidate.expiresAt &&
+          new Date(candidate.expiresAt).getTime() > Date.now() + REUSE_MIN_VALIDITY_MS
+      );
+
+    if (existingSession) {
+      for (const deliveryOrder of codOrders) {
+        if (!deliveryOrder.codUpiSession?.provider) {
+          deliveryOrder.codUpiSession = existingSession;
+          await deliveryOrder.save();
+        }
+      }
+
+      return successResponse(
+        res,
+        {
+          provider: existingSession.provider,
+          razorpayQrId: existingSession.razorpayQrId,
+          qrImageUrl: existingSession.qrImageUrl,
+          qrDataUrl: existingSession.qrDataUrl,
+          upiUri: existingSession.upiUri,
+          paymentUrl: existingSession.paymentUrl,
+          amount: totalCodAmount,
+          manualConfirmRequired: existingSession.manualConfirmRequired,
+          orderRef,
+          payeeName: "Vyaha"
+        },
+        "UPI collection QR ready"
+      );
+    }
+
     const session = await PaymentService.createCodCollectionPayment({
       amountPaise,
       orderId: String(order._id),
