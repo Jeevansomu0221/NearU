@@ -349,7 +349,7 @@ const openCustomUpiIntent = async (input: UpiIntentPaymentInput, upiApp: UpiApp)
 
   const result = (await withTimeout(
     RazorpayCustom.open(options),
-    120000,
+    60000,
     "Payment timed out. Complete payment in your UPI app or try again."
   )) as Record<string, string>;
 
@@ -464,4 +464,9 @@ export const describeRazorpayPaymentError = (error: unknown) => {
   }
 
   return "Online payment did not complete.";
+};
+
+export const isRazorpayPaymentCancelled = (error: unknown) => {
+  const message = describeRazorpayPaymentError(error).toLowerCase();
+  return message.includes("cancel") || message.includes("back button");
 };

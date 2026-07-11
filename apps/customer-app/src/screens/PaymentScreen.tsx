@@ -19,6 +19,7 @@ import SuccessCelebration from "../components/SuccessCelebration";
 import UpiAppPicker from "../components/UpiAppPicker";
 import {
   describeRazorpayPaymentError,
+  isRazorpayPaymentCancelled,
   openUpiIntentPayment,
   prepareCheckoutUpiSelection,
   savePreferredUpiApp,
@@ -67,21 +68,33 @@ const getOnlinePaymentFailureMessage = (error: any) => describeRazorpayPaymentEr
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// UPI payments (especially bank apps like Kotak811) can take 1-2 minutes to
-// show as captured on Razorpay, so poll long enough before declaring failure.
+type ReconcileProfile = {
+  maxAttempts: number;
+  intervalMs: number;
+};
+
+// User-cancelled payments rarely need long polling; ambiguous/timeouts need more time
+// for slow bank apps (e.g. Kotak811) to report capture on Razorpay.
+const RECONCILE_PROFILES = {
+  cancelled: { maxAttempts: 5, intervalMs: 2000 },
+  incomplete: { maxAttempts: 15, intervalMs: 3000 },
+  verifyFailed: { maxAttempts: 30, intervalMs: 3000 }
+} as const satisfies Record<string, ReconcileProfile>;
+
 const reconcilePaymentWithServer = async (
   orderId: string,
   onStage?: (stage: string) => void,
-  maxAttempts = 40,
-  intervalMs = 3000
+  profile: ReconcileProfile = RECONCILE_PROFILES.incomplete
 ) => {
+  const { maxAttempts, intervalMs } = profile;
+
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (attempt === 0) {
       onStage?.("Confirming payment...");
-    } else if (attempt < 6) {
+    } else if (attempt < 4) {
       onStage?.("Still confirming payment...");
-    } else if (attempt < 20) {
-      onStage?.("Waiting for your bank to confirm... This can take up to a minute.");
+    } else if (attempt < 10) {
+      onStage?.("Waiting for your bank to confirm...");
     } else {
       onStage?.("Still waiting for bank confirmation... Please don't close the app.");
     }
@@ -130,6 +143,7 @@ export default function PaymentScreen({ route, navigation }: any) {
   const [selectedTipPreset, setSelectedTipPreset] = useState<number>(0);
   const [showCustomTip, setShowCustomTip] = useState(false);
   const [customTipText, setCustomTipText] = useState("");
+  const [retryPaymentAfterUpiPick, setRetryPaymentAfterUpiPick] = useState(false);
 
   const paymentMethods = [
     { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
@@ -326,7 +340,11 @@ export default function PaymentScreen({ route, navigation }: any) {
           try {
             // The main payment path already polled for over a minute, so only
             // do a final quick check before cancelling.
-            const reconciled = await reconcilePaymentWithServer(order._id, undefined, 2, 2000);
+            const reconciled = await reconcilePaymentWithServer(
+              order._id,
+              undefined,
+              RECONCILE_PROFILES.cancelled
+            );
             if (reconciled) {
               paidOrders.push(reconciled);
               return;
@@ -391,26 +409,32 @@ export default function PaymentScreen({ route, navigation }: any) {
             });
           });
         } catch (paymentError: any) {
-          onStage?.("Confirming payment...");
-          const reconciledOrder = await reconcilePaymentWithServer(createdOrder._id, onStage);
+          const wasCancelled = isRazorpayPaymentCancelled(paymentError);
+          onStage?.(wasCancelled ? "Checking payment status..." : "Confirming payment...");
+          const reconciledOrder = await reconcilePaymentWithServer(
+            createdOrder._id,
+            onStage,
+            wasCancelled ? RECONCILE_PROFILES.cancelled : RECONCILE_PROFILES.incomplete
+          );
           if (reconciledOrder) {
             pendingOnlineOrders = pendingOnlineOrders.filter((order) => order?._id !== createdOrder._id);
             paidOrders.push(reconciledOrder);
             continue;
           }
           const sdkMessage = getOnlinePaymentFailureMessage(paymentError);
-          const looksLikeFalseCancel =
-            sdkMessage.toLowerCase().includes("cancel") ||
-            sdkMessage.toLowerCase().includes("back button");
-          const failureMessage = looksLikeFalseCancel
-            ? "Your bank is still confirming the payment. If money was deducted, check My Orders in a few minutes before paying again."
+          const failureMessage = wasCancelled
+            ? "Payment was not completed. Choose a UPI app and try again, or switch to Cash on Delivery."
             : `${sdkMessage} If money was deducted from your account, the order will be confirmed automatically in a few minutes - check My Orders before paying again.`;
           throw new OnlinePaymentFailedError(failureMessage);
         }
 
         if (!hasValidRazorpaySuccess(paymentResult)) {
           onStage?.("Confirming payment...");
-          const reconciledOrder = await reconcilePaymentWithServer(createdOrder._id, onStage);
+          const reconciledOrder = await reconcilePaymentWithServer(
+            createdOrder._id,
+            onStage,
+            RECONCILE_PROFILES.incomplete
+          );
           if (reconciledOrder) {
             pendingOnlineOrders = pendingOnlineOrders.filter((order) => order?._id !== createdOrder._id);
             paidOrders.push(reconciledOrder);
@@ -429,7 +453,11 @@ export default function PaymentScreen({ route, navigation }: any) {
 
         if (!verifyResponse.success) {
           onStage?.("Confirming payment...");
-          const reconciledOrder = await reconcilePaymentWithServer(createdOrder._id, onStage);
+          const reconciledOrder = await reconcilePaymentWithServer(
+            createdOrder._id,
+            onStage,
+            RECONCILE_PROFILES.verifyFailed
+          );
           if (reconciledOrder) {
             pendingOnlineOrders = pendingOnlineOrders.filter((order) => order?._id !== createdOrder._id);
             paidOrders.push(reconciledOrder);
@@ -483,6 +511,56 @@ export default function PaymentScreen({ route, navigation }: any) {
     setSelectedUpiApp(app);
     await savePreferredUpiApp(app);
     setShowUpiPicker(false);
+
+    if (retryPaymentAfterUpiPick) {
+      setRetryPaymentAfterUpiPick(false);
+      void startOnlinePayment(app);
+    }
+  };
+
+  const startOnlinePayment = async (checkoutUpiApp: UpiApp) => {
+    try {
+      setLoading(true);
+      setLoadingStage("Preparing payment...");
+      const paidOrders = await placeOnlineOrders(checkoutUpiApp, setLoadingStage);
+      handleSuccessfulCheckout(paidOrders);
+    } catch (error: any) {
+      showPaymentFailureAlert(error);
+    } finally {
+      setLoading(false);
+      setLoadingStage("");
+    }
+  };
+
+  const showPaymentFailureAlert = (error: any) => {
+    let errorMessage = "Failed to place order";
+
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    } else if (typeof error.message === "string" && error.message.includes("Network Error")) {
+      errorMessage = "Cannot connect to server. Please check your internet connection.";
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    if (paymentMethod === "RAZORPAY" && isOnlinePaymentFailure(error)) {
+      Alert.alert("Payment Failed", errorMessage, [
+        {
+          text: "Try Online Again",
+          onPress: () => {
+            setRetryPaymentAfterUpiPick(true);
+            void openUpiPicker();
+          }
+        },
+        {
+          text: "Switch to COD",
+          onPress: () => setPaymentMethod("CASH_ON_DELIVERY")
+        }
+      ]);
+      return;
+    }
+
+    Alert.alert("Order Failed", errorMessage);
   };
 
   const handlePayment = async () => {
@@ -533,28 +611,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         handleSuccessfulCheckout(createdOrders);
       }
     } catch (error: any) {
-      let errorMessage = "Failed to place order";
-
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (typeof error.message === "string" && error.message.includes("Network Error")) {
-        errorMessage = "Cannot connect to server. Please check your internet connection.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      if (paymentMethod === "RAZORPAY" && isOnlinePaymentFailure(error)) {
-        Alert.alert("Payment Failed", errorMessage, [
-          { text: "Try Online Again", style: "cancel" },
-          {
-            text: "Switch to COD",
-            onPress: () => setPaymentMethod("CASH_ON_DELIVERY")
-          }
-        ]);
-        return;
-      }
-
-      Alert.alert("Order Failed", errorMessage);
+      showPaymentFailureAlert(error);
     } finally {
       setLoading(false);
       setLoadingStage("");
@@ -840,7 +897,10 @@ export default function PaymentScreen({ route, navigation }: any) {
         apps={upiApps}
         selectedAppId={selectedUpiApp?.id}
         totalLabel={formatAmount(payableTotal)}
-        onClose={() => setShowUpiPicker(false)}
+        onClose={() => {
+          setShowUpiPicker(false);
+          setRetryPaymentAfterUpiPick(false);
+        }}
         onSelect={handleUpiAppSelection}
       />
 
