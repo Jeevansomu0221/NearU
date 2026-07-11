@@ -159,7 +159,14 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   }, [orderId]);
 
   useEffect(() => {
-    if (!upiPaymentVisible || !codUpiSession || upiPaymentPaid) return;
+    if (
+      !upiPaymentVisible ||
+      !codUpiSession ||
+      upiPaymentPaid ||
+      codUpiSession.manualConfirmRequired
+    ) {
+      return;
+    }
 
     let cancelled = false;
     const pollPaymentStatus = async () => {
@@ -173,10 +180,23 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [upiPaymentVisible, codUpiSession, upiPaymentPaid, orderId, refreshUpiPaymentStatus]);
+  }, [
+    upiPaymentVisible,
+    codUpiSession,
+    upiPaymentPaid,
+    orderId,
+    refreshUpiPaymentStatus,
+  ]);
 
   useEffect(() => {
-    if (!upiPaymentVisible || !codUpiSession || upiPaymentPaid) return;
+    if (
+      !upiPaymentVisible ||
+      !codUpiSession ||
+      upiPaymentPaid ||
+      codUpiSession.manualConfirmRequired
+    ) {
+      return;
+    }
 
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") {

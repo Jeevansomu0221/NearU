@@ -349,6 +349,18 @@ const OrderSchema = new Schema({
       type: Number,
       min: 0
     },
+    qrDataUrl: {
+      type: String,
+      trim: true
+    },
+    upiUri: {
+      type: String,
+      trim: true
+    },
+    manualConfirmRequired: {
+      type: Boolean,
+      default: false
+    },
     createdAt: {
       type: Date
     },

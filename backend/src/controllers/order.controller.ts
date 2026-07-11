@@ -1558,13 +1558,18 @@ const markCodOrdersPaidFromUpi = async (deliveryOrders: any[], paymentId?: strin
 };
 
 const getCodCollectionTargets = (orders: any[]) =>
-  orders.filter(
-    (deliveryOrder: any) =>
+  orders.filter((deliveryOrder: any) => {
+    // Keep tracking orders after UPI collection marks them PAID and paymentMethod becomes UPI.
+    if (deliveryOrder.codUpiSession?.provider) {
+      return true;
+    }
+
+    return (
       deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
-      (deliveryOrder.codUpiSession?.provider ||
-        deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY" ||
+      (deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY" ||
         deliveryOrder.codCollection?.method === "UPI")
-  );
+    );
+  });
 
 export const createCodUpiCollection = async (req: AuthRequest, res: Response) => {
   try {
