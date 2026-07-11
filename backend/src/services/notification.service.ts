@@ -6,6 +6,10 @@ import Partner from "../models/Partner.model";
 import User from "../models/User.model";
 import { getFirebaseApp } from "./firebaseAuth.service";
 import { getRiderOrderEarnings } from "./payout.service";
+import {
+  filterNearbyDeliveryUserIds,
+  resolveOrderShopCoordinates
+} from "./deliveryMatching.service";
 
 export type NotificationApp = "customer" | "partner" | "delivery";
 
@@ -348,11 +352,29 @@ export const notifyCustomerOrderStatus = async (order: any, status: string) => {
 export const notifyDeliveryJobReady = async (order: any) => {
   const selfDelivery = order.selfDelivery || {};
   const reservedFor = compactIds(Array.isArray(selfDelivery.reservedFor) ? selfDelivery.reservedFor : []);
-  const targetUserIds = await filterDeliveryUsersByPreference(
+  const candidateUserIds = await filterDeliveryUsersByPreference(
     await getAvailableDeliveryUserIds(reservedFor.length ? reservedFor : undefined),
     "jobs"
   );
-  if (!targetUserIds.length) return;
+  if (!candidateUserIds.length) return;
+
+  const shopCoordinates = await resolveOrderShopCoordinates(order);
+  const targetUserIds = shopCoordinates
+    ? await filterNearbyDeliveryUserIds(shopCoordinates, candidateUserIds)
+    : [];
+
+  if (!targetUserIds.length) {
+    if (shopCoordinates) {
+      console.log(
+        `No nearby delivery riders within radius for order ${idString(order._id)}; skipped job notification`
+      );
+    } else {
+      console.log(
+        `Shop location missing for order ${idString(order._id)}; skipped nearby delivery job notification`
+      );
+    }
+    return;
+  }
   const details = await getDeliveryJobNotificationDetails(order);
   const bodyParts = [
     `Pickup: ${details.restaurantName}${details.pickupAddress ? ` - ${details.pickupAddress}` : ""}`,

@@ -12,7 +12,10 @@ import {
   Image,
   Switch,
   ActivityIndicator,
-  ScrollView
+  ScrollView,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
@@ -103,6 +106,9 @@ const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
   const mimeExtension = asset.mimeType?.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
   return `${baseName}.${mimeExtension}`;
 };
+
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+const MODAL_HEIGHT = Math.min(SCREEN_HEIGHT * 0.9, 720);
 
 const getMenuImageUrl = (url: string) => {
   if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
@@ -531,7 +537,10 @@ export default function MenuScreen({ navigation }: any) {
       )}
 
       <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => !saving && setModalVisible(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <Pressable
             style={styles.modalBackdrop}
             onPress={() => {
@@ -541,10 +550,17 @@ export default function MenuScreen({ navigation }: any) {
               }
             }}
           />
-          <View style={[styles.modalSheetWrap, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 12 }]}>
-            <View style={styles.modalContent}>
+          <View style={[styles.modalSheetWrap, { paddingBottom: insets.bottom + 8 }]}>
+            <View style={[styles.modalContent, { height: MODAL_HEIGHT }]}>
+              <View style={styles.modalHandle} />
+
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
+                <View style={styles.modalHeaderCopy}>
+                  <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
+                  <Text style={styles.modalSubtitle}>
+                    {editingItem ? "Update details customers see on your menu" : "Fill in the details to list this item"}
+                  </Text>
+                </View>
                 <TouchableOpacity
                   style={styles.modalCloseButton}
                   onPress={() => {
@@ -564,157 +580,196 @@ export default function MenuScreen({ navigation }: any) {
                 contentContainerStyle={styles.modalBodyContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
+                bounces
               >
-              <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving || pickerBusy}>
-                {imageUri ? (
-                  <>
-                    <Image source={{ uri: getMenuImageUrl(imageUri) }} style={styles.selectedImage} />
-                    <View style={styles.imagePickerCopy}>
-                      <Text style={styles.imagePlaceholderText}>Photo selected</Text>
-                      <Text style={styles.imagePlaceholderSubtext}>Tap to change. We resize it automatically.</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#7CA2C7" />
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.imagePlaceholder}>
-                      <Ionicons name="image-outline" size={24} color="#60A5FA" />
-                    </View>
-                    <View style={styles.imagePickerCopy}>
-                      <Text style={styles.imagePlaceholderText}>Add photo</Text>
-                      <Text style={styles.imagePlaceholderSubtext}>Auto resized for menu cards.</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#7CA2C7" />
-                  </>
-                )}
-              </TouchableOpacity>
+                <Text style={styles.formSectionLabel}>Photo</Text>
+                <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving || pickerBusy}>
+                  {imageUri ? (
+                    <>
+                      <Image source={{ uri: getMenuImageUrl(imageUri) }} style={styles.selectedImage} />
+                      <View style={styles.imagePickerCopy}>
+                        <Text style={styles.imagePlaceholderText}>Photo selected</Text>
+                        <Text style={styles.imagePlaceholderSubtext}>Tap to change. We resize it automatically.</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color="#7CA2C7" />
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.imagePlaceholder}>
+                        <Ionicons name="image-outline" size={24} color="#60A5FA" />
+                      </View>
+                      <View style={styles.imagePickerCopy}>
+                        <Text style={styles.imagePlaceholderText}>Add photo</Text>
+                        <Text style={styles.imagePlaceholderSubtext}>Auto resized for menu cards.</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color="#7CA2C7" />
+                    </>
+                  )}
+                </TouchableOpacity>
 
-              <TextInput
-                style={styles.input}
-                placeholder="Item name"
-                placeholderTextColor="#98A2B3"
-                value={form.name}
-                onChangeText={(text) => setForm({ ...form, name: text })}
-                editable={!saving}
-              />
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Description"
-                placeholderTextColor="#98A2B3"
-                value={form.description}
-                onChangeText={(text) => setForm({ ...form, description: text })}
-                multiline
-                numberOfLines={3}
-                editable={!saving}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Price"
-                placeholderTextColor="#98A2B3"
-                value={form.price}
-                onChangeText={(text) => setForm({ ...form, price: text.replace(/[^0-9.]/g, "") })}
-                keyboardType="decimal-pad"
-                editable={!saving}
-              />
-
-              <Text style={styles.modalLabel}>Category</Text>
-              <View style={styles.categoryWrap}>
-                {availableCategories.map((category) => {
-                  const selected = form.category === category;
-                  return (
-                    <TouchableOpacity
-                      key={category}
-                      style={[styles.categoryChip, selected && styles.categoryChipSelected]}
-                      onPress={() => setForm({ ...form, category })}
-                      disabled={saving}
-                    >
-                      <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>{category}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TextInput
-                style={styles.input}
-                placeholder="Preparation time in minutes"
-                placeholderTextColor="#98A2B3"
-                value={form.preparationTime}
-                onChangeText={(text) => setForm({ ...form, preparationTime: text.replace(/\D/g, "") })}
-                keyboardType="number-pad"
-                editable={!saving}
-              />
-
-              <View style={styles.formSwitchRow}>
-                <Text style={styles.formSwitchLabel}>Vegetarian</Text>
-                <Switch value={form.isVegetarian} onValueChange={(value) => setForm({ ...form, isVegetarian: value })} disabled={saving} />
-              </View>
-              <View style={styles.formSwitchRow}>
-                <Text style={styles.formSwitchLabel}>Available for order</Text>
-                <Switch value={form.isAvailable} onValueChange={(value) => setForm({ ...form, isAvailable: value })} disabled={saving} />
-              </View>
-
-              <View style={styles.extrasSectionCard}>
-                <Text style={styles.modalLabel}>Extra choices (optional)</Text>
-                <Text style={styles.modalHint}>
-                  Add options like extra cheese or larger portion. These options show only for this item.
-                </Text>
-
-                {extraChoices.length === 0 ? (
-                  <View style={styles.emptyExtrasState}>
-                    <Ionicons name="list-outline" size={16} color="#7B8DA6" />
-                    <Text style={styles.emptyExtrasText}>No extra choices added yet</Text>
-                  </View>
-                ) : null}
-
-                {extraChoices.map((choice, index) => (
-                  <View key={`extra-${index}`} style={styles.extraChoiceRow}>
+                <Text style={styles.formSectionLabel}>Basic details</Text>
+                <View style={styles.formField}>
+                  <Text style={styles.fieldLabel}>Item name *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Mango Smoothie"
+                    placeholderTextColor="#98A2B3"
+                    value={form.name}
+                    onChangeText={(text) => setForm({ ...form, name: text })}
+                    editable={!saving}
+                  />
+                </View>
+                <View style={styles.formField}>
+                  <Text style={styles.fieldLabel}>Description</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Short description for customers"
+                    placeholderTextColor="#98A2B3"
+                    value={form.description}
+                    onChangeText={(text) => setForm({ ...form, description: text })}
+                    multiline
+                    numberOfLines={3}
+                    editable={!saving}
+                  />
+                </View>
+                <View style={styles.formRow}>
+                  <View style={[styles.formField, styles.formFieldHalf]}>
+                    <Text style={styles.fieldLabel}>Price (Rs) *</Text>
                     <TextInput
-                      style={[styles.input, styles.extraChoiceNameInput]}
-                      placeholder="Choice name (e.g. Extra cheese)"
+                      style={styles.input}
+                      placeholder="0.00"
                       placeholderTextColor="#98A2B3"
-                      value={choice.name}
-                      onChangeText={(text) => {
-                        const next = [...extraChoices];
-                        next[index] = { ...next[index], name: text };
-                        setExtraChoices(next);
-                      }}
-                      editable={!saving}
-                    />
-                    <TextInput
-                      style={[styles.input, styles.extraChoicePriceInput]}
-                      placeholder="+Rs"
-                      placeholderTextColor="#98A2B3"
-                      value={choice.price > 0 ? String(choice.price) : ""}
-                      onChangeText={(text) => {
-                        const next = [...extraChoices];
-                        next[index] = {
-                          ...next[index],
-                          price: text ? parseFloat(text.replace(/[^0-9.]/g, "")) || 0 : 0
-                        };
-                        setExtraChoices(next);
-                      }}
+                      value={form.price}
+                      onChangeText={(text) => setForm({ ...form, price: text.replace(/[^0-9.]/g, "") })}
                       keyboardType="decimal-pad"
                       editable={!saving}
                     />
-                    <TouchableOpacity
-                      style={styles.extraChoiceRemove}
-                      onPress={() => setExtraChoices(extraChoices.filter((_, rowIndex) => rowIndex !== index))}
-                      disabled={saving}
-                    >
-                      <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                    </TouchableOpacity>
                   </View>
-                ))}
+                  <View style={[styles.formField, styles.formFieldHalf]}>
+                    <Text style={styles.fieldLabel}>Prep time (min)</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="15"
+                      placeholderTextColor="#98A2B3"
+                      value={form.preparationTime}
+                      onChangeText={(text) => setForm({ ...form, preparationTime: text.replace(/\D/g, "") })}
+                      keyboardType="number-pad"
+                      editable={!saving}
+                    />
+                  </View>
+                </View>
 
-                <TouchableOpacity
-                  style={styles.addExtraChoiceButton}
-                  onPress={() => setExtraChoices([...extraChoices, { name: "", price: 0 }])}
-                  disabled={saving}
-                >
-                  <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
-                  <Text style={styles.addExtraChoiceText}>Add extra choice</Text>
-                </TouchableOpacity>
-              </View>
+                <Text style={styles.formSectionLabel}>Category</Text>
+                <View style={styles.categoryWrap}>
+                  {availableCategories.map((category) => {
+                    const selected = form.category === category;
+                    return (
+                      <TouchableOpacity
+                        key={category}
+                        style={[styles.categoryChip, selected && styles.categoryChipSelected]}
+                        onPress={() => setForm({ ...form, category })}
+                        disabled={saving}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>{category}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.formSectionLabel}>Availability</Text>
+                <View style={styles.switchCard}>
+                  <View style={styles.formSwitchRow}>
+                    <View style={styles.switchCopy}>
+                      <Text style={styles.formSwitchLabel}>Vegetarian</Text>
+                      <Text style={styles.formSwitchHint}>Show veg badge on menu</Text>
+                    </View>
+                    <Switch
+                      value={form.isVegetarian}
+                      onValueChange={(value) => setForm({ ...form, isVegetarian: value })}
+                      disabled={saving}
+                      trackColor={{ false: "#D9E6F7", true: "#9FC8FF" }}
+                      thumbColor={form.isVegetarian ? "#60A5FA" : "#9AB3CC"}
+                    />
+                  </View>
+                  <View style={styles.switchDivider} />
+                  <View style={styles.formSwitchRow}>
+                    <View style={styles.switchCopy}>
+                      <Text style={styles.formSwitchLabel}>Available for order</Text>
+                      <Text style={styles.formSwitchHint}>Hidden items won't appear to customers</Text>
+                    </View>
+                    <Switch
+                      value={form.isAvailable}
+                      onValueChange={(value) => setForm({ ...form, isAvailable: value })}
+                      disabled={saving}
+                      trackColor={{ false: "#D9E6F7", true: "#9FC8FF" }}
+                      thumbColor={form.isAvailable ? "#60A5FA" : "#9AB3CC"}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.extrasSectionCard}>
+                  <Text style={styles.modalLabel}>Extra choices (optional)</Text>
+                  <Text style={styles.modalHint}>
+                    Add options like extra cheese or larger portion. These options show only for this item.
+                  </Text>
+
+                  {extraChoices.length === 0 ? (
+                    <View style={styles.emptyExtrasState}>
+                      <Ionicons name="list-outline" size={16} color="#7B8DA6" />
+                      <Text style={styles.emptyExtrasText}>No extra choices added yet</Text>
+                    </View>
+                  ) : null}
+
+                  {extraChoices.map((choice, index) => (
+                    <View key={`extra-${index}`} style={styles.extraChoiceRow}>
+                      <TextInput
+                        style={[styles.input, styles.extraChoiceNameInput]}
+                        placeholder="Choice name (e.g. Extra cheese)"
+                        placeholderTextColor="#98A2B3"
+                        value={choice.name}
+                        onChangeText={(text) => {
+                          const next = [...extraChoices];
+                          next[index] = { ...next[index], name: text };
+                          setExtraChoices(next);
+                        }}
+                        editable={!saving}
+                      />
+                      <TextInput
+                        style={[styles.input, styles.extraChoicePriceInput]}
+                        placeholder="+Rs"
+                        placeholderTextColor="#98A2B3"
+                        value={choice.price > 0 ? String(choice.price) : ""}
+                        onChangeText={(text) => {
+                          const next = [...extraChoices];
+                          next[index] = {
+                            ...next[index],
+                            price: text ? parseFloat(text.replace(/[^0-9.]/g, "")) || 0 : 0
+                          };
+                          setExtraChoices(next);
+                        }}
+                        keyboardType="decimal-pad"
+                        editable={!saving}
+                      />
+                      <TouchableOpacity
+                        style={styles.extraChoiceRemove}
+                        onPress={() => setExtraChoices(extraChoices.filter((_, rowIndex) => rowIndex !== index))}
+                        disabled={saving}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+
+                  <TouchableOpacity
+                    style={styles.addExtraChoiceButton}
+                    onPress={() => setExtraChoices([...extraChoices, { name: "", price: 0 }])}
+                    disabled={saving}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+                    <Text style={styles.addExtraChoiceText}>Add extra choice</Text>
+                  </TouchableOpacity>
+                </View>
               </ScrollView>
 
               <View style={styles.modalButtons}>
@@ -727,26 +782,38 @@ export default function MenuScreen({ navigation }: any) {
                     }
                   }}
                   disabled={saving}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
-                  {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.saveButtonText}>{editingItem ? "Update" : "Save"}</Text>}
+                <TouchableOpacity
+                  style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                  onPress={handleSave}
+                  disabled={saving}
+                  activeOpacity={0.85}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>{editingItem ? "Update Item" : "Save Item"}</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      <TouchableOpacity
-        style={[styles.fabButton, { bottom: 18 + insets.bottom }]}
-        onPress={() => openEditor()}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
-      </TouchableOpacity>
+      {!modalVisible ? (
+        <TouchableOpacity
+          style={[styles.fabButton, { bottom: 18 + insets.bottom }]}
+          onPress={() => openEditor()}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -1082,38 +1149,57 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)"
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "flex-end"
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject
   },
   modalSheetWrap: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 14
+    paddingHorizontal: 12
   },
   modalContent: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     borderWidth: 1,
     borderColor: "#D9E6F7",
-    maxHeight: "100%",
-    overflow: "hidden"
+    overflow: "hidden",
+    shadowColor: "#143A66",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8
+  },
+  modalHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D9E6F7",
+    marginTop: 10,
+    marginBottom: 4
   },
   modalHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 10,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#E7EEF8"
   },
+  modalHeaderCopy: {
+    flex: 1,
+    marginRight: 12
+  },
   modalCloseButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#EEF5FF"
@@ -1122,15 +1208,44 @@ const styles = StyleSheet.create({
     flex: 1
   },
   modalBodyContent: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 8
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 20
   },
   modalTitle: {
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: "800",
+    color: "#143A66"
+  },
+  modalSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#6A86A8"
+  },
+  formSectionLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#5E7897",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 10
+  },
+  formField: {
+    marginBottom: 12
+  },
+  formFieldHalf: {
+    flex: 1
+  },
+  formRow: {
+    flexDirection: "row",
+    gap: 10
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: "700",
     color: "#143A66",
-    textAlign: "left"
+    marginBottom: 6
   },
   imagePicker: {
     minHeight: 78,
@@ -1178,12 +1293,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9E6F7",
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
     color: "#123456",
-    backgroundColor: "#F9FCFF",
-    marginBottom: 10
+    backgroundColor: "#FFFFFF",
+    marginBottom: 0
   },
   textArea: {
     minHeight: 72,
@@ -1258,7 +1373,7 @@ const styles = StyleSheet.create({
   categoryWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 12
+    marginBottom: 18
   },
   categoryChip: {
     paddingHorizontal: 12,
@@ -1283,21 +1398,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8
+    paddingVertical: 10
+  },
+  switchCard: {
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    borderRadius: 14,
+    backgroundColor: "#F8FBFF",
+    paddingHorizontal: 14,
+    marginBottom: 18
+  },
+  switchDivider: {
+    height: 1,
+    backgroundColor: "#E7EEF8"
+  },
+  switchCopy: {
+    flex: 1,
+    marginRight: 12
   },
   formSwitchLabel: {
     fontSize: 14,
     color: "#143A66",
     fontWeight: "700"
   },
+  formSwitchHint: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#7B8DA6",
+    lineHeight: 15
+  },
   modalButtons: {
     flexDirection: "row",
-    marginTop: 0,
     borderTopWidth: 1,
     borderTopColor: "#E7EEF8",
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 14
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 16,
+    backgroundColor: "#FFFFFF"
   },
   cancelButton: {
     flex: 1,

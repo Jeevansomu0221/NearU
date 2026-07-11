@@ -31,20 +31,32 @@ export default function HomePage() {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   const loadShops = useCallback(async () => {
+    if (!coords) {
+      setShops([]);
+      setLoading(false);
+      setError(geoError || `Allow location to view shops within ${radiusKm} km of you.`);
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
-      const params = coords
-        ? { latitude: coords.latitude, longitude: coords.longitude, radiusKm }
-        : undefined;
-      const res = await getPartners(params);
+      const res = await getPartners({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        radiusKm
+      });
       setShops((res.data as Shop[]) || []);
+      if (!res.data?.length && (res as any).message) {
+        setError((res as any).message);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load shops");
+      setShops([]);
     } finally {
       setLoading(false);
     }
-  }, [coords, radiusKm]);
+  }, [coords, geoError, radiusKm]);
 
   useEffect(() => {
     if (!geoLoading) loadShops();

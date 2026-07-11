@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import Partner from "../models/Partner.model";
 import Order from "../models/Order.model";
+import { parseGoogleMapsLink } from "../utils/mapsParser";
 
-const DEFAULT_RADIUS_KM = 3;
+const DEFAULT_RADIUS_KM = 5;
 const MAX_RADIUS_KM = 10;
 const MAX_SHOPS_FALLBACK = 100;
 
@@ -20,27 +21,90 @@ const parseRadiusKm = (value: unknown) => {
   return Math.min(parsed, MAX_RADIUS_KM);
 };
 
-const findApprovedShops = (limit = MAX_SHOPS_FALLBACK) =>
+const shopListProjection =
+  "_id restaurantName shopName category address isOpen rating ratingCount shopImageUrl openingTime closingTime location";
+
+const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+
+const distanceKmBetween = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+) => {
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
+};
+
+const roundDistanceKm = (distanceKm: number) => Math.round(distanceKm * 10) / 10;
+
+const findShopsMissingCoordinates = (limit = MAX_SHOPS_FALLBACK) =>
   Partner.find({
     status: "APPROVED",
-    hasCompletedSetup: true
+    hasCompletedSetup: true,
+    "location.coordinates": [0, 0],
+    "address.googleMapsLink": { $exists: true, $nin: ["", null] }
   })
-    .select("_id restaurantName shopName category address isOpen rating ratingCount shopImageUrl openingTime closingTime")
+    .select(shopListProjection)
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
 
-const buildApprovedShopsFallback = async (radiusKm: number, message: string) => {
-  const shops = await findApprovedShops();
+const resolveShopCoordinates = (shop: any): [number, number] | null => {
+  const [longitude, latitude] = shop?.location?.coordinates || [];
+  if (
+    Number.isFinite(longitude) &&
+    Number.isFinite(latitude) &&
+    !(longitude === 0 && latitude === 0)
+  ) {
+    return [longitude, latitude];
+  }
 
-  return {
-    success: true,
-    data: shops,
-    radiusKm,
-    locationApplied: false,
-    message
-  };
+  const mapsLink = typeof shop?.address?.googleMapsLink === "string" ? shop.address.googleMapsLink : "";
+  const parsed = parseGoogleMapsLink(mapsLink);
+  if (!parsed) {
+    return null;
+  }
+
+  return [parsed.longitude, parsed.latitude];
 };
+
+const mapShopsWithinRadius = (
+  shops: any[],
+  latitude: number,
+  longitude: number,
+  radiusKm: number
+) =>
+  shops
+    .map((shop) => {
+      const coordinates = resolveShopCoordinates(shop);
+      if (!coordinates) {
+        return null;
+      }
+
+      const [shopLongitude, shopLatitude] = coordinates;
+      const distanceKm = distanceKmBetween(latitude, longitude, shopLatitude, shopLongitude);
+      if (distanceKm > radiusKm) {
+        return null;
+      }
+
+      const { location: _location, ...shopWithoutLocation } = shop;
+      return {
+        ...shopWithoutLocation,
+        distanceKm: roundDistanceKm(distanceKm)
+      };
+    })
+    .filter(Boolean)
+    .sort((left: any, right: any) => left.distanceKm - right.distanceKm);
 
 export const getShopsWithImages = async (req: Request, res: Response) => {
   try {
@@ -89,35 +153,64 @@ export const getShopsWithImages = async (req: Request, res: Response) => {
           { $limit: MAX_SHOPS_FALLBACK }
         ]);
 
-        if (shops.length === 0) {
-          return res.json(await buildApprovedShopsFallback(
-            radiusKm,
-            `No shops found within ${radiusKm} km. Showing approved shops instead.`
-          ));
-        }
+        const shopsMissingCoordinates = await findShopsMissingCoordinates();
+        const additionalShops = mapShopsWithinRadius(
+          shopsMissingCoordinates,
+          latitude,
+          longitude,
+          radiusKm
+        );
+
+        const mergedShops = [...shops, ...additionalShops]
+          .reduce((acc: any[], shop: any) => {
+            if (!acc.some((existing) => String(existing._id) === String(shop._id))) {
+              acc.push(shop);
+            }
+            return acc;
+          }, [])
+          .sort((left: any, right: any) => left.distanceKm - right.distanceKm)
+          .slice(0, MAX_SHOPS_FALLBACK);
 
         return res.json({
           success: true,
-          data: shops,
+          data: mergedShops,
           radiusKm,
-          locationApplied: true
+          locationApplied: true,
+          message:
+            mergedShops.length === 0
+              ? `No shops found within ${radiusKm} km of your location.`
+              : undefined
         });
       } catch (geoError) {
-        console.error("❌ Geo shop lookup failed, falling back to approved shops:", geoError);
-        return res.json(await buildApprovedShopsFallback(
+        console.error("❌ Geo shop lookup failed:", geoError);
+
+        const shopsMissingCoordinates = await findShopsMissingCoordinates();
+        const fallbackShops = mapShopsWithinRadius(
+          shopsMissingCoordinates,
+          latitude,
+          longitude,
+          radiusKm
+        ).slice(0, MAX_SHOPS_FALLBACK);
+
+        return res.json({
+          success: true,
+          data: fallbackShops,
           radiusKm,
-          "Showing approved shops while nearby lookup is unavailable"
-        ));
+          locationApplied: true,
+          message:
+            fallbackShops.length === 0
+              ? `No shops found within ${radiusKm} km of your location.`
+              : "Nearby lookup is limited right now. Showing shops with saved map locations."
+        });
       }
     }
 
-    const shops = await findApprovedShops();
-
     return res.json({
       success: true,
-      data: shops,
+      data: [],
       radiusKm,
-      locationApplied: false
+      locationApplied: false,
+      message: "Location is required to show nearby shops."
     });
   } catch (error: any) {
     console.error("❌ Error getting shops:", error);

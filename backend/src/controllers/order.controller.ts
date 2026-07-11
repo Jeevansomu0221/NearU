@@ -20,6 +20,12 @@ import {
 } from "../services/notification.service";
 import { PaymentService } from "../services/payment.service";
 import { getRiderOrderEarnings } from "../services/payout.service";
+import { config } from "../config/env";
+import {
+  isRiderLocationFresh,
+  isRiderNearShop,
+  resolveOrderShopCoordinates
+} from "../services/deliveryMatching.service";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
@@ -2160,10 +2166,12 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
     )).filter((job: any) => isDeliveryJobVisibleToUser(job, deliveryUserId));
     const deliveryJobs = groupBundledDeliveryJobs(availableJobObjects);
 
-    // If the rider hasn't shared their location yet, still show every READY
-    // job so they at least know what's pending and can refresh after enabling GPS.
     if (!hasRiderLocation) {
-      return successResponse(res, deliveryJobs, "Available delivery jobs retrieved (rider location pending)");
+      return successResponse(res, [], "Enable location sharing to see nearby delivery jobs");
+    }
+
+    if (!isRiderLocationFresh(deliveryPartner.updatedAt)) {
+      return successResponse(res, [], "Refresh your GPS location to see nearby delivery jobs");
     }
 
     const rankedJobs = deliveryJobs
@@ -2175,13 +2183,8 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
           !(partnerCoordinates[0] === 0 && partnerCoordinates[1] === 0)
         );
 
-        // If the shop never set its location, still surface the job to the
-        // rider but mark distance as unknown rather than dropping it silently.
         if (!partnerHasLocation) {
-          return {
-            ...job,
-            distanceToRestaurant: null
-          };
+          return null;
         }
 
         const distanceToRestaurant = haversineKm(riderCoordinates as [number, number], partnerCoordinates);
@@ -2190,14 +2193,13 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
           distanceToRestaurant: Number(distanceToRestaurant.toFixed(2))
         };
       })
-      .filter(Boolean)
-      .sort((left: any, right: any) => {
-        const leftDist = left.distanceToRestaurant ?? Number.POSITIVE_INFINITY;
-        const rightDist = right.distanceToRestaurant ?? Number.POSITIVE_INFINITY;
-        return leftDist - rightDist;
-      });
+      .filter((job: any) => {
+        if (!job) return false;
+        return job.distanceToRestaurant <= config.deliveryRadiusKm;
+      })
+      .sort((left: any, right: any) => left.distanceToRestaurant - right.distanceToRestaurant);
 
-    return successResponse(res, rankedJobs, "Available delivery jobs retrieved");
+    return successResponse(res, rankedJobs, "Nearby delivery jobs retrieved");
 
   } catch (err: any) {
     console.error("getAvailableDeliveryJobs error:", err);
@@ -2221,7 +2223,10 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const deliveryPartner = await resolveDeliveryPartnerForUser(user, "userId status isAvailable");
+    const deliveryPartner = await resolveDeliveryPartnerForUser(
+      user,
+      "userId status isAvailable currentLocation updatedAt"
+    );
     const acceptStatuses = ["ACTIVE", "VERIFIED"];
     if (!deliveryPartner || !acceptStatuses.includes(deliveryPartner.status)) {
       return errorResponse(res, "Delivery partner is not eligible to accept jobs", 403);
@@ -2260,9 +2265,20 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       ]
     };
 
-    const requestedOrder = await Order.findOne(acceptFilter);
+    const requestedOrder = await Order.findOne(acceptFilter).populate("partnerId", "location");
     if (!requestedOrder) {
       return errorResponse(res, "Order is no longer available", 409);
+    }
+
+    const riderCoordinates = normalizeCoordinates(deliveryPartner.currentLocation?.coordinates);
+    const shopCoordinates = await resolveOrderShopCoordinates(requestedOrder);
+    if (
+      shopCoordinates &&
+      (!riderCoordinates ||
+        !isRiderLocationFresh(deliveryPartner.updatedAt) ||
+        !isRiderNearShop(riderCoordinates, shopCoordinates))
+    ) {
+      return errorResponse(res, "You are outside the delivery radius for this job", 403);
     }
 
     if (isBundledDeliveryOrder(requestedOrder)) {

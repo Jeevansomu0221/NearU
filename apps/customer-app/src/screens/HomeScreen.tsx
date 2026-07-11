@@ -76,7 +76,7 @@ const categoryOptions = [
   { key: "ice-creams", label: "Ice Creams", icon: "ice-cream" }
 ] as const;
 
-const NEARBY_RADIUS_KM = 3;
+const NEARBY_RADIUS_KM = 5;
 const LOCATION_TIMEOUT_MS = 8000;
 const INITIAL_LOCATION_REQUEST_DELAY_MS = 1200;
 const LOCATION_PERMISSION_MESSAGE = `Allow location to view shops within ${NEARBY_RADIUS_KM} km of you.`;
@@ -229,15 +229,6 @@ export default function HomeScreen({ navigation }: Props) {
     return false;
   };
 
-  const loadApprovedShops = async (messageForCount: (count: number) => string) => {
-    const fallbackResponse = await getPartners();
-    const approvedShops = extractShops(fallbackResponse);
-
-    setShops(approvedShops);
-    setLocationPermissionPrompt(null);
-    setLocationMessage(messageForCount(approvedShops.length));
-  };
-
   const loadNearbyShops = async (showRefresh = false) => {
     try {
       if (showRefresh) {
@@ -257,11 +248,8 @@ export default function HomeScreen({ navigation }: Props) {
         LOCATION_TIMEOUT_MS
       );
       if (locationServicesEnabled === false) {
-        await loadApprovedShops((count) =>
-          count > 0
-            ? "Showing approved shops. Turn on device location to sort by nearby shops."
-            : "No approved shops found. Check partner approval and setup status."
-        );
+        setShops([]);
+        setLocationMessage("Turn on device location to see shops within 5 km of you.");
         return;
       }
 
@@ -269,20 +257,14 @@ export default function HomeScreen({ navigation }: Props) {
       try {
         location = await getCurrentPositionWithTimeout();
       } catch {
-        await loadApprovedShops((count) =>
-          count > 0
-            ? "Showing approved shops while we retry nearby sorting."
-            : "No approved shops found. Check partner approval and setup status."
-        );
+        setShops([]);
+        setLocationMessage("Could not get your location. Pull to refresh and try again.");
         return;
       }
 
       if (!location) {
-        await loadApprovedShops((count) =>
-          count > 0
-            ? "Showing approved shops while we wait for your location. Pull to refresh to try nearby sorting."
-            : "No approved shops found. Check partner approval and setup status."
-        );
+        setShops([]);
+        setLocationMessage("Waiting for your location. Pull to refresh to try again.");
         return;
       }
 
@@ -294,32 +276,19 @@ export default function HomeScreen({ navigation }: Props) {
 
       const nearbyShops = extractShops(response);
 
-      if (nearbyShops.length > 0) {
-        setShops(nearbyShops);
-        setLocationPermissionPrompt(null);
-        setLocationMessage(
-          (response as any)?.locationApplied === false && (response as any)?.message
+      setShops(nearbyShops);
+      setLocationPermissionPrompt(null);
+      setLocationMessage(
+        nearbyShops.length > 0
+          ? (response as any)?.locationApplied === false && (response as any)?.message
             ? (response as any).message
             : `Showing shops within ${NEARBY_RADIUS_KM} km of your current location`
-        );
-      } else {
-        await loadApprovedShops((count) =>
-          count > 0
-            ? `No shops found within ${NEARBY_RADIUS_KM} km. Showing approved shops instead.`
-            : "No approved shops found. Check partner approval and setup status."
-        );
-      }
+          : (response as any)?.message || `No shops found within ${NEARBY_RADIUS_KM} km of you.`
+      );
     } catch (error: any) {
-      try {
-        await loadApprovedShops((count) =>
-          count > 0
-            ? "Showing approved shops while nearby lookup is unavailable."
-            : "No approved shops found. Check partner approval and setup status."
-        );
-      } catch (fallbackError: any) {
-        Alert.alert("Error", fallbackError.message || error.message || "Failed to load shops");
-        setShops([]);
-      }
+      Alert.alert("Error", error.message || "Failed to load nearby shops");
+      setShops([]);
+      setLocationMessage("Could not load nearby shops. Pull to refresh and try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
