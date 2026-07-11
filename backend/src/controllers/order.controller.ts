@@ -1567,6 +1567,85 @@ const markCodOrdersPaidFromUpi = async (
   }
 };
 
+const getPendingCodOrders = (orders: any[]) =>
+  orders.filter(
+    (deliveryOrder: any) =>
+      deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
+      deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY"
+  );
+
+const normalizeCodUpiSessionPayload = (session: any) => {
+  if (!session?.provider) {
+    return null;
+  }
+
+  return {
+    provider: session.provider,
+    razorpayQrId: session.razorpayQrId,
+    qrImageUrl: session.qrImageUrl,
+    qrDataUrl: session.qrDataUrl,
+    upiUri: session.upiUri,
+    paymentUrl: session.paymentUrl,
+    amount: session.amount,
+    manualConfirmRequired: session.manualConfirmRequired === true,
+    createdAt: session.createdAt ? new Date(session.createdAt) : new Date(),
+    expiresAt: session.expiresAt
+      ? new Date(session.expiresAt)
+      : new Date(Date.now() + 60 * 60 * 1000)
+  };
+};
+
+const persistCodUpiSession = async (orders: any[], session: any) => {
+  const codUpiSession = normalizeCodUpiSessionPayload(session);
+  if (!codUpiSession) {
+    return false;
+  }
+
+  const pendingCodOrders = getPendingCodOrders(orders);
+  const targetOrders = pendingCodOrders.length > 0 ? pendingCodOrders : getCodCollectionTargets(orders);
+  if (targetOrders.length === 0) {
+    return false;
+  }
+
+  await Order.updateMany(
+    { _id: { $in: targetOrders.map((deliveryOrder: any) => deliveryOrder._id) } },
+    { $set: { codUpiSession } }
+  );
+
+  return true;
+};
+
+const restoreCodUpiSessionIfNeeded = async (orders: any[], session?: any) => {
+  if (findCodUpiSession(orders)?.provider) {
+    return findCodUpiSession(orders);
+  }
+
+  const normalizedSession = normalizeCodUpiSessionPayload(session);
+  if (!normalizedSession) {
+    return null;
+  }
+
+  const persisted = await persistCodUpiSession(orders, normalizedSession);
+  if (!persisted) {
+    return null;
+  }
+
+  const orderIds = orders.map((deliveryOrder: any) => deliveryOrder._id);
+  const refreshedOrders = await Order.find({ _id: { $in: orderIds } });
+  return findCodUpiSession(refreshedOrders);
+};
+
+const getCodOrdersForManualVerify = (orders: any[]) => {
+  const codTargets = getCodCollectionTargets(orders).filter(
+    (deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID"
+  );
+  if (codTargets.length > 0) {
+    return codTargets;
+  }
+
+  return getPendingCodOrders(orders);
+};
+
 const getCodCollectionTargets = (orders: any[]) =>
   orders.filter((deliveryOrder: any) => {
     // Keep tracking orders after UPI collection marks them PAID and paymentMethod becomes UPI.
@@ -1766,6 +1845,10 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
       deliveryOrder.codUpiSession = codUpiSession;
       await deliveryOrder.save();
     }
+    await persistCodUpiSession(
+      await Order.find({ _id: { $in: codOrders.map((deliveryOrder: any) => deliveryOrder._id) } }),
+      codUpiSession
+    );
 
     return successResponse(
       res,
@@ -1799,12 +1882,22 @@ export const getCodUpiPaymentStatus = async (req: AuthRequest, res: Response) =>
 
     const { deliveryOrders } = assignment;
     const orderIds = deliveryOrders.map((deliveryOrder: any) => deliveryOrder._id);
-    const freshOrders = await Order.find({ _id: { $in: orderIds } });
+    let freshOrders = await Order.find({ _id: { $in: orderIds } });
 
-    if (!findCodUpiSession(freshOrders)?.provider) {
+    const restoredSession = await restoreCodUpiSessionIfNeeded(freshOrders, req.body?.session);
+    if (!restoredSession?.provider) {
+      if (getPendingCodOrders(freshOrders).length > 0) {
+        return successResponse(res, {
+          paid: false,
+          manualConfirmRequired: true,
+          amount: req.body?.session?.amount,
+          provider: req.body?.session?.provider
+        });
+      }
       return errorResponse(res, "UPI collection has not been started for this order", 400);
     }
 
+    freshOrders = await Order.find({ _id: { $in: orderIds } });
     const paymentState = await syncCodUpiPaymentState(freshOrders, String(req.params.orderId));
 
     return successResponse(res, paymentState);
@@ -1830,12 +1923,29 @@ export const confirmCodUpiPayment = async (req: AuthRequest, res: Response) => {
 
     const { deliveryOrders } = assignment;
     const orderIds = deliveryOrders.map((deliveryOrder: any) => deliveryOrder._id);
-    const freshOrders = await Order.find({ _id: { $in: orderIds } });
-    const session = findCodUpiSession(freshOrders);
+    let freshOrders = await Order.find({ _id: { $in: orderIds } });
+    const riderManualVerify = req.body?.riderManualVerify === true;
 
-    if (!session?.provider) {
+    const restoredSession = await restoreCodUpiSessionIfNeeded(freshOrders, req.body?.session);
+    if (!restoredSession?.provider) {
+      if (riderManualVerify) {
+        const codTargets = getCodOrdersForManualVerify(freshOrders);
+        if (codTargets.length === 0) {
+          return errorResponse(res, "This delivery does not require COD collection", 400);
+        }
+
+        await markCodOrdersPaidFromUpi(codTargets, undefined, {
+          riderManualVerify: true,
+          collectedBy: new mongoose.Types.ObjectId(user.id)
+        });
+        return successResponse(res, { paid: true }, "UPI payment manually verified by rider");
+      }
+
       return errorResponse(res, "UPI collection has not been started for this order", 400);
     }
+
+    freshOrders = await Order.find({ _id: { $in: orderIds } });
+    const session = findCodUpiSession(freshOrders);
 
     const paymentState = await syncCodUpiPaymentState(freshOrders, String(orderId));
 
@@ -1843,9 +1953,7 @@ export const confirmCodUpiPayment = async (req: AuthRequest, res: Response) => {
       return successResponse(res, { paid: true }, "UPI payment confirmed");
     }
 
-    const riderManualVerify = req.body?.riderManualVerify === true;
-
-    if (session.provider === "platform_upi" || riderManualVerify) {
+    if (session?.provider === "platform_upi" || riderManualVerify) {
       const codTargets = getCodCollectionTargets(freshOrders).filter(
         (deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID"
       );

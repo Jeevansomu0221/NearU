@@ -151,7 +151,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     try {
       pollInFlightRef.current = true;
       setUpiPolling(true);
-      const response = await getCodUpiPaymentStatus(orderId);
+      const response = await getCodUpiPaymentStatus(orderId, codUpiSession);
       if (response.success && response.data) {
         if (response.data.manualConfirmRequired) {
           setCodUpiSession((previous) =>
@@ -174,7 +174,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       pollInFlightRef.current = false;
       setUpiPolling(false);
     }
-  }, [orderId]);
+  }, [orderId, codUpiSession]);
 
   useEffect(() => {
     if (!upiPaymentVisible) {
@@ -577,7 +577,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const handleManualUpiConfirm = async (riderManualVerify = false) => {
     try {
       setUpiLoading(true);
-      const response = await confirmCodUpiPayment(orderId, { riderManualVerify });
+      const response = await confirmCodUpiPayment(orderId, { riderManualVerify, session: codUpiSession });
       if (!response.success) {
         Alert.alert(
           "Payment not confirmed",

@@ -162,6 +162,12 @@ router.get(
 );
 
 router.post(
+  "/delivery/:orderId/cod-upi/status",
+  authMiddleware,
+  getCodUpiPaymentStatus
+);
+
+router.post(
   "/delivery/:orderId/cod-upi/confirm",
   authMiddleware,
   confirmCodUpiPayment

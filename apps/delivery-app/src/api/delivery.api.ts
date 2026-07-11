@@ -246,15 +246,26 @@ export const createCodUpiCollection = (orderId: string): Promise<ApiResponse<Cod
 };
 
 export const getCodUpiPaymentStatus = (
-  orderId: string
+  orderId: string,
+  session?: CodUpiSession | null
 ): Promise<ApiResponse<{ paid: boolean; manualConfirmRequired?: boolean; amount?: number; provider?: string }>> => {
-  return apiGet(`/orders/delivery/${orderId}/cod-upi/status`);
+  return apiPost(
+    `/orders/delivery/${orderId}/cod-upi/status`,
+    session?.provider ? { session } : {},
+    STATUS_UPDATE_REQUEST_CONFIG
+  );
 };
 
-export const confirmCodUpiPayment = (orderId: string, options?: { riderManualVerify?: boolean }): Promise<ApiResponse<{ paid: boolean }>> => {
+export const confirmCodUpiPayment = (
+  orderId: string,
+  options?: { riderManualVerify?: boolean; session?: CodUpiSession | null }
+): Promise<ApiResponse<{ paid: boolean }>> => {
   return apiPost<{ paid: boolean }>(
     `/orders/delivery/${orderId}/cod-upi/confirm`,
-    { riderManualVerify: options?.riderManualVerify === true },
+    {
+      riderManualVerify: options?.riderManualVerify === true,
+      ...(options?.session?.provider ? { session: options.session } : {})
+    },
     STATUS_UPDATE_REQUEST_CONFIG
   );
 };
