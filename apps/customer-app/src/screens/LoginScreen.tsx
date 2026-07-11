@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,11 @@ import {
   Alert,
   ActivityIndicator,
   Image,
-  Linking
+  Linking,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -28,6 +32,25 @@ interface Props {
 export default function LoginScreen({ navigation }: Props) {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const keyboardOpen = keyboardHeight > 0;
 
   const getSendOtpErrorMessage = (error: any) => {
     const code = String(error?.code || '').toLowerCase();
@@ -80,11 +103,23 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          keyboardOpen && styles.scrollContentKeyboard,
+          Platform.OS === 'android' && keyboardOpen && { paddingBottom: keyboardHeight },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
         <Image source={require('../../assets/vyaha-wordmark.png')} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.subtitle}>Good food near you</Text>
-        
+        <Text style={[styles.subtitle, keyboardOpen && styles.subtitleKeyboard]}>Good food near you</Text>
+
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Phone Number</Text>
           <View style={styles.phoneInputWrapper}>
@@ -96,9 +131,7 @@ export default function LoginScreen({ navigation }: Props) {
               keyboardType="phone-pad"
               value={phone}
               onChangeText={(text) => {
-                // Allow only numbers
                 const numbers = text.replace(/\D/g, '');
-                // Limit to 10 digits
                 if (numbers.length <= 10) {
                   setPhone(numbers);
                 }
@@ -124,8 +157,8 @@ export default function LoginScreen({ navigation }: Props) {
             </Text>
           )}
         </TouchableOpacity>
-        
-        <View style={styles.footer}>
+
+        <View style={[styles.footer, keyboardOpen && styles.footerKeyboard]}>
           <Text style={styles.footerText}>
             By continuing, you agree to our{" "}
             <Text style={styles.footerLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Service</Text>
@@ -133,8 +166,8 @@ export default function LoginScreen({ navigation }: Props) {
             <Text style={styles.footerLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
           </Text>
         </View>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -143,11 +176,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 24,
     paddingVertical: 40,
     justifyContent: 'center',
+  },
+  scrollContentKeyboard: {
+    justifyContent: 'flex-start',
+    paddingTop: 48,
   },
   logo: {
     width: 210,
@@ -161,6 +198,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 60,
     fontStyle: 'italic',
+  },
+  subtitleKeyboard: {
+    marginBottom: 28,
   },
   inputContainer: {
     marginBottom: 32,
@@ -226,6 +266,9 @@ const styles = StyleSheet.create({
   footer: {
     marginTop: 40,
     paddingHorizontal: 20,
+  },
+  footerKeyboard: {
+    marginTop: 24,
   },
   footerText: {
     fontSize: 12,

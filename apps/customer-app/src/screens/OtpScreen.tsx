@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,11 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Linking
+  Linking,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -42,7 +46,26 @@ export default function OtpScreen({ navigation, route }: Props) {
   const [otpError, setOtpError] = useState('');
   const [requiresFreshOtp, setRequiresFreshOtp] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(RESEND_COOLDOWN_SECONDS);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const lastSubmittedOtp = useRef('');
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const keyboardOpen = keyboardHeight > 0;
 
   const extractServerMessage = (error: any): string => {
     const data = error?.response?.data;
@@ -261,14 +284,28 @@ export default function OtpScreen({ navigation, route }: Props) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Verify Phone Number</Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          keyboardOpen && styles.scrollContentKeyboard,
+          Platform.OS === 'android' && keyboardOpen && { paddingBottom: keyboardHeight },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <Text style={[styles.title, keyboardOpen && styles.titleKeyboard]}>Verify Phone Number</Text>
         <View style={styles.phoneContainer}>
           <Text style={styles.phoneLabel}>Code sent to</Text>
           <Text style={styles.phoneNumber}>+91 {phone}</Text>
         </View>
-        <Text style={styles.instruction}>Enter the 6-digit code sent to your phone</Text>
+        <Text style={[styles.instruction, keyboardOpen && styles.instructionKeyboard]}>
+          Enter the 6-digit code sent to your phone
+        </Text>
         <View style={styles.otpContainer}>
           <TextInput
             style={styles.otpInput}
@@ -292,7 +329,7 @@ export default function OtpScreen({ navigation, route }: Props) {
             textAlign="center"
           />
         </View>
-        <View style={styles.otpDots}>
+        <View style={[styles.otpDots, keyboardOpen && styles.otpDotsKeyboard]}>
           {Array.from({ length: 6 }).map((_, index) => (
             <View key={index} style={[styles.otpDot, index < otp.length && styles.otpDotFilled]} />
           ))}
@@ -312,7 +349,7 @@ export default function OtpScreen({ navigation, route }: Props) {
           {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.buttonText}>Verify & Continue</Text>}
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.resendButton}
+          style={[styles.resendButton, keyboardOpen && styles.resendButtonKeyboard]}
           onPress={handleResendOTP}
           disabled={loading || (resendSeconds > 0 && !requiresFreshOtp)}
         >
@@ -321,7 +358,7 @@ export default function OtpScreen({ navigation, route }: Props) {
             {resendSeconds === 0 || requiresFreshOtp ? <Text style={styles.resendLink}>Resend OTP</Text> : null}
           </Text>
         </TouchableOpacity>
-        <View style={styles.footer}>
+        <View style={[styles.footer, keyboardOpen && styles.footerKeyboard]}>
           <Text style={styles.footerText}>
             By verifying, you agree to our{" "}
             <Text style={styles.footerLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Service</Text>
@@ -329,22 +366,34 @@ export default function OtpScreen({ navigation, route }: Props) {
             <Text style={styles.footerLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
           </Text>
         </View>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  content: { flex: 1, paddingHorizontal: 24, paddingVertical: 40, justifyContent: 'center' },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+    justifyContent: 'center',
+  },
+  scrollContentKeyboard: {
+    justifyContent: 'flex-start',
+    paddingTop: 48,
+  },
   title: { fontSize: 28, fontWeight: 'bold', color: '#333', textAlign: 'center', marginBottom: 24 },
+  titleKeyboard: { marginBottom: 16 },
   phoneContainer: { alignItems: 'center', marginBottom: 8 },
   phoneLabel: { fontSize: 14, color: '#666', marginBottom: 4 },
   phoneNumber: { fontSize: 18, fontWeight: '600', color: '#333' },
   instruction: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 32, lineHeight: 20 },
+  instructionKeyboard: { marginBottom: 20 },
   otpContainer: { marginBottom: 16 },
   otpInput: { borderWidth: 2, borderColor: '#E0E0E0', borderRadius: 12, padding: 16, fontSize: 24, fontWeight: 'bold', letterSpacing: 8, color: '#333', backgroundColor: '#FAFAFA' },
   otpDots: { flexDirection: 'row', justifyContent: 'center', marginBottom: 40 },
+  otpDotsKeyboard: { marginBottom: 24 },
   otpDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#E0E0E0', marginHorizontal: 6 },
   otpDotFilled: { backgroundColor: '#FF6B35' },
   errorCard: { backgroundColor: '#FFF4EF', borderWidth: 1, borderColor: '#FFD2C0', borderRadius: 14, padding: 12, marginBottom: 18 },
@@ -354,9 +403,11 @@ const styles = StyleSheet.create({
   buttonDisabled: { backgroundColor: '#FFA285', shadowOpacity: 0.1 },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   resendButton: { alignItems: 'center', marginBottom: 40 },
+  resendButtonKeyboard: { marginBottom: 24 },
   resendText: { fontSize: 14, color: '#666' },
   resendLink: { color: '#FF6B35', fontWeight: '600' },
   footer: { paddingHorizontal: 20 },
+  footerKeyboard: { marginTop: 8 },
   footerText: { fontSize: 12, color: '#888', textAlign: 'center', lineHeight: 18 },
   footerLink: { color: '#FF6B35', fontWeight: '700' },
 });
