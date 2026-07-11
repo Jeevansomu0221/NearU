@@ -202,7 +202,11 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
           ) {
             delete orderUpdate.status;
           }
-          if (isDeliveryCollection && targetOrder.paymentMethod !== "CASH_ON_DELIVERY") {
+          if (isDeliveryCollection) {
+          orderUpdate["codCollection.method"] = "UPI";
+          orderUpdate["codCollection.collectedAt"] = new Date();
+        }
+        if (isDeliveryCollection && targetOrder.paymentMethod !== "CASH_ON_DELIVERY") {
             continue;
           }
           await Order.findByIdAndUpdate(targetOrder._id, orderUpdate);

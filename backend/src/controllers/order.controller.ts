@@ -1544,6 +1544,11 @@ const markCodOrdersPaidFromUpi = async (deliveryOrders: any[], paymentId?: strin
 
     deliveryOrder.paymentStatus = "PAID";
     deliveryOrder.paymentMethod = "UPI";
+    deliveryOrder.codCollection = {
+      ...(deliveryOrder.codCollection || {}),
+      method: "UPI",
+      collectedAt: new Date()
+    };
     if (paymentId) {
       deliveryOrder.razorpayPaymentId = paymentId;
       deliveryOrder.paymentId = paymentId;
@@ -1551,6 +1556,15 @@ const markCodOrdersPaidFromUpi = async (deliveryOrders: any[], paymentId?: strin
     await deliveryOrder.save();
   }
 };
+
+const getCodCollectionTargets = (orders: any[]) =>
+  orders.filter(
+    (deliveryOrder: any) =>
+      deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
+      (deliveryOrder.codUpiSession?.provider ||
+        deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY" ||
+        deliveryOrder.codCollection?.method === "UPI")
+  );
 
 export const createCodUpiCollection = async (req: AuthRequest, res: Response) => {
   try {
@@ -1567,6 +1581,33 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
     }
 
     const { order, deliveryOrders } = assignment;
+    const codTargets = getCodCollectionTargets(
+      await Order.find({ _id: { $in: deliveryOrders.map((deliveryOrder: any) => deliveryOrder._id) } })
+    );
+    const alreadyPaid =
+      codTargets.length > 0 && codTargets.every((deliveryOrder: any) => deliveryOrder.paymentStatus === "PAID");
+    if (alreadyPaid) {
+      const sessionOrder = codTargets.find((deliveryOrder: any) => deliveryOrder.codUpiSession?.provider);
+      const session = sessionOrder?.codUpiSession;
+      return successResponse(
+        res,
+        {
+          provider: session?.provider || "razorpay_qr",
+          razorpayQrId: session?.razorpayQrId,
+          qrImageUrl: session?.qrImageUrl,
+          qrDataUrl: session?.qrDataUrl,
+          upiUri: session?.upiUri,
+          paymentUrl: session?.paymentUrl,
+          amount: session?.amount,
+          manualConfirmRequired: false,
+          orderRef: String(order._id).slice(-6).toUpperCase(),
+          payeeName: "Vyaha",
+          paid: true
+        },
+        "UPI payment already received"
+      );
+    }
+
     const codOrders = deliveryOrders.filter(
       (deliveryOrder: any) =>
         deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" && deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY"
@@ -1689,12 +1730,7 @@ export const getCodUpiPaymentStatus = async (req: AuthRequest, res: Response) =>
       return errorResponse(res, "UPI collection has not been started for this order", 400);
     }
 
-    const codTargets = freshOrders.filter(
-      (deliveryOrder: any) =>
-        deliveryOrder.codUpiSession?.provider ||
-        deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY" ||
-        deliveryOrder.codCollection?.method === "UPI"
-    );
+    const codTargets = getCodCollectionTargets(freshOrders);
 
     const alreadyPaid = codTargets.length > 0 && codTargets.every((deliveryOrder: any) => deliveryOrder.paymentStatus === "PAID");
     if (alreadyPaid) {
@@ -1706,24 +1742,22 @@ export const getCodUpiPaymentStatus = async (req: AuthRequest, res: Response) =>
       });
     }
 
-    const paymentStatus = await PaymentService.checkCodCollectionPayment({
-      provider: session.provider,
-      razorpayQrId: session.razorpayQrId || undefined,
-      amount: session.amount || undefined
-    });
+    const paymentStatus = await PaymentService.checkCodCollectionPayment(
+      {
+        provider: session.provider,
+        razorpayQrId: session.razorpayQrId || undefined,
+        amount: session.amount || undefined
+      },
+      String(req.params.orderId)
+    );
 
     if (paymentStatus.paid) {
       const pendingOrders = freshOrders.filter((deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID");
-      await markCodOrdersPaidFromUpi(pendingOrders);
+      await markCodOrdersPaidFromUpi(pendingOrders, paymentStatus.paymentId);
     }
 
     const refreshedOrders = await Order.find({ _id: { $in: orderIds } });
-    const paidOrders = refreshedOrders.filter(
-      (deliveryOrder: any) =>
-        deliveryOrder.codUpiSession?.provider ||
-        deliveryOrder.paymentStatus === "PAYMENT_PENDING_DELIVERY" ||
-        deliveryOrder.codCollection?.method === "UPI"
-    );
+    const paidOrders = getCodCollectionTargets(refreshedOrders);
     const allPaid = paidOrders.length > 0 && paidOrders.every((deliveryOrder: any) => deliveryOrder.paymentStatus === "PAID");
 
     return successResponse(res, {
@@ -1753,16 +1787,37 @@ export const confirmCodUpiPayment = async (req: AuthRequest, res: Response) => {
     }
 
     const { deliveryOrders } = assignment;
-    const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
+    const codOrders = deliveryOrders.filter(
+      (deliveryOrder: any) =>
+        deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
+        deliveryOrder.paymentStatus !== "PAID"
+    );
     const session = codOrders[0]?.codUpiSession;
 
-    if (!session || session.provider !== "platform_upi") {
-      return errorResponse(res, "Manual UPI confirmation is not available for this payment", 400);
+    if (!session?.provider) {
+      return errorResponse(res, "UPI collection has not been started for this order", 400);
     }
 
-    await markCodOrdersPaidFromUpi(codOrders);
+    const paymentStatus = await PaymentService.checkCodCollectionPayment(
+      {
+        provider: session.provider,
+        razorpayQrId: session.razorpayQrId || undefined,
+        amount: session.amount || undefined
+      },
+      String(orderId)
+    );
 
-    return successResponse(res, { paid: true }, "UPI payment marked as received");
+    if (paymentStatus.paid) {
+      await markCodOrdersPaidFromUpi(codOrders, paymentStatus.paymentId);
+      return successResponse(res, { paid: true }, "UPI payment confirmed");
+    }
+
+    if (session.provider === "platform_upi") {
+      await markCodOrdersPaidFromUpi(codOrders);
+      return successResponse(res, { paid: true }, "UPI payment marked as received");
+    }
+
+    return errorResponse(res, "Payment not received yet. Ask the customer to complete UPI payment and try again.", 400);
   } catch (error: any) {
     console.error("confirmCodUpiPayment error:", error);
     return errorResponse(res, error.message || "Failed to confirm UPI payment");

@@ -210,39 +210,105 @@ export const PaymentService = {
     return { paid: true, order, didConfirm };
   },
 
-  checkCodCollectionPayment: async (session: {
-    provider?: CodCollectionProvider | string;
-    razorpayQrId?: string;
-    amount?: number;
-  }) => {
+  checkCodCollectionPayment: async (
+    session: {
+      provider?: CodCollectionProvider | string;
+      razorpayQrId?: string;
+      amount?: number;
+    },
+    orderId?: string
+  ) => {
     if (!session?.provider) {
-      return { paid: false, manualConfirmRequired: false };
+      return { paid: false, manualConfirmRequired: false, paymentId: undefined as string | undefined };
     }
 
     if (session.provider === "platform_upi") {
-      return { paid: false, manualConfirmRequired: true };
+      return { paid: false, manualConfirmRequired: true, paymentId: undefined as string | undefined };
     }
 
     if (session.provider !== "razorpay_qr" || !session.razorpayQrId) {
-      return { paid: false, manualConfirmRequired: false };
+      return { paid: false, manualConfirmRequired: false, paymentId: undefined as string | undefined };
     }
 
     const razorpay = getRazorpayClient();
-    const qr = await razorpay.qrCode.fetch(session.razorpayQrId);
-    const expectedAmount = Number((qr as any).payment_amount || 0);
-    const receivedAmount = Number((qr as any).payments_amount_received || 0);
-    const paymentsCount = Number((qr as any).payments_count_received || 0);
-    const qrStatus = String((qr as any).status || "").toLowerCase();
-    const paid =
-      paymentsCount > 0 ||
-      qrStatus === "closed" ||
-      (expectedAmount > 0 ? receivedAmount >= expectedAmount : receivedAmount > 0);
+    const expectedAmountPaise = Math.round(Number(session.amount || 0) * 100);
+
+    const isCapturedPayment = (payment: any) => {
+      const status = String(payment?.status || "").toLowerCase();
+      if (status !== "captured" && status !== "authorized") return false;
+      const amount = Number(payment?.amount || 0);
+      return expectedAmountPaise <= 0 || amount >= expectedAmountPaise;
+    };
+
+    const buildPaidResult = (payment?: any) => ({
+      paid: true,
+      manualConfirmRequired: false,
+      paymentId: payment?.id ? String(payment.id) : undefined,
+      receivedAmount: Number(payment?.amount || expectedAmountPaise) / 100,
+      expectedAmount: expectedAmountPaise / 100
+    });
+
+    try {
+      const qr = await razorpay.qrCode.fetch(session.razorpayQrId);
+      const expectedAmount = Number((qr as any).payment_amount || 0);
+      const receivedAmount = Number((qr as any).payments_amount_received || 0);
+      const paymentsCount = Number((qr as any).payments_count_received || 0);
+      const qrStatus = String((qr as any).status || "").toLowerCase();
+      const paid =
+        paymentsCount > 0 ||
+        qrStatus === "closed" ||
+        (expectedAmount > 0 ? receivedAmount >= expectedAmount : receivedAmount > 0);
+
+      if (paid) {
+        return {
+          paid: true,
+          manualConfirmRequired: false,
+          paymentId: undefined as string | undefined,
+          receivedAmount: receivedAmount / 100,
+          expectedAmount: expectedAmount / 100
+        };
+      }
+    } catch (error) {
+      console.warn("Razorpay QR fetch failed during COD status check:", (error as Error)?.message || error);
+    }
+
+    try {
+      const qrPayments = await (razorpay.payments as any).all({
+        qr_code_id: session.razorpayQrId,
+        count: 10
+      });
+      const capturedQrPayment = (qrPayments?.items || []).find(isCapturedPayment);
+      if (capturedQrPayment) {
+        return buildPaidResult(capturedQrPayment);
+      }
+    } catch (error) {
+      console.warn("Razorpay QR payments lookup failed:", (error as Error)?.message || error);
+    }
+
+    if (orderId) {
+      try {
+        const orderPayments = await (razorpay.payments as any).all({
+          count: 10,
+          notes: {
+            orderId,
+            deliveryCollection: "true"
+          }
+        });
+        const capturedOrderPayment = (orderPayments?.items || []).find(isCapturedPayment);
+        if (capturedOrderPayment) {
+          return buildPaidResult(capturedOrderPayment);
+        }
+      } catch (error) {
+        console.warn("Razorpay order-note payments lookup failed:", (error as Error)?.message || error);
+      }
+    }
 
     return {
-      paid,
+      paid: false,
       manualConfirmRequired: false,
-      receivedAmount: receivedAmount / 100,
-      expectedAmount: expectedAmount / 100
+      paymentId: undefined as string | undefined,
+      receivedAmount: 0,
+      expectedAmount: expectedAmountPaise / 100
     };
   }
 };

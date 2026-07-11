@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
   Platform,
   Image,
   Dimensions,
-  Animated
+  Animated,
+  AppState
 } from "react-native";
 import { 
   acceptJob,
@@ -140,32 +141,51 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     getCurrentRiderLocation({ showDeniedAlert: false }).catch(() => {});
   }, []);
 
+  const refreshUpiPaymentStatus = useCallback(async () => {
+    try {
+      setUpiPolling(true);
+      const response = await getCodUpiPaymentStatus(orderId);
+      if (response.success && response.data?.paid) {
+        setUpiPaymentPaid(true);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Failed to poll COD UPI status:", error);
+      return false;
+    } finally {
+      setUpiPolling(false);
+    }
+  }, [orderId]);
+
   useEffect(() => {
     if (!upiPaymentVisible || !codUpiSession || upiPaymentPaid) return;
 
     let cancelled = false;
     const pollPaymentStatus = async () => {
-      try {
-        setUpiPolling(true);
-        const response = await getCodUpiPaymentStatus(orderId);
-        if (cancelled) return;
-        if (response.success && response.data?.paid) {
-          setUpiPaymentPaid(true);
-        }
-      } catch (error) {
-        console.error("Failed to poll COD UPI status:", error);
-      } finally {
-        if (!cancelled) setUpiPolling(false);
-      }
+      if (cancelled) return;
+      await refreshUpiPaymentStatus();
     };
 
     pollPaymentStatus();
-    const intervalId = setInterval(pollPaymentStatus, 3000);
+    const intervalId = setInterval(pollPaymentStatus, 2000);
     return () => {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [upiPaymentVisible, codUpiSession, upiPaymentPaid, orderId]);
+  }, [upiPaymentVisible, codUpiSession, upiPaymentPaid, orderId, refreshUpiPaymentStatus]);
+
+  useEffect(() => {
+    if (!upiPaymentVisible || !codUpiSession || upiPaymentPaid) return;
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshUpiPaymentStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [upiPaymentVisible, codUpiSession, upiPaymentPaid, refreshUpiPaymentStatus]);
 
   const returnToJobs = () => {
     if (navigation.canGoBack?.()) {
@@ -482,6 +502,13 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         Alert.alert("UPI unavailable", response.message || "Could not create UPI payment QR. Try cash collection.");
         return;
       }
+      if (response.data.paid) {
+        setCodUpiSession(response.data);
+        setUpiPaymentPaid(true);
+        setCodPaymentChoiceVisible(false);
+        setUpiPaymentVisible(true);
+        return;
+      }
       if (!getCodQrDisplayUri(response.data)) {
         Alert.alert(
           "UPI unavailable",
@@ -506,13 +533,13 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       setUpiLoading(true);
       const response = await confirmCodUpiPayment(orderId);
       if (!response.success) {
-        Alert.alert("Could not confirm", response.message || "Please try again.");
+        Alert.alert("Payment not confirmed", response.message || "Ask the customer to complete payment, then try again.");
         return;
       }
       setUpiPaymentPaid(true);
     } catch (error) {
       console.error("Failed to confirm UPI payment:", error);
-      Alert.alert("Could not confirm", "Please try again.");
+      Alert.alert("Could not confirm", "Please try again in a few seconds.");
     } finally {
       setUpiLoading(false);
     }
@@ -984,30 +1011,48 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             <Text style={styles.qrScanHint}>Customer scans with any UPI app · Vyaha receives payment directly</Text>
 
             {upiPaymentPaid ? (
-              <Text style={styles.upiPaidText}>Payment received — complete delivery</Text>
+              <View style={styles.upiPaidBanner}>
+                <Ionicons name="checkmark-circle" size={22} color="#166534" />
+                <Text style={styles.upiPaidText}>Payment received — complete delivery</Text>
+              </View>
             ) : (
               <Text style={styles.upiWaitingText}>
-                {upiPolling ? "Checking payment status..." : "Waiting for customer payment..."}
+                {upiPolling ? "Confirming payment with Vyaha..." : "Waiting for customer payment..."}
               </Text>
             )}
 
             <View style={styles.upiFooterActions}>
-              <TouchableOpacity style={styles.confirmSecondary} onPress={() => setUpiPaymentVisible(false)} disabled={updating}>
+              <TouchableOpacity style={styles.confirmSecondary} onPress={() => setUpiPaymentVisible(false)} disabled={upiLoading || updating}>
                 <Text style={styles.confirmSecondaryText}>Back</Text>
               </TouchableOpacity>
-              {codUpiSession?.manualConfirmRequired && !upiPaymentPaid ? (
-                <TouchableOpacity style={[styles.confirmPrimary, styles.confirmPrimaryUpi]} onPress={handleManualUpiConfirm} disabled={upiLoading}>
-                  {upiLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Customer Paid</Text>}
-                </TouchableOpacity>
-              ) : (
+              {!upiPaymentPaid ? (
                 <TouchableOpacity
-                  style={[styles.confirmPrimary, styles.confirmPrimaryUpi, !upiPaymentPaid && styles.confirmPrimaryDisabled]}
-                  onPress={completeUpiDelivery}
-                  disabled={!upiPaymentPaid || updating}
+                  style={[styles.confirmPrimary, styles.confirmPrimaryUpi]}
+                  onPress={() => {
+                    if (codUpiSession?.manualConfirmRequired) {
+                      void handleManualUpiConfirm();
+                    } else {
+                      void refreshUpiPaymentStatus();
+                    }
+                  }}
+                  disabled={upiPolling || upiLoading}
                 >
-                  {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Complete Delivery</Text>}
+                  {upiPolling ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.confirmPrimaryText}>
+                      {codUpiSession?.manualConfirmRequired ? "Customer Paid" : "Check Payment"}
+                    </Text>
+                  )}
                 </TouchableOpacity>
-              )}
+              ) : null}
+              <TouchableOpacity
+                style={[styles.confirmPrimary, styles.confirmPrimaryUpi, !upiPaymentPaid && styles.confirmPrimaryDisabled]}
+                onPress={completeUpiDelivery}
+                disabled={!upiPaymentPaid || updating}
+              >
+                {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Complete Delivery</Text>}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1614,6 +1659,18 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: "#64748B",
     textAlign: "center"
+  },
+  upiPaidBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "#DCFCE7"
   },
   upiPaidText: {
     marginBottom: 8,

@@ -237,6 +237,7 @@ export interface CodUpiSession {
   amount: number;
   orderRef: string;
   payeeName: string;
+  paid?: boolean;
   manualConfirmRequired?: boolean;
 }
 
