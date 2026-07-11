@@ -13,9 +13,9 @@ import {
   Switch,
   ActivityIndicator,
   ScrollView,
-  Dimensions,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  useWindowDimensions
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getImagePicker } from "../utils/imagePicker";
@@ -107,9 +107,6 @@ const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
   return `${baseName}.${mimeExtension}`;
 };
 
-const SCREEN_HEIGHT = Dimensions.get("window").height;
-const MODAL_HEIGHT = Math.min(SCREEN_HEIGHT * 0.9, 720);
-
 const getMenuImageUrl = (url: string) => {
   if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
     return url;
@@ -131,6 +128,8 @@ const getMenuImageUrl = (url: string) => {
 export default function MenuScreen({ navigation }: any) {
   const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const modalHeight = Math.min(windowHeight * 0.92, 720);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -540,7 +539,8 @@ export default function MenuScreen({ navigation }: any) {
       <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => !saving && setModalVisible(false)}>
         <KeyboardAvoidingView
           style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
         >
           <Pressable
             style={styles.modalBackdrop}
@@ -552,7 +552,7 @@ export default function MenuScreen({ navigation }: any) {
             }}
           />
           <View style={[styles.modalSheetWrap, { paddingBottom: insets.bottom + 8 }]}>
-            <View style={[styles.modalContent, { height: MODAL_HEIGHT }]}>
+            <View style={[styles.modalContent, { height: modalHeight }]}>
               <View style={styles.modalHandle} />
 
               <View style={styles.modalHeader}>
@@ -576,13 +576,15 @@ export default function MenuScreen({ navigation }: any) {
                 </TouchableOpacity>
               </View>
 
-              <ScrollView
-                style={styles.modalBodyScroll}
-                contentContainerStyle={styles.modalBodyContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                bounces
-              >
+              <View style={styles.modalBodyContainer}>
+                <ScrollView
+                  style={styles.modalBodyScroll}
+                  contentContainerStyle={styles.modalBodyContent}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator
+                  nestedScrollEnabled
+                  bounces
+                >
                 <Text style={styles.formSectionLabel}>Photo</Text>
                 <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving || pickerBusy}>
                   {imageUri ? (
@@ -771,7 +773,8 @@ export default function MenuScreen({ navigation }: any) {
                     <Text style={styles.addExtraChoiceText}>Add extra choice</Text>
                   </TouchableOpacity>
                 </View>
-              </ScrollView>
+                </ScrollView>
+              </View>
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -1168,11 +1171,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9E6F7",
     overflow: "hidden",
+    flexDirection: "column",
     shadowColor: "#143A66",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 8
+  },
+  modalBodyContainer: {
+    flex: 1,
+    flexShrink: 1,
+    minHeight: 0
   },
   modalHandle: {
     alignSelf: "center",
@@ -1209,9 +1218,10 @@ const styles = StyleSheet.create({
     flex: 1
   },
   modalBodyContent: {
+    flexGrow: 1,
     paddingHorizontal: 18,
     paddingTop: 16,
-    paddingBottom: 20
+    paddingBottom: 24
   },
   modalTitle: {
     fontSize: 20,
@@ -1430,6 +1440,7 @@ const styles = StyleSheet.create({
   },
   modalButtons: {
     flexDirection: "row",
+    flexShrink: 0,
     borderTopWidth: 1,
     borderTopColor: "#E7EEF8",
     paddingHorizontal: 18,
