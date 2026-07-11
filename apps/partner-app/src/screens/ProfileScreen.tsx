@@ -12,7 +12,7 @@ import {
   Linking
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as ImagePicker from "expo-image-picker";
+import { getImagePicker } from "../utils/imagePicker";
 import { Ionicons } from "@expo/vector-icons";
 import api, { uploadMultipart } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
@@ -405,6 +405,7 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const pickAsset = async (): Promise<PickerAsset | null> => {
+    const ImagePicker = await getImagePicker();
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") {
       Alert.alert("Permission needed", "Please grant gallery permission to upload.");

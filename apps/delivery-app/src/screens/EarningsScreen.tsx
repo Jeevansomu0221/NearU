@@ -18,7 +18,7 @@ import {
   type LayoutChangeEvent,
   type TextInput as TextInputType
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
+import { getImagePicker } from "../utils/imagePicker";
 import { uploadMultipart } from "../api/client";
 import {
   getCashLedger,
@@ -223,6 +223,7 @@ export default function EarningsScreen({ navigation }: any) {
     Keyboard.dismiss();
     activeDepositField.current = null;
 
+    const ImagePicker = await getImagePicker();
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") {
       Alert.alert("Permission needed", "Allow gallery access to upload your deposit proof.");

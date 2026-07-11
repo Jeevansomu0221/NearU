@@ -18,7 +18,7 @@ import {
   Platform
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as ImagePicker from "expo-image-picker";
+import { getImagePicker } from "../utils/imagePicker";
 import { Ionicons } from "@expo/vector-icons";
 import api, { uploadMultipart } from "../api/client";
 import NotificationButton from "../components/NotificationButton";
@@ -234,6 +234,7 @@ export default function MenuScreen({ navigation }: any) {
     if (pickerBusy || saving) return;
     try {
       setPickerBusy(true);
+      const ImagePicker = await getImagePicker();
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission needed", "Please grant gallery permission to add images");

@@ -15,7 +15,7 @@ import {
   View
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as ImagePicker from "expo-image-picker";
+import { getImagePicker } from "../utils/imagePicker";
 import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -665,6 +665,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const pickImage = async (field?: UploadField): Promise<UploadAsset | null> => {
+    const ImagePicker = await getImagePicker();
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permission.status !== "granted") { Alert.alert("Permission needed", "Please allow gallery access to upload images."); return null; }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -679,6 +680,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const pickLiveSelfie = async (): Promise<UploadAsset | null> => {
+    const ImagePicker = await getImagePicker();
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (permission.status !== "granted") { Alert.alert("Camera permission needed", GENERIC_UPLOAD_ERROR); return null; }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, cameraType: ImagePicker.CameraType.front, allowsEditing: false, quality: 0.8 });
