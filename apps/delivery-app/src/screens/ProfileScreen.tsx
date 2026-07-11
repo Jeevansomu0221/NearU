@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getImagePicker } from "../utils/imagePicker";
-import * as DocumentPicker from "expo-document-picker";
+import { getDocumentPicker } from "../utils/documentPicker";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -658,6 +658,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const pickDocument = async (field: UploadField): Promise<UploadAsset | null> => {
+    const DocumentPicker = await getDocumentPicker();
     const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "application/pdf"], copyToCacheDirectory: true, multiple: false });
     if (result.canceled || !result.assets?.[0]?.uri) return null;
     const asset = result.assets[0];
