@@ -251,8 +251,12 @@ export const getCodUpiPaymentStatus = (
   return apiGet(`/orders/delivery/${orderId}/cod-upi/status`);
 };
 
-export const confirmCodUpiPayment = (orderId: string): Promise<ApiResponse<{ paid: boolean }>> => {
-  return apiPost<{ paid: boolean }>(`/orders/delivery/${orderId}/cod-upi/confirm`, {}, STATUS_UPDATE_REQUEST_CONFIG);
+export const confirmCodUpiPayment = (orderId: string, options?: { riderManualVerify?: boolean }): Promise<ApiResponse<{ paid: boolean }>> => {
+  return apiPost<{ paid: boolean }>(
+    `/orders/delivery/${orderId}/cod-upi/confirm`,
+    { riderManualVerify: options?.riderManualVerify === true },
+    STATUS_UPDATE_REQUEST_CONFIG
+  );
 };
 
 // =================== DELIVERY STATS ===================

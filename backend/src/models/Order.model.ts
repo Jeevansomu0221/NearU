@@ -393,6 +393,10 @@ const OrderSchema = new Schema({
     cashLedgerEntryId: {
       type: Types.ObjectId,
       ref: "CashLedgerEntry"
+    },
+    manuallyVerifiedByRider: {
+      type: Boolean,
+      default: false
     }
   },
 

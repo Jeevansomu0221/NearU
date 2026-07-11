@@ -574,21 +574,42 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleManualUpiConfirm = async () => {
+  const handleManualUpiConfirm = async (riderManualVerify = false) => {
     try {
       setUpiLoading(true);
-      const response = await confirmCodUpiPayment(orderId);
+      const response = await confirmCodUpiPayment(orderId, { riderManualVerify });
       if (!response.success) {
-        Alert.alert("Payment not confirmed", response.message || "Ask the customer to complete payment, then try again.");
+        Alert.alert(
+          "Payment not confirmed",
+          response.message || "Ask the customer to complete payment, then try again."
+        );
         return;
       }
       setUpiPaymentPaid(true);
+      setUpiAwaitingPayment(false);
     } catch (error) {
       console.error("Failed to confirm UPI payment:", error);
       Alert.alert("Could not confirm", "Please try again in a few seconds.");
     } finally {
       setUpiLoading(false);
     }
+  };
+
+  const handleRiderManualVerify = () => {
+    const amount = codUpiSession?.amount || job?.grandTotal || 0;
+    Alert.alert(
+      "Verify payment manually",
+      `Confirm the customer paid Rs ${amount} via UPI. Only use this if you have verified the payment was received.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Payment verified",
+          onPress: () => {
+            void handleManualUpiConfirm(true);
+          }
+        }
+      ]
+    );
   };
 
   const completeUpiDelivery = async () => {
@@ -1102,6 +1123,17 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                 {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Complete Delivery</Text>}
               </TouchableOpacity>
             </View>
+
+            {!upiPaymentPaid ? (
+              <TouchableOpacity
+                style={styles.upiManualVerifyButton}
+                onPress={handleRiderManualVerify}
+                disabled={upiLoading || updating}
+              >
+                <Ionicons name="shield-checkmark-outline" size={16} color="#1D4ED8" />
+                <Text style={styles.upiManualVerifyText}>Payment done — verify manually</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -1744,6 +1776,25 @@ const styles = StyleSheet.create({
   },
   confirmPrimaryDisabled: {
     opacity: 0.5
+  },
+  upiManualVerifyButton: {
+    marginTop: 10,
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    backgroundColor: "#EFF6FF"
+  },
+  upiManualVerifyText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1D4ED8"
   },
   noLocationAddressCard: {
     width: "100%",

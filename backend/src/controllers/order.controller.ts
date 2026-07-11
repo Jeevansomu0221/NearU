@@ -1534,7 +1534,11 @@ const getAssignedDeliveryOrders = async (orderId: string, userId: mongoose.Types
   return { order, deliveryOrders };
 };
 
-const markCodOrdersPaidFromUpi = async (deliveryOrders: any[], paymentId?: string) => {
+const markCodOrdersPaidFromUpi = async (
+  deliveryOrders: any[],
+  paymentId?: string,
+  options?: { riderManualVerify?: boolean; collectedBy?: mongoose.Types.ObjectId }
+) => {
   for (const deliveryOrder of deliveryOrders) {
     if (deliveryOrder.paymentStatus === "PAID") continue;
     const isCodUpiOrder =
@@ -1548,11 +1552,16 @@ const markCodOrdersPaidFromUpi = async (deliveryOrders: any[], paymentId?: strin
     deliveryOrder.codCollection = {
       ...(deliveryOrder.codCollection || {}),
       method: "UPI",
-      collectedAt: new Date()
+      collectedAt: new Date(),
+      manuallyVerifiedByRider: options?.riderManualVerify === true
     };
+    if (options?.collectedBy) {
+      deliveryOrder.codCollection.collectedBy = options.collectedBy;
+    }
     if (paymentId) {
       deliveryOrder.razorpayPaymentId = paymentId;
       deliveryOrder.paymentId = paymentId;
+      deliveryOrder.codCollection.razorpayPaymentId = paymentId;
     }
     await deliveryOrder.save();
   }
@@ -1834,12 +1843,21 @@ export const confirmCodUpiPayment = async (req: AuthRequest, res: Response) => {
       return successResponse(res, { paid: true }, "UPI payment confirmed");
     }
 
-    if (session.provider === "platform_upi") {
+    const riderManualVerify = req.body?.riderManualVerify === true;
+
+    if (session.provider === "platform_upi" || riderManualVerify) {
       const codTargets = getCodCollectionTargets(freshOrders).filter(
         (deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID"
       );
-      await markCodOrdersPaidFromUpi(codTargets);
-      return successResponse(res, { paid: true }, "UPI payment marked as received");
+      await markCodOrdersPaidFromUpi(codTargets, undefined, {
+        riderManualVerify: session.provider === "platform_upi" || riderManualVerify,
+        collectedBy: new mongoose.Types.ObjectId(user.id)
+      });
+      return successResponse(
+        res,
+        { paid: true },
+        riderManualVerify ? "UPI payment manually verified by rider" : "UPI payment marked as received"
+      );
     }
 
     return errorResponse(res, "Payment not received yet. Ask the customer to complete UPI payment and try again.", 400);
