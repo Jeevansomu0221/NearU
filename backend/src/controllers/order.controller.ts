@@ -2485,6 +2485,22 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
+    if (order.paymentStatus === "PAID") {
+      return errorResponse(res, "Order is already paid and cannot be cancelled", 400);
+    }
+
+    if (order.paymentMethod === "RAZORPAY" && order.razorpayOrderId && order.paymentStatus === "PENDING") {
+      const reconciliation = await PaymentService.reconcileOnlinePayment(order);
+      if (reconciliation.paid) {
+        if (reconciliation.didConfirm) {
+          void notifyPartnerNewOrder(order).catch((error) => {
+            console.error("Failed to notify partner after cancel-time payment reconciliation:", error);
+          });
+        }
+        return errorResponse(res, "Payment was completed and order cannot be cancelled", 400);
+      }
+    }
+
     // Only allow cancellation if order hasn't been accepted by partner
     // Include PENDING status in cancellable statuses
     const cancellableStatuses = ["CONFIRMED", "PENDING"];
@@ -2496,7 +2512,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     order.status = "CANCELLED";
     
     // Update payment status if payment was made
-    if (order.paymentStatus === "PAID" || order.paymentStatus === "PAYMENT_PENDING_DELIVERY") {
+    if (order.paymentStatus === "PAYMENT_PENDING_DELIVERY") {
       order.paymentStatus = "REFUNDED";
     } else {
       order.paymentStatus = "CANCELLED";

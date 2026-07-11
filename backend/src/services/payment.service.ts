@@ -169,6 +169,47 @@ export const PaymentService = {
     );
   },
 
+  fetchCapturedPaymentForOrder: async (razorpayOrderId: string) => {
+    const razorpay = getRazorpayClient();
+    const paymentList = await razorpay.orders.fetchPayments(razorpayOrderId);
+    const items = Array.isArray((paymentList as any)?.items) ? (paymentList as any).items : [];
+
+    return items.find((payment: any) => String(payment?.status || "").toLowerCase() === "captured") || null;
+  },
+
+  reconcileOnlinePayment: async (order: {
+    _id: { toString(): string };
+    paymentStatus?: string;
+    paymentMethod?: string;
+    status?: string;
+    razorpayOrderId?: string | null;
+    razorpayPaymentId?: string | null;
+    save(): Promise<unknown>;
+  }) => {
+    if (order.paymentStatus === "PAID") {
+      return { paid: true, order, didConfirm: false };
+    }
+
+    if (!order.razorpayOrderId || order.paymentMethod !== "RAZORPAY") {
+      return { paid: false, order, didConfirm: false };
+    }
+
+    const capturedPayment = await PaymentService.fetchCapturedPaymentForOrder(order.razorpayOrderId);
+    if (!capturedPayment?.id) {
+      return { paid: false, order, didConfirm: false };
+    }
+
+    const didConfirm = order.status === "PENDING" || order.status === "CANCELLED";
+    order.razorpayPaymentId = capturedPayment.id;
+    order.paymentStatus = "PAID";
+    if (didConfirm) {
+      order.status = "CONFIRMED";
+    }
+    await order.save();
+
+    return { paid: true, order, didConfirm };
+  },
+
   checkCodCollectionPayment: async (session: {
     provider?: CodCollectionProvider | string;
     razorpayQrId?: string;

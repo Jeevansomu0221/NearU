@@ -1,5 +1,5 @@
 // apps/customer-app/src/api/payment.api.ts
-import { apiPost, ApiResponse } from "./client";
+import { apiGet, apiPost, ApiResponse } from "./client";
 
 interface RazorpayOrderRequest {
   orderId: string;
@@ -37,4 +37,11 @@ export const verifyPayment = (
   data: VerifyPaymentRequest
 ): Promise<ApiResponse<any>> => {
   return apiPost<any>("/payment/verify", data);
+};
+
+/**
+ * Check payment status (server-side reconciliation with Razorpay)
+ */
+export const checkPaymentStatus = (orderId: string): Promise<ApiResponse<any>> => {
+  return apiGet<any>(`/payment/status/${orderId}`);
 };

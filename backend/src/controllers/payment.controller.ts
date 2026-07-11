@@ -55,6 +55,40 @@ export const createPaymentOrder = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getPaymentStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!req.user) {
+      return errorResponse(res, "Unauthorized", 401);
+    }
+
+    if (!orderId) {
+      return errorResponse(res, "orderId is required", 400);
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return errorResponse(res, "Order not found", 404);
+    }
+
+    if (order.customerId.toString() !== req.user.id) {
+      return errorResponse(res, "Unauthorized to check this payment", 403);
+    }
+
+    const result = await PaymentService.reconcileOnlinePayment(order);
+    if (result.didConfirm) {
+      void notifyPartnerNewOrder(order).catch((error) => {
+        console.error("Failed to notify partner after payment reconciliation:", error);
+      });
+    }
+
+    return successResponse(res, order, result.paid ? "Payment confirmed" : "Payment pending");
+  } catch (error: any) {
+    return errorResponse(res, error.message || "Failed to check payment status");
+  }
+};
+
 export const verifyPayment = async (req: AuthRequest, res: Response) => {
   try {
     const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
@@ -149,7 +183,7 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
           razorpayPaymentId: paymentEntity?.id
         };
 
-        if (!isDeliveryCollection && order?.status === "PENDING") {
+        if (!isDeliveryCollection && (order?.status === "PENDING" || order?.status === "CANCELLED")) {
           update.status = "CONFIRMED";
         }
 
@@ -161,7 +195,11 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
 
         for (const targetOrder of ordersToUpdate) {
           const orderUpdate = { ...update };
-          if (!isDeliveryCollection && targetOrder.status !== "PENDING") {
+          if (
+            !isDeliveryCollection &&
+            targetOrder.status !== "PENDING" &&
+            targetOrder.status !== "CANCELLED"
+          ) {
             delete orderUpdate.status;
           }
           if (isDeliveryCollection && targetOrder.paymentMethod !== "CASH_ON_DELIVERY") {

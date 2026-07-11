@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
 import { cancelOrder, createShopOrder } from "../api/order.api";
-import { createRazorpayOrder, verifyPayment } from "../api/payment.api";
+import { checkPaymentStatus, createRazorpayOrder, verifyPayment } from "../api/payment.api";
 import SuccessCelebration from "../components/SuccessCelebration";
 import UpiAppPicker from "../components/UpiAppPicker";
 import {
@@ -64,6 +64,33 @@ const hasValidRazorpaySuccess = (result: any) =>
   Boolean(result?.razorpay_order_id && result?.razorpay_payment_id && result?.razorpay_signature);
 
 const getOnlinePaymentFailureMessage = (error: any) => describeRazorpayPaymentError(error);
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const reconcilePaymentWithServer = async (
+  orderId: string,
+  onStage?: (stage: string) => void,
+  maxAttempts = 8,
+  intervalMs = 2500
+) => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    onStage?.(attempt === 0 ? "Confirming payment..." : "Still confirming payment...");
+    try {
+      const response = await checkPaymentStatus(orderId);
+      if (response.success && response.data?.paymentStatus === "PAID") {
+        return response.data;
+      }
+    } catch (error) {
+      console.warn("Payment reconciliation attempt failed:", error);
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await sleep(intervalMs);
+    }
+  }
+
+  return null;
+};
 
 const createDeliveryBundleId = () =>
   `bundle_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -282,14 +309,29 @@ export default function PaymentScreen({ route, navigation }: any) {
       const ordersToCancel = pendingOnlineOrders.filter((order) => order?._id);
       if (ordersToCancel.length === 0) return;
 
+      const remainingPending: any[] = [];
+
       await Promise.allSettled(
-        ordersToCancel.map((order) =>
-          cancelOrder(order._id).catch((error) => {
+        ordersToCancel.map(async (order) => {
+          try {
+            const reconciled = await reconcilePaymentWithServer(order._id);
+            if (reconciled) {
+              paidOrders.push(reconciled);
+              return;
+            }
+          } catch (error) {
+            console.warn("Failed to reconcile order before cleanup:", error);
+          }
+
+          try {
+            await cancelOrder(order._id);
+          } catch (error) {
             console.warn("Failed to cancel unpaid online order:", error);
-          })
-        )
+            remainingPending.push(order);
+          }
+        })
       );
-      pendingOnlineOrders = [];
+      pendingOnlineOrders = remainingPending;
     };
 
     for (const [index, group] of groupedShops.entries()) {
@@ -337,10 +379,24 @@ export default function PaymentScreen({ route, navigation }: any) {
             });
           });
         } catch (paymentError: any) {
+          onStage?.("Confirming payment...");
+          const reconciledOrder = await reconcilePaymentWithServer(createdOrder._id, onStage);
+          if (reconciledOrder) {
+            pendingOnlineOrders = pendingOnlineOrders.filter((order) => order?._id !== createdOrder._id);
+            paidOrders.push(reconciledOrder);
+            continue;
+          }
           throw new OnlinePaymentFailedError(getOnlinePaymentFailureMessage(paymentError));
         }
 
         if (!hasValidRazorpaySuccess(paymentResult)) {
+          onStage?.("Confirming payment...");
+          const reconciledOrder = await reconcilePaymentWithServer(createdOrder._id, onStage);
+          if (reconciledOrder) {
+            pendingOnlineOrders = pendingOnlineOrders.filter((order) => order?._id !== createdOrder._id);
+            paidOrders.push(reconciledOrder);
+            continue;
+          }
           throw new OnlinePaymentFailedError("Payment was not completed. Please try again or switch to Cash on Delivery.");
         }
 
@@ -353,6 +409,13 @@ export default function PaymentScreen({ route, navigation }: any) {
         });
 
         if (!verifyResponse.success) {
+          onStage?.("Confirming payment...");
+          const reconciledOrder = await reconcilePaymentWithServer(createdOrder._id, onStage);
+          if (reconciledOrder) {
+            pendingOnlineOrders = pendingOnlineOrders.filter((order) => order?._id !== createdOrder._id);
+            paidOrders.push(reconciledOrder);
+            continue;
+          }
           throw new OnlinePaymentFailedError(verifyResponse.message || `Payment verification failed for ${group.shopName}`);
         }
 
@@ -360,6 +423,9 @@ export default function PaymentScreen({ route, navigation }: any) {
         paidOrders.push(verifyResponse.data || createdOrder);
       } catch (error: any) {
         await cleanupPendingOnlineOrders();
+        if (pendingOnlineOrders.length === 0 && paidOrders.length > 0) {
+          return paidOrders;
+        }
         throw isOnlinePaymentFailure(error)
           ? error
           : new OnlinePaymentFailedError(getOnlinePaymentFailureMessage(error));

@@ -4,6 +4,7 @@ import { roleMiddleware } from "../middlewares/role.middleware";
 import { CONSUMER_APP_ROLES } from "../config/roles";
 import {
   createPaymentOrder,
+  getPaymentStatus,
   verifyPayment,
   handlePaymentWebhook
 } from "../controllers/payment.controller";
@@ -24,6 +25,13 @@ router.post(
   authMiddleware,
   roleMiddleware([...CONSUMER_APP_ROLES]),
   verifyPayment
+);
+
+router.get(
+  "/status/:orderId",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  getPaymentStatus
 );
 
 export default router;
