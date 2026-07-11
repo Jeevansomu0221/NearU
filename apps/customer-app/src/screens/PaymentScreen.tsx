@@ -67,14 +67,24 @@ const getOnlinePaymentFailureMessage = (error: any) => describeRazorpayPaymentEr
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// UPI payments (especially bank apps like Kotak811) can take 1-2 minutes to
+// show as captured on Razorpay, so poll long enough before declaring failure.
 const reconcilePaymentWithServer = async (
   orderId: string,
   onStage?: (stage: string) => void,
-  maxAttempts = 8,
-  intervalMs = 2500
+  maxAttempts = 40,
+  intervalMs = 3000
 ) => {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    onStage?.(attempt === 0 ? "Confirming payment..." : "Still confirming payment...");
+    if (attempt === 0) {
+      onStage?.("Confirming payment...");
+    } else if (attempt < 6) {
+      onStage?.("Still confirming payment...");
+    } else if (attempt < 20) {
+      onStage?.("Waiting for your bank to confirm... This can take up to a minute.");
+    } else {
+      onStage?.("Still waiting for bank confirmation... Please don't close the app.");
+    }
     try {
       const response = await checkPaymentStatus(orderId);
       if (response.success && response.data?.paymentStatus === "PAID") {
@@ -314,7 +324,9 @@ export default function PaymentScreen({ route, navigation }: any) {
       await Promise.allSettled(
         ordersToCancel.map(async (order) => {
           try {
-            const reconciled = await reconcilePaymentWithServer(order._id);
+            // The main payment path already polled for over a minute, so only
+            // do a final quick check before cancelling.
+            const reconciled = await reconcilePaymentWithServer(order._id, undefined, 2, 2000);
             if (reconciled) {
               paidOrders.push(reconciled);
               return;
@@ -386,7 +398,14 @@ export default function PaymentScreen({ route, navigation }: any) {
             paidOrders.push(reconciledOrder);
             continue;
           }
-          throw new OnlinePaymentFailedError(getOnlinePaymentFailureMessage(paymentError));
+          const sdkMessage = getOnlinePaymentFailureMessage(paymentError);
+          const looksLikeFalseCancel =
+            sdkMessage.toLowerCase().includes("cancel") ||
+            sdkMessage.toLowerCase().includes("back button");
+          const failureMessage = looksLikeFalseCancel
+            ? "Your bank is still confirming the payment. If money was deducted, check My Orders in a few minutes before paying again."
+            : `${sdkMessage} If money was deducted from your account, the order will be confirmed automatically in a few minutes - check My Orders before paying again.`;
+          throw new OnlinePaymentFailedError(failureMessage);
         }
 
         if (!hasValidRazorpaySuccess(paymentResult)) {

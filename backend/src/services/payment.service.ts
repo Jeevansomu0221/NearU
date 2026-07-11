@@ -174,7 +174,15 @@ export const PaymentService = {
     const paymentList = await razorpay.orders.fetchPayments(razorpayOrderId);
     const items = Array.isArray((paymentList as any)?.items) ? (paymentList as any).items : [];
 
-    return items.find((payment: any) => String(payment?.status || "").toLowerCase() === "captured") || null;
+    // Orders are created with payment_capture enabled, so an "authorized" payment
+    // means the customer's money has already been debited and capture is imminent.
+    // Treating it as paid avoids false "Payment Failed" while capture settles.
+    return (
+      items.find((payment: any) => {
+        const status = String(payment?.status || "").toLowerCase();
+        return status === "captured" || status === "authorized";
+      }) || null
+    );
   },
 
   reconcileOnlinePayment: async (order: {

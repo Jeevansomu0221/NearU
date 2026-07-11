@@ -121,8 +121,7 @@ export const verifyPayment = async (req: AuthRequest, res: Response) => {
     );
 
     if (!isValidSignature) {
-      order.paymentStatus = "FAILED";
-      await order.save();
+      // Keep PENDING so reconciliation/webhook can still confirm a real UPI debit.
       return errorResponse(res, "Payment signature verification failed", 400);
     }
 
@@ -224,6 +223,23 @@ export const handlePaymentWebhook = async (req: any, res: Response) => {
       const notes = event.payload?.payment?.entity?.notes;
       const orderId = notes?.orderId;
       if (orderId) {
+        const order = await Order.findById(orderId);
+        if (!order || order.paymentStatus === "PAID") {
+          return successResponse(res, { received: true }, "Webhook processed");
+        }
+
+        if (order.razorpayOrderId) {
+          const result = await PaymentService.reconcileOnlinePayment(order);
+          if (result.paid) {
+            if (result.didConfirm) {
+              void notifyPartnerNewOrder(order).catch((error) => {
+                console.error("Failed to notify partner after failed-webhook reconciliation:", error);
+              });
+            }
+            return successResponse(res, { received: true }, "Webhook processed");
+          }
+        }
+
         await Order.findByIdAndUpdate(orderId, { paymentStatus: "FAILED" });
       }
     }
