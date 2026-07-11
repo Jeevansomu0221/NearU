@@ -109,6 +109,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [upiPaymentPaid, setUpiPaymentPaid] = useState(false);
   const [upiLoading, setUpiLoading] = useState(false);
   const [upiPolling, setUpiPolling] = useState(false);
+  const [upiAwaitingPayment, setUpiAwaitingPayment] = useState(false);
+  const pollInFlightRef = useRef(false);
   const [statusModal, setStatusModal] = useState<{
     title: string;
     message: string;
@@ -142,21 +144,43 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   }, []);
 
   const refreshUpiPaymentStatus = useCallback(async () => {
+    if (pollInFlightRef.current) {
+      return false;
+    }
+
     try {
+      pollInFlightRef.current = true;
       setUpiPolling(true);
       const response = await getCodUpiPaymentStatus(orderId);
-      if (response.success && response.data?.paid) {
-        setUpiPaymentPaid(true);
-        return true;
+      if (response.success && response.data) {
+        if (response.data.manualConfirmRequired) {
+          setCodUpiSession((previous) =>
+            previous ? { ...previous, manualConfirmRequired: true } : previous
+          );
+          setUpiAwaitingPayment(false);
+        }
+
+        if (response.data.paid) {
+          setUpiPaymentPaid(true);
+          setUpiAwaitingPayment(false);
+          return true;
+        }
       }
       return false;
     } catch (error) {
       console.error("Failed to poll COD UPI status:", error);
       return false;
     } finally {
+      pollInFlightRef.current = false;
       setUpiPolling(false);
     }
   }, [orderId]);
+
+  useEffect(() => {
+    if (!upiPaymentVisible) {
+      setUpiAwaitingPayment(false);
+    }
+  }, [upiPaymentVisible]);
 
   useEffect(() => {
     if (
@@ -525,6 +549,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       if (response.data.paid) {
         setCodUpiSession(response.data);
         setUpiPaymentPaid(true);
+        setUpiAwaitingPayment(false);
         setCodPaymentChoiceVisible(false);
         setUpiPaymentVisible(true);
         return;
@@ -538,6 +563,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       }
       setCodUpiSession(response.data);
       setUpiPaymentPaid(false);
+      setUpiAwaitingPayment(!response.data.manualConfirmRequired);
       setCodPaymentChoiceVisible(false);
       setUpiPaymentVisible(true);
     } catch (error) {
@@ -1037,7 +1063,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               </View>
             ) : (
               <Text style={styles.upiWaitingText}>
-                {upiPolling ? "Confirming payment with Vyaha..." : "Waiting for customer payment..."}
+                {upiAwaitingPayment || upiPolling
+                  ? "Confirming payment with Vyaha..."
+                  : "Waiting for customer payment..."}
               </Text>
             )}
 
