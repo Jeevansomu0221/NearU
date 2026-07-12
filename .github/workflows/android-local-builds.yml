@@ -83,6 +83,35 @@ jobs:
         working-directory: ${{ matrix.app_dir }}
         run: npm ci
 
+      - name: Cache Gradle
+        if: ${{ github.event_name == 'push' || github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/wrapper
+            ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-8.14.3-${{ matrix.name }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-8.14.3-
+            ${{ runner.os }}-gradle-
+
+      - name: Warm Gradle wrapper
+        if: ${{ github.event_name == 'push' || github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name }}
+        working-directory: ${{ matrix.app_dir }}
+        run: |
+          npx expo prebuild --platform android --no-install
+          cd android
+          for attempt in 1 2 3 4 5; do
+            if ./gradlew --version; then
+              echo "Gradle wrapper ready on attempt $attempt"
+              exit 0
+            fi
+            echo "Gradle download attempt $attempt failed, retrying..."
+            sleep $((attempt * 15))
+          done
+          echo "Error: could not download Gradle after 5 attempts"
+          exit 1
+
       - name: Build production AAB
         if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab') }}
         working-directory: ${{ matrix.app_dir }}
@@ -90,7 +119,15 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://vyaha-app-backend.onrender.com' }}
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
-        run: npx eas-cli build -p android --profile production --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-production.aab
+        run: |
+          for attempt in 1 2 3; do
+            if npx eas-cli build -p android --profile production --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-production.aab; then
+              exit 0
+            fi
+            echo "Production AAB build attempt $attempt failed, retrying..."
+            sleep $((attempt * 30))
+          done
+          exit 1
 
       - name: Verify and stage production AAB
         if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab') }}
@@ -128,7 +165,15 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://vyaha-app-backend.onrender.com' }}
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
-        run: npx eas-cli build -p android --profile development --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-development.apk
+        run: |
+          for attempt in 1 2 3; do
+            if npx eas-cli build -p android --profile development --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-development.apk; then
+              exit 0
+            fi
+            echo "Development APK build attempt $attempt failed, retrying..."
+            sleep $((attempt * 30))
+          done
+          exit 1
 
       - name: Print development APK signing certificate
         if: ${{ github.event_name == 'push' || ((github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'development-apk')) }}
@@ -141,7 +186,15 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://vyaha-app-backend.onrender.com' }}
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
-        run: npx eas-cli build -p android --profile preview --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-preview.apk
+        run: |
+          for attempt in 1 2 3; do
+            if npx eas-cli build -p android --profile preview --local --non-interactive --output ../../${{ matrix.artifact_prefix }}-preview.apk; then
+              exit 0
+            fi
+            echo "Preview APK build attempt $attempt failed, retrying..."
+            sleep $((attempt * 30))
+          done
+          exit 1
 
       - name: Upload AAB
         if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.app == 'all' || github.event.inputs.app == matrix.name) && (github.event.inputs.artifact == 'all' || github.event.inputs.artifact == 'both' || github.event.inputs.artifact == 'aab') }}
