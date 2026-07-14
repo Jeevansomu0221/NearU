@@ -9,7 +9,11 @@ import {
   type PartnerRecord
 } from "../api/admin.api";
 import SuspendAccountModal, { type AccountActionType } from "../components/SuspendAccountModal";
-import { getPartnerDisplayName, getPartnerSearchHaystack } from "../utils/partnerDisplay";
+import {
+  getPartnerDisplayName,
+  getPartnerSearchHaystack,
+  isPartnerDeleted
+} from "../utils/partnerDisplay";
 
 const REUPLOAD_OPTIONS: Array<{ key: DocumentReuploadKey; label: string }> = [
   { key: "fssaiUrl", label: "FSSAI license" },
@@ -19,8 +23,6 @@ const REUPLOAD_OPTIONS: Array<{ key: DocumentReuploadKey; label: string }> = [
 ];
 
 type StatusFilter = "ALL" | "DELETED" | PartnerRecord["status"];
-
-const isPartnerDeleted = (partner: PartnerRecord) => Boolean(partner.isDeleted);
 
 export default function Partners() {
   const [loading, setLoading] = useState(true);
@@ -78,6 +80,9 @@ export default function Partners() {
       pending: partners.filter((partner) => partner.status === "PENDING").length,
       approved: partners.filter((partner) => partner.status === "APPROVED").length,
       rejected: partners.filter((partner) => partner.status === "REJECTED").length,
+      suspended: partners.filter(
+        (partner) => partner.status === "SUSPENDED" && !isPartnerDeleted(partner)
+      ).length,
       deleted: partners.filter((partner) => isPartnerDeleted(partner)).length
     }),
     [partners]
@@ -247,6 +252,12 @@ export default function Partners() {
               </Typography.Title>
             </div>
             <div>
+              <Typography.Text type="secondary">Suspended</Typography.Text>
+              <Typography.Title level={3} style={{ margin: 0, color: "#ea580c" }}>
+                {counts.suspended}
+              </Typography.Title>
+            </div>
+            <div>
               <Typography.Text type="secondary">Deleted</Typography.Text>
               <Typography.Title level={3} style={{ margin: 0, color: "#6b7280" }}>
                 {counts.deleted}
@@ -280,7 +291,7 @@ export default function Partners() {
               rowKey="_id"
               loading={loading}
               dataSource={filteredPartners}
-              pagination={{ pageSize: 8 }}
+              pagination={{ pageSize: 25, showSizeChanger: true, pageSizeOptions: ["25", "50", "100"] }}
               columns={[
                 {
                   title: "Partner",
