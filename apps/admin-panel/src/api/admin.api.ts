@@ -15,6 +15,7 @@ export interface PartnerRecord {
   _id: string;
   ownerName: string;
   restaurantName: string;
+  shopName?: string;
   phone: string;
   ownerPhone?: string;
   restaurantPhone?: string;
@@ -27,6 +28,17 @@ export interface PartnerRecord {
   };
   category: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
+  isOpen?: boolean;
+  hasCompletedSetup?: boolean;
+  isDeleted?: boolean;
+  userId?: {
+    _id?: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+    isActive?: boolean;
+    deletedRoles?: string[];
+  } | string;
   createdAt: string;
   approvedAt?: string;
   rejectionReason?: string;

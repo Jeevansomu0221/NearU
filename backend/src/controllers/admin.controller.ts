@@ -67,12 +67,38 @@ export const getPartnerRequests = async (req: AuthRequest, res: Response) => {
   try {
     const partners = await Partner.find()
       .sort({ createdAt: -1 })
-      .populate("userId", "name phone email")
-      .select("ownerName restaurantName phone address category status createdAt documents approvedAt");
+      .populate("userId", "name phone email isActive deletedRoles")
+      .select(
+        "ownerName restaurantName shopName phone ownerPhone restaurantPhone address category status isOpen hasCompletedSetup createdAt documents approvedAt rejectionReason suspensionType suspendedUntil suspendedAt"
+      );
+
+    const data = partners.map((partner) => {
+      const plain = partner.toObject();
+      const user = plain.userId as
+        | { isActive?: boolean; deletedRoles?: string[]; name?: string; phone?: string; email?: string }
+        | null
+        | undefined;
+      const restaurantName = String(plain.restaurantName || "");
+      const shopName = String(plain.shopName || "");
+      const phone = String(plain.phone || "");
+      const rejectionReason = String(plain.rejectionReason || "");
+      const isDeleted =
+        restaurantName === "Deleted Partner" ||
+        shopName === "Deleted Partner" ||
+        phone.startsWith("deleted_") ||
+        /account deleted/i.test(rejectionReason) ||
+        user?.isActive === false ||
+        Boolean(user?.deletedRoles?.includes("partner"));
+
+      return {
+        ...plain,
+        isDeleted
+      };
+    });
 
     res.json({
       success: true,
-      data: partners
+      data
     });
   } catch (error: any) {
     console.error("Error getting partner requests:", error);
@@ -154,7 +180,10 @@ export const updatePartnerStatus = async (req: AuthRequest, res: Response) => {
       partner.approvedAt = undefined;
       clearSuspensionFields(partner);
     } else if (status === "SUSPENDED") {
-      partner.rejectionReason = String(rejectionReason || "Account suspended").trim();
+      const reason = String(rejectionReason || (deleteAccount ? "Account deleted by admin" : "Account suspended")).trim();
+      partner.rejectionReason = deleteAccount && !/account deleted/i.test(reason)
+        ? `${reason} (Account deleted by admin)`
+        : reason;
       partner.suspensionType = deleteAccount ? "PERMANENT" : normalizedSuspensionType;
       partner.suspendedAt = new Date();
       partner.suspendedUntil =

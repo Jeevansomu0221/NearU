@@ -9,6 +9,7 @@ import {
   type PartnerRecord
 } from "../api/admin.api";
 import SuspendAccountModal, { type AccountActionType } from "../components/SuspendAccountModal";
+import { getPartnerDisplayName, getPartnerSearchHaystack } from "../utils/partnerDisplay";
 
 const REUPLOAD_OPTIONS: Array<{ key: DocumentReuploadKey; label: string }> = [
   { key: "fssaiUrl", label: "FSSAI license" },
@@ -17,11 +18,15 @@ const REUPLOAD_OPTIONS: Array<{ key: DocumentReuploadKey; label: string }> = [
   { key: "gstUrl", label: "GST certificate" }
 ];
 
+type StatusFilter = "ALL" | "DELETED" | PartnerRecord["status"];
+
+const isPartnerDeleted = (partner: PartnerRecord) => Boolean(partner.isDeleted);
+
 export default function Partners() {
   const [loading, setLoading] = useState(true);
   const [partners, setPartners] = useState<PartnerRecord[]>([]);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | PartnerRecord["status"]>("ALL");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [selectedPartner, setSelectedPartner] = useState<PartnerRecord | null>(null);
   const [rejectingPartner, setRejectingPartner] = useState<PartnerRecord | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -50,10 +55,15 @@ export default function Partners() {
   const filteredPartners = useMemo(() => {
     return partners
       .filter((partner) => {
-      const matchesStatus = statusFilter === "ALL" || partner.status === statusFilter;
-      const haystack = `${partner.ownerName} ${partner.restaurantName} ${partner.phone} ${partner.ownerPhone || ""} ${partner.restaurantPhone || ""} ${partner.category}`.toLowerCase();
-      const matchesQuery = haystack.includes(query.toLowerCase());
-      return matchesStatus && matchesQuery;
+        const deleted = isPartnerDeleted(partner);
+        const matchesStatus =
+          statusFilter === "ALL"
+            ? true
+            : statusFilter === "DELETED"
+              ? deleted
+              : partner.status === statusFilter;
+        const matchesQuery = getPartnerSearchHaystack(partner).includes(query.toLowerCase());
+        return matchesStatus && matchesQuery;
       })
       .sort((a, b) => {
         if (a.status === "PENDING" && b.status !== "PENDING") return -1;
@@ -67,14 +77,15 @@ export default function Partners() {
       total: partners.length,
       pending: partners.filter((partner) => partner.status === "PENDING").length,
       approved: partners.filter((partner) => partner.status === "APPROVED").length,
-      rejected: partners.filter((partner) => partner.status === "REJECTED").length
+      rejected: partners.filter((partner) => partner.status === "REJECTED").length,
+      deleted: partners.filter((partner) => isPartnerDeleted(partner)).length
     }),
     [partners]
   );
 
   const handleApprove = async (partner: PartnerRecord) => {
     await updatePartnerStatus(partner._id, "APPROVED");
-    message.success(`${partner.restaurantName} approved`);
+    message.success(`${getPartnerDisplayName(partner)} approved`);
     loadPartners();
   };
 
@@ -86,7 +97,7 @@ export default function Partners() {
     }
 
     await updatePartnerStatus(rejectingPartner._id, "REJECTED", rejectReason.trim());
-    message.success(`${rejectingPartner.restaurantName} rejected`);
+    message.success(`${getPartnerDisplayName(rejectingPartner)} rejected`);
     setRejectingPartner(null);
     setRejectReason("");
     loadPartners();
@@ -108,8 +119,8 @@ export default function Partners() {
       });
       message.success(
         payload.actionType === "DELETE"
-          ? `${suspendingPartner.restaurantName} account deleted`
-          : `${suspendingPartner.restaurantName} suspended`
+          ? `${getPartnerDisplayName(suspendingPartner)} account deleted`
+          : `${getPartnerDisplayName(suspendingPartner)} suspended`
       );
       setSuspendingPartner(null);
       loadPartners();
@@ -123,7 +134,7 @@ export default function Partners() {
   const handleReinstate = async (partner: PartnerRecord) => {
     try {
       await updatePartnerStatus(partner._id, "APPROVED");
-      message.success(`${partner.restaurantName} reinstated`);
+      message.success(`${getPartnerDisplayName(partner)} reinstated`);
       loadPartners();
     } catch (error: any) {
       message.error(error?.response?.data?.message || "Failed to reinstate partner");
@@ -160,7 +171,7 @@ export default function Partners() {
         keys: reuploadKeys,
         note: reuploadNote.trim()
       });
-      message.success(`Re-upload request sent to ${reuploadPartner.restaurantName}`);
+      message.success(`Re-upload request sent to ${getPartnerDisplayName(reuploadPartner)}`);
       closeReuploadModal();
       loadPartners();
     } catch (error: any) {
@@ -175,7 +186,7 @@ export default function Partners() {
     try {
       setReuploadSubmitting(true);
       await requestPartnerDocumentReupload(reuploadPartner._id, { keys: [], clear: true, note: "" });
-      message.success(`Re-upload requirements cleared for ${reuploadPartner.restaurantName}`);
+      message.success(`Re-upload requirements cleared for ${getPartnerDisplayName(reuploadPartner)}`);
       closeReuploadModal();
       loadPartners();
     } catch (error: any) {
@@ -235,6 +246,12 @@ export default function Partners() {
                 {counts.rejected}
               </Typography.Title>
             </div>
+            <div>
+              <Typography.Text type="secondary">Deleted</Typography.Text>
+              <Typography.Title level={3} style={{ margin: 0, color: "#6b7280" }}>
+                {counts.deleted}
+              </Typography.Title>
+            </div>
           </Space>
         </Card>
 
@@ -254,8 +271,8 @@ export default function Partners() {
               </Space>
               <Segmented
                 value={statusFilter}
-                onChange={(value) => setStatusFilter(value as typeof statusFilter)}
-                options={["ALL", "PENDING", "APPROVED", "REJECTED", "SUSPENDED"]}
+                onChange={(value) => setStatusFilter(value as StatusFilter)}
+                options={["ALL", "PENDING", "APPROVED", "REJECTED", "SUSPENDED", "DELETED"]}
               />
             </Space>
 
@@ -267,14 +284,25 @@ export default function Partners() {
               columns={[
                 {
                   title: "Partner",
-                  render: (_, partner) => (
-                    <div>
-                      <Typography.Text strong>{partner.restaurantName}</Typography.Text>
+                  render: (_, partner) => {
+                    const displayName = getPartnerDisplayName(partner);
+                    const rawName = (partner.shopName || partner.restaurantName || "").trim();
+                    return (
                       <div>
-                        <Typography.Text type="secondary">{partner.ownerName}</Typography.Text>
+                        <Typography.Text strong>{displayName}</Typography.Text>
+                        {rawName && displayName.toLowerCase() !== rawName.toLowerCase() ? (
+                          <div>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              DB: {rawName}
+                            </Typography.Text>
+                          </div>
+                        ) : null}
+                        <div>
+                          <Typography.Text type="secondary">{partner.ownerName}</Typography.Text>
+                        </div>
                       </div>
-                    </div>
-                  )
+                    );
+                  }
                 },
                 {
                   title: "Contact",
@@ -300,49 +328,58 @@ export default function Partners() {
                   )
                 },
                 {
+                  title: "Deleted",
+                  width: 110,
+                  render: (_, partner) =>
+                    isPartnerDeleted(partner) ? <Tag color="default">Yes</Tag> : <Tag color="green">No</Tag>
+                },
+                {
                   title: "Actions",
-                  render: (_, partner) => (
-                    <Space wrap>
-                      <Button size="small" onClick={() => setSelectedPartner(partner)}>
-                        View
-                      </Button>
-                      {partner.status === "PENDING" ? (
-                        <>
-                          <Button
-                            size="small"
-                            type="primary"
-                            icon={<CheckCircleOutlined />}
-                            onClick={() => handleApprove(partner)}
-                          >
-                            Approve
-                          </Button>
+                  render: (_, partner) => {
+                    const deleted = isPartnerDeleted(partner);
+                    return (
+                      <Space wrap>
+                        <Button size="small" onClick={() => setSelectedPartner(partner)}>
+                          View
+                        </Button>
+                        {!deleted && partner.status === "PENDING" ? (
+                          <>
+                            <Button
+                              size="small"
+                              type="primary"
+                              icon={<CheckCircleOutlined />}
+                              onClick={() => handleApprove(partner)}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="small"
+                              danger
+                              icon={<CloseCircleOutlined />}
+                              onClick={() => setRejectingPartner(partner)}
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        ) : null}
+                        {!deleted && partner.status === "APPROVED" ? (
                           <Button
                             size="small"
                             danger
-                            icon={<CloseCircleOutlined />}
-                            onClick={() => setRejectingPartner(partner)}
+                            icon={<StopOutlined />}
+                            onClick={() => setSuspendingPartner(partner)}
                           >
-                            Reject
+                            Suspend
                           </Button>
-                        </>
-                      ) : null}
-                      {partner.status === "APPROVED" ? (
-                        <Button
-                          size="small"
-                          danger
-                          icon={<StopOutlined />}
-                          onClick={() => setSuspendingPartner(partner)}
-                        >
-                          Suspend
-                        </Button>
-                      ) : null}
-                      {partner.status === "SUSPENDED" ? (
-                        <Button size="small" type="primary" onClick={() => handleReinstate(partner)}>
-                          Reinstate
-                        </Button>
-                      ) : null}
-                    </Space>
-                  )
+                        ) : null}
+                        {!deleted && partner.status === "SUSPENDED" ? (
+                          <Button size="small" type="primary" onClick={() => handleReinstate(partner)}>
+                            Reinstate
+                          </Button>
+                        ) : null}
+                      </Space>
+                    );
+                  }
                 }
               ]}
             />
@@ -352,11 +389,11 @@ export default function Partners() {
 
       <Drawer
         width={420}
-        title={selectedPartner?.restaurantName}
+        title={selectedPartner ? getPartnerDisplayName(selectedPartner) : undefined}
         open={Boolean(selectedPartner)}
         onClose={() => setSelectedPartner(null)}
         extra={
-          selectedPartner ? (
+          selectedPartner && !isPartnerDeleted(selectedPartner) ? (
             <Button icon={<ReloadOutlined />} onClick={() => openReuploadModal(selectedPartner)}>
               Request re-upload
             </Button>
@@ -397,6 +434,10 @@ export default function Partners() {
             <div>
               <Typography.Text type="secondary">Application Status</Typography.Text>
               <div>{selectedPartner.status}</div>
+            </div>
+            <div>
+              <Typography.Text type="secondary">Deleted</Typography.Text>
+              <div>{isPartnerDeleted(selectedPartner) ? "Yes" : "No"}</div>
             </div>
             <div>
               <Typography.Text type="secondary">Document completeness</Typography.Text>
@@ -460,7 +501,11 @@ export default function Partners() {
             {selectedPartner.rejectionReason ? (
               <div>
                 <Typography.Text type="secondary">
-                  {selectedPartner.status === "SUSPENDED" ? "Suspension Reason" : "Rejection Reason"}
+                  {isPartnerDeleted(selectedPartner)
+                    ? "Deletion Reason"
+                    : selectedPartner.status === "SUSPENDED"
+                      ? "Suspension Reason"
+                      : "Rejection Reason"}
                 </Typography.Text>
                 <div>{selectedPartner.rejectionReason}</div>
               </div>
@@ -480,7 +525,7 @@ export default function Partners() {
       </Drawer>
 
       <Modal
-        title={`Reject ${rejectingPartner?.restaurantName || "partner"}`}
+        title={`Reject ${rejectingPartner ? getPartnerDisplayName(rejectingPartner) : "partner"}`}
         open={Boolean(rejectingPartner)}
         onCancel={() => {
           setRejectingPartner(null);
@@ -499,7 +544,7 @@ export default function Partners() {
       </Modal>
 
       <Modal
-        title={`Request re-upload from ${reuploadPartner?.restaurantName || "partner"}`}
+        title={`Request re-upload from ${reuploadPartner ? getPartnerDisplayName(reuploadPartner) : "partner"}`}
         open={Boolean(reuploadPartner)}
         onCancel={closeReuploadModal}
         onOk={handleSubmitReupload}
@@ -548,7 +593,7 @@ export default function Partners() {
 
       <SuspendAccountModal
         open={Boolean(suspendingPartner)}
-        entityLabel={suspendingPartner?.restaurantName || "partner"}
+        entityLabel={suspendingPartner ? getPartnerDisplayName(suspendingPartner) : "partner"}
         onCancel={() => setSuspendingPartner(null)}
         onConfirm={handleSuspendConfirm}
         loading={suspendSubmitting}
