@@ -77,8 +77,9 @@ function Home() {
       const stage = stageRef.current;
       if (stage) {
         const rect = stage.getBoundingClientRect();
-        const visible = 1 - Math.min(1, Math.max(0, rect.top / window.innerHeight));
-        stage.style.setProperty('--route-progress', String(visible));
+        const mid = rect.top + rect.height * 0.45;
+        const delta = (window.innerHeight * 0.5 - mid) / window.innerHeight;
+        stage.style.setProperty('--stage-spin', String(Math.max(-1, Math.min(1, delta))));
       }
     };
 
@@ -227,72 +228,53 @@ function Home() {
         <section className="home-stage" ref={stageRef} aria-label="Vyaha app experience">
           <div className="home-stage__copy home-reveal" ref={stageCopyRef}>
             <p className="home-eyebrow">Inside the app</p>
-            <h2>From kitchen to doorstep — watched live.</h2>
+            <h2>Order, track, and tip the neighborhood — in motion.</h2>
             <p>
-              Follow every local hop in one continuous stream: order placed,
-              kitchen cooking, rider moving, food at your door.
+              A focused customer experience built around live tracking, honest
+              totals, and food that still feels local.
             </p>
           </div>
 
-          <div className="home-journey" aria-hidden="true">
-            <div className="home-journey__glow home-journey__glow--a" />
-            <div className="home-journey__glow home-journey__glow--b" />
+          <div className="home-stage__scene" aria-hidden="true">
+            <div className="home-stage__floor" />
+            <div className="home-stage__ring home-stage__ring--outer" />
+            <div className="home-stage__ring home-stage__ring--inner" />
 
-            <ol className="home-journey__steps">
-              <li className="home-journey__step home-journey__step--kitchen">
-                <img src={vyahaLogos.partner} alt="" />
-                <strong>Kitchen</strong>
-                <span>Order accepted</span>
-              </li>
-              <li className="home-journey__step home-journey__step--rider">
-                <img src={vyahaLogos.delivery} alt="" />
-                <strong>Rider</strong>
-                <span>On the move</span>
-              </li>
-              <li className="home-journey__step home-journey__step--home">
+            <div className="home-stage__satellites">
+              <div className="home-stage__sat home-stage__sat--a">
                 <img src={vyahaLogos.customer} alt="" />
-                <strong>Home</strong>
-                <span>Genuine total paid</span>
-              </li>
-            </ol>
-
-            <div className="home-journey__track">
-              <svg className="home-journey__path" viewBox="0 0 900 220" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="vyahaRoute" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#2f6bff" />
-                    <stop offset="50%" stopColor="#e23744" />
-                    <stop offset="100%" stopColor="#1c9b55" />
-                  </linearGradient>
-                </defs>
-                <path
-                  className="home-journey__rail"
-                  d="M40 150 C 180 40, 320 40, 450 120 C 580 200, 720 200, 860 70"
-                />
-                <path
-                  className="home-journey__rail home-journey__rail--live"
-                  d="M40 150 C 180 40, 320 40, 450 120 C 580 200, 720 200, 860 70"
-                />
-                <g className="home-journey__courier">
-                  <circle r="11" fill="#fff" />
-                  <circle r="5.5" fill="#e23744" />
-                  <animateMotion
-                    dur="4.8s"
-                    repeatCount="indefinite"
-                    path="M40 150 C 180 40, 320 40, 450 120 C 580 200, 720 200, 860 70"
-                  />
-                </g>
-              </svg>
+              </div>
+              <div className="home-stage__sat home-stage__sat--b">
+                <img src={vyahaLogos.partner} alt="" />
+              </div>
+              <div className="home-stage__sat home-stage__sat--c">
+                <img src={vyahaLogos.delivery} alt="" />
+              </div>
             </div>
 
-            <div className="home-journey__ticker">
-              <div className="home-journey__chip home-journey__chip--live">
-                <i />
-                Live order tracking
-              </div>
-              <div className="home-journey__chip">ETA 12 min</div>
-              <div className="home-journey__chip home-journey__chip--price">
-                Menu price · no markup fog
+            <div className="home-stage__phone">
+              <div className="home-stage__phone-bezel">
+                <div className="home-stage__phone-notch" />
+                <div className="home-stage__phone-screen">
+                  <img
+                    className="home-stage__phone-logo"
+                    src={vyahaLogos.customer}
+                    alt=""
+                  />
+                  <div className="home-stage__pulse">
+                    <span />
+                    Live order tracking
+                  </div>
+                  <div className="home-stage__bars">
+                    <i />
+                    <i />
+                    <i className="short" />
+                  </div>
+                  <div className="home-stage__map">
+                    <span className="home-stage__dot" />
+                    <span className="home-stage__path" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
