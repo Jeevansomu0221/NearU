@@ -1,6 +1,8 @@
 const SHOP_NAME_ALIASES: Record<string, string> = {
   "fastfood test": "Burger Yard Express",
-  "raja cloud": "Raja Cloud Kitchen"
+  "raja cloud": "Raja Cloud Kitchen",
+  "raja cloud kitchen": "Raja Cloud Kitchen",
+  "paradise biryani": "Raja Cloud Kitchen"
 };
 
 const ADDRESS_ALIASES: Record<string, string> = {

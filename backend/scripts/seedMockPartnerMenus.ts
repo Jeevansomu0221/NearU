@@ -53,22 +53,23 @@ type PartnerCatalogEntry = {
 
 const image = (url: string) => `${url}?auto=format&fit=crop&w=900&q=80`;
 
+/** Image subjects must match the dish at the same index in RAJA_CLOUD_KITCHEN_ITEMS. */
 const BIRYANI_ITEM_IMAGES = [
-  "https://images.unsplash.com/photo-1563379091339-03246963d51a",
-  "https://images.unsplash.com/photo-1599043513900-ed6fe01d3833",
-  "https://images.unsplash.com/photo-1630383249896-424e482df921",
-  "https://images.unsplash.com/photo-1601050690597-df0568f70950",
-  "https://images.unsplash.com/photo-1603133872878-684f208fb84b",
-  "https://images.unsplash.com/photo-1546833999-b9f581a1996d",
-  "https://images.unsplash.com/photo-1589302168068-964664d93dc0",
-  "https://images.unsplash.com/photo-1604908176997-4317c7eaeb9b",
-  "https://images.unsplash.com/photo-1601050690117-8b3b8f567f1f",
-  "https://images.unsplash.com/photo-1512058564366-18510be2db19",
-  "https://images.unsplash.com/photo-1596797038530-2c107aa1e2fd",
-  "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445",
-  "https://images.unsplash.com/photo-1498654896293-37aacf113fd9",
-  "https://images.unsplash.com/photo-1482049016688-2d3e1b311543",
-  "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f"
+  "https://images.unsplash.com/photo-1563379091339-03246963d51a", // chicken dum biryani bowl
+  "https://images.unsplash.com/photo-1599043513900-ed6fe01d3833", // mutton/layered biryani plate
+  "https://images.unsplash.com/photo-1630383249896-424e482df921", // boneless chicken biryani
+  "https://images.unsplash.com/photo-1589302168068-964664d93dc0", // vegetable dum biryani / fragrant rice
+  "https://images.unsplash.com/photo-1565557623262-fcf4c9b4f5a8", // paneer with Indian breads
+  "https://images.unsplash.com/photo-1626082927389-3d19c9868fb4", // spicy fried chicken (Chicken 65)
+  "https://images.unsplash.com/photo-1519707576283-4a24068ae64c", // crispy fried fish (Apollo Fish)
+  "https://images.unsplash.com/photo-1585937421612-70a008356fbe", // chilli/curry gravy (Mirchi Ka Salan)
+  "https://images.unsplash.com/photo-1571214424206-896ebf5d748e", // yogurt bowl (Raita)
+  "https://images.unsplash.com/photo-1551024506-0bccd828d307", // sweet bread/cream dessert (Double Ka Meetha)
+  "https://images.unsplash.com/photo-1488477181946-6428a0291777", // apricot/cream dessert (Qubani Ka Meetha)
+  "https://images.unsplash.com/photo-1701578901732-f44c8acd7b78", // biryani with fry pieces
+  "https://images.unsplash.com/photo-1603133872878-684f208fb84b", // egg rice / egg biryani
+  "https://images.unsplash.com/photo-1546833999-b9f581a1996d", // pan-fried meat curry (Talawa Gosht)
+  "https://images.unsplash.com/photo-1626777552726-4a6b54c97e46" // thin hand-tossed roti / naan
 ].map(image);
 
 const SWEETS_ITEM_IMAGES = [
@@ -162,11 +163,11 @@ const ICE_CREAM_ITEM_IMAGES = [
 ].map(image);
 
 const PARTNER_IMAGES: Record<string, { shopImageUrl: string; bannerImageUrl: string; restaurantPhotosUrls: string[] }> = {
-  "Paradise Biryani": {
+  "Raja Cloud Kitchen": {
     shopImageUrl: image("https://images.unsplash.com/photo-1563379091339-03246963d51a"),
     bannerImageUrl: image("https://images.unsplash.com/photo-1599043513900-ed6fe01d3833"),
     restaurantPhotosUrls: [
-      image("https://images.unsplash.com/photo-1546833999-b9f581a1996d"),
+      image("https://images.unsplash.com/photo-1630383249896-424e482df921"),
       image("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4"),
       image("https://images.unsplash.com/photo-1559339352-11d035aa65de")
     ]
@@ -218,7 +219,7 @@ const PARTNER_IMAGES: Record<string, { shopImageUrl: string; bannerImageUrl: str
   }
 };
 
-const PARADISE_BIRYANI_ITEMS: MenuSeed[] = [
+const RAJA_CLOUD_KITCHEN_ITEMS: MenuSeed[] = [
   { name: "Chicken Dum Biryani", description: "Hyderabadi dum biryani with tender chicken and aromatic basmati rice", price: 249, category: "Biryani", isVegetarian: false, preparationTime: 25, imageUrl: BIRYANI_ITEM_IMAGES[0] },
   { name: "Mutton Dum Biryani", description: "Slow-cooked mutton biryani with saffron and fried onions", price: 329, category: "Biryani", isVegetarian: false, preparationTime: 28, imageUrl: BIRYANI_ITEM_IMAGES[1] },
   { name: "Boneless Chicken Biryani", description: "Juicy boneless chicken layered with fragrant rice", price: 279, category: "Biryani", isVegetarian: false, preparationTime: 22, imageUrl: BIRYANI_ITEM_IMAGES[2] },
@@ -327,7 +328,7 @@ const NATURALS_ICECREAM_ITEMS: MenuSeed[] = [
 ];
 
 const AFFORDABLE_PRICES: Record<string, Record<string, number>> = {
-  "Paradise Biryani": {
+  "Raja Cloud Kitchen": {
     "Chicken Dum Biryani": 199,
     "Mutton Dum Biryani": 279,
     "Boneless Chicken Biryani": 219,
@@ -433,10 +434,10 @@ const AFFORDABLE_PRICES: Record<string, Record<string, number>> = {
 
 const PARTNER_CATALOG: PartnerCatalogEntry[] = [
   {
-    restaurantName: "Paradise Biryani",
-    legacyNames: ["Raja cloud"],
+    restaurantName: "Raja Cloud Kitchen",
+    legacyNames: ["Raja cloud", "Paradise Biryani"],
     phoneEnv: "RAJA_CLOUD_PHONE",
-    shopDescription: "Legendary Hyderabadi biryani since 1953 — dum biryani, kebabs and Nizami desserts",
+    shopDescription: "Homestyle Hyderabadi cloud kitchen — dum biryani, kebabs and Nizami desserts",
     category: "cloud-kitchen",
     rating: 4.6,
     ratingCount: 2840,
@@ -567,7 +568,7 @@ const PARTNER_CATALOG: PartnerCatalogEntry[] = [
 ];
 
 const MENU_BY_PARTNER: Record<string, { items: MenuSeed[]; images: string[] }> = {
-  "Paradise Biryani": { items: PARADISE_BIRYANI_ITEMS, images: BIRYANI_ITEM_IMAGES },
+  "Raja Cloud Kitchen": { items: RAJA_CLOUD_KITCHEN_ITEMS, images: BIRYANI_ITEM_IMAGES },
   "Pulla Reddy Sweets": { items: PULLA_REDDY_SWEETS_ITEMS, images: SWEETS_ITEM_IMAGES },
   "Karachi Bakery": { items: KARACHI_BAKERY_ITEMS, images: BAKERY_ITEM_IMAGES },
   "Sree Krishna Juice Point": { items: SREE_KRISHNA_JUICE_ITEMS, images: JUICE_ITEM_IMAGES },
@@ -585,7 +586,7 @@ const LEGACY_MENU_ITEMS_TO_REMOVE: Record<string, string[]> = {
     "Butter Croissant", "Chocolate Muffin", "Red Velvet Pastry", "Black Forest Slice",
     "Veg Sandwich", "Blueberry Cheesecake Jar"
   ],
-  "Paradise Biryani": [
+  "Raja Cloud Kitchen": [
     "Plain Dosa", "Masala Dosa", "Idly (2 pcs)", "Ghee Podi Idly", "Maggie Masala"
   ]
 };
