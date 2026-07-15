@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { vyahaLogos } from '../assets/logos';
 import { effectiveDate } from '../content/legalConfig';
 import { pageData } from '../content/policyPages';
 import PolicySidebar, { PolicyMobileNav } from '../components/PolicySidebar';
@@ -17,6 +18,13 @@ function LegalPage({ pageType }) {
 
   return (
     <div className="legal-page-container">
+      <div className="legal-brand-row">
+        <Link className="legal-brand" to="/">
+          <img src={vyahaLogos.brand} alt="Vyaha" />
+          <span>Vyaha</span>
+        </Link>
+      </div>
+
       <div className="legal-page-layout">
         <PolicySidebar activePageType={pageType} />
 
