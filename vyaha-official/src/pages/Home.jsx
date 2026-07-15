@@ -51,11 +51,9 @@ function useReveal(reducedMotion) {
 function Home() {
   const reducedMotion = usePrefersReducedMotion();
   const heroRef = useRef(null);
-  const stageRef = useRef(null);
   const promiseRef = useReveal(reducedMotion);
-  const stageCopyRef = useReveal(reducedMotion);
+  const appsRef = useReveal(reducedMotion);
   const valueRef = useReveal(reducedMotion);
-  const ecosystemRef = useReveal(reducedMotion);
   const launchRef = useReveal(reducedMotion);
 
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
@@ -72,14 +70,6 @@ function Home() {
       if (hero) {
         const progress = Math.min(y / Math.max(window.innerHeight, 1), 1);
         hero.style.setProperty('--hero-depth', String(progress));
-      }
-
-      const stage = stageRef.current;
-      if (stage) {
-        const rect = stage.getBoundingClientRect();
-        const mid = rect.top + rect.height * 0.45;
-        const delta = (window.innerHeight * 0.5 - mid) / window.innerHeight;
-        stage.style.setProperty('--stage-spin', String(Math.max(-1, Math.min(1, delta))));
       }
     };
 
@@ -225,58 +215,55 @@ function Home() {
           </ul>
         </section>
 
-        <section className="home-stage" ref={stageRef} aria-label="Vyaha app experience">
-          <div className="home-stage__copy home-reveal" ref={stageCopyRef}>
-            <p className="home-eyebrow">Inside the app</p>
-            <h2>Order, track, and tip the neighborhood — in motion.</h2>
-            <p>
-              A focused customer experience built around live tracking, honest
-              totals, and food that still feels local.
-            </p>
+        <section className="home-trio home-reveal" ref={appsRef} aria-label="Vyaha apps">
+          <div className="home-trio__intro">
+            <p className="home-eyebrow">Three apps. One neighborhood.</p>
+            <h2>Built for partners, customers, and riders.</h2>
           </div>
 
-          <div className="home-stage__scene" aria-hidden="true">
-            <div className="home-stage__floor" />
-            <div className="home-stage__ring home-stage__ring--outer" />
-            <div className="home-stage__ring home-stage__ring--inner" />
+          <div className="home-trio__grid">
+            <article className="home-trio__card home-trio__card--partner">
+              <img src={vyahaLogos.partner} alt="" />
+              <span className="home-trio__label">Partner app</span>
+              <h3>For restaurants</h3>
+              <ul>
+                <li>We take as little commission as possible</li>
+                <li>Easy menu updates for every shift change</li>
+                <li>We send your money within 2 weeks</li>
+                <li>Support on everything you need</li>
+              </ul>
+              <Link to="/restaurants">
+                Partner with Vyaha <span aria-hidden="true">→</span>
+              </Link>
+            </article>
 
-            <div className="home-stage__satellites">
-              <div className="home-stage__sat home-stage__sat--a">
-                <img src={vyahaLogos.customer} alt="" />
-              </div>
-              <div className="home-stage__sat home-stage__sat--b">
-                <img src={vyahaLogos.partner} alt="" />
-              </div>
-              <div className="home-stage__sat home-stage__sat--c">
-                <img src={vyahaLogos.delivery} alt="" />
-              </div>
-            </div>
+            <article className="home-trio__card home-trio__card--customer">
+              <img src={vyahaLogos.customer} alt="" />
+              <span className="home-trio__label">Customer app</span>
+              <h3>For food lovers</h3>
+              <ul>
+                <li>Genuine menu prices — no extra cost</li>
+                <li>Explore undiscovered shops and restaurants</li>
+                <li>Try different foods from nearby kitchens</li>
+              </ul>
+              <Link to="/apps">
+                Explore Customer App <span aria-hidden="true">→</span>
+              </Link>
+            </article>
 
-            <div className="home-stage__phone">
-              <div className="home-stage__phone-bezel">
-                <div className="home-stage__phone-notch" />
-                <div className="home-stage__phone-screen">
-                  <img
-                    className="home-stage__phone-logo"
-                    src={vyahaLogos.customer}
-                    alt=""
-                  />
-                  <div className="home-stage__pulse">
-                    <span />
-                    Live order tracking
-                  </div>
-                  <div className="home-stage__bars">
-                    <i />
-                    <i />
-                    <i className="short" />
-                  </div>
-                  <div className="home-stage__map">
-                    <span className="home-stage__dot" />
-                    <span className="home-stage__path" />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <article className="home-trio__card home-trio__card--delivery">
+              <img src={vyahaLogos.delivery} alt="" />
+              <span className="home-trio__label">Delivery app</span>
+              <h3>For delivery partners</h3>
+              <ul>
+                <li>No onboarding fee</li>
+                <li>Your hard work, your money</li>
+                <li>Easy money withdrawal</li>
+              </ul>
+              <Link to="/delivery">
+                Start Delivering <span aria-hidden="true">→</span>
+              </Link>
+            </article>
           </div>
         </section>
 
@@ -306,56 +293,6 @@ function Home() {
               <p>Shorter routes mean fresher food and steadier delivery.</p>
             </li>
           </ol>
-        </section>
-
-        <section className="home-ecosystem home-reveal" ref={ecosystemRef}>
-          <p className="home-eyebrow">One local network</p>
-          <h2>Built for every side of the order</h2>
-          <p className="home-ecosystem__lede">
-            Customers, restaurants, and riders each get a focused app — connected
-            by one Vyaha platform.
-          </p>
-
-          <div className="home-ecosystem__grid">
-            <Link to="/apps" className="home-app home-app--customer">
-              <img src={vyahaLogos.customer} alt="" />
-              <span className="home-app__label">For customers</span>
-              <h3>Discover nearby food without the price confusion.</h3>
-              <p>
-                Browse local restaurants, review clear totals, place orders, and
-                track delivery from one simple app.
-              </p>
-              <em>
-                Explore Customer App <span aria-hidden="true">→</span>
-              </em>
-            </Link>
-
-            <Link to="/restaurants" className="home-app home-app--partner">
-              <img src={vyahaLogos.partner} alt="" />
-              <span className="home-app__label">For restaurants</span>
-              <h3>Run orders, menus, and growth from a cleaner workspace.</h3>
-              <p>
-                Accept orders, keep menus current, manage verification, and serve
-                your neighborhood with fewer moving parts.
-              </p>
-              <em>
-                Partner With Vyaha <span aria-hidden="true">→</span>
-              </em>
-            </Link>
-
-            <Link to="/delivery" className="home-app home-app--delivery">
-              <img src={vyahaLogos.delivery} alt="" />
-              <span className="home-app__label">For delivery partners</span>
-              <h3>Accept local jobs and keep earnings easy to follow.</h3>
-              <p>
-                Go available, view nearby orders, update delivery status, and
-                track work with a delivery-first app.
-              </p>
-              <em>
-                Start Delivering <span aria-hidden="true">→</span>
-              </em>
-            </Link>
-          </div>
         </section>
 
         <section className="home-launch home-reveal" ref={launchRef}>
