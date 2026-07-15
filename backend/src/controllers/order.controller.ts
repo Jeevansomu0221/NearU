@@ -1436,7 +1436,8 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
             collectedAt: new Date(),
             collectedBy: userId,
             method: "CASH",
-            cashLedgerEntryId: cashLedgerEntry._id
+            cashLedgerEntryId: cashLedgerEntry._id,
+            manuallyVerifiedByRider: false
           };
           createdCashLedgerAmount += orderCodAmount;
         } else if (
@@ -1451,7 +1452,8 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
             collectedAt: new Date(),
             collectedBy: userId,
             method: "UPI",
-            razorpayPaymentId: deliveryOrder.razorpayPaymentId || deliveryOrder.paymentId
+            razorpayPaymentId: deliveryOrder.razorpayPaymentId || deliveryOrder.paymentId,
+            manuallyVerifiedByRider: false
           };
           deliveryOrder.paymentMethod = "UPI";
         }
@@ -1836,7 +1838,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
       upiUri: session.upiUri,
       paymentUrl: session.paymentUrl,
       amount: session.amount,
-      manualConfirmRequired: session.manualConfirmRequired,
+      manualConfirmRequired: session.manualConfirmRequired === true,
       createdAt: new Date(),
       expiresAt
     };
