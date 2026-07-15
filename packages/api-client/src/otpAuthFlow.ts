@@ -5,9 +5,28 @@ import type { UserRole } from "./types.js";
 export const TEST_LOGIN_PHONE = "1010101010";
 export const TEST_LOGIN_OTP = "000000";
 
-export const isTestLoginPhone = (phone: string) => phone.replace(/\D/g, "") === TEST_LOGIN_PHONE;
-export const isTestOtpLogin = (phone: string, otp: string) =>
-  isTestLoginPhone(phone) && otp === TEST_LOGIN_OTP;
+const DEFAULT_TEST_LOGIN_CREDENTIALS: Record<string, string> = {
+  "1010101010": "000000",
+  "1234567890": "123456"
+};
+
+const TEST_LOGIN_CREDENTIALS = (() => {
+  const raw = process.env.EXPO_PUBLIC_TEST_LOGIN_CREDENTIALS;
+  if (!raw) {
+    return DEFAULT_TEST_LOGIN_CREDENTIALS;
+  }
+  try {
+    return { ...DEFAULT_TEST_LOGIN_CREDENTIALS, ...(JSON.parse(raw) as Record<string, string>) };
+  } catch {
+    return DEFAULT_TEST_LOGIN_CREDENTIALS;
+  }
+})();
+
+const normalizePhone = (phone: string) => phone.replace(/\D/g, "");
+
+export const isTestLoginPhone = (phone: string) => normalizePhone(phone) in TEST_LOGIN_CREDENTIALS;
+export const getTestLoginOtp = (phone: string) => TEST_LOGIN_CREDENTIALS[normalizePhone(phone)];
+export const isTestOtpLogin = (phone: string, otp: string) => getTestLoginOtp(phone) === otp;
 
 export type OtpAuthProvider = "2factor" | "firebase";
 
@@ -39,7 +58,7 @@ const normalizeSendOtpResponse = (raw: SendOtpResponse | Record<string, unknown>
 export const sendOtpWithFallback = async (phone: string, role: UserRole): Promise<OtpSessionInfo> => {
   const cleanedPhone = phone.replace(/\D/g, "");
   if (isTestLoginPhone(cleanedPhone)) {
-    return { provider: "2factor", deliveryHint: `Use test OTP ${TEST_LOGIN_OTP} to continue.` };
+    return { provider: "2factor", deliveryHint: `Use test OTP ${getTestLoginOtp(cleanedPhone)} to continue.` };
   }
 
   try {
@@ -82,15 +101,7 @@ export const verifyOtpSession = async (
   role: UserRole,
   session: OtpSessionInfo
 ) => {
-  if (isTestOtpLogin(phone, otp)) {
-    const response = await verifyOtp(phone, otp, role);
-    if (!response.success || !response.data?.token || !response.data?.user) {
-      throw new Error(response.message || "Invalid or expired OTP");
-    }
-    return response;
-  }
-
-  if (session.provider === "2factor") {
+  if (isTestOtpLogin(phone, otp) || isTestLoginPhone(phone) || session.provider === "2factor") {
     const response = await verifyOtp(phone, otp, role);
     if (!response.success || !response.data?.token || !response.data?.user) {
       throw new Error(response.message || "Invalid or expired OTP");

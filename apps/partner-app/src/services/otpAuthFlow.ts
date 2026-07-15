@@ -4,42 +4,65 @@ import { sendFirebaseOtp, confirmFirebaseOtp } from "./firebasePhoneAuth";
 export const TEST_LOGIN_PHONE = "1010101010";
 export const TEST_LOGIN_OTP = "000000";
 
+/** Soft backend OTP bypass (no SMS). Keep in sync with backend testLoginCredentials defaults. */
+const DEFAULT_TEST_LOGIN_CREDENTIALS: Record<string, string> = {
+  "1010101010": "000000",
+  "1234567890": "123456"
+};
+
 /** Firebase Console → Authentication → Phone → numbers for testing (+91, no country code). */
 const DEFAULT_FIREBASE_TEST_PHONES: Record<string, string> = {
   "1010101010": "000000",
+  "1000010000": "000000",
+  "1234567890": "123456",
   "9999900000": "123456",
   "9999900001": "123456",
   "2020202020": "000000",
-  "3030303030": "000000"
+  "2222222222": "222222",
+  "3030303030": "000000",
+  "3333333333": "333333",
+  "4444444444": "444444",
+  "5555555555": "555555",
+  "6666666666": "666666",
+  "7777777777": "777777"
 };
 
-const parseFirebaseTestPhones = (): Record<string, string> => {
-  const raw = process.env.EXPO_PUBLIC_FIREBASE_TEST_PHONES;
+const parseJsonPhoneMap = (raw: string | undefined, defaults: Record<string, string>) => {
   if (!raw) {
-    return DEFAULT_FIREBASE_TEST_PHONES;
+    return defaults;
   }
 
   try {
     const parsed = JSON.parse(raw) as Record<string, string>;
-    return { ...DEFAULT_FIREBASE_TEST_PHONES, ...parsed };
+    return { ...defaults, ...parsed };
   } catch {
-    return DEFAULT_FIREBASE_TEST_PHONES;
+    return defaults;
   }
 };
 
-const FIREBASE_TEST_PHONES = parseFirebaseTestPhones();
+const TEST_LOGIN_CREDENTIALS = parseJsonPhoneMap(
+  process.env.EXPO_PUBLIC_TEST_LOGIN_CREDENTIALS,
+  DEFAULT_TEST_LOGIN_CREDENTIALS
+);
 
-export const isTestLoginPhone = (phone: string) => phone.replace(/\D/g, "") === TEST_LOGIN_PHONE;
-export const isTestOtpLogin = (phone: string, otp: string) =>
-  isTestLoginPhone(phone) && otp === TEST_LOGIN_OTP;
+const FIREBASE_TEST_PHONES = parseJsonPhoneMap(
+  process.env.EXPO_PUBLIC_FIREBASE_TEST_PHONES,
+  DEFAULT_FIREBASE_TEST_PHONES
+);
+
+const normalizePhone = (phone: string) => phone.replace(/\D/g, "");
+
+export const isTestLoginPhone = (phone: string) => normalizePhone(phone) in TEST_LOGIN_CREDENTIALS;
+export const getTestLoginOtp = (phone: string) => TEST_LOGIN_CREDENTIALS[normalizePhone(phone)];
+export const isTestOtpLogin = (phone: string, otp: string) => getTestLoginOtp(phone) === otp;
 
 export const isFirebaseTestPhone = (phone: string) => {
-  const cleaned = phone.replace(/\D/g, "");
+  const cleaned = normalizePhone(phone);
   return cleaned in FIREBASE_TEST_PHONES;
 };
 
 export const getFirebaseTestOtpHint = (phone: string) => {
-  const cleaned = phone.replace(/\D/g, "");
+  const cleaned = normalizePhone(phone);
   return FIREBASE_TEST_PHONES[cleaned] || "the Firebase test code";
 };
 
@@ -110,7 +133,7 @@ export const sendOtpWithFallback = async (phone: string, role: string): Promise<
   if (isTestLoginPhone(cleanedPhone)) {
     return {
       provider: "2factor",
-      deliveryHint: `Use test OTP ${TEST_LOGIN_OTP} to continue.`
+      deliveryHint: `Use test OTP ${getTestLoginOtp(cleanedPhone)} to continue.`
     };
   }
 
@@ -185,15 +208,7 @@ export const verifyOtpSession = async (
   role: string,
   session: OtpSessionInfo
 ) => {
-  if (isTestOtpLogin(phone, otp)) {
-    const payload = await withNetworkRetry(() => verifyOtp(phone, otp, role), "verify-otp");
-    return {
-      success: true,
-      data: payload
-    };
-  }
-
-  if (session.provider === "2factor" && !isFirebaseTestPhone(phone)) {
+  if (isTestOtpLogin(phone, otp) || isTestLoginPhone(phone) || (session.provider === "2factor" && !isFirebaseTestPhone(phone))) {
     const payload = await withNetworkRetry(() => verifyOtp(phone, otp, role), "verify-otp");
     return {
       success: true,

@@ -15,13 +15,13 @@ import { config } from "../config/env";
 const phoneRegex = /^[0-9]{10}$/;
 const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD || "";
 const ADMIN_PHONE = process.env.ADMIN_PANEL_PHONE || "";
-const TEST_LOGIN_PHONE = config.testLoginPhone;
-const TEST_LOGIN_OTP = config.testLoginOtp;
+const TEST_LOGIN_CREDENTIALS = config.testLoginCredentials;
 
 const normalizePhone = (phone: string) => phone.replace(/\D/g, "").slice(-10);
-const isTestLoginPhone = (phone: string) => normalizePhone(phone) === TEST_LOGIN_PHONE;
+const getTestLoginOtp = (phone: string) => TEST_LOGIN_CREDENTIALS[normalizePhone(phone)];
+const isTestLoginPhone = (phone: string) => Boolean(getTestLoginOtp(phone));
 const isTestOtpLogin = (phone: string, otp?: string) =>
-  isTestLoginPhone(phone) && String(otp || "").trim() === TEST_LOGIN_OTP;
+  getTestLoginOtp(phone) === String(otp || "").trim();
 
 const idsMatch = (left?: unknown, right?: unknown) =>
   Boolean(left && right && left.toString() === right.toString());
@@ -128,7 +128,7 @@ export const sendOTP = async (req: Request, res: Response) => {
         {
           phone,
           provider: "memory",
-          deliveryHint: `Use test OTP ${TEST_LOGIN_OTP} to continue.`
+          deliveryHint: `Use test OTP ${getTestLoginOtp(phone)} to continue.`
         },
         "OTP sent successfully"
       );

@@ -359,7 +359,8 @@ export class OTPService {
 
   static async verifyOTP(phone: string, otp: string): Promise<boolean> {
     const normalizedPhone = phone.replace(/\D/g, "").slice(-10);
-    if (normalizedPhone === config.testLoginPhone && otp === config.testLoginOtp) {
+    const testOtp = config.testLoginCredentials[normalizedPhone];
+    if (testOtp && otp === testOtp) {
       return true;
     }
 

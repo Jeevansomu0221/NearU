@@ -17,6 +17,42 @@ const parseOrigins = (value: string | undefined) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const normalizeTestPhone = (phone: string) => phone.replace(/\D/g, "").slice(-10);
+
+/** Soft OTP bypass pairs used by apps + backend (no SMS). */
+const DEFAULT_TEST_LOGIN_CREDENTIALS: Record<string, string> = {
+  "1010101010": "000000",
+  "1234567890": "123456"
+};
+
+const parseTestLoginCredentials = (): Record<string, string> => {
+  const credentials = { ...DEFAULT_TEST_LOGIN_CREDENTIALS };
+  const legacyPhone = normalizeTestPhone(process.env.TEST_LOGIN_PHONE || "1010101010");
+  const legacyOtp = process.env.TEST_LOGIN_OTP || "000000";
+  if (legacyPhone && legacyOtp) {
+    credentials[legacyPhone] = legacyOtp;
+  }
+
+  const raw = process.env.TEST_LOGIN_CREDENTIALS;
+  if (!raw) {
+    return credentials;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    for (const [phone, otp] of Object.entries(parsed)) {
+      const normalizedPhone = normalizeTestPhone(phone);
+      if (normalizedPhone && otp) {
+        credentials[normalizedPhone] = String(otp).trim();
+      }
+    }
+  } catch {
+    // Keep defaults + legacy env when JSON is invalid.
+  }
+
+  return credentials;
+};
+
 export const config = {
   port: parsePositiveInt(process.env.PORT, 5000),
   nodeEnv,
@@ -63,6 +99,7 @@ export const config = {
   deliveryLocationFreshnessMinutes: parsePositiveInt(process.env.DELIVERY_LOCATION_FRESHNESS_MINUTES, 10),
   testLoginPhone: (process.env.TEST_LOGIN_PHONE || "1010101010").replace(/\D/g, "").slice(-10),
   testLoginOtp: process.env.TEST_LOGIN_OTP || "000000",
+  testLoginCredentials: parseTestLoginCredentials(),
   allowMultiDeviceSessions: process.env.ALLOW_MULTI_DEVICE_SESSIONS !== "false"
 };
 
