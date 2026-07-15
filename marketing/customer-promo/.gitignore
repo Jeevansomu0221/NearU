@@ -1,0 +1,5 @@
+clips/
+../customer-promo-frames/
+out/preview_*.jpg
+*.pyc
+__pycache__/
