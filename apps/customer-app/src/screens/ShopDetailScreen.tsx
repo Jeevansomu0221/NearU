@@ -211,18 +211,33 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
         const [menuResponse, shopResponse] = await Promise.all([
           getPartnerMenu(shopId),
-          passedShop ? Promise.resolve(null) : getPartnerDetails(shopId)
+          getPartnerDetails(shopId)
         ]);
 
-        if (!passedShop && shopResponse && (shopResponse as any).success && (shopResponse as any).data) {
-          setShop((shopResponse as any).data);
+        const menuPayload = menuResponse as any;
+        const shopPayload = shopResponse as any;
+
+        if (shopPayload?.success && shopPayload?.data) {
+          setShop(shopPayload.data);
+        } else if (menuPayload?.partner) {
+          setShop((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  isOpen: menuPayload.partner.isOpen !== false,
+                  rating: menuPayload.partner.rating ?? prev.rating
+                }
+              : prev
+          );
         }
 
-        if ((menuResponse as any).data && Array.isArray((menuResponse as any).data)) {
-          setMenu((menuResponse as any).data.filter((item: MenuItem) => item.isAvailable));
-        } else {
-          setMenu([]);
-        }
+        const menuItems = Array.isArray(menuPayload?.data)
+          ? menuPayload.data
+          : Array.isArray(menuPayload?.data?.data)
+            ? menuPayload.data.data
+            : [];
+
+        setMenu(menuItems.filter((item: MenuItem) => item.isAvailable));
       } catch (error: any) {
         Alert.alert("Error", error.message || "Failed to load restaurant details");
         setMenu([]);
@@ -232,7 +247,33 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
     };
 
     loadData();
-  }, [passedShop, shopId]);
+  }, [shopId]);
+
+  const refreshShopOpenStatus = useCallback(async () => {
+    try {
+      const shopResponse = await getPartnerDetails(shopId);
+      const shopPayload = shopResponse as any;
+      if (shopPayload?.success && shopPayload?.data) {
+        setShop((prev) => {
+          if (!prev) return shopPayload.data;
+          return {
+            ...prev,
+            ...shopPayload.data,
+            isOpen: shopPayload.data.isOpen !== false
+          };
+        });
+        return;
+      }
+
+      const menuResponse = await getPartnerMenu(shopId);
+      const partner = (menuResponse as any)?.partner;
+      if (partner && typeof partner.isOpen === "boolean") {
+        setShop((prev) => (prev ? { ...prev, isOpen: partner.isOpen } : prev));
+      }
+    } catch {
+      // Keep showing the last known status if a background refresh fails.
+    }
+  }, [shopId]);
 
   const loadFavoriteFoodItems = useCallback(async () => {
     try {
@@ -257,7 +298,12 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       loadFavoriteFoodItems();
-    }, [loadFavoriteFoodItems])
+      void refreshShopOpenStatus();
+      const interval = setInterval(() => {
+        void refreshShopOpenStatus();
+      }, 20000);
+      return () => clearInterval(interval);
+    }, [loadFavoriteFoodItems, refreshShopOpenStatus])
   );
 
   useEffect(() => {

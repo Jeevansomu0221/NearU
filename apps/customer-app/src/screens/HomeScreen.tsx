@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { RootStackParamList } from "../navigation/AppNavigator";
@@ -156,18 +157,10 @@ export default function HomeScreen({ navigation }: Props) {
     const locationTimer = setTimeout(() => {
       promptForLocationPermission();
     }, INITIAL_LOCATION_REQUEST_DELAY_MS);
-    loadOrderBadgeCount();
     getVegModePreference().then(setVegMode).catch(() => {});
 
     return () => clearTimeout(locationTimer);
   }, []);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      loadOrderBadgeCount();
-    });
-    return unsubscribe;
-  }, [loadOrderBadgeCount, navigation]);
 
   const openLocationSettings = () => {
     Linking.openSettings().catch(() => {
@@ -229,16 +222,28 @@ export default function HomeScreen({ navigation }: Props) {
     return false;
   };
 
-  const loadNearbyShops = async (showRefresh = false) => {
+  const hasGrantedLocationPermission = async () => {
+    const existingPermission = await Location.getForegroundPermissionsAsync();
+    return existingPermission.status === "granted";
+  };
+
+  const loadNearbyShops = useCallback(async (options?: { showRefresh?: boolean; silent?: boolean }) => {
+    const showRefresh = Boolean(options?.showRefresh);
+    const silent = Boolean(options?.silent);
+
     try {
       if (showRefresh) {
         setRefreshing(true);
-      } else {
+      } else if (!silent) {
         setLoading(true);
       }
-      setLocationPermissionPrompt(null);
+      if (!silent) {
+        setLocationPermissionPrompt(null);
+      }
 
-      const hasLocationPermission = await requestHomeLocationPermission();
+      const hasLocationPermission = silent
+        ? await hasGrantedLocationPermission()
+        : await requestHomeLocationPermission();
       if (!hasLocationPermission) {
         return;
       }
@@ -248,8 +253,10 @@ export default function HomeScreen({ navigation }: Props) {
         LOCATION_TIMEOUT_MS
       );
       if (locationServicesEnabled === false) {
-        setShops([]);
-        setLocationMessage("Turn on device location to see shops within 5 km of you.");
+        if (!silent) {
+          setShops([]);
+          setLocationMessage("Turn on device location to see shops within 5 km of you.");
+        }
         return;
       }
 
@@ -257,14 +264,18 @@ export default function HomeScreen({ navigation }: Props) {
       try {
         location = await getCurrentPositionWithTimeout();
       } catch {
-        setShops([]);
-        setLocationMessage("Could not get your location. Pull to refresh and try again.");
+        if (!silent) {
+          setShops([]);
+          setLocationMessage("Could not get your location. Pull to refresh and try again.");
+        }
         return;
       }
 
       if (!location) {
-        setShops([]);
-        setLocationMessage("Waiting for your location. Pull to refresh to try again.");
+        if (!silent) {
+          setShops([]);
+          setLocationMessage("Waiting for your location. Pull to refresh to try again.");
+        }
         return;
       }
 
@@ -286,14 +297,18 @@ export default function HomeScreen({ navigation }: Props) {
           : (response as any)?.message || `No shops found within ${NEARBY_RADIUS_KM} km of you.`
       );
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to load nearby shops");
-      setShops([]);
-      setLocationMessage("Could not load nearby shops. Pull to refresh and try again.");
+      if (!silent) {
+        Alert.alert("Error", error.message || "Failed to load nearby shops");
+        setShops([]);
+        setLocationMessage("Could not load nearby shops. Pull to refresh and try again.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
       setRefreshing(false);
     }
-  };
+  }, []);
 
   const promptForLocationPermission = async () => {
     const hasLocationPermission = await requestHomeLocationPermission();
@@ -305,6 +320,18 @@ export default function HomeScreen({ navigation }: Props) {
 
     await loadNearbyShops();
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadOrderBadgeCount();
+      // Keep open/closed badges fresh whenever Home becomes visible.
+      void loadNearbyShops({ silent: true });
+      const interval = setInterval(() => {
+        void loadNearbyShops({ silent: true });
+      }, 30000);
+      return () => clearInterval(interval);
+    }, [loadNearbyShops, loadOrderBadgeCount])
+  );
 
   const formatAddress = (address: string | AddressObject): string => {
     if (!address) return "Address not available";
@@ -582,7 +609,7 @@ export default function HomeScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="always"
         keyboardDismissMode="none"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops(true)} tintColor="#FF6B35" />
+          <RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops({ showRefresh: true })} tintColor="#FF6B35" />
         }
         showsVerticalScrollIndicator={false}
       />
