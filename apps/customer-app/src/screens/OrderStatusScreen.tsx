@@ -98,7 +98,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   }, [loadOrderDetails]);
 
   useEffect(() => {
-    if (!order) return;
+    // Only hydrate from the server after submit. Live polls must not wipe in-progress stars/comments.
+    if (!order?.ratingSubmittedAt) return;
 
     setFoodQualityRating(order.restaurantRating?.foodQuality || 0);
     setPackagingRating(order.restaurantRating?.packaging || 0);
