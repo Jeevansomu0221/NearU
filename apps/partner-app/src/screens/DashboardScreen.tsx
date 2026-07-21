@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -24,6 +24,8 @@ export default function DashboardScreen({ navigation }: any) {
   const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
   const [shopOpen, setShopOpen] = useState(true);
+  const [togglingShop, setTogglingShop] = useState(false);
+  const togglingShopRef = useRef(false);
   const [partner, setPartner] = useState<any>(null);
   const [wallet, setWallet] = useState<PartnerWallet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,9 @@ export default function DashboardScreen({ navigation }: any) {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener?.("focus", loadDashboardData);
+    const unsubscribe = navigation.addListener?.("focus", () => {
+      loadDashboardData({ silent: true });
+    });
     return unsubscribe;
   }, [navigation]);
 
@@ -60,16 +64,21 @@ export default function DashboardScreen({ navigation }: any) {
     }
   };
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (options?: { silent?: boolean }) => {
     try {
-      setLoading(true);
+      if (!options?.silent) {
+        setLoading(true);
+      }
       const res = await api.get("/partners/my-status");
       const partnerData = res.data as { success: boolean; data: any };
       if (!partnerData.success || !partnerData.data) {
         throw new Error("Partner profile not found");
       }
       setPartner(partnerData.data);
-      setShopOpen(partnerData.data?.isOpen !== false);
+      // Don't clobber an in-flight optimistic toggle with a stale refresh.
+      if (!togglingShopRef.current) {
+        setShopOpen(partnerData.data?.isOpen !== false);
+      }
 
       try {
         const [statsRes, walletRes] = await Promise.all([
@@ -96,17 +105,28 @@ export default function DashboardScreen({ navigation }: any) {
     } catch (error) {
       console.error("Failed to load dashboard:", error);
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   };
 
-  const toggleShopStatus = async () => {
+  const toggleShopStatus = async (nextOpen: boolean) => {
+    if (togglingShopRef.current || nextOpen === shopOpen) return;
+
+    const previous = shopOpen;
+    togglingShopRef.current = true;
+    setTogglingShop(true);
+    setShopOpen(nextOpen);
+
     try {
-      await api.put("/partners/shop-status", { isOpen: !shopOpen });
-      setShopOpen(!shopOpen);
-      Alert.alert("Shop Status Updated", `Your shop is now ${!shopOpen ? "OPEN" : "CLOSED"}`);
+      await api.put("/partners/shop-status", { isOpen: nextOpen });
     } catch (error) {
-      Alert.alert("Error", "Failed to update shop status");
+      setShopOpen(previous);
+      Alert.alert("Error", "Failed to update shop status. Please try again.");
+    } finally {
+      togglingShopRef.current = false;
+      setTogglingShop(false);
     }
   };
 
@@ -158,7 +178,10 @@ export default function DashboardScreen({ navigation }: any) {
           </View>
         </View>
 
-        <View
+        <TouchableOpacity
+          activeOpacity={0.92}
+          disabled={togglingShop}
+          onPress={() => toggleShopStatus(!shopOpen)}
           style={[
             styles.statusBanner,
             shopOpen ? styles.statusBannerOpen : styles.statusBannerClosed,
@@ -185,16 +208,23 @@ export default function DashboardScreen({ navigation }: any) {
                 isDarkMode && (shopOpen ? styles.statusSubheadingOpenDark : styles.statusSubheadingClosedDark)
               ]}
             >
-              {shopOpen ? "Accepting customer orders" : "Tap switch to go online"}
+              {togglingShop
+                ? "Updating..."
+                : shopOpen
+                  ? "Accepting customer orders"
+                  : "Tap to go online"}
             </Text>
           </View>
           <Switch
             value={shopOpen}
             onValueChange={toggleShopStatus}
+            disabled={togglingShop}
             trackColor={{ false: "#FDA4AF", true: "#A7F3D0" }}
             thumbColor={shopOpen ? "#10B981" : "#F43F5E"}
+            // Banner handles taps; keep Switch visual only to avoid ScrollView eating the first press.
+            pointerEvents="none"
           />
-        </View>
+        </TouchableOpacity>
 
         <View style={[styles.metricsCard, isDarkMode && styles.cardDark]}>
           <View style={styles.metricsHeader}>
