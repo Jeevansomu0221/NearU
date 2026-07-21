@@ -252,7 +252,7 @@ export default function ProductDetailSheet({
 
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>Cooking request</Text>
-                  <Text style={styles.sectionHint}>Optional</Text>
+                  <Text style={styles.sectionHint}>Optional • Shared with the restaurant only</Text>
                   <TextInput
                     style={styles.cookingInput}
                     value={cookingRequest}

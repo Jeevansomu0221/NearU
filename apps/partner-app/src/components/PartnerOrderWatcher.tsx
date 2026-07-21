@@ -11,6 +11,7 @@ type PartnerOrder = {
   items?: Array<{
     name?: string;
     quantity?: number;
+    cookingRequest?: string;
   }>;
 };
 
@@ -152,7 +153,11 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
     newOrderAlert?.items
       ?.filter((item) => item.name)
       .slice(0, 4)
-      .map((item) => ({ name: item.name || "", quantity: item.quantity || 1 })) || [];
+      .map((item) => ({
+        name: item.name || "",
+        quantity: item.quantity || 1,
+        cookingRequest: item.cookingRequest || ""
+      })) || [];
 
   return (
     <NewOrderBanner

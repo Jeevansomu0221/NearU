@@ -30,6 +30,37 @@ import {
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
 
+/** Rider-only delivery instructions (cart Special Instructions). Hide from restaurant partners. */
+const sanitizeOrderForPartner = (orderObj: any) => {
+  if (!orderObj) return orderObj;
+  const next = { ...orderObj };
+  delete next.note;
+  return next;
+};
+
+/** Kitchen cooking requests stay with the restaurant. Hide from delivery riders. */
+const stripCookingRequestsFromItems = (items: any[] = []) =>
+  items.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const { cookingRequest: _cookingRequest, ...rest } = item;
+    return rest;
+  });
+
+const sanitizeOrderForDelivery = (orderObj: any) => {
+  if (!orderObj) return orderObj;
+  const next = { ...orderObj };
+  if (Array.isArray(next.items)) {
+    next.items = stripCookingRequestsFromItems(next.items);
+  }
+  if (Array.isArray(next.pickupStops)) {
+    next.pickupStops = next.pickupStops.map((stop: any) => ({
+      ...stop,
+      items: stripCookingRequestsFromItems(stop.items || [])
+    }));
+  }
+  return next;
+};
+
 const RESTAURANT_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -392,7 +423,7 @@ const ensureDeliveryLocationForResponse = async (orderObj: any): Promise<any> =>
     const deliveryFee = Number(order.deliveryFee || 0);
     const tipAmount = Number(order.tipAmount || 0);
     order.estimatedEarnings = roundMoney(deliveryFee + tipAmount);
-    return order;
+    return sanitizeOrderForDelivery(order);
   };
 
   const existingLocation = normalizeLocationPayload(orderObj.deliveryLocation);
@@ -486,7 +517,7 @@ const buildBundledDeliveryJob = (orders: any[]) => {
     paymentStatus,
     items: sortedOrders.flatMap((order) => {
       const partnerName = order.partnerId?.restaurantName || order.partnerId?.shopName || "Restaurant";
-      return (order.items || []).map((item: any) => ({
+      return stripCookingRequestsFromItems(order.items || []).map((item: any) => ({
         ...item,
         shopName: partnerName,
         orderId: idString(order._id)
@@ -498,7 +529,7 @@ const buildBundledDeliveryJob = (orders: any[]) => {
       sequence: Number(order.deliveryBundleSequence || 1),
       status: order.status,
       partnerId: order.partnerId,
-      items: order.items || [],
+      items: stripCookingRequestsFromItems(order.items || []),
       itemTotal: order.itemTotal || 0,
       deliveryFee: order.deliveryFee || 0,
       tipAmount: order.tipAmount || 0,
@@ -2030,9 +2061,9 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
         .populate("partnerId", "restaurantName shopName phone")
         .populate("deliveryPartnerId", "name phone");
       
-      // Mask customer information for partners
+      // Mask customer information for partners; hide rider-only delivery notes.
       orders = orders.map(order => {
-        const orderObj = order.toObject() as any;
+        const orderObj = sanitizeOrderForPartner(order.toObject() as any);
         orderObj.customerId = maskedCustomerFrom(orderObj.customerId);
         return orderObj;
       });
@@ -2061,7 +2092,11 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
 
     if (isDeliveryOrdersRoute) {
       const deliveryOrders = await Promise.all(
-        orders.map((order: any) => ensureDeliveryLocationForResponse(order.toObject ? order.toObject() : order))
+        orders.map(async (order: any) =>
+          sanitizeOrderForDelivery(
+            await ensureDeliveryLocationForResponse(order.toObject ? order.toObject() : order)
+          )
+        )
       );
       return successResponse(res, groupBundledDeliveryJobs(deliveryOrders), "Orders retrieved successfully", 200, pagination);
     }
@@ -2264,7 +2299,9 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
             return successResponse(res, buildBundledDeliveryJob(bundledOrders), "Bundled delivery details retrieved");
           }
         } else {
-          availableDeliveryJobForUser = await ensureDeliveryLocationForResponse(orderObj);
+          availableDeliveryJobForUser = sanitizeOrderForDelivery(
+            await ensureDeliveryLocationForResponse(orderObj)
+          );
         }
       }
     }
@@ -2286,19 +2323,22 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
     // rider can also match a partner profile by phone/user linkage, but they
     // still need the real drop address and GPS pin to complete delivery.
     if (isPartner && !isCustomer && !isDelivery && !isAdmin) {
-      orderObj.customerId = maskedCustomerFrom(orderObj.customerId);
+      const partnerView = sanitizeOrderForPartner(orderObj);
+      partnerView.customerId = maskedCustomerFrom(partnerView.customerId);
       
       // Also mask detailed delivery address for partners
       // Show only area/city, not full address
-      orderObj.deliveryAddress = maskDeliveryAddressForPartner(orderObj.deliveryAddress);
-      orderObj.deliveryLocation = undefined;
+      partnerView.deliveryAddress = maskDeliveryAddressForPartner(partnerView.deliveryAddress);
+      partnerView.deliveryLocation = undefined;
 
-      const [partnerOrder] = await enrichDeliveryPartnerProfiles([orderObj]);
+      const [partnerOrder] = await enrichDeliveryPartnerProfiles([partnerView]);
       return successResponse(res, partnerOrder, "Order details retrieved");
     }
 
     const responseOrder = await ensureDeliveryLocationForResponse(orderObj);
-    return successResponse(res, responseOrder, "Order details retrieved");
+    const deliverySafeOrder =
+      isDelivery || isDeliveryDetailsRoute ? sanitizeOrderForDelivery(responseOrder) : responseOrder;
+    return successResponse(res, deliverySafeOrder, "Order details retrieved");
   } catch (err: any) {
     console.error("getOrderDetails error:", err);
     return errorResponse(res, "Failed to get order details");
@@ -2769,7 +2809,7 @@ export const getPartnerOrderDetails = async (req: AuthRequest, res: Response) =>
       return errorResponse(res, "Unauthorized to view this order", 401);
     }
 
-    const orderObj = order.toObject() as any;
+    const orderObj = sanitizeOrderForPartner(order.toObject() as any);
     
     // Completely mask customer information for partners
     orderObj.customerId = maskedCustomerFrom(orderObj.customerId);

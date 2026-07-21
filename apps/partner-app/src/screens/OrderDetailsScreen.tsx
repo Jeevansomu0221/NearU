@@ -20,6 +20,8 @@ interface OrderItem {
   name: string;
   quantity: number;
   price: number;
+  cookingRequest?: string;
+  selectedExtras?: Array<{ name: string; price: number }>;
 }
 
 interface Order {
@@ -27,7 +29,7 @@ interface Order {
   status: string;
   createdAt: string;
   deliveryAddress: string;
-  note: string;
+  note?: string;
   items: OrderItem[];
   customerId?: {
     name: string;
@@ -538,12 +540,6 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
             <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Delivery Partner:</Text>
             <Text style={[styles.infoValue, isDarkMode && styles.textDark]}>{getDeliveryPartnerName(order.deliveryPartnerId)}</Text>
           </View>
-          {order.note ? (
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Packing Note:</Text>
-              <Text style={[styles.infoValue, isDarkMode && styles.textDark]}>{order.note}</Text>
-            </View>
-          ) : null}
         </View>
       </View>
 
@@ -556,6 +552,16 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
                 <Text style={[styles.itemName, isDarkMode && styles.textDark]}>
                   {item.quantity} x {item.name}
                 </Text>
+                {item.selectedExtras && item.selectedExtras.length > 0 ? (
+                  <Text style={[styles.itemPrice, isDarkMode && styles.mutedTextDark]}>
+                    Extras: {item.selectedExtras.map((extra) => extra.name).join(", ")}
+                  </Text>
+                ) : null}
+                {item.cookingRequest?.trim() ? (
+                  <Text style={[styles.cookingRequestText, isDarkMode && styles.cookingRequestTextDark]}>
+                    Cooking request: {item.cookingRequest.trim()}
+                  </Text>
+                ) : null}
                 <Text style={[styles.itemPrice, isDarkMode && styles.mutedTextDark]}>Rs {item.price} each</Text>
               </View>
               <Text style={[styles.itemTotal, isDarkMode && styles.textDark]}>Rs {item.price * item.quantity}</Text>
@@ -873,6 +879,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: partnerTheme.colors.primaryDark,
     marginBottom: 4
+  },
+  cookingRequestText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#B45309",
+    marginBottom: 4,
+    lineHeight: 18
+  },
+  cookingRequestTextDark: {
+    color: "#FBBF24"
   },
   itemPrice: {
     fontSize: 13,

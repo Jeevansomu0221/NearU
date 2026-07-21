@@ -19,6 +19,7 @@ type Props = {
   items?: Array<{
     name: string;
     quantity: number;
+    cookingRequest?: string;
   }>;
   grandTotal: number;
   onOpen: () => void;
@@ -114,9 +115,10 @@ export default function NewOrderBanner({
           {items.length > 0 ? (
             <View style={styles.itemsWrap}>
               {items.map((item) => (
-                <View key={`${orderId}-${item.name}`} style={styles.itemChip}>
-                  <Text style={styles.itemChipText} numberOfLines={1}>
+                <View key={`${orderId}-${item.name}-${item.cookingRequest || ""}`} style={styles.itemChip}>
+                  <Text style={styles.itemChipText} numberOfLines={2}>
                     {item.quantity} x {item.name}
+                    {item.cookingRequest?.trim() ? `\nCooking: ${item.cookingRequest.trim()}` : ""}
                   </Text>
                 </View>
               ))}

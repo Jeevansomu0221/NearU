@@ -617,7 +617,7 @@ export default function CartScreen({ route, navigation }: any) {
                 style={styles.instructionsInput}
                 value={note}
                 onChangeText={setNote}
-                placeholder="Add delivery notes, gate number, less spicy, no onions..."
+                placeholder="Gate number, don't ring bell, leave at door..."
                 placeholderTextColor="#98A2B3"
                 multiline
                 textAlignVertical="top"
@@ -631,7 +631,7 @@ export default function CartScreen({ route, navigation }: any) {
                   }, 80);
                 }}
               />
-              <Text style={styles.instructionsHint}>These instructions will be attached to your order.</Text>
+              <Text style={styles.instructionsHint}>Shown only to your delivery partner.</Text>
             </View>
 
             <View style={styles.summaryCard}>

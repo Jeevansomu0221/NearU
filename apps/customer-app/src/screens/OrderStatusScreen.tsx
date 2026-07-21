@@ -514,7 +514,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         </View>
         {order.note ? (
           <View style={[styles.detailBlock, styles.detailDivider]}>
-            <Text style={styles.detailLabel}>Special instructions</Text>
+            <Text style={styles.detailLabel}>Delivery instructions</Text>
             <Text style={styles.detailValue}>{order.note}</Text>
           </View>
         ) : null}
@@ -529,6 +529,9 @@ export default function OrderStatusScreen({ route, navigation }: any) {
           >
             <View style={styles.itemCopy}>
               <Text style={styles.itemName}>{item.quantity} x {item.name}</Text>
+              {item.cookingRequest?.trim() ? (
+                <Text style={styles.itemMeta}>Cooking: {item.cookingRequest.trim()}</Text>
+              ) : null}
               <Text style={styles.itemMeta}>{formatAmount(item.price)} each</Text>
             </View>
             <Text style={styles.itemTotal}>{formatAmount(item.price * item.quantity)}</Text>

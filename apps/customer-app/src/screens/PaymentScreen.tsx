@@ -722,7 +722,7 @@ export default function PaymentScreen({ route, navigation }: any) {
 
         {orderSummary.note ? (
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Special instructions</Text>
+            <Text style={styles.sectionTitle}>Delivery instructions</Text>
             <Text style={styles.instructionsText}>{orderSummary.note}</Text>
           </View>
         ) : null}

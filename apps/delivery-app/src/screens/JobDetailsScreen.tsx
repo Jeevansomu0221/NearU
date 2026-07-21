@@ -879,7 +879,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="document-text" size={20} color="#9C27B0" />
-            <Text style={styles.sectionTitle}>Customer Note</Text>
+            <Text style={styles.sectionTitle}>Delivery instructions</Text>
           </View>
           <View style={styles.noteCard}>
             <Text style={styles.noteText}>{job.note}</Text>
