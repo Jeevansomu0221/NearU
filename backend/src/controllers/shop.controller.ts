@@ -295,13 +295,24 @@ export const getPartnerReviews = async (req: Request, res: Response) => {
       Order.countDocuments(reviewFilter)
     ]);
 
-    const reviews = orders.map((order: any) => ({
-      _id: order._id,
-      rating: order.restaurantRating?.overallExperience || 0,
-      comment: order.restaurantRating?.comment || "",
-      submittedAt: order.ratingSubmittedAt,
-      customerName: order.customerId?.name || "Customer"
-    }));
+    const reviews = orders.map((order: any) => {
+      const foodQuality = order.restaurantRating?.foodQuality || 0;
+      const packaging = order.restaurantRating?.packaging || 0;
+      const overallExperience =
+        order.restaurantRating?.overallExperience ||
+        (foodQuality && packaging ? Number(((foodQuality + packaging) / 2).toFixed(2)) : foodQuality || packaging || 0);
+
+      return {
+        _id: order._id,
+        rating: overallExperience,
+        foodQuality,
+        packaging,
+        overallExperience,
+        comment: order.restaurantRating?.comment || "",
+        submittedAt: order.ratingSubmittedAt,
+        customerName: order.customerId?.name || "Customer"
+      };
+    });
 
     return res.json({
       success: true,

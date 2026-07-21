@@ -101,8 +101,18 @@ export interface Order {
     taxDiscount?: number;
     paymentStatus?: string;
     paymentMethod?: string;
-    restaurantRating?: Record<string, unknown>;
-    deliveryRating?: Record<string, unknown>;
+    restaurantRating?: {
+        foodQuality?: number;
+        packaging?: number;
+        overallExperience?: number;
+        comment?: string;
+    };
+    deliveryRating?: {
+        deliverySpeed?: number;
+        partnerBehavior?: number;
+        comment?: string;
+    };
+    ratingSubmittedAt?: string;
 }
 export interface OrderPricingQuote {
     groups: Array<{

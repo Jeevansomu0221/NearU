@@ -708,6 +708,8 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
         acceptanceRate,
         acceptedJobs,
         rejectedJobs,
+        rating: Number(deliveryPartner.rating || 0),
+        ratingCount: Number(deliveryPartner.ratingCount || 0),
         cashBalance: deliveryPartner.cashBalance || 0,
         pendingDepositAmount: deliveryPartner.pendingDepositAmount || 0
       },
@@ -716,6 +718,83 @@ export const getDeliveryStats = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error("getDeliveryStats error:", error);
     return errorResponse(res, "Failed to get delivery stats");
+  }
+};
+
+export const getMyDeliveryReviews = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = ensureDeliveryUser(req, res);
+    if (!user) return;
+
+    const deliveryPartner = await findDeliveryPartnerForUser(user)?.lean();
+    if (!deliveryPartner) {
+      return errorResponse(res, "Delivery profile not found", 404);
+    }
+
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+    const deliveryUserId = deliveryPartner.userId || user.id;
+
+    const reviewFilter = {
+      deliveryPartnerId: deliveryUserId,
+      status: "DELIVERED",
+      ratingSubmittedAt: { $ne: null },
+      "deliveryRating.deliverySpeed": { $gte: 1, $lte: 5 }
+    };
+
+    const [orders, total] = await Promise.all([
+      Order.find(reviewFilter)
+        .sort({ ratingSubmittedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate("customerId", "name")
+        .populate("partnerId", "restaurantName shopName")
+        .select("deliveryRating ratingSubmittedAt createdAt grandTotal partnerId")
+        .lean(),
+      Order.countDocuments(reviewFilter)
+    ]);
+
+    const reviews = orders.map((order: any) => {
+      const deliverySpeed = order.deliveryRating?.deliverySpeed || 0;
+      const partnerBehavior = order.deliveryRating?.partnerBehavior || deliverySpeed || 0;
+      const rating =
+        deliverySpeed && partnerBehavior
+          ? Number(((deliverySpeed + partnerBehavior) / 2).toFixed(2))
+          : deliverySpeed || partnerBehavior || 0;
+
+      return {
+        _id: order._id,
+        orderId: order._id,
+        orderNumber: order._id?.toString().slice(-6).toUpperCase(),
+        rating,
+        deliverySpeed,
+        partnerBehavior,
+        comment: order.deliveryRating?.comment || "",
+        submittedAt: order.ratingSubmittedAt,
+        orderedAt: order.createdAt,
+        customerName: order.customerId?.name || "Customer",
+        restaurantName:
+          order.partnerId?.restaurantName || order.partnerId?.shopName || "Restaurant",
+        grandTotal: order.grandTotal || 0
+      };
+    });
+
+    return successResponse(
+      res,
+      {
+        reviews,
+        total,
+        rating: Number(deliveryPartner.rating || 0),
+        ratingCount: Number(deliveryPartner.ratingCount || total),
+        page,
+        limit,
+        hasMore: page * limit < total
+      },
+      "Delivery reviews retrieved successfully"
+    );
+  } catch (error) {
+    console.error("getMyDeliveryReviews error:", error);
+    return errorResponse(res, "Failed to fetch delivery reviews");
   }
 };
 

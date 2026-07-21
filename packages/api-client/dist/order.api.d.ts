@@ -20,10 +20,11 @@ export declare const submitOrderRating: (orderId: string, payload: {
         overallExperience: number;
         comment?: string;
     };
-    deliveryRating: {
+    deliveryRating?: {
         deliverySpeed: number;
         partnerBehavior: number;
         comment?: string;
+        rating?: number;
     };
 }) => Promise<ApiResponse<Order>>;
 export declare const getPartnerOrders: () => Promise<ApiResponse<Order[]>>;

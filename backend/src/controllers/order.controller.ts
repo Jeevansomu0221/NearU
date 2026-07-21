@@ -2128,32 +2128,51 @@ export const submitOrderRating = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
+    const foodQuality = normalizeRatingScore(
+      req.body?.restaurantRating?.foodQuality ?? req.body?.overallRating
+    );
+    const packaging = normalizeRatingScore(
+      req.body?.restaurantRating?.packaging ?? req.body?.overallRating
+    );
+    const explicitOverall = normalizeRatingScore(
+      req.body?.restaurantRating?.overallExperience ?? req.body?.overallRating
+    );
+    const computedOverall =
+      foodQuality !== null && packaging !== null
+        ? Number((((foodQuality + packaging) / 2)).toFixed(2))
+        : null;
+
     const restaurantRating = {
-      foodQuality: normalizeRatingScore(
-        req.body?.restaurantRating?.foodQuality ?? req.body?.overallRating
-      ),
-      packaging: normalizeRatingScore(
-        req.body?.restaurantRating?.packaging ?? req.body?.overallRating
-      ),
-      overallExperience: normalizeRatingScore(
-        req.body?.restaurantRating?.overallExperience ?? req.body?.overallRating
-      ),
+      foodQuality,
+      packaging,
+      overallExperience: explicitOverall ?? computedOverall,
       comment: String(req.body?.restaurantRating?.comment || req.body?.comment || "").trim()
     };
+
+    // Single rider score (preferred) or legacy deliverySpeed/partnerBehavior pair.
+    const riderScore = normalizeRatingScore(
+      req.body?.deliveryRating?.rating ??
+        req.body?.deliveryRating?.overall ??
+        req.body?.deliveryRating?.deliverySpeed ??
+        req.body?.riderRating
+    );
+    const deliveryBehavior = normalizeRatingScore(
+      req.body?.deliveryRating?.partnerBehavior ?? riderScore
+    );
     const deliveryRating = {
-      deliverySpeed: normalizeRatingScore(req.body?.deliveryRating?.deliverySpeed),
-      partnerBehavior: normalizeRatingScore(req.body?.deliveryRating?.partnerBehavior),
+      deliverySpeed: riderScore,
+      partnerBehavior: deliveryBehavior,
       comment: String(req.body?.deliveryRating?.comment || "").trim()
     };
 
-    const hasInvalidRestaurantScore = [
-      restaurantRating.foodQuality,
-      restaurantRating.packaging,
-      restaurantRating.overallExperience
-    ].some((score) => score === null);
+    if (restaurantRating.foodQuality === null || restaurantRating.packaging === null) {
+      return errorResponse(res, "Food and packaging ratings must be between 1 and 5", 400);
+    }
 
-    if (hasInvalidRestaurantScore) {
-      return errorResponse(res, "Restaurant rating must be between 1 and 5", 400);
+    if (restaurantRating.overallExperience === null) {
+      restaurantRating.overallExperience = Number(
+        (((restaurantRating.foodQuality + restaurantRating.packaging) / 2)).toFixed(2)
+      );
     }
 
     const order: any = await Order.findOne({ _id: orderId, customerId: user.id });
@@ -2172,11 +2191,10 @@ export const submitOrderRating = async (req: AuthRequest, res: Response) => {
     const requiresDeliveryRating = Boolean(order.deliveryPartnerId);
     if (requiresDeliveryRating) {
       if (deliveryRating.deliverySpeed === null || deliveryRating.partnerBehavior === null) {
-        const fallbackScore = restaurantRating.overallExperience || 5;
-        deliveryRating.deliverySpeed = deliveryRating.deliverySpeed ?? fallbackScore;
-        deliveryRating.partnerBehavior = deliveryRating.partnerBehavior ?? fallbackScore;
+        return errorResponse(res, "Delivery rating must be between 1 and 5", 400);
       }
     } else {
+      // Pickup / no rider — keep schema filled without affecting rider aggregates.
       deliveryRating.deliverySpeed = deliveryRating.deliverySpeed ?? 5;
       deliveryRating.partnerBehavior = deliveryRating.partnerBehavior ?? 5;
     }
@@ -2189,17 +2207,29 @@ export const submitOrderRating = async (req: AuthRequest, res: Response) => {
     const partner: any = await Partner.findById(order.partnerId).select("rating ratingCount");
     if (partner && restaurantRating.overallExperience) {
       const nextCount = Number(partner.ratingCount || 0) + 1;
-      partner.rating = updateAverageRating(Number(partner.rating || 0), Number(partner.ratingCount || 0), restaurantRating.overallExperience);
+      partner.rating = updateAverageRating(
+        Number(partner.rating || 0),
+        Number(partner.ratingCount || 0),
+        restaurantRating.overallExperience
+      );
       partner.ratingCount = nextCount;
       await partner.save();
     }
 
     if (order.deliveryPartnerId) {
-      const deliveryPartner: any = await DeliveryPartner.findOne({ userId: order.deliveryPartnerId }).select("rating ratingCount");
+      const deliveryPartner: any = await DeliveryPartner.findOne({
+        userId: order.deliveryPartnerId
+      }).select("rating ratingCount");
       if (deliveryPartner && deliveryRating.deliverySpeed && deliveryRating.partnerBehavior) {
-        const nextDeliveryScore = Number(((deliveryRating.deliverySpeed + deliveryRating.partnerBehavior) / 2).toFixed(2));
+        const nextDeliveryScore = Number(
+          ((deliveryRating.deliverySpeed + deliveryRating.partnerBehavior) / 2).toFixed(2)
+        );
         const nextCount = Number(deliveryPartner.ratingCount || 0) + 1;
-        deliveryPartner.rating = updateAverageRating(Number(deliveryPartner.rating || 0), Number(deliveryPartner.ratingCount || 0), nextDeliveryScore);
+        deliveryPartner.rating = updateAverageRating(
+          Number(deliveryPartner.rating || 0),
+          Number(deliveryPartner.ratingCount || 0),
+          nextDeliveryScore
+        );
         deliveryPartner.ratingCount = nextCount;
         await deliveryPartner.save();
       }

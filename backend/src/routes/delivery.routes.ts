@@ -11,6 +11,7 @@ import {
   getDeliveryProfile,
   updateDeliveryProfile,
   getDeliveryStats,
+  getMyDeliveryReviews,
   getTodaysEarnings,
   getAllDeliveryPartnersForAdmin,
   updateDeliveryPartnerStatusByAdmin,
@@ -44,6 +45,7 @@ router.get("/app-update-info", getDeliveryAppUpdateInfo);
 
 // =================== STATS ===================
 router.get("/stats", getDeliveryStats);
+router.get("/reviews", getMyDeliveryReviews);
 router.get("/earnings/today", getTodaysEarnings);
 router.get("/cash-ledger", getMyCashLedger);
 router.post("/cash-deposits", submitCashDeposit);

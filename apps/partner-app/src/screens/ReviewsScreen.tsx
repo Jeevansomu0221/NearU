@@ -122,6 +122,17 @@ export default function ReviewsScreen() {
         {renderStars(item.rating)}
       </View>
 
+      <View style={themedStyles.breakdownRow}>
+        <View style={themedStyles.breakdownItem}>
+          <Text style={themedStyles.breakdownLabel}>Food</Text>
+          {renderStars(item.foodQuality || item.rating)}
+        </View>
+        <View style={themedStyles.breakdownItem}>
+          <Text style={themedStyles.breakdownLabel}>Packaging</Text>
+          {renderStars(item.packaging || item.rating)}
+        </View>
+      </View>
+
       {item.itemsSummary ? <Text style={themedStyles.reviewItems}>{item.itemsSummary}</Text> : null}
 
       {item.comment ? (
@@ -284,6 +295,25 @@ const createStyles = (theme: PartnerTheme) =>
       marginTop: 2,
       fontSize: 12,
       color: theme.colors.muted
+    },
+    breakdownRow: {
+      marginTop: 12,
+      flexDirection: "row",
+      gap: 12
+    },
+    breakdownItem: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      borderRadius: 12,
+      padding: 10
+    },
+    breakdownLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: theme.colors.muted,
+      marginBottom: 6,
+      textTransform: "uppercase",
+      letterSpacing: 0.3
     },
     reviewItems: {
       marginTop: 10,

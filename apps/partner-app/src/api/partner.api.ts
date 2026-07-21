@@ -67,6 +67,9 @@ export type PartnerOrderReview = {
   orderId: string;
   orderNumber: string;
   rating: number;
+  foodQuality?: number;
+  packaging?: number;
+  overallExperience?: number;
   comment: string;
   submittedAt?: string;
   orderedAt?: string;

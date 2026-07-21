@@ -1130,12 +1130,20 @@ export const getMyPartnerReviews = async (req: Request, res: Response) => {
       const itemNames = Array.isArray(order.items)
         ? order.items.map((item: any) => item?.name).filter(Boolean)
         : [];
+      const foodQuality = order.restaurantRating?.foodQuality || 0;
+      const packaging = order.restaurantRating?.packaging || 0;
+      const overallExperience =
+        order.restaurantRating?.overallExperience ||
+        (foodQuality && packaging ? Number(((foodQuality + packaging) / 2).toFixed(2)) : foodQuality || packaging || 0);
 
       return {
         _id: order._id,
         orderId: order._id,
         orderNumber: order._id?.toString().slice(-6).toUpperCase(),
-        rating: order.restaurantRating?.overallExperience || 0,
+        rating: overallExperience,
+        foodQuality,
+        packaging,
+        overallExperience,
         comment: order.restaurantRating?.comment || "",
         submittedAt: order.ratingSubmittedAt,
         orderedAt: order.createdAt,

@@ -46,10 +46,11 @@ export const submitOrderRating = (
       overallExperience: number;
       comment?: string;
     };
-    deliveryRating: {
+    deliveryRating?: {
       deliverySpeed: number;
       partnerBehavior: number;
       comment?: string;
+      rating?: number;
     };
   }
 ): Promise<ApiResponse<Order>> => apiPost<Order>(`/orders/${orderId}/ratings`, payload);

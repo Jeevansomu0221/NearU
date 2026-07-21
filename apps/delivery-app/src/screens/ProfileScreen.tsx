@@ -854,7 +854,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(walletBalance)}</Text><Text style={s.statLbl}>Wallet</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.totalEarnings || profile?.totalEarnings)}</Text><Text style={s.statLbl}>Paid earnings</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{stats?.totalDeliveries || profile?.totalDeliveries || 0}</Text><Text style={s.statLbl}>Deliveries</Text></View>
-            <View style={s.statCard}><Text style={s.statVal}>{(profile?.rating || 0).toFixed(1)}</Text><Text style={s.statLbl}>Rating</Text></View>
+            <View style={s.statCard}><Text style={s.statVal}>{(stats?.rating ?? profile?.rating ?? 0).toFixed(1)}</Text><Text style={s.statLbl}>Rating</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.cashBalance || profile?.cashBalance || 0)}</Text><Text style={s.statLbl}>COD cash held</Text></View>
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.pendingDepositAmount || profile?.pendingDepositAmount || 0)}</Text><Text style={s.statLbl}>Pending deposit</Text></View>
           </View>
@@ -937,11 +937,20 @@ export default function ProfileScreen({ navigation, route }: any) {
             {renderInfoRow("Today earnings", formatCurrency(todayEarnings))}
             {renderInfoRow("Paid earnings", formatCurrency(stats?.totalEarnings || profile?.totalEarnings || 0))}
             {renderInfoRow("Average delivery time", formatAverageDeliveryTime(stats?.averageDeliveryTime))}
-            {renderInfoRow("Rating", `${(profile?.rating || 0).toFixed(1)} / 5 (${profile?.ratingCount || 0} ratings)`)}
+            {renderInfoRow(
+              "Rating",
+              `${(stats?.rating ?? profile?.rating ?? 0).toFixed(1)} / 5 (${stats?.ratingCount ?? profile?.ratingCount ?? 0} ratings)`
+            )}
             {renderInfoRow("Acceptance rate", formatAcceptanceRate(stats))}
             {renderInfoRow("Accepted jobs", String(stats?.acceptedJobs || 0))}
             {renderInfoRow("Rejected jobs", String(stats?.rejectedJobs || 0))}
             {renderInfoRow("COD cash due", formatCurrency(stats?.cashDueToPlatform || 0))}
+            {renderShortcut(
+              "star-outline",
+              "Delivery reviews",
+              "See customer ratings and feedback for your deliveries",
+              () => navigation.getParent()?.navigate("Reviews")
+            )}
           </View>
 
           {/* Support */}

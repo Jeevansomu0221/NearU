@@ -97,9 +97,35 @@ export interface DeliveryStats {
   acceptanceRate?: number;
   acceptedJobs?: number;
   rejectedJobs?: number;
+  rating?: number;
+  ratingCount?: number;
   cashBalance?: number;
   pendingDepositAmount?: number;
-  cashDueToPlatform?: number;
+}
+
+export interface DeliveryOrderReview {
+  _id: string;
+  orderId: string;
+  orderNumber: string;
+  rating: number;
+  deliverySpeed?: number;
+  partnerBehavior?: number;
+  comment: string;
+  submittedAt?: string;
+  orderedAt?: string;
+  customerName: string;
+  restaurantName?: string;
+  grandTotal?: number;
+}
+
+export interface DeliveryReviewsResponse {
+  reviews: DeliveryOrderReview[];
+  total: number;
+  rating: number;
+  ratingCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
 }
 
 export interface CashLedgerEntry {
@@ -277,6 +303,13 @@ export const confirmCodUpiPayment = (
  */
 export const getDeliveryStats = (): Promise<ApiResponse<DeliveryStats>> => {
   return apiGet<DeliveryStats>("/delivery/stats");
+};
+
+export const getDeliveryReviews = (params?: {
+  page?: number;
+  limit?: number;
+}): Promise<ApiResponse<DeliveryReviewsResponse>> => {
+  return apiGet<DeliveryReviewsResponse>("/delivery/reviews", { params });
 };
 
 /**

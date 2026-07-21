@@ -50,8 +50,11 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
-  const [overallRating, setOverallRating] = useState(0);
+  const [foodQualityRating, setFoodQualityRating] = useState(0);
+  const [packagingRating, setPackagingRating] = useState(0);
+  const [deliveryRating, setDeliveryRating] = useState(0);
   const [restaurantComment, setRestaurantComment] = useState("");
+  const [deliveryComment, setDeliveryComment] = useState("");
   const scrollRef = useRef<ScrollView>(null);
   const reviewOffsetY = useRef(0);
 
@@ -95,10 +98,15 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   }, [loadOrderDetails]);
 
   useEffect(() => {
-    if (!order?.ratingSubmittedAt) return;
+    if (!order) return;
 
-    setOverallRating(order.restaurantRating?.overallExperience || 0);
+    setFoodQualityRating(order.restaurantRating?.foodQuality || 0);
+    setPackagingRating(order.restaurantRating?.packaging || 0);
     setRestaurantComment(order.restaurantRating?.comment || "");
+    setDeliveryRating(
+      order.deliveryRating?.deliverySpeed || order.deliveryRating?.partnerBehavior || 0
+    );
+    setDeliveryComment(order.deliveryRating?.comment || "");
   }, [order]);
 
   useFocusEffect(
@@ -287,27 +295,50 @@ export default function OrderStatusScreen({ route, navigation }: any) {
     );
   };
 
-  const canSubmitRatings = overallRating >= 1 && overallRating <= 5;
+  const hasDeliveryPartner = Boolean(
+    order?.deliveryPartnerId &&
+      (typeof order.deliveryPartnerId === "object"
+        ? (order.deliveryPartnerId as any)._id || (order.deliveryPartnerId as any).name
+        : order.deliveryPartnerId)
+  );
+
+  const canSubmitRatings =
+    foodQualityRating >= 1 &&
+    foodQualityRating <= 5 &&
+    packagingRating >= 1 &&
+    packagingRating <= 5 &&
+    (!hasDeliveryPartner || (deliveryRating >= 1 && deliveryRating <= 5));
 
   const handleSubmitRatings = async () => {
     if (!order || ratingSubmitting) return;
 
-    if (!canSubmitRatings) {
-      Alert.alert("Review", "Please select a star rating before submitting.");
+    if (foodQualityRating < 1 || packagingRating < 1) {
+      Alert.alert("Review", "Please rate food quality and packaging before submitting.");
+      return;
+    }
+
+    if (hasDeliveryPartner && deliveryRating < 1) {
+      Alert.alert("Review", "Please rate your delivery partner before submitting.");
       return;
     }
 
     try {
       setRatingSubmitting(true);
+      const overallExperience = Number(((foodQualityRating + packagingRating) / 2).toFixed(2));
       const response = await submitOrderRating(order._id, {
-        overallRating,
-        comment: restaurantComment.trim(),
         restaurantRating: {
-          foodQuality: overallRating,
-          packaging: overallRating,
-          overallExperience: overallRating,
+          foodQuality: foodQualityRating,
+          packaging: packagingRating,
+          overallExperience,
           comment: restaurantComment.trim()
-        }
+        },
+        deliveryRating: hasDeliveryPartner
+          ? {
+              deliverySpeed: deliveryRating,
+              partnerBehavior: deliveryRating,
+              comment: deliveryComment.trim()
+            }
+          : undefined
       });
 
       if (!response.success || !response.data) {
@@ -594,30 +625,81 @@ export default function OrderStatusScreen({ route, navigation }: any) {
           {hasSubmittedRating ? (
             <View>
               <Text style={styles.ratingSubmittedText}>Thanks for your review.</Text>
-              <View style={styles.ratingRowBlock}>
-                <Text style={styles.ratingLabel}>Your rating</Text>
-                {renderStars(overallRating, () => {}, true)}
+
+              <View style={styles.ratingGroup}>
+                <Text style={styles.ratingGroupTitle}>Restaurant</Text>
+                <View style={styles.ratingRowBlock}>
+                  <Text style={styles.ratingLabel}>Food</Text>
+                  {renderStars(foodQualityRating, () => {}, true)}
+                </View>
+                <View style={styles.ratingRowBlock}>
+                  <Text style={styles.ratingLabel}>Packaging</Text>
+                  {renderStars(packagingRating, () => {}, true)}
+                </View>
+                {restaurantComment ? (
+                  <Text style={styles.submittedReviewComment}>{restaurantComment}</Text>
+                ) : null}
               </View>
-              {restaurantComment ? (
-                <Text style={styles.submittedReviewComment}>{restaurantComment}</Text>
+
+              {hasDeliveryPartner || deliveryRating > 0 ? (
+                <View style={styles.ratingGroup}>
+                  <Text style={styles.ratingGroupTitle}>Delivery</Text>
+                  <View style={styles.ratingRowBlock}>
+                    <Text style={styles.ratingLabel}>Rider</Text>
+                    {renderStars(deliveryRating, () => {}, true)}
+                  </View>
+                  {deliveryComment ? (
+                    <Text style={styles.submittedReviewComment}>{deliveryComment}</Text>
+                  ) : null}
+                </View>
               ) : null}
             </View>
           ) : (
             <>
-              <Text style={styles.ratingHint}>Share a star rating and optional feedback for this restaurant.</Text>
-              <View style={styles.ratingRowBlock}>
-                <Text style={styles.ratingLabel}>Overall rating</Text>
-                {renderStars(overallRating, setOverallRating)}
+              <Text style={styles.ratingHint}>
+                Rate the restaurant and delivery separately. Comments are optional.
+              </Text>
+
+              <View style={styles.ratingGroup}>
+                <Text style={styles.ratingGroupTitle}>Restaurant</Text>
+                <View style={styles.ratingRowBlock}>
+                  <Text style={styles.ratingLabel}>Food</Text>
+                  {renderStars(foodQualityRating, setFoodQualityRating)}
+                </View>
+                <View style={styles.ratingRowBlock}>
+                  <Text style={styles.ratingLabel}>Packaging</Text>
+                  {renderStars(packagingRating, setPackagingRating)}
+                </View>
+                <TextInput
+                  style={styles.ratingCommentInput}
+                  value={restaurantComment}
+                  onChangeText={setRestaurantComment}
+                  multiline
+                  placeholder="Feedback for the restaurant (optional)"
+                  placeholderTextColor="#A3968D"
+                  onFocus={scrollReviewIntoView}
+                />
               </View>
-              <TextInput
-                style={styles.ratingCommentInput}
-                value={restaurantComment}
-                onChangeText={setRestaurantComment}
-                multiline
-                placeholder="Anything else to say? (optional)"
-                placeholderTextColor="#A3968D"
-                onFocus={scrollReviewIntoView}
-              />
+
+              {hasDeliveryPartner ? (
+                <View style={styles.ratingGroup}>
+                  <Text style={styles.ratingGroupTitle}>Delivery</Text>
+                  <View style={styles.ratingRowBlock}>
+                    <Text style={styles.ratingLabel}>Rider</Text>
+                    {renderStars(deliveryRating, setDeliveryRating)}
+                  </View>
+                  <TextInput
+                    style={styles.ratingCommentInput}
+                    value={deliveryComment}
+                    onChangeText={setDeliveryComment}
+                    multiline
+                    placeholder="Feedback for the rider (optional)"
+                    placeholderTextColor="#A3968D"
+                    onFocus={scrollReviewIntoView}
+                  />
+                </View>
+              ) : null}
+
               <TouchableOpacity
                 style={[styles.primaryButton, (!canSubmitRatings || ratingSubmitting) && styles.primaryButtonDisabled]}
                 onPress={handleSubmitRatings}

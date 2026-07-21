@@ -17,6 +17,7 @@ import MyJobsScreen from "../screens/MyJobsScreen";
 import JobDetailsScreen from "../screens/JobDetailsScreen"; // Make sure this import exists
 import EarningsScreen from "../screens/EarningsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import ReviewsScreen from "../screens/ReviewsScreen";
 import ReviewStatusScreen from "../screens/ReviewStatusScreen";
 import AccountDeletionReviewScreen from "../screens/AccountDeletionReviewScreen";
 import { getDeliveryProfile } from "../api/profile.api";
@@ -225,6 +226,11 @@ export default function AppNavigator() {
         name="JobDetails"
         component={JobDetailsScreen}
         options={{ title: "Job Details" }}
+      />
+      <Stack.Screen
+        name="Reviews"
+        component={ReviewsScreen}
+        options={{ title: "My Reviews", headerShown: true, headerStyle: { backgroundColor: "#16A34A" }, headerTintColor: "#fff" }}
       />
     </Stack.Navigator>
   );
