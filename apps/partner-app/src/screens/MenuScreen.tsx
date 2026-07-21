@@ -129,7 +129,7 @@ export default function MenuScreen({ navigation }: any) {
   const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const modalHeight = Math.min(windowHeight * 0.92, 720);
+  const [lockedModalHeight, setLockedModalHeight] = useState(() => Math.min(windowHeight * 0.92, 720));
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -273,6 +273,8 @@ export default function MenuScreen({ navigation }: any) {
   };
 
   const openEditor = (item?: MenuItem) => {
+    // Lock height at open so Android window/inset flicker can't thrash the sheet.
+    setLockedModalHeight(Math.min(windowHeight * 0.92, 720));
     if (item) {
       setEditingItem(item);
       setForm({
@@ -537,11 +539,7 @@ export default function MenuScreen({ navigation }: any) {
       )}
 
       <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => !saving && setModalVisible(false)}>
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
             style={styles.modalBackdrop}
             onPress={() => {
@@ -551,40 +549,47 @@ export default function MenuScreen({ navigation }: any) {
               }
             }}
           />
-          <View style={[styles.modalSheetWrap, { paddingBottom: insets.bottom + 8 }]}>
-            <View style={[styles.modalContent, { height: modalHeight }]}>
-              <View style={styles.modalHandle} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+            style={styles.modalKeyboardWrap}
+          >
+            <View style={[styles.modalSheetWrap, { paddingBottom: insets.bottom + 8 }]}>
+              <View style={[styles.modalContent, { height: lockedModalHeight }]}>
+                <View style={styles.modalHandle} />
 
-              <View style={styles.modalHeader}>
-                <View style={styles.modalHeaderCopy}>
-                  <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
-                  <Text style={styles.modalSubtitle}>
-                    {editingItem ? "Update details customers see on your menu" : "Fill in the details to list this item"}
-                  </Text>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalHeaderCopy}>
+                    <Text style={styles.modalTitle}>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</Text>
+                    <Text style={styles.modalSubtitle}>
+                      {editingItem ? "Update details customers see on your menu" : "Fill in the details to list this item"}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.modalCloseButton}
+                    onPress={() => {
+                      if (!saving) {
+                        setModalVisible(false);
+                        resetForm();
+                      }
+                    }}
+                    disabled={saving}
+                  >
+                    <Ionicons name="close" size={20} color="#5E7897" />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.modalCloseButton}
-                  onPress={() => {
-                    if (!saving) {
-                      setModalVisible(false);
-                      resetForm();
-                    }
-                  }}
-                  disabled={saving}
-                >
-                  <Ionicons name="close" size={20} color="#5E7897" />
-                </TouchableOpacity>
-              </View>
 
-              <View style={styles.modalBodyContainer}>
-                <ScrollView
-                  style={styles.modalBodyScroll}
-                  contentContainerStyle={styles.modalBodyContent}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator
-                  nestedScrollEnabled
-                  bounces
-                >
+                <View style={styles.modalBodyContainer}>
+                  <ScrollView
+                    style={styles.modalBodyScroll}
+                    contentContainerStyle={styles.modalBodyContent}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    showsVerticalScrollIndicator
+                    nestedScrollEnabled
+                    bounces={false}
+                    overScrollMode="never"
+                  >
                 <Text style={styles.formSectionLabel}>Photo</Text>
                 <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={saving || pickerBusy}>
                   {imageUri ? (
@@ -804,9 +809,10 @@ export default function MenuScreen({ navigation }: any) {
                   )}
                 </TouchableOpacity>
               </View>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {!modalVisible ? (
@@ -1158,6 +1164,10 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject
+  },
+  modalKeyboardWrap: {
+    width: "100%",
+    justifyContent: "flex-end"
   },
   modalSheetWrap: {
     paddingHorizontal: 12
