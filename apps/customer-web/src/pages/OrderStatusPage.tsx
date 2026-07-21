@@ -65,7 +65,7 @@ export default function OrderStatusPage() {
     try {
       setSubmitting(true);
       setError("");
-      const overallExperience = Number(((foodQuality + packaging) / 2).toFixed(2));
+      const overallExperience = Math.round((foodQuality + packaging) / 2);
       await submitOrderRating(orderId, {
         restaurantRating: {
           foodQuality,

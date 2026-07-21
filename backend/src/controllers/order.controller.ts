@@ -2113,6 +2113,14 @@ const normalizeRatingScore = (value: unknown) => {
   return Number.isInteger(score) && score >= 1 && score <= 5 ? score : null;
 };
 
+/** Accepts whole or half-star values in the 1–5 range (e.g. 4.5). */
+const normalizeOverallScore = (value: unknown) => {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return null;
+  if (score < 1 || score > 5) return null;
+  return Number(score.toFixed(2));
+};
+
 const updateAverageRating = (currentRating: number, currentCount: number, nextRating: number) => {
   const safeCount = Number.isFinite(currentCount) && currentCount > 0 ? currentCount : 0;
   const safeRating = Number.isFinite(currentRating) && currentRating > 0 ? currentRating : 0;
@@ -2134,18 +2142,19 @@ export const submitOrderRating = async (req: AuthRequest, res: Response) => {
     const packaging = normalizeRatingScore(
       req.body?.restaurantRating?.packaging ?? req.body?.overallRating
     );
-    const explicitOverall = normalizeRatingScore(
-      req.body?.restaurantRating?.overallExperience ?? req.body?.overallRating
-    );
     const computedOverall =
       foodQuality !== null && packaging !== null
         ? Number((((foodQuality + packaging) / 2)).toFixed(2))
         : null;
+    const explicitOverall = normalizeOverallScore(
+      req.body?.restaurantRating?.overallExperience ?? req.body?.overallRating
+    );
 
     const restaurantRating = {
       foodQuality,
       packaging,
-      overallExperience: explicitOverall ?? computedOverall,
+      // Prefer food/packaging average so half-stars never fail validation.
+      overallExperience: computedOverall ?? explicitOverall,
       comment: String(req.body?.restaurantRating?.comment || req.body?.comment || "").trim()
     };
 

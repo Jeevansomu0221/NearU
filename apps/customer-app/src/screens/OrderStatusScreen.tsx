@@ -325,7 +325,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
 
     try {
       setRatingSubmitting(true);
-      const overallExperience = Number(((foodQualityRating + packagingRating) / 2).toFixed(2));
+      // Send a whole-number overall so older API validators that require integers still accept it.
+      const overallExperience = Math.round((foodQualityRating + packagingRating) / 2);
       const response = await submitOrderRating(order._id, {
         restaurantRating: {
           foodQuality: foodQualityRating,
