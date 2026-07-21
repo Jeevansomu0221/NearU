@@ -10,7 +10,11 @@ import {
   TouchableOpacity,
   RefreshControl,
   Linking,
-  TextInput
+  TextInput,
+  Keyboard,
+  Platform,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -56,16 +60,65 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const [restaurantComment, setRestaurantComment] = useState("");
   const [deliveryComment, setDeliveryComment] = useState("");
   const scrollRef = useRef<ScrollView>(null);
-  const reviewOffsetY = useRef(0);
+  const scrollOffsetY = useRef(0);
+  const restaurantCommentRef = useRef<TextInput>(null);
+  const deliveryCommentRef = useRef<TextInput>(null);
+  const focusedCommentRef = useRef<TextInput | null>(null);
 
-  const scrollReviewIntoView = useCallback(() => {
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, reviewOffsetY.current - 16),
-        animated: true
+  const scrollFocusedCommentIntoView = useCallback((inputRef?: React.RefObject<TextInput | null>) => {
+    const input = (inputRef?.current || focusedCommentRef.current) as TextInput | null;
+    const scroll = scrollRef.current;
+    if (!input || !scroll) return;
+
+    const run = () => {
+      input.measureInWindow((_x, y, _w, height) => {
+        scroll.measureInWindow((_sx, scrollY, _sw, scrollHeight) => {
+          const gap = 28;
+          const inputBottom = y + height;
+          const visibleBottom = scrollY + scrollHeight;
+          let delta = 0;
+
+          if (inputBottom + gap > visibleBottom) {
+            delta = inputBottom + gap - visibleBottom;
+          } else if (y < scrollY + gap) {
+            delta = y - (scrollY + gap);
+          }
+
+          if (Math.abs(delta) < 4) return;
+          scroll.scrollTo({
+            y: Math.max(0, scrollOffsetY.current + delta),
+            animated: true
+          });
+        });
       });
-    }, 80);
+    };
+
+    // Wait for Android window resize / iOS keyboard animation, then retry once.
+    setTimeout(run, Platform.OS === "android" ? 180 : 60);
+    setTimeout(run, Platform.OS === "android" ? 360 : 160);
   }, []);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const sub = Keyboard.addListener(showEvent, () => {
+      scrollFocusedCommentIntoView();
+    });
+    return () => sub.remove();
+  }, [scrollFocusedCommentIntoView]);
+
+  const onReviewScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollOffsetY.current = event.nativeEvent.contentOffset.y;
+  }, []);
+
+  const focusRestaurantComment = useCallback(() => {
+    focusedCommentRef.current = restaurantCommentRef.current;
+    scrollFocusedCommentIntoView(restaurantCommentRef);
+  }, [scrollFocusedCommentIntoView]);
+
+  const focusDeliveryComment = useCallback(() => {
+    focusedCommentRef.current = deliveryCommentRef.current;
+    scrollFocusedCommentIntoView(deliveryCommentRef);
+  }, [scrollFocusedCommentIntoView]);
 
   const loadOrderDetails = useCallback(async (options?: { silent?: boolean }) => {
     try {
@@ -416,8 +469,10 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       ref={scrollRef}
       style={styles.container}
       contentContainerStyle={{ paddingTop: 14 }}
-      bottomPadding={40}
+      bottomPadding={canRateOrder && !hasSubmittedRating ? 220 : 40}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#FF6B35"]} />}
+      onScroll={onReviewScroll}
+      scrollEventThrottle={16}
     >
       <View style={styles.heroCard}>
         <View style={styles.heroTopRow}>
@@ -617,12 +672,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       </View>
 
       {canRateOrder ? (
-        <View
-          style={styles.sectionCard}
-          onLayout={(event) => {
-            reviewOffsetY.current = event.nativeEvent.layout.y;
-          }}
-        >
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Rate your order</Text>
           {hasSubmittedRating ? (
             <View>
@@ -673,13 +723,20 @@ export default function OrderStatusScreen({ route, navigation }: any) {
                   {renderStars(packagingRating, setPackagingRating)}
                 </View>
                 <TextInput
+                  ref={restaurantCommentRef}
                   style={styles.ratingCommentInput}
                   value={restaurantComment}
                   onChangeText={setRestaurantComment}
                   multiline
+                  textAlignVertical="top"
                   placeholder="Feedback for the restaurant (optional)"
                   placeholderTextColor="#A3968D"
-                  onFocus={scrollReviewIntoView}
+                  onFocus={focusRestaurantComment}
+                  onBlur={() => {
+                    if (focusedCommentRef.current === restaurantCommentRef.current) {
+                      focusedCommentRef.current = null;
+                    }
+                  }}
                 />
               </View>
 
@@ -691,13 +748,20 @@ export default function OrderStatusScreen({ route, navigation }: any) {
                     {renderStars(deliveryRating, setDeliveryRating)}
                   </View>
                   <TextInput
+                    ref={deliveryCommentRef}
                     style={styles.ratingCommentInput}
                     value={deliveryComment}
                     onChangeText={setDeliveryComment}
                     multiline
+                    textAlignVertical="top"
                     placeholder="Feedback for the rider (optional)"
                     placeholderTextColor="#A3968D"
-                    onFocus={scrollReviewIntoView}
+                    onFocus={focusDeliveryComment}
+                    onBlur={() => {
+                      if (focusedCommentRef.current === deliveryCommentRef.current) {
+                        focusedCommentRef.current = null;
+                      }
+                    }}
                   />
                 </View>
               ) : null}
