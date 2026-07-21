@@ -23,6 +23,7 @@ import { sendOtpWithFallback, verifyOtpSession, OtpSessionInfo } from "../servic
 import { registerForPushNotifications } from "../services/notifications";
 import { partnerTheme } from "../theme";
 import { buildLegalUrl } from "../constants/legal";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 const TERMS_URL = buildLegalUrl("terms");
 const PRIVACY_URL = buildLegalUrl("privacy");
@@ -39,6 +40,7 @@ export default function LoginScreen({ navigation }: any) {
   const [requiresFreshOtp, setRequiresFreshOtp] = useState(false);
   const lastSubmittedOtp = useRef("");
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardBottomInset();
 
   const extractServerMessage = (error: any): string => {
     const data = error?.response?.data;
@@ -301,13 +303,20 @@ export default function LoginScreen({ navigation }: any) {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + 8,
+            paddingBottom: insets.bottom + 40 + androidKeyboardPadding(keyboardHeight)
+          }
+        ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerContainer}>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { cancelOrder, getOrderDetails, submitOrderRating } from "../api/order.api";
 import type { Order } from "../api/order.api";
 import { getPublicShopName } from "../utils/display";
+import KeyboardSafeScreen from "../components/KeyboardSafeScreen";
 
 type TimelineStep = {
   status: string;
@@ -51,6 +52,13 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [overallRating, setOverallRating] = useState(0);
   const [restaurantComment, setRestaurantComment] = useState("");
+  const scrollRef = useRef<ScrollView>(null);
+
+  const scrollReviewIntoView = useCallback(() => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 280);
+  }, []);
 
   const loadOrderDetails = useCallback(async (options?: { silent?: boolean }) => {
     try {
@@ -367,9 +375,11 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const canRateOrder = order.status === "DELIVERED";
 
   return (
-    <ScrollView
+    <KeyboardSafeScreen
+      ref={scrollRef}
       style={styles.container}
-      contentContainerStyle={{ paddingTop: 14, paddingBottom: 32 }}
+      contentContainerStyle={{ paddingTop: 14 }}
+      bottomPadding={40}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#FF6B35"]} />}
     >
       <View style={styles.heroCard}>
@@ -594,6 +604,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
                 multiline
                 placeholder="Anything else to say? (optional)"
                 placeholderTextColor="#A3968D"
+                onFocus={scrollReviewIntoView}
               />
               <TouchableOpacity
                 style={[styles.primaryButton, (!canSubmitRatings || ratingSubmitting) && styles.primaryButtonDisabled]}
@@ -640,7 +651,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
           <Text style={styles.primaryButtonText}>View All Orders</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </KeyboardSafeScreen>
   );
 }
 

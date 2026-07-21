@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { sendOtpWithFallback } from "../services/otpAuthFlow";
 import { buildLegalUrl } from "../constants/legal";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 const TERMS_URL = buildLegalUrl("terms");
 const PRIVACY_URL = buildLegalUrl("privacy");
@@ -22,6 +23,7 @@ const PRIVACY_URL = buildLegalUrl("privacy");
 export default function LoginScreen({ navigation }: any) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const keyboardHeight = useKeyboardBottomInset();
 
   const onSend = async () => {
     // Validate phone
@@ -60,9 +62,16 @@ export default function LoginScreen({ navigation }: any) {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContainer,
+          { paddingBottom: 40 + androidKeyboardPadding(keyboardHeight) }
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <View style={styles.content}>
           <View style={styles.header}>
             <Image

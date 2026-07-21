@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   Alert,
   Modal,
   TextInput,
-  InteractionManager
+  InteractionManager,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
@@ -25,6 +27,7 @@ import {
   savePreferredUpiApp,
   type UpiApp
 } from "../utils/upiPayment";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 interface CheckoutGroup {
   shopId: string;
@@ -131,6 +134,8 @@ export default function PaymentScreen({ route, navigation }: any) {
   const { userProfile, orderSummary } = route.params;
   const { items, clear } = useCart();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH_ON_DELIVERY");
@@ -656,10 +661,19 @@ export default function PaymentScreen({ route, navigation }: any) {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <ScrollView
+        ref={scrollRef}
         style={styles.content}
-        contentContainerStyle={{ paddingTop: 14, paddingBottom: 180 + insets.bottom }}
+        contentContainerStyle={{
+          paddingTop: 14,
+          paddingBottom: 180 + insets.bottom + androidKeyboardPadding(keyboardHeight)
+        }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <View style={styles.headerSection}>
           <Text style={styles.headerEyebrow}>Checkout</Text>
@@ -756,6 +770,9 @@ export default function PaymentScreen({ route, navigation }: any) {
                 placeholder="Enter amount"
                 placeholderTextColor="#A3968D"
                 maxLength={3}
+                onFocus={() => {
+                  setTimeout(() => scrollRef.current?.scrollTo({ y: 420, animated: true }), 280);
+                }}
               />
             </View>
           ) : null}
@@ -824,7 +841,15 @@ export default function PaymentScreen({ route, navigation }: any) {
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
+      <View
+        style={[
+          styles.footer,
+          {
+            bottom: androidKeyboardPadding(keyboardHeight),
+            paddingBottom: insets.bottom + 14
+          }
+        ]}
+      >
         {paymentMethod === "RAZORPAY" ? (
           <TouchableOpacity style={styles.payUsingRow} onPress={() => void openUpiPicker()}>
             <View>
@@ -935,7 +960,7 @@ export default function PaymentScreen({ route, navigation }: any) {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

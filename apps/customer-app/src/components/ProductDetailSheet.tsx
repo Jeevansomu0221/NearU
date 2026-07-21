@@ -17,6 +17,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SelectedExtra } from "../context/CartContext";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 export interface ExtraChoice {
   name: string;
@@ -55,6 +56,8 @@ export default function ProductDetailSheet({
   onAdd
 }: ProductDetailSheetProps) {
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedExtras, setSelectedExtras] = useState<SelectedExtra[]>([]);
   const [cookingRequest, setCookingRequest] = useState("");
@@ -161,7 +164,10 @@ export default function ProductDetailSheet({
           <Animated.View
             style={[
               styles.sheet,
-              { paddingBottom: Math.max(insets.bottom, 12), transform: [{ translateY }] }
+              {
+                paddingBottom: Math.max(insets.bottom, 12) + androidKeyboardPadding(keyboardHeight),
+                transform: [{ translateY }]
+              }
             ]}
           >
             <View style={styles.sheetTopBar} {...panResponder.panHandlers}>
@@ -169,10 +175,12 @@ export default function ProductDetailSheet({
             </View>
 
             <ScrollView
+              ref={scrollRef}
               showsVerticalScrollIndicator={false}
               bounces={false}
               contentContainerStyle={styles.scrollContent}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             >
               <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
 
@@ -253,6 +261,9 @@ export default function ProductDetailSheet({
                     placeholderTextColor="#A3968D"
                     multiline
                     textAlignVertical="top"
+                    onFocus={() => {
+                      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 280);
+                    }}
                   />
                 </View>
               </View>

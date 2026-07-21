@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, Alert } from "react-native";
+import {
+  Text,
+  TextInput,
+  Button,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet
+} from "react-native";
 import { verifyFirebaseOtp } from "../api/auth.api";
 import {
   clearFirebaseOtpSession,
@@ -7,10 +16,12 @@ import {
   isFirebaseOtpSessionExpiredError
 } from "../services/firebasePhoneAuth";
 import { resolveStartupDeletionRequest } from "../api/accountDeletion.api";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone, role } = route.params;
   const [otp, setOtp] = useState("");
+  const keyboardHeight = useKeyboardBottomInset();
 
   const extractServerMessage = (error: any): string => {
     const data = error?.response?.data;
@@ -102,24 +113,44 @@ export default function OtpScreen({ route, navigation }: any) {
   };
 
   return (
-    <View style={{ flex: 1, justifyContent: "center", padding: 20 }}>
-      <Text style={{ fontSize: 18, marginBottom: 10 }}>OTP sent to {phone}</Text>
-      <TextInput
-        placeholder="Enter OTP"
-        keyboardType="number-pad"
-        value={otp}
-        onChangeText={setOtp}
-        maxLength={6}
-        style={{
-          borderWidth: 1,
-          borderColor: "#ccc",
-          padding: 12,
-          marginBottom: 20,
-          textAlign: "center",
-          borderRadius: 6
-        }}
-      />
-      <Button title="Verify OTP" onPress={handleVerify} />
-    </View>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: 40 + androidKeyboardPadding(keyboardHeight) }
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bounces={false}
+      >
+        <Text style={styles.title}>OTP sent to {phone}</Text>
+        <TextInput
+          placeholder="Enter OTP"
+          keyboardType="number-pad"
+          value={otp}
+          onChangeText={setOtp}
+          maxLength={6}
+          style={styles.input}
+        />
+        <Button title="Verify OTP" onPress={handleVerify} />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#fff" },
+  content: { flexGrow: 1, justifyContent: "center", padding: 20 },
+  title: { fontSize: 18, marginBottom: 10 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 12,
+    marginBottom: 20,
+    textAlign: "center",
+    borderRadius: 6
+  }
+});

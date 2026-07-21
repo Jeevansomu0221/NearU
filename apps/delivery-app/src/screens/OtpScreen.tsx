@@ -6,7 +6,10 @@ import {
   TouchableOpacity,
   Alert,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { persistAuthSession } from "../api/auth.api";
@@ -20,6 +23,7 @@ import {
 import { sendOtpWithFallback, verifyOtpSession, OtpSessionInfo } from "../services/otpAuthFlow";
 import { registerForPushNotifications } from "../services/notifications";
 import { requestRiderLocationPermission } from "../utils/riderLocation";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone, otpSession: initialOtpSession } = route.params;
@@ -29,6 +33,7 @@ export default function OtpScreen({ route, navigation }: any) {
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
   const [requiresFreshOtp, setRequiresFreshOtp] = useState(false);
+  const keyboardHeight = useKeyboardBottomInset();
 
   const extractServerMessage = (error: any): string => {
     const data = error?.response?.data;
@@ -192,7 +197,19 @@ export default function OtpScreen({ route, navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 40 + androidKeyboardPadding(keyboardHeight) }
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bounces={false}
+      >
       <Text style={styles.title}>Verify OTP</Text>
       <Text style={styles.subtitle}>
         Enter the 6-digit code sent to{"\n"}
@@ -236,12 +253,14 @@ export default function OtpScreen({ route, navigation }: any) {
           <Text style={[styles.resendText, canResend && styles.resendTextActive]}>Resend OTP</Text>
         </TouchableOpacity>
       </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 20, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  scrollContent: { flexGrow: 1, justifyContent: "center", padding: 20 },
   title: { fontSize: 28, fontWeight: "bold", color: "#333", marginBottom: 8, textAlign: "center" },
   subtitle: { fontSize: 16, color: "#666", marginBottom: 40, textAlign: "center", lineHeight: 24 },
   phoneText: { fontWeight: "bold", color: "#333" },

@@ -18,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, { uploadMultipart } from "../api/client";
 import { partnerTheme } from "../theme";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 const CATEGORIES = ["bakery", "restaurant", "cloud-kitchen", "grocery", "tiffin-center", "fast-food", "sweets", "ice-creams", "juice", "other"];
 
@@ -290,6 +291,7 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
 
 export default function OnboardingScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardBottomInset();
   const [activeStep, setActiveStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<UploadingKey>(null);
@@ -1088,12 +1090,16 @@ export default function OnboardingScreen({ navigation }: any) {
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
     <KeyboardAvoidingView
       style={styles.keyboard}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ paddingTop: 10, paddingBottom: insets.bottom + 180, flexGrow: 1 }}
+        contentContainerStyle={{
+          paddingTop: 10,
+          paddingBottom: insets.bottom + 180 + androidKeyboardPadding(keyboardHeight),
+          flexGrow: 1
+        }}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}

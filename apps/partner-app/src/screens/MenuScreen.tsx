@@ -23,6 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import api, { uploadMultipart } from "../api/client";
 import NotificationButton from "../components/NotificationButton";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 interface ExtraChoice {
   name: string;
@@ -129,6 +130,7 @@ export default function MenuScreen({ navigation }: any) {
   const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
+  const keyboardHeight = useKeyboardBottomInset();
   const [lockedModalHeight, setLockedModalHeight] = useState(() => Math.min(windowHeight * 0.92, 720));
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -554,7 +556,14 @@ export default function MenuScreen({ navigation }: any) {
             keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
             style={styles.modalKeyboardWrap}
           >
-            <View style={[styles.modalSheetWrap, { paddingBottom: insets.bottom + 8 }]}>
+            <View
+              style={[
+                styles.modalSheetWrap,
+                {
+                  paddingBottom: insets.bottom + 8 + androidKeyboardPadding(keyboardHeight)
+                }
+              ]}
+            >
               <View style={[styles.modalContent, { height: lockedModalHeight }]}>
                 <View style={styles.modalHandle} />
 

@@ -9,13 +9,16 @@ import {
   Alert,
   ScrollView,
   TextInput,
-  Linking
+  Linking,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getImagePicker } from "../utils/imagePicker";
 import { Ionicons } from "@expo/vector-icons";
 import api, { uploadMultipart } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 type ReuploadFlags = {
   fssaiUrl?: boolean;
@@ -269,6 +272,7 @@ const isProfileVerificationLocked = (profile?: PartnerProfile | null, docs?: Doc
 export default function ProfileScreen({ navigation }: any) {
   const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardBottomInset();
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1133,11 +1137,19 @@ export default function ProfileScreen({ navigation }: any) {
   const isGstRegistered = kyc.gstRegistered === true || kyc.gstRegistered === "true" || kyc.gstRegistered === "yes";
 
   return (
-    <View style={[styles.safeAreaScreen, isDarkMode && styles.safeAreaScreenDark]}>
+    <KeyboardAvoidingView
+      style={[styles.safeAreaScreen, isDarkMode && styles.safeAreaScreenDark]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <ScrollView
         style={[styles.container, isDarkMode && styles.safeAreaScreenDark]}
-        contentContainerStyle={{ paddingTop: 10, paddingBottom: insets.bottom + 36 }}
+        contentContainerStyle={{
+          paddingTop: 10,
+          paddingBottom: insets.bottom + 36 + androidKeyboardPadding(keyboardHeight)
+        }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <View style={styles.hero}>
           <View style={styles.heroRow}>
@@ -1804,7 +1816,7 @@ export default function ProfileScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

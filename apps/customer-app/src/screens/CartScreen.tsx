@@ -7,13 +7,16 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  TextInput
+  TextInput,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart, type CartItem, type CartItemRef } from "../context/CartContext";
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
@@ -50,6 +53,8 @@ export default function CartScreen({ route, navigation }: any) {
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
   const hasProfileRef = useRef(false);
   const locationCacheRef = useRef<{ location: { latitude: number; longitude: number }; at: number } | null>(null);
 
@@ -465,7 +470,10 @@ export default function CartScreen({ route, navigation }: any) {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>Your Cart</Text>
         {items.length > 0 ? (
@@ -494,8 +502,14 @@ export default function CartScreen({ route, navigation }: any) {
       ) : (
         <>
           <ScrollView
+            ref={scrollRef}
             style={styles.itemsContainer}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: 128 + insets.bottom }]}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: 128 + insets.bottom + androidKeyboardPadding(keyboardHeight) }
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           >
             {groupedItems.map((group) => (
               <View key={group.shopId} style={styles.shopCard}>
@@ -605,6 +619,9 @@ export default function CartScreen({ route, navigation }: any) {
                 placeholderTextColor="#98A2B3"
                 multiline
                 textAlignVertical="top"
+                onFocus={() => {
+                  setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 280);
+                }}
               />
               <Text style={styles.instructionsHint}>These instructions will be attached to your order.</Text>
             </View>
@@ -665,7 +682,15 @@ export default function CartScreen({ route, navigation }: any) {
             </View>
           </ScrollView>
 
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
+          <View
+            style={[
+              styles.footer,
+              {
+                bottom: androidKeyboardPadding(keyboardHeight),
+                paddingBottom: insets.bottom + 14
+              }
+            ]}
+          >
             <View>
               <Text style={styles.footerLabel}>Total</Text>
               <Text style={styles.footerTotal}>{formatAmount(total)}</Text>
@@ -682,7 +707,7 @@ export default function CartScreen({ route, navigation }: any) {
           </View>
         </>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

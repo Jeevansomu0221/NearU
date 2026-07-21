@@ -9,7 +9,9 @@ import {
   TouchableOpacity,
   View,
   Switch,
-  ActivityIndicator
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -20,6 +22,7 @@ import { getMyDeletionRequest } from "../api/accountDeletion.api";
 import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { buildLegalUrl, OFFICIAL_SITE_URL } from "../constants/legal";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 const PARTNER_POLICY_URL = `${OFFICIAL_SITE_URL}/partner-policy`;
 const TERMS_URL = buildLegalUrl("terms");
@@ -46,6 +49,7 @@ type SettingsState = {
 
 export default function SettingsScreen({ navigation, route }: any) {
   const { isDarkMode, setDarkMode } = usePartnerTheme();
+  const keyboardHeight = useKeyboardBottomInset();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
@@ -245,7 +249,17 @@ export default function SettingsScreen({ navigation, route }: any) {
 
   return (
     <>
-    <ScrollView style={[styles.container, isDark && styles.containerDark]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView
+      style={[styles.container, isDark && styles.containerDark]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+    <ScrollView
+      style={[styles.container, isDark && styles.containerDark]}
+      contentContainerStyle={[styles.content, { paddingBottom: 28 + androidKeyboardPadding(keyboardHeight) }]}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
       <View style={[styles.heroCard, isDark && styles.heroCardDark]}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroIcon}>
@@ -427,6 +441,7 @@ export default function SettingsScreen({ navigation, route }: any) {
       </View>
 
     </ScrollView>
+    </KeyboardAvoidingView>
     <DeleteAccountModal
       visible={deleteAccountModalVisible}
       onClose={() => setDeleteAccountModalVisible(false)}
