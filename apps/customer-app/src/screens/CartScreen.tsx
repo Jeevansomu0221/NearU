@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart, type CartItem, type CartItemRef } from "../context/CartContext";
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
-import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
@@ -53,8 +52,8 @@ export default function CartScreen({ route, navigation }: any) {
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const instructionsOffsetY = useRef(0);
   const hasProfileRef = useRef(false);
   const locationCacheRef = useRef<{ location: { latitude: number; longitude: number }; at: number } | null>(null);
 
@@ -504,12 +503,10 @@ export default function CartScreen({ route, navigation }: any) {
           <ScrollView
             ref={scrollRef}
             style={styles.itemsContainer}
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: 128 + insets.bottom + androidKeyboardPadding(keyboardHeight) }
-            ]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: 128 + insets.bottom }]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           >
             {groupedItems.map((group) => (
               <View key={group.shopId} style={styles.shopCard}>
@@ -609,7 +606,12 @@ export default function CartScreen({ route, navigation }: any) {
               ) : null}
             </View>
 
-            <View style={styles.sectionCard}>
+            <View
+              style={styles.sectionCard}
+              onLayout={(event) => {
+                instructionsOffsetY.current = event.nativeEvent.layout.y;
+              }}
+            >
               <Text style={styles.sectionTitle}>Special Instructions</Text>
               <TextInput
                 style={styles.instructionsInput}
@@ -620,7 +622,13 @@ export default function CartScreen({ route, navigation }: any) {
                 multiline
                 textAlignVertical="top"
                 onFocus={() => {
-                  setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 280);
+                  // Keep the field in view — do not scrollToEnd (that jumps past the input to totals).
+                  setTimeout(() => {
+                    scrollRef.current?.scrollTo({
+                      y: Math.max(0, instructionsOffsetY.current - 16),
+                      animated: true
+                    });
+                  }, 80);
                 }}
               />
               <Text style={styles.instructionsHint}>These instructions will be attached to your order.</Text>
@@ -682,15 +690,7 @@ export default function CartScreen({ route, navigation }: any) {
             </View>
           </ScrollView>
 
-          <View
-            style={[
-              styles.footer,
-              {
-                bottom: androidKeyboardPadding(keyboardHeight),
-                paddingBottom: insets.bottom + 14
-              }
-            ]}
-          >
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
             <View>
               <Text style={styles.footerLabel}>Total</Text>
               <Text style={styles.footerTotal}>{formatAmount(total)}</Text>

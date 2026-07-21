@@ -27,7 +27,6 @@ import {
   savePreferredUpiApp,
   type UpiApp
 } from "../utils/upiPayment";
-import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 interface CheckoutGroup {
   shopId: string;
@@ -134,8 +133,8 @@ export default function PaymentScreen({ route, navigation }: any) {
   const { userProfile, orderSummary } = route.params;
   const { items, clear } = useCart();
   const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const tipFieldOffsetY = useRef(0);
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH_ON_DELIVERY");
@@ -670,10 +669,11 @@ export default function PaymentScreen({ route, navigation }: any) {
         style={styles.content}
         contentContainerStyle={{
           paddingTop: 14,
-          paddingBottom: 180 + insets.bottom + androidKeyboardPadding(keyboardHeight)
+          paddingBottom: 180 + insets.bottom
         }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
       >
         <View style={styles.headerSection}>
           <Text style={styles.headerEyebrow}>Checkout</Text>
@@ -727,7 +727,12 @@ export default function PaymentScreen({ route, navigation }: any) {
           </View>
         ) : null}
 
-        <View style={styles.sectionCard}>
+        <View
+          style={styles.sectionCard}
+          onLayout={(event) => {
+            tipFieldOffsetY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <Text style={styles.sectionTitle}>Tip your delivery partner</Text>
           <Text style={styles.tipHint}>100% of your tip goes to the rider after successful delivery.</Text>
           <View style={styles.tipPresetRow}>
@@ -771,7 +776,12 @@ export default function PaymentScreen({ route, navigation }: any) {
                 placeholderTextColor="#A3968D"
                 maxLength={3}
                 onFocus={() => {
-                  setTimeout(() => scrollRef.current?.scrollTo({ y: 420, animated: true }), 280);
+                  setTimeout(() => {
+                    scrollRef.current?.scrollTo({
+                      y: Math.max(0, tipFieldOffsetY.current - 16),
+                      animated: true
+                    });
+                  }, 80);
                 }}
               />
             </View>
@@ -841,15 +851,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         )}
       </ScrollView>
 
-      <View
-        style={[
-          styles.footer,
-          {
-            bottom: androidKeyboardPadding(keyboardHeight),
-            paddingBottom: insets.bottom + 14
-          }
-        ]}
-      >
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
         {paymentMethod === "RAZORPAY" ? (
           <TouchableOpacity style={styles.payUsingRow} onPress={() => void openUpiPicker()}>
             <View>

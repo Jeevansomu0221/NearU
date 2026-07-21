@@ -165,7 +165,7 @@ export default function ProductDetailSheet({
             style={[
               styles.sheet,
               {
-                paddingBottom: Math.max(insets.bottom, 12) + androidKeyboardPadding(keyboardHeight),
+                paddingBottom: Math.max(insets.bottom, 12) + androidKeyboardPadding(keyboardHeight, { forModal: true }),
                 transform: [{ translateY }]
               }
             ]}
@@ -262,7 +262,7 @@ export default function ProductDetailSheet({
                     multiline
                     textAlignVertical="top"
                     onFocus={() => {
-                      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 280);
+                      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
                     }}
                   />
                 </View>

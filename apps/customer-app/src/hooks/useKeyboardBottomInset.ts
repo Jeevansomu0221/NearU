@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Keyboard, Platform } from "react-native";
 
-/** Live keyboard height for padding fields above the soft keyboard (esp. Android + edge-to-edge). */
+/** Live keyboard height (useful for modal/sheets that do not resize with the window). */
 export function useKeyboardBottomInset() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -23,7 +23,12 @@ export function useKeyboardBottomInset() {
   return keyboardHeight;
 }
 
-/** Extra bottom padding to apply on Android when the keyboard is open. iOS relies on KeyboardAvoidingView. */
-export function androidKeyboardPadding(keyboardHeight: number) {
-  return Platform.OS === "android" ? keyboardHeight : 0;
+/**
+ * Extra bottom inset for overlays/modals on Android.
+ * Full screens use softwareKeyboardLayoutMode "resize" — do not add this there or the UI double-jumps.
+ */
+export function androidKeyboardPadding(keyboardHeight: number, options?: { forModal?: boolean }) {
+  if (Platform.OS !== "android") return 0;
+  if (!options?.forModal) return 0;
+  return keyboardHeight;
 }

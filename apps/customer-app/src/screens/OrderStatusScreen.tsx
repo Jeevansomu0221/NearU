@@ -53,11 +53,15 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const [overallRating, setOverallRating] = useState(0);
   const [restaurantComment, setRestaurantComment] = useState("");
   const scrollRef = useRef<ScrollView>(null);
+  const reviewOffsetY = useRef(0);
 
   const scrollReviewIntoView = useCallback(() => {
     setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 280);
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, reviewOffsetY.current - 16),
+        animated: true
+      });
+    }, 80);
   }, []);
 
   const loadOrderDetails = useCallback(async (options?: { silent?: boolean }) => {
@@ -577,7 +581,12 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       </View>
 
       {canRateOrder ? (
-        <View style={styles.sectionCard}>
+        <View
+          style={styles.sectionCard}
+          onLayout={(event) => {
+            reviewOffsetY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <Text style={styles.sectionTitle}>Rate your order</Text>
           {hasSubmittedRating ? (
             <View>

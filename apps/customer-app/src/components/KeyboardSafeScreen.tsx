@@ -8,7 +8,6 @@ import {
   type StyleProp,
   type ViewStyle
 } from "react-native";
-import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 
 type Props = ScrollViewProps & {
   style?: StyleProp<ViewStyle>;
@@ -19,21 +18,20 @@ type Props = ScrollViewProps & {
 };
 
 /**
- * Full-screen scroll form that keeps focused inputs above the keyboard on iOS and Android.
+ * Full-screen scroll form. Relies on Android window resize + iOS KeyboardAvoidingView
+ * so focused fields stay visible without overshooting downward.
  */
 const KeyboardSafeScreen = forwardRef<ScrollView, Props>(function KeyboardSafeScreen(
   {
     style,
     contentContainerStyle,
     bottomPadding = 24,
-    keyboardVerticalOffset = Platform.OS === "ios" ? 0 : 0,
+    keyboardVerticalOffset = 0,
     children,
     ...scrollProps
   },
   ref
 ) {
-  const keyboardHeight = useKeyboardBottomInset();
-
   return (
     <KeyboardAvoidingView
       style={[styles.flex, style]}
@@ -43,12 +41,10 @@ const KeyboardSafeScreen = forwardRef<ScrollView, Props>(function KeyboardSafeSc
       <ScrollView
         ref={ref}
         style={styles.flex}
-        contentContainerStyle={[
-          contentContainerStyle,
-          { paddingBottom: bottomPadding + androidKeyboardPadding(keyboardHeight) }
-        ]}
+        contentContainerStyle={[contentContainerStyle, { paddingBottom: bottomPadding }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         {...scrollProps}
       >
         {children}
