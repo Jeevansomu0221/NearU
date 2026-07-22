@@ -3,7 +3,7 @@
     "name": "Vyaha",
     "slug": "vyaha-customer",
     "scheme": "vyaha-customer",
-    "version": "1.0.20",
+    "version": "1.0.21",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -47,7 +47,7 @@
     },
     "android": {
       "package": "com.vyaha.customer",
-      "versionCode": 36,
+      "versionCode": 37,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
@@ -78,8 +78,8 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true
           }
