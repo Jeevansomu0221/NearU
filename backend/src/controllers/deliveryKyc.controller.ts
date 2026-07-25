@@ -287,7 +287,12 @@ export const skipDeliveryPan = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Verify Aadhaar before skipping PAN", 400);
     }
     if (partner.documents?.panVerified) {
-      return errorResponse(res, "PAN is already verified", 400);
+      const refreshed = await DeliveryPartner.findById(partner._id).lean();
+      return successResponse(
+        res,
+        await serializeProfile(user.id, refreshed || partner),
+        "PAN is already verified"
+      );
     }
 
     await DeliveryPartner.updateOne(
@@ -348,7 +353,12 @@ export const verifyDeliveryBank = async (req: AuthRequest, res: Response) => {
 
     const docs: any = partner.documents || {};
     if (docs.bankVerificationStatus === "VERIFIED") {
-      return errorResponse(res, "Bank details are already verified", 400);
+      const refreshed = await DeliveryPartner.findById(partner._id).lean();
+      return successResponse(
+        res,
+        await serializeProfile(user.id, refreshed || partner),
+        "Bank details are already verified"
+      );
     }
 
     const matchName = accountHolderName || docs.aadhaarName || partner.name || "";
@@ -438,7 +448,12 @@ export const skipDeliveryBank = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Verify Aadhaar before skipping bank details", 400);
     }
     if (partner.documents?.bankVerificationStatus === "VERIFIED") {
-      return errorResponse(res, "Bank details are already verified", 400);
+      const refreshed = await DeliveryPartner.findById(partner._id).lean();
+      return successResponse(
+        res,
+        await serializeProfile(user.id, refreshed || partner),
+        "Bank details are already verified. Continuing."
+      );
     }
 
     await DeliveryPartner.updateOne(

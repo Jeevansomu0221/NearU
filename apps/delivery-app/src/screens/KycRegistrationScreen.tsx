@@ -77,6 +77,18 @@ export default function KycRegistrationScreen({ navigation }: any) {
     navigation.reset({ index: 0, routes: [{ name: "Main" }] });
   };
 
+  const isBankDone = (docs?: DeliveryProfile["documents"] | null) =>
+    docs?.bankVerificationStatus === "VERIFIED" || Boolean(docs?.bankDetailsSkipped);
+
+  const goAfterPan = async (data: DeliveryProfile) => {
+    setProfile(data);
+    if (isBankDone(data.documents)) {
+      await finishToMain();
+      return;
+    }
+    setStep(3);
+  };
+
   const hydrateFromProfile = (data: DeliveryProfile) => {
     setProfile(data);
     const docs = data.documents || {};
@@ -100,9 +112,8 @@ export default function KycRegistrationScreen({ navigation }: any) {
     if (!docs.aadhaarVerified) setStep(0);
     else if (!data.termsAcceptedAt || !data.emergencyContactName) setStep(1);
     else if (!docs.panVerified && !docs.panSkipped) setStep(2);
-    else if (docs.bankVerificationStatus !== "VERIFIED" && !docs.bankDetailsSkipped) setStep(3);
+    else if (!isBankDone(docs)) setStep(3);
     else {
-      // Fully done — enter app
       finishToMain().catch(() => {});
     }
   };
@@ -112,13 +123,16 @@ export default function KycRegistrationScreen({ navigation }: any) {
       try {
         const response = await getDeliveryProfile();
         if (response.success && response.data) {
-          if (response.data.status === "ACTIVE" && response.data.isProfileComplete) {
-            const docs = response.data.documents || {};
-            // Still allow completing skipped PAN/bank during registration if they landed here.
-            if (docs.aadhaarVerified && docs.panSkipped && docs.bankDetailsSkipped) {
-              await finishToMain();
-              return;
-            }
+          const docs = response.data.documents || {};
+          // Registration finished once Aadhaar is done and bank is verified or skipped.
+          if (
+            response.data.status === "ACTIVE" &&
+            docs.aadhaarVerified &&
+            (docs.panVerified || docs.panSkipped) &&
+            isBankDone(docs)
+          ) {
+            await finishToMain();
+            return;
           }
           hydrateFromProfile(response.data);
         } else {
@@ -239,8 +253,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
       if (!response.success || !response.data) {
         throw new Error(response.message || "PAN verification failed");
       }
-      setProfile(response.data);
-      setStep(3);
+      await goAfterPan(response.data);
     } catch (error: any) {
       Alert.alert("PAN failed", error?.message || "Could not verify PAN");
     } finally {
@@ -255,8 +268,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
       if (!response.success || !response.data) {
         throw new Error(response.message || "Failed to skip PAN");
       }
-      setProfile(response.data);
-      setStep(3);
+      await goAfterPan(response.data);
     } catch (error: any) {
       Alert.alert("Skip failed", error?.message || "Could not skip PAN");
     } finally {
@@ -279,6 +291,10 @@ export default function KycRegistrationScreen({ navigation }: any) {
     }
     setBusy(true);
     try {
+      if (isBankDone(profile?.documents)) {
+        await finishToMain();
+        return;
+      }
       const response = await verifyBank({
         bankAccountNumber: bankAccountNumber.trim(),
         bankIfsc: bankIfsc.trim().toUpperCase(),
@@ -308,6 +324,10 @@ export default function KycRegistrationScreen({ navigation }: any) {
   const handleSkipBank = async () => {
     setBusy(true);
     try {
+      if (isBankDone(profile?.documents)) {
+        await finishToMain();
+        return;
+      }
       const response = await skipBank();
       if (!response.success) {
         throw new Error(response.message || "Failed to skip bank details");
