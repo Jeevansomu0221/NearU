@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID } from "crypto";
 import { config } from "../config/env";
 
-const CONSENT_PURPOSE = "Delivery partner KYC verification for NearU payouts";
+const CONSENT_PURPOSE = "NearU delivery rider KYC verification";
+// Decentro Aadhaar OTP requires purpose length <= 50 characters.
 
 export type DecentroAadhaarOtpResult = {
   initiationTransactionId: string;

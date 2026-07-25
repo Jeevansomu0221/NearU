@@ -102,7 +102,8 @@ export const config = {
   testLoginCredentials: parseTestLoginCredentials(),
   allowMultiDeviceSessions: process.env.ALLOW_MULTI_DEVICE_SESSIONS !== "false",
   /** Decentro: staging https://in.staging.decentro.tech — production https://in.decentro.tech (must match credential environment). */
-  decentroBaseUrl: (process.env.DECENTRO_BASE_URL || "https://in.decentro.tech").replace(/\/$/, ""),
+  // VyahaTechnologies_* keys currently authenticate on staging only (prod returns invalid_client_credentials).
+  decentroBaseUrl: (process.env.DECENTRO_BASE_URL || "https://in.staging.decentro.tech").replace(/\/$/, ""),
   decentroClientId: process.env.DECENTRO_CLIENT_ID || "",
   decentroClientSecret: process.env.DECENTRO_CLIENT_SECRET || "",
   decentroKycModuleSecret: process.env.DECENTRO_KYC_MODULE_SECRET || "",
