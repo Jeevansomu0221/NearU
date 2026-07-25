@@ -23,6 +23,15 @@ import {
   getDeliveryAppUpdateInfo
 } from "../controllers/delivery.controller";
 import {
+  sendDeliveryAadhaarOtp,
+  verifyDeliveryAadhaarOtp,
+  verifyDeliveryPan,
+  skipDeliveryPan,
+  verifyDeliveryBank,
+  skipDeliveryBank,
+  completeDeliveryRegistrationBasics
+} from "../controllers/deliveryKyc.controller";
+import {
   getMyCashLedger,
   submitCashDeposit
 } from "../controllers/cash.controller";
@@ -42,6 +51,15 @@ router.get("/profile", getDeliveryProfile);
 router.put("/profile", updateDeliveryProfile);
 router.put("/bank-details", updateBankDetails);
 router.get("/app-update-info", getDeliveryAppUpdateInfo);
+
+// =================== DIGITAL KYC (Decentro) ===================
+router.post("/kyc/aadhaar/send-otp", sendDeliveryAadhaarOtp);
+router.post("/kyc/aadhaar/verify-otp", verifyDeliveryAadhaarOtp);
+router.post("/kyc/pan/verify", verifyDeliveryPan);
+router.post("/kyc/pan/skip", skipDeliveryPan);
+router.post("/kyc/bank/verify", verifyDeliveryBank);
+router.post("/kyc/bank/skip", skipDeliveryBank);
+router.post("/kyc/registration-basics", completeDeliveryRegistrationBasics);
 
 // =================== STATS ===================
 router.get("/stats", getDeliveryStats);

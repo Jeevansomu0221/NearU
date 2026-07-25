@@ -22,7 +22,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { uploadMultipart } from "../api/client";
 import { buildLegalUrl } from "../constants/legal";
-import { getDeliveryProfile, updateBankDetails, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
+import { getDeliveryProfile, updateDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
+import { verifyBank, verifyPan } from "../api/kyc.api";
 import { getDeliveryStats, getTodaysEarnings, getWithdrawalWallet, type DeliveryStats } from "../api/delivery.api";
 import SupportModal from "../components/SupportModal";
 import DeleteAccountModal from "../components/DeleteAccountModal";
@@ -184,13 +185,15 @@ const normalizeDocuments = (input?: Partial<Docs> | null): Docs => {
 
 const emptyDocs = (): Docs => ({
   aadhaarNumber: "", aadhaarFrontUrl: "", aadhaarBackUrl: "", aadhaarUrl: "",
-  panNumber: "", panFrontUrl: "", panUrl: "", selfiePhotoUrl: "",
+  aadhaarVerified: false, aadhaarVerifiedAt: null, aadhaarName: "", aadhaarMasked: "", nameLocked: false,
+  panNumber: "", panFrontUrl: "", panUrl: "", panVerified: false, panVerifiedAt: null, panName: "", panSkipped: false,
+  selfiePhotoUrl: "",
   drivingLicenseFrontUrl: "", drivingLicenseBackUrl: "", drivingLicenseUrl: "",
   vehicleRcFrontUrl: "", vehicleRcBackUrl: "", vehicleRcUrl: "", insuranceUrl: "",
   // Kept for future bank proof uploads; current registration does not ask for bank proof type.
   bankDocumentType: "", bankAccountHolderName: "", cancelledChequeUrl: "",
   bankPassbookUrl: "", bankStatementUrl: "", bankAccountNumber: "", bankIfsc: "", bankUpiId: "",
-  bankVerificationStatus: "", bankReviewComment: "",
+  bankVerificationStatus: "", bankReviewComment: "", bankDetailsSkipped: false, kycProvider: "",
   submittedAt: "", isComplete: false, reuploadFlags: {}, reuploadNotes: ""
 });
 
@@ -290,6 +293,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [profile, setProfile] = useState<DeliveryProfile | null>(null);
   const [step, setStep] = useState(0);
   const [editingBank, setEditingBank] = useState(false);
+  const [editingPan, setEditingPan] = useState(false);
+  const [panSaving, setPanSaving] = useState(false);
+  const [panDraft, setPanDraft] = useState("");
+  const [panConsent, setPanConsent] = useState(false);
   const [stats, setStats] = useState<DeliveryStats | null>(null);
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -570,28 +577,27 @@ export default function ProfileScreen({ navigation, route }: any) {
   const handleSaveBankDetails = async () => {
     const hasBankInput = Boolean(documents.bankAccountHolderName?.trim() || documents.bankAccountNumber?.trim() || documents.bankIfsc?.trim());
     const bankUpiId = documents.bankUpiId?.trim().toLowerCase() || "";
-    if (!hasBankInput && !bankUpiId) {
-      Alert.alert("Missing details", "Add bank account details or a UPI ID.");
+    if (!hasBankInput) {
+      Alert.alert("Missing details", "Add bank account number and IFSC to verify payouts.");
       return;
     }
-    if (hasBankInput) {
-      if (!documents.bankAccountHolderName?.trim()) { Alert.alert("Missing details", "Account holder name is required if you add bank details."); return; }
-      if (!documents.bankAccountNumber?.trim()) { Alert.alert("Missing details", "Bank account number is required if you add bank details."); return; }
-      if (!documents.bankIfsc?.trim()) { Alert.alert("Missing details", "IFSC code is required if you add bank details."); return; }
-      if (documents.bankAccountNumber?.trim() && !/^[0-9]+$/.test(documents.bankAccountNumber.trim())) { Alert.alert("Invalid details", "Bank account number must be numeric."); return; }
-      if (documents.bankIfsc?.trim() && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) { Alert.alert("Invalid details", "IFSC code format is invalid."); return; }
-    }
+    if (!documents.bankAccountHolderName?.trim()) { Alert.alert("Missing details", "Account holder name is required."); return; }
+    if (!documents.bankAccountNumber?.trim()) { Alert.alert("Missing details", "Bank account number is required."); return; }
+    if (!documents.bankIfsc?.trim()) { Alert.alert("Missing details", "IFSC code is required."); return; }
+    if (!/^[0-9]+$/.test(documents.bankAccountNumber.trim())) { Alert.alert("Invalid details", "Bank account number must be numeric."); return; }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(documents.bankIfsc.trim().toUpperCase())) { Alert.alert("Invalid details", "IFSC code format is invalid."); return; }
     if (bankUpiId && !UPI_REGEX.test(bankUpiId)) { Alert.alert("Invalid details", "UPI ID format is invalid."); return; }
     setBankSaving(true);
     try {
-      const response = await updateBankDetails({
+      const response = await verifyBank({
         bankAccountHolderName: documents.bankAccountHolderName?.trim(),
         bankAccountNumber: documents.bankAccountNumber?.trim() || "",
         bankIfsc: documents.bankIfsc?.trim().toUpperCase(),
-        bankUpiId
+        bankUpiId: bankUpiId || undefined,
+        allowAdminFallback: true
       });
       if (!response.success) {
-        throw new Error(response.message || "Failed to update payout details");
+        throw new Error(response.message || "Failed to verify payout details");
       }
       const profileResponse = await getDeliveryProfile();
       if (!profileResponse.success || !profileResponse.data) {
@@ -599,11 +605,42 @@ export default function ProfileScreen({ navigation, route }: any) {
       }
       syncProfile(profileResponse.data);
       setEditingBank(false);
-      Alert.alert("Submitted", "Bank details sent for admin verification. You can withdraw after they are verified.");
+      if (response.data?.adminFallback) {
+        Alert.alert("Submitted for review", response.data.decentroError || "Decentro could not verify automatically. Admin will review.");
+      } else {
+        Alert.alert("Verified", "Bank account verified. You can withdraw earnings.");
+      }
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to update payout details");
     } finally {
       setBankSaving(false);
+    }
+  };
+
+  const handleVerifyPanFromProfile = async () => {
+    const pan = panDraft.trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      Alert.alert("Invalid PAN", "PAN must match AAAAA9999A format.");
+      return;
+    }
+    if (!panConsent) {
+      Alert.alert("Consent required", "Please consent to PAN verification.");
+      return;
+    }
+    setPanSaving(true);
+    try {
+      const response = await verifyPan({ panNumber: pan, consent: true });
+      if (!response.success) throw new Error(response.message || "PAN verification failed");
+      const profileResponse = await getDeliveryProfile();
+      if (profileResponse.success && profileResponse.data) syncProfile(profileResponse.data);
+      setEditingPan(false);
+      setPanDraft("");
+      setPanConsent(false);
+      Alert.alert("Verified", "PAN verified successfully.");
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to verify PAN");
+    } finally {
+      setPanSaving(false);
     }
   };
 
@@ -859,13 +896,46 @@ export default function ProfileScreen({ navigation, route }: any) {
             <View style={s.statCard}><Text style={s.statVal}>{formatCurrency(stats?.pendingDepositAmount || profile?.pendingDepositAmount || 0)}</Text><Text style={s.statLbl}>Pending deposit</Text></View>
           </View>
 
-          {/* Documents */}
+          {/* Digital KYC */}
           <View style={s.section}>
-            <Text style={s.sectionTitle}>Documents & Verification</Text>
-            <Text style={s.sectionSub}>Documents are locked after verification. Contact support if a change is needed.</Text>
-            {activeDocumentItems.map((item) => renderActiveDocumentRow(item))}
-            <View style={s.divider} />
-            {renderInfoRow("Verification status", verificationStatusLabel)}
+            <Text style={s.sectionTitle}>Identity (Digital KYC)</Text>
+            <Text style={s.sectionSub}>Aadhaar-verified name is locked. PAN and bank can be completed here for payouts.</Text>
+            {renderInfoRow("Aadhaar", documents.aadhaarVerified ? `Verified (${documents.aadhaarMasked || documents.aadhaarNumber || "••••"})` : "Not verified")}
+            {renderInfoRow("Name", safeValue(documents.aadhaarName || name))}
+            {renderInfoRow("PAN", documents.panVerified ? `Verified (${documents.panNumber})` : documents.panSkipped ? "Skipped" : "Not added")}
+            {!documents.panVerified ? (
+              editingPan ? (
+                <>
+                  <Text style={s.inputLabel}>PAN number</Text>
+                  <TextInput
+                    style={s.input}
+                    value={panDraft}
+                    onChangeText={(v) => setPanDraft(v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10))}
+                    placeholder="AAAAA9999A"
+                    placeholderTextColor="#98A2B3"
+                    autoCapitalize="characters"
+                    maxLength={10}
+                    selectionColor={GREEN_PRIMARY}
+                  />
+                  <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }} onPress={() => setPanConsent((c) => !c)}>
+                    <Ionicons name={panConsent ? "checkbox" : "square-outline"} size={20} color={panConsent ? GREEN_PRIMARY : "#98A2B3"} />
+                    <Text style={s.sectionSub}>I consent to PAN verification</Text>
+                  </TouchableOpacity>
+                  <View style={s.btnRow}>
+                    <TouchableOpacity style={s.btnOutline} onPress={() => { setEditingPan(false); setPanDraft(""); setPanConsent(false); }}>
+                      <Text style={s.btnOutlineText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[s.btnPrimary, panSaving && s.btnDisabled]} onPress={handleVerifyPanFromProfile} disabled={panSaving}>
+                      {panSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnPrimaryText}>Verify PAN</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <TouchableOpacity style={[s.btnPrimary, { marginTop: 14 }]} onPress={() => setEditingPan(true)}>
+                  <Text style={s.btnPrimaryText}>Add / verify PAN</Text>
+                </TouchableOpacity>
+              )
+            ) : null}
             {documents.reuploadNotes ? <View style={s.alertBox}><Ionicons name="alert-circle" size={16} color="#B42318" /><Text style={s.alertBoxText}>{documents.reuploadNotes}</Text></View> : null}
           </View>
 
@@ -875,7 +945,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             {(() => {
               const bankStatus = documents.bankVerificationStatus || "";
               const bankTone = bankStatusTone[bankStatus] || bankStatusTone[""];
-              const canEditBank = !bankStatus || bankStatus === "REJECTED";
+              const canEditBank = !bankStatus || bankStatus === "REJECTED" || Boolean(documents.bankDetailsSkipped);
               return (
                 <>
                   <View style={[s.statusChip, { backgroundColor: bankTone.bg, alignSelf: "flex-start", marginBottom: 10 }]}>
@@ -888,11 +958,11 @@ export default function ProfileScreen({ navigation, route }: any) {
                     </View>
                   ) : null}
                   {bankStatus === "PENDING" ? (
-                    <Text style={s.sectionSub}>Your bank details are under admin review. Withdrawals unlock after verification.</Text>
+                    <Text style={s.sectionSub}>Your bank details are under review (Decentro fallback). Withdrawals unlock after verification.</Text>
                   ) : bankStatus === "VERIFIED" ? (
                     <Text style={s.sectionSub}>Verified payout details are locked for security.</Text>
                   ) : (
-                    <Text style={s.sectionSub}>Add payout details for withdrawals. Admin will verify them separately from your rider profile.</Text>
+                    <Text style={s.sectionSub}>Add payout details for withdrawals. We verify via Decentro (admin only if that fails).</Text>
                   )}
                   {editingBank && canEditBank ? (
               <>
@@ -907,7 +977,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <View style={s.btnRow}>
                   <TouchableOpacity style={s.btnOutline} onPress={() => setEditingBank(false)}><Text style={s.btnOutlineText}>Cancel</Text></TouchableOpacity>
                   <TouchableOpacity style={[s.btnPrimary, bankSaving && s.btnDisabled]} onPress={handleSaveBankDetails} disabled={bankSaving}>
-                    {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnPrimaryText}>Submit for verification</Text>}
+                    {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnPrimaryText}>Verify with Decentro</Text>}
                   </TouchableOpacity>
                 </View>
               </>

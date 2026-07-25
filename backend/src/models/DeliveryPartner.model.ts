@@ -23,9 +23,20 @@ export interface IDeliveryPartner extends Document {
     aadhaarFrontUrl?: string;
     aadhaarBackUrl?: string;
     aadhaarUrl?: string;
+    aadhaarVerified?: boolean;
+    aadhaarVerifiedAt?: Date | null;
+    aadhaarName?: string;
+    aadhaarMasked?: string;
+    aadhaarOtpTxnId?: string;
+    aadhaarShareCode?: string;
+    nameLocked?: boolean;
     panNumber?: string;
     panFrontUrl?: string;
     panUrl?: string;
+    panVerified?: boolean;
+    panVerifiedAt?: Date | null;
+    panName?: string;
+    panSkipped?: boolean;
     selfiePhotoUrl?: string;
     drivingLicenseFrontUrl?: string;
     drivingLicenseBackUrl?: string;
@@ -44,6 +55,8 @@ export interface IDeliveryPartner extends Document {
     bankUpiId?: string;
     bankVerificationStatus?: "PENDING" | "VERIFIED" | "REJECTED" | "";
     bankReviewComment?: string;
+    bankDetailsSkipped?: boolean;
+    kycProvider?: string;
     submittedAt?: Date;
     isComplete?: boolean;
     reuploadFlags?: Record<string, boolean>;
@@ -151,9 +164,20 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
       aadhaarFrontUrl: { type: String, default: "" },
       aadhaarBackUrl: { type: String, default: "" },
       aadhaarUrl: { type: String, default: "" },
+      aadhaarVerified: { type: Boolean, default: false },
+      aadhaarVerifiedAt: { type: Date, default: null },
+      aadhaarName: { type: String, default: "" },
+      aadhaarMasked: { type: String, default: "" },
+      aadhaarOtpTxnId: { type: String, default: "" },
+      aadhaarShareCode: { type: String, default: "" },
+      nameLocked: { type: Boolean, default: false },
       panNumber: { type: String, default: "" },
       panFrontUrl: { type: String, default: "" },
       panUrl: { type: String, default: "" },
+      panVerified: { type: Boolean, default: false },
+      panVerifiedAt: { type: Date, default: null },
+      panName: { type: String, default: "" },
+      panSkipped: { type: Boolean, default: false },
       selfiePhotoUrl: { type: String, default: "" },
       drivingLicenseFrontUrl: { type: String, default: "" },
       drivingLicenseBackUrl: { type: String, default: "" },
@@ -176,6 +200,8 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
         default: ""
       },
       bankReviewComment: { type: String, default: "" },
+      bankDetailsSkipped: { type: Boolean, default: false },
+      kycProvider: { type: String, default: "" },
       submittedAt: { type: Date, default: null },
       isComplete: { type: Boolean, default: false },
       reuploadFlags: {

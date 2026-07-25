@@ -17,6 +17,7 @@ import MyJobsScreen from "../screens/MyJobsScreen";
 import JobDetailsScreen from "../screens/JobDetailsScreen"; // Make sure this import exists
 import EarningsScreen from "../screens/EarningsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import KycRegistrationScreen from "../screens/KycRegistrationScreen";
 import ReviewsScreen from "../screens/ReviewsScreen";
 import ReviewStatusScreen from "../screens/ReviewStatusScreen";
 import AccountDeletionReviewScreen from "../screens/AccountDeletionReviewScreen";
@@ -192,8 +193,7 @@ export default function AppNavigator() {
       />
       <Stack.Screen
         name="CompleteProfile"
-        component={ProfileScreen}
-        initialParams={{ forceComplete: true }}
+        component={KycRegistrationScreen}
         options={{
           title: "Complete Registration",
           headerLeft: () => null

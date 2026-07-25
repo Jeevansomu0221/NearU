@@ -24,9 +24,18 @@ export interface DeliveryProfile {
     aadhaarFrontUrl?: string;
     aadhaarBackUrl?: string;
     aadhaarUrl?: string;
+    aadhaarVerified?: boolean;
+    aadhaarVerifiedAt?: string | null;
+    aadhaarName?: string;
+    aadhaarMasked?: string;
+    nameLocked?: boolean;
     panNumber?: string;
     panFrontUrl?: string;
     panUrl?: string;
+    panVerified?: boolean;
+    panVerifiedAt?: string | null;
+    panName?: string;
+    panSkipped?: boolean;
     selfiePhotoUrl?: string;
     drivingLicenseFrontUrl?: string;
     drivingLicenseBackUrl?: string;
@@ -45,6 +54,8 @@ export interface DeliveryProfile {
     bankUpiId?: string;
     bankVerificationStatus?: "PENDING" | "VERIFIED" | "REJECTED" | "";
     bankReviewComment?: string;
+    bankDetailsSkipped?: boolean;
+    kycProvider?: string;
     submittedAt?: string;
     isComplete?: boolean;
     reuploadFlags?: Partial<Record<

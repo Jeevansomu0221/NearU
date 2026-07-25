@@ -127,6 +127,7 @@ type DeliveryProfileCompletionInput = {
     aadhaarFrontUrl?: string;
     aadhaarBackUrl?: string;
     aadhaarUrl?: string;
+    aadhaarVerified?: boolean;
     panNumber?: string;
     panFrontUrl?: string;
     selfiePhotoUrl?: string;
@@ -149,36 +150,22 @@ type DeliveryProfileCompletionInput = {
 };
 
 const getMissingDeliveryProfileFields = (profile: DeliveryProfileCompletionInput) => {
-  const requiresMotorDocuments = vehicleTypeRequiresMotorDocuments(profile.vehicleType);
   const missingFields: string[] = [];
   const hasRealName =
     !!safeTrimmedString(profile.name) &&
     !/^Delivery\s\d{4}$/.test(safeTrimmedString(profile.name)) &&
     safeTrimmedString(profile.name).length >= 3;
 
+  // Digital KYC: Aadhaar OTP verification is the only mandatory identity gate.
+  if (!profile.documents?.aadhaarVerified) {
+    missingFields.push("Aadhaar verification");
+  }
   if (!hasRealName) missingFields.push("name");
-  if (!hasValidDateOfBirth(profile.dateOfBirth)) missingFields.push("date of birth");
+  if (!profile.termsAcceptedAt) missingFields.push("accepted terms");
+  if (!safeTrimmedString(profile.vehicleType)) missingFields.push("vehicle type");
   if (!safeTrimmedString(profile.emergencyContactName)) missingFields.push("emergency contact name");
   if (!emergencyPhoneRegex.test(safeTrimmedString(profile.emergencyContactPhone))) {
     missingFields.push("emergency contact phone");
-  }
-  if (!profile.termsAcceptedAt) missingFields.push("accepted terms");
-  if (!safeTrimmedString(profile.vehicleType)) missingFields.push("vehicle type");
-  if (requiresMotorDocuments && !safeTrimmedString(profile.vehicleNumber)) missingFields.push("vehicle number");
-  if (requiresMotorDocuments && !safeTrimmedString(profile.licenseNumber)) missingFields.push("driving license number");
-  if (!(safeTrimmedString(profile.documents?.aadhaarFrontUrl) || safeTrimmedString(profile.documents?.aadhaarUrl))) {
-    missingFields.push("Aadhaar front");
-  }
-  if (!safeTrimmedString(profile.documents?.aadhaarNumber)) missingFields.push("Aadhaar number");
-  if (!safeTrimmedString(profile.documents?.selfiePhotoUrl)) missingFields.push("selfie photo");
-  if (
-    requiresMotorDocuments &&
-    !(safeTrimmedString(profile.documents?.drivingLicenseFrontUrl) || safeTrimmedString(profile.documents?.drivingLicenseUrl))
-  ) {
-    missingFields.push("driving license front");
-  }
-  if (requiresMotorDocuments && !safeTrimmedString(profile.documents?.drivingLicenseBackUrl)) {
-    missingFields.push("driving license back");
   }
 
   return missingFields;
@@ -292,11 +279,18 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
     const updateUser: Record<string, unknown> = {};
     const updateDelivery: Record<string, unknown> = {};
 
+    const partnerForNameLock =
+      name !== undefined ? await findDeliveryPartnerForUser(user)?.lean() : null;
+
     if (name !== undefined) {
-      if (typeof name !== "string" || name.trim().length < 3) {
+      if (partnerForNameLock?.documents?.nameLocked || partnerForNameLock?.documents?.aadhaarVerified) {
+        // Name is locked to Decentro Aadhaar extract — ignore client overrides.
+      } else if (typeof name !== "string" || name.trim().length < 3) {
         return errorResponse(res, "Name must be at least 3 characters", 400);
+      } else {
+        updateUser.name = name.trim();
+        updateDelivery.name = name.trim();
       }
-      updateUser.name = name.trim();
     }
 
     if (email !== undefined) {
@@ -447,15 +441,10 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
         return errorResponse(res, "UPI ID format is invalid", 400);
       }
 
-      const nextVehicleType = typeof vehicleType === "string" ? vehicleType : currentPartner?.vehicleType;
-      const requiresMotorDocuments = vehicleTypeRequiresMotorDocuments(nextVehicleType);
       const hasMandatoryDocuments = Boolean(
-        normalizedDocuments.aadhaarNumber &&
-          normalizedDocuments.aadhaarFrontUrl &&
-          normalizedDocuments.selfiePhotoUrl &&
-          (!requiresMotorDocuments ||
-            (normalizedDocuments.drivingLicenseFrontUrl &&
-              normalizedDocuments.drivingLicenseBackUrl))
+        normalizedDocuments.aadhaarVerified ||
+          (normalizedDocuments.aadhaarNumber &&
+            (existingDocuments.aadhaarVerified || normalizedDocuments.aadhaarVerified))
       );
 
       const replacementChecks = [
@@ -524,7 +513,8 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
 
       const isInitialRegistration = ["INACTIVE", "PENDING"].includes(currentPartner?.status || "INACTIVE");
       if (hasMandatoryDocuments && status === undefined && reviewComment === undefined && isInitialRegistration) {
-        updateDelivery.status = "PENDING";
+        // Digital KYC auto-activates after Aadhaar verify; keep ACTIVE if already verified.
+        updateDelivery.status = existingDocuments.aadhaarVerified || normalizedDocuments.aadhaarVerified ? "ACTIVE" : "PENDING";
       }
     } else if (didUpdateReuploadFlags) {
       updateDelivery.documents = {
@@ -1232,7 +1222,11 @@ export const updateBankDetails = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Verified bank details are locked. Contact support if you need to change them.", 400);
     }
     if (existingDocuments.bankVerificationStatus === "PENDING") {
-      return errorResponse(res, "Your bank details are already under admin review.", 400);
+      return errorResponse(
+        res,
+        "Your bank details are already under review. Wait for verification or contact support.",
+        400
+      );
     }
 
     const bank = normalizeBankPayload(req.body);
@@ -1241,6 +1235,7 @@ export const updateBankDetails = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, validationError, 400);
     }
 
+    // Prefer Decentro via /delivery/kyc/bank/verify. This endpoint remains as admin-fallback submit.
     await DeliveryPartner.updateOne(
       { _id: deliveryPartner._id },
       {
@@ -1250,7 +1245,8 @@ export const updateBankDetails = async (req: AuthRequest, res: Response) => {
           "documents.bankIfsc": bank.bankIfsc,
           "documents.bankUpiId": bank.bankUpiId,
           "documents.bankVerificationStatus": "PENDING",
-          "documents.bankReviewComment": ""
+          "documents.bankReviewComment": "Submitted for admin verification (manual fallback).",
+          "documents.bankDetailsSkipped": false
         }
       }
     );

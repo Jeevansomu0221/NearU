@@ -100,7 +100,19 @@ export const config = {
   testLoginPhone: (process.env.TEST_LOGIN_PHONE || "1010101010").replace(/\D/g, "").slice(-10),
   testLoginOtp: process.env.TEST_LOGIN_OTP || "000000",
   testLoginCredentials: parseTestLoginCredentials(),
-  allowMultiDeviceSessions: process.env.ALLOW_MULTI_DEVICE_SESSIONS !== "false"
+  allowMultiDeviceSessions: process.env.ALLOW_MULTI_DEVICE_SESSIONS !== "false",
+  /** Decentro sandbox: https://in.staging.decentro.tech — production: https://in.decentro.tech */
+  decentroBaseUrl: (process.env.DECENTRO_BASE_URL || "https://in.staging.decentro.tech").replace(/\/$/, ""),
+  decentroClientId: process.env.DECENTRO_CLIENT_ID || "",
+  decentroClientSecret: process.env.DECENTRO_CLIENT_SECRET || "",
+  decentroKycModuleSecret: process.env.DECENTRO_KYC_MODULE_SECRET || "",
+  decentroPaymentsModuleSecret: process.env.DECENTRO_PAYMENTS_MODULE_SECRET || "",
+  decentroCoreBankingModuleSecret: process.env.DECENTRO_CORE_BANKING_MODULE_SECRET || "",
+  decentroProviderSecret: process.env.DECENTRO_PROVIDER_SECRET || "",
+  decentroConsumerUrn: process.env.DECENTRO_CONSUMER_URN || "",
+  decentroBankValidationType: (process.env.DECENTRO_BANK_VALIDATION_TYPE || "penniless").toLowerCase(),
+  /** When true, Aadhaar/PAN/bank KYC succeed with fake sandbox data (OTP 111111). */
+  decentroMock: process.env.DECENTRO_MOCK === "true"
 };
 
 export const validateEnv = (): void => {

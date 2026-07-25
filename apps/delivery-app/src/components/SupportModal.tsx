@@ -74,12 +74,12 @@ const DELIVERY_FAQS: FAQEntry[] = [
   {
     question: "What documents do I need?",
     answer:
-      "Aadhaar, PAN, and a selfie are required. If you use a motor vehicle, you also need a driving license, RC, and insurance. Upload them in Profile > Documents."
+      "Complete Aadhaar OTP verification (mandatory to go online). PAN and bank details are optional during signup — add them later in Profile for payouts. Verification is digital via Decentro; no document photo uploads are required."
   },
   {
     question: "How long does profile verification take?",
     answer:
-      "Our team typically reviews your rider profile and documents within 24–48 hours after submission. Check Profile for status updates."
+      "Aadhaar OTP verification is instant and activates your rider account automatically. Bank verification is also instant via Decentro (admin review only if automated verify fails)."
   },
   {
     question: "Can I update my bank details?",
