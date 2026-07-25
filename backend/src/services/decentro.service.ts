@@ -171,6 +171,54 @@ export const getDecentroRuntimeConfig = () => ({
   bankValidationType: config.decentroBankValidationType
 });
 
+/** Safe live probe from this server (used to detect Render IP blocks vs bad keys). */
+export const probeDecentroAadhaarEndpoint = async () => {
+  const baseUrl = resolveDecentroBaseUrl();
+  const host = getDecentroHost(baseUrl);
+  if (!config.decentroClientId || !config.decentroClientSecret || !config.decentroKycModuleSecret) {
+    return {
+      ok: false,
+      host,
+      status: 0,
+      contentType: "",
+      bodyPreview: "Missing Decentro credentials on server",
+      diagnosis: "missing_credentials"
+    };
+  }
+
+  const response = await fetch(`${baseUrl}/v2/kyc/aadhaar/otp`, {
+    method: "POST",
+    headers: buildHeaders("kyc"),
+    body: JSON.stringify({
+      reference_id: newReferenceId(),
+      consent: true,
+      purpose: CONSENT_PURPOSE,
+      aadhaar_number: "999999990019"
+    })
+  });
+
+  const rawText = await response.text();
+  const contentType = response.headers.get("content-type") || "";
+  const bodyPreview = rawText.replace(/\s+/g, " ").slice(0, 220);
+  let diagnosis = "unknown";
+  if (response.status === 403 && bodyPreview.includes("403 Forbidden")) {
+    diagnosis = "ip_or_waf_blocked";
+  } else if (response.status === 401) {
+    diagnosis = "invalid_credentials";
+  } else if (contentType.includes("application/json")) {
+    diagnosis = "api_reachable";
+  }
+
+  return {
+    ok: contentType.includes("application/json"),
+    host,
+    status: response.status,
+    contentType,
+    bodyPreview,
+    diagnosis
+  };
+};
+
 const pickName = (data: Record<string, any> | undefined) => {
   if (!data) return "";
   const proof = data.proofOfIdentity || data.proof_of_identity || {};

@@ -16,7 +16,7 @@ import supportRoutes from "./routes/support.routes";
 import notificationRoutes from "./routes/notification.routes";
 import { config } from "./config/env";
 import { errorMiddleware } from "./middlewares/error.middleware";
-import { getDecentroRuntimeConfig } from "./services/decentro.service";
+import { getDecentroRuntimeConfig, probeDecentroAadhaarEndpoint } from "./services/decentro.service";
 
 const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
@@ -98,12 +98,22 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", message: "Vyaha backend is running" });
 });
 
-app.get("/health/decentro", (_req, res) => {
+app.get("/health/decentro", async (_req, res) => {
   // Safe diagnostics only — never returns secrets.
-  res.json({
-    status: "ok",
-    decentro: getDecentroRuntimeConfig()
-  });
+  try {
+    const probe = await probeDecentroAadhaarEndpoint();
+    res.json({
+      status: "ok",
+      decentro: getDecentroRuntimeConfig(),
+      probe
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: "error",
+      message: error?.message || "Decentro probe failed",
+      decentro: getDecentroRuntimeConfig()
+    });
+  }
 });
 
 app.use(errorMiddleware);
