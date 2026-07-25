@@ -65,21 +65,22 @@ const buildHeaders = (module: "kyc" | "payments" | "core_banking") => {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
-    client_id: config.decentroClientId,
-    client_secret: config.decentroClientSecret
+    client_id: config.decentroClientId.trim(),
+    client_secret: config.decentroClientSecret.trim()
   };
 
   if (module === "kyc" && config.decentroKycModuleSecret) {
-    headers.module_secret = config.decentroKycModuleSecret;
+    headers.module_secret = config.decentroKycModuleSecret.trim();
   }
   if (module === "payments" && config.decentroPaymentsModuleSecret) {
-    headers.module_secret = config.decentroPaymentsModuleSecret;
+    headers.module_secret = config.decentroPaymentsModuleSecret.trim();
   }
   if (module === "core_banking" && config.decentroCoreBankingModuleSecret) {
-    headers.module_secret = config.decentroCoreBankingModuleSecret;
+    headers.module_secret = config.decentroCoreBankingModuleSecret.trim();
   }
-  if (config.decentroProviderSecret) {
-    headers.provider_secret = config.decentroProviderSecret;
+  // YBL provider_secret is only for banking rails — never attach it to KYC calls.
+  if ((module === "payments" || module === "core_banking") && config.decentroProviderSecret) {
+    headers.provider_secret = config.decentroProviderSecret.trim();
   }
 
   return headers;
