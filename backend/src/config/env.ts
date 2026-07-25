@@ -110,7 +110,13 @@ export const config = {
   decentroCoreBankingModuleSecret: process.env.DECENTRO_CORE_BANKING_MODULE_SECRET || "",
   decentroProviderSecret: process.env.DECENTRO_PROVIDER_SECRET || "",
   decentroConsumerUrn: process.env.DECENTRO_CONSUMER_URN || "",
-  decentroBankValidationType: (process.env.DECENTRO_BANK_VALIDATION_TYPE || "penniless").toLowerCase(),
+  decentroBankValidationType: (() => {
+    const raw = (process.env.DECENTRO_BANK_VALIDATION_TYPE || "penniless").toLowerCase().trim();
+    // Common typo on dashboards: pennyless → penniless
+    if (raw === "pennyless") return "penniless";
+    if (raw === "pennydrop" || raw === "hybrid" || raw === "penniless") return raw;
+    return "penniless";
+  })(),
   /** When true, Aadhaar/PAN/bank KYC succeed with fake sandbox data (OTP 111111). */
   decentroMock: process.env.DECENTRO_MOCK === "true"
 };
