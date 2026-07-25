@@ -101,8 +101,8 @@ export const config = {
   testLoginOtp: process.env.TEST_LOGIN_OTP || "000000",
   testLoginCredentials: parseTestLoginCredentials(),
   allowMultiDeviceSessions: process.env.ALLOW_MULTI_DEVICE_SESSIONS !== "false",
-  /** Decentro sandbox: https://in.staging.decentro.tech — production: https://in.decentro.tech */
-  decentroBaseUrl: (process.env.DECENTRO_BASE_URL || "https://in.staging.decentro.tech").replace(/\/$/, ""),
+  /** Decentro: staging https://in.staging.decentro.tech — production https://in.decentro.tech (must match credential environment). */
+  decentroBaseUrl: (process.env.DECENTRO_BASE_URL || "https://in.decentro.tech").replace(/\/$/, ""),
   decentroClientId: process.env.DECENTRO_CLIENT_ID || "",
   decentroClientSecret: process.env.DECENTRO_CLIENT_SECRET || "",
   decentroKycModuleSecret: process.env.DECENTRO_KYC_MODULE_SECRET || "",

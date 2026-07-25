@@ -91,7 +91,13 @@ const callDecentro = async (
   module: "kyc" | "payments" | "core_banking"
 ): Promise<DecentroApiResponse> => {
   if (!config.decentroClientId || !config.decentroClientSecret) {
-    throw new Error("Decentro credentials are not configured");
+    throw new Error("Decentro credentials are not configured on the server");
+  }
+
+  if (module === "kyc" && !config.decentroKycModuleSecret && !config.decentroMock) {
+    throw new Error(
+      "DECENTRO_KYC_MODULE_SECRET is missing on the server. Add the KYC & Onboarding module secret in Render env vars and redeploy."
+    );
   }
 
   const url = `${config.decentroBaseUrl.replace(/\/$/, "")}${path}`;
@@ -101,11 +107,19 @@ const callDecentro = async (
     body: JSON.stringify(body)
   });
 
+  const rawText = await response.text();
   let payload: DecentroApiResponse = {};
   try {
-    payload = (await response.json()) as DecentroApiResponse;
+    payload = rawText ? (JSON.parse(rawText) as DecentroApiResponse) : {};
   } catch {
-    throw new Error(`Decentro returned a non-JSON response (${response.status})`);
+    const hint =
+      response.status === 403 || response.status === 401
+        ? " Auth failed — check DECENTRO_BASE_URL matches your credentials (staging keys → in.staging.decentro.tech, production keys → in.decentro.tech), and that client_id / client_secret / module_secret are set on Render."
+        : "";
+    const snippet = rawText.replace(/\s+/g, " ").slice(0, 120);
+    throw new Error(
+      `Decentro returned a non-JSON response (${response.status}).${hint}${snippet ? ` Body: ${snippet}` : ""}`
+    );
   }
 
   if (!response.ok || !isSuccessStatus(payload)) {
