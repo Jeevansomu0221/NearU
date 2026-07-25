@@ -195,7 +195,8 @@ export default function AppNavigator() {
         name="CompleteProfile"
         component={KycRegistrationScreen}
         options={{
-          title: "Complete Registration",
+          title: "Registration",
+          headerShadowVisible: false,
           headerLeft: () => null
         }}
       />
