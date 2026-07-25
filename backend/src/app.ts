@@ -16,6 +16,7 @@ import supportRoutes from "./routes/support.routes";
 import notificationRoutes from "./routes/notification.routes";
 import { config } from "./config/env";
 import { errorMiddleware } from "./middlewares/error.middleware";
+import { getDecentroRuntimeConfig } from "./services/decentro.service";
 
 const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
@@ -95,6 +96,14 @@ app.use("/legal", legalRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", message: "Vyaha backend is running" });
+});
+
+app.get("/health/decentro", (_req, res) => {
+  // Safe diagnostics only — never returns secrets.
+  res.json({
+    status: "ok",
+    decentro: getDecentroRuntimeConfig()
+  });
 });
 
 app.use(errorMiddleware);

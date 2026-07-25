@@ -87,6 +87,28 @@ const buildHeaders = (module: "kyc" | "payments" | "core_banking") => {
   return headers;
 };
 
+const getDecentroHost = (baseUrl: string) => {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
+};
+
+const isProductionDecentroHost = (baseUrl: string) => getDecentroHost(baseUrl) === "in.decentro.tech";
+
+const resolveDecentroBaseUrl = () => {
+  const configured = config.decentroBaseUrl.replace(/\/$/, "");
+  // Current Vyaha credentials authenticate on staging only.
+  if (isProductionDecentroHost(configured)) {
+    console.warn(
+      `[decentro] DECENTRO_BASE_URL is production (${configured}). Forcing https://in.staging.decentro.tech because current keys are staging-only.`
+    );
+    return "https://in.staging.decentro.tech";
+  }
+  return configured;
+};
+
 const callDecentro = async (
   path: string,
   body: Record<string, unknown>,
@@ -102,7 +124,9 @@ const callDecentro = async (
     );
   }
 
-  const url = `${config.decentroBaseUrl.replace(/\/$/, "")}${path}`;
+  const baseUrl = resolveDecentroBaseUrl();
+  const url = `${baseUrl}${path}`;
+  const host = getDecentroHost(baseUrl);
   const response = await fetch(url, {
     method: "POST",
     headers: buildHeaders(module),
@@ -116,20 +140,36 @@ const callDecentro = async (
   } catch {
     const hint =
       response.status === 403 || response.status === 401
-        ? " Auth failed — check DECENTRO_BASE_URL matches your credentials (staging keys → in.staging.decentro.tech, production keys → in.decentro.tech), and that client_id / client_secret / module_secret are set on Render."
+        ? ` Auth failed on host ${host}. Set DECENTRO_BASE_URL=https://in.staging.decentro.tech on Render.`
         : "";
     const snippet = rawText.replace(/\s+/g, " ").slice(0, 120);
     throw new Error(
-      `Decentro returned a non-JSON response (${response.status}).${hint}${snippet ? ` Body: ${snippet}` : ""}`
+      `Decentro non-JSON (${response.status}) host=${host}.${hint}${snippet ? ` Body: ${snippet}` : ""}`
     );
   }
 
   if (!response.ok || !isSuccessStatus(payload)) {
-    throw new Error(extractMessage(payload, `Decentro request failed (${response.status})`));
+    throw new Error(
+      `${extractMessage(payload, `Decentro request failed (${response.status})`)} [host=${host}]`
+    );
   }
 
   return payload;
 };
+
+export const getDecentroRuntimeConfig = () => ({
+  configuredBaseUrl: config.decentroBaseUrl,
+  configuredHost: getDecentroHost(config.decentroBaseUrl),
+  effectiveBaseUrl: resolveDecentroBaseUrl(),
+  effectiveHost: getDecentroHost(resolveDecentroBaseUrl()),
+  clientIdPrefix: config.decentroClientId ? `${config.decentroClientId.slice(0, 12)}…` : "",
+  hasClientSecret: Boolean(config.decentroClientSecret),
+  hasKycModuleSecret: Boolean(config.decentroKycModuleSecret),
+  hasPaymentsModuleSecret: Boolean(config.decentroPaymentsModuleSecret),
+  hasConsumerUrn: Boolean(config.decentroConsumerUrn),
+  mock: config.decentroMock,
+  bankValidationType: config.decentroBankValidationType
+});
 
 const pickName = (data: Record<string, any> | undefined) => {
   if (!data) return "";
