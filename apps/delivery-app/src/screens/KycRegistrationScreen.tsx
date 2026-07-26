@@ -209,7 +209,13 @@ export default function KycRegistrationScreen({ navigation }: any) {
       if (!response.success || !response.data) throw new Error(response.message || "Failed to send OTP");
       setInitiationTransactionId(response.data.initiationTransactionId);
       setAadhaarOtpSent(true);
-      setStatusNote("OTP sent to Aadhaar-linked mobile");
+      const serverMsg = response.data.message || response.message || "";
+      if (/111111|mock/i.test(serverMsg)) {
+        setStatusNote("Mock mode: enter OTP 111111 (no SMS is sent)");
+        setAadhaarOtp("111111");
+      } else {
+        setStatusNote(serverMsg || "OTP sent to Aadhaar-linked mobile");
+      }
     } catch (error: any) {
       Alert.alert("Aadhaar OTP failed", error?.message || "Could not send OTP");
     } finally {
