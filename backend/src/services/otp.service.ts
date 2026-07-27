@@ -98,21 +98,6 @@ const tryManualTemplateOtp = async (phone: string, apiKey: string, otp: string) 
   }
 };
 
-const tryAutogenSms = async (phone: string, apiKey: string, templateName: string) => {
-  const response = await fetch(
-    `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/AUTOGEN/${encodeURIComponent(templateName)}`,
-    { method: "GET" }
-  );
-  const payload = (await response.json()) as TwoFactorResponse;
-  const { details } = parseTwoFactorResponse(payload);
-
-  if (!response.ok || !isTwoFactorSuccess(payload) || !details) {
-    throw new Error(`2Factor AUTOGEN failed: ${JSON.stringify(payload)}`);
-  }
-
-  return details;
-};
-
 const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
   const trace = startOtpSendTrace(phone, "2factor");
   const apiKey = config.twofactorApiKey;
@@ -137,13 +122,6 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
       run: async () => {
         await tryManualTemplateOtp(phone, apiKey, otp);
         await persistManualOtpSession(phone, otp);
-      }
-    },
-    {
-      label: "AUTOGEN_TEMPLATE",
-      run: async () => {
-        const sessionId = await tryAutogenSms(phone, apiKey, config.twofactorTemplateName);
-        await persistAutogenSession(phone, sessionId);
       }
     }
   ];

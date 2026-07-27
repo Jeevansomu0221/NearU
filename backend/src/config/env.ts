@@ -78,7 +78,8 @@ export const config = {
   twofactorSenderId: process.env.TWOFACTOR_SENDER_ID || "",
   twofactorTemplateName: process.env.TWOFACTOR_TEMPLATE_NAME || "",
   twofactorDltEntityId: process.env.TWOFACTOR_DLT_ENTITY_ID || "",
-  otpFirebaseFallback: process.env.OTP_FIREBASE_FALLBACK !== "false",
+  // Keep fallback opt-in only; implicit fallback can switch provider behavior unexpectedly.
+  otpFirebaseFallback: process.env.OTP_FIREBASE_FALLBACK === "true",
   otpDebug: process.env.OTP_DEBUG === "true",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "",
   firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "",
