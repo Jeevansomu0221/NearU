@@ -1,9 +1,10 @@
 import { apiPost, ApiResponse } from "./client";
 import type { DeliveryProfile } from "./profile.api";
 
-export type AadhaarOtpSendResult = {
+export type DigiLockerStartResult = {
   initiationTransactionId: string;
-  maskedAadhaar: string;
+  authorizationUrl: string;
+  mock?: boolean;
   message?: string;
 };
 
@@ -16,18 +17,17 @@ export type AadhaarVerifyResult = DeliveryProfile & {
   };
 };
 
-export const sendAadhaarOtp = (payload: {
-  aadhaarNumber: string;
+export const startDigiLocker = (payload: {
   consent: boolean;
-}): Promise<ApiResponse<AadhaarOtpSendResult>> => {
-  return apiPost<AadhaarOtpSendResult>("/delivery/kyc/aadhaar/send-otp", payload);
+}): Promise<ApiResponse<DigiLockerStartResult>> => {
+  return apiPost<DigiLockerStartResult>("/delivery/kyc/digilocker/start", payload);
 };
 
-export const verifyAadhaarOtp = (payload: {
-  otp: string;
+export const completeDigiLocker = (payload: {
   initiationTransactionId?: string;
+  code?: string;
 }): Promise<ApiResponse<AadhaarVerifyResult>> => {
-  return apiPost<AadhaarVerifyResult>("/delivery/kyc/aadhaar/verify-otp", payload);
+  return apiPost<AadhaarVerifyResult>("/delivery/kyc/digilocker/complete", payload);
 };
 
 export const verifyPan = (payload: {

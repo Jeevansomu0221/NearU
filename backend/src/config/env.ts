@@ -116,6 +116,9 @@ export const config = {
   decentroCoreBankingModuleSecret: process.env.DECENTRO_CORE_BANKING_MODULE_SECRET || "",
   decentroProviderSecret: process.env.DECENTRO_PROVIDER_SECRET || "",
   decentroConsumerUrn: process.env.DECENTRO_CONSUMER_URN || "",
+  decentroDigilockerRedirectUrl:
+    process.env.DECENTRO_DIGILOCKER_REDIRECT_URL ||
+    `${(process.env.API_BASE_URL || "http://localhost:5000").replace(/\/$/, "")}/api/delivery/kyc/digilocker/callback`,
   decentroBankValidationType: (() => {
     const raw = (process.env.DECENTRO_BANK_VALIDATION_TYPE || "penniless").toLowerCase().trim();
     // Common typo on dashboards: pennyless → penniless

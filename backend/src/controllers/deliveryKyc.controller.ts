@@ -4,14 +4,13 @@ import DeliveryPartner from "../models/DeliveryPartner.model";
 import User from "../models/User.model";
 import { successResponse, errorResponse } from "../utils/response";
 import {
-  createEphemeralShareCode,
+  fetchDigiLockerEAadhaar,
+  initiateDigiLockerSession,
   isDecentroConfigured,
-  maskAadhaarNumber,
-  sendAadhaarOtp,
-  validateAadhaarOtp,
   validateBankAccount,
   verifyPan
 } from "../services/decentro.service";
+import { config } from "../config/env";
 
 interface AuthRequest extends Request {
   user?: {
@@ -22,7 +21,6 @@ interface AuthRequest extends Request {
   };
 }
 
-const aadhaarRegex = /^[0-9]{12}$/;
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const emergencyPhoneRegex = /^[0-9]{10}$/;
@@ -71,7 +69,25 @@ const serializeProfile = async (userId: string, partner: any) => {
   };
 };
 
-export const sendDeliveryAadhaarOtp = async (req: AuthRequest, res: Response) => {
+/** @deprecated Aadhaar OTP is deprecated by Decentro — use DigiLocker. */
+export const sendDeliveryAadhaarOtp = async (_req: AuthRequest, res: Response) => {
+  return errorResponse(
+    res,
+    "Aadhaar OTP is deprecated by Decentro. Use DigiLocker via /delivery/kyc/digilocker/start",
+    410
+  );
+};
+
+/** @deprecated Aadhaar OTP is deprecated by Decentro — use DigiLocker. */
+export const verifyDeliveryAadhaarOtp = async (_req: AuthRequest, res: Response) => {
+  return errorResponse(
+    res,
+    "Aadhaar OTP is deprecated by Decentro. Use DigiLocker via /delivery/kyc/digilocker/complete",
+    410
+  );
+};
+
+export const startDeliveryDigiLocker = async (req: AuthRequest, res: Response) => {
   try {
     const user = ensureDeliveryUser(req, res);
     if (!user) return;
@@ -80,12 +96,8 @@ export const sendDeliveryAadhaarOtp = async (req: AuthRequest, res: Response) =>
       return errorResponse(res, "Decentro KYC is not configured on the server", 503);
     }
 
-    const aadhaarNumber = String(req.body.aadhaarNumber || req.body.aadhaar_number || "").replace(/\D/g, "");
-    if (!aadhaarRegex.test(aadhaarNumber)) {
-      return errorResponse(res, "Aadhaar number must be 12 digits", 400);
-    }
     if (req.body.consent !== true && String(req.body.consent || "").toUpperCase() !== "Y") {
-      return errorResponse(res, "Aadhaar consent is required", 400);
+      return errorResponse(res, "Aadhaar / DigiLocker consent is required", 400);
     }
 
     const partner = await findDeliveryPartnerForUser(user);
@@ -97,18 +109,15 @@ export const sendDeliveryAadhaarOtp = async (req: AuthRequest, res: Response) =>
       return errorResponse(res, "Aadhaar is already verified for this rider", 400);
     }
 
-    const otpResult = await sendAadhaarOtp(aadhaarNumber);
-    const shareCode = createEphemeralShareCode();
+    const session = await initiateDigiLockerSession();
 
     await DeliveryPartner.updateOne(
       { _id: partner._id },
       {
         $set: {
-          "documents.aadhaarNumber": aadhaarNumber,
-          "documents.aadhaarMasked": maskAadhaarNumber(aadhaarNumber),
-          "documents.aadhaarOtpTxnId": otpResult.initiationTransactionId,
-          "documents.aadhaarShareCode": shareCode,
-          "documents.kycProvider": "decentro"
+          "documents.aadhaarOtpTxnId": session.initiationTransactionId,
+          "documents.aadhaarShareCode": "",
+          "documents.kycProvider": "decentro-digilocker"
         }
       }
     );
@@ -116,30 +125,26 @@ export const sendDeliveryAadhaarOtp = async (req: AuthRequest, res: Response) =>
     return successResponse(
       res,
       {
-        initiationTransactionId: otpResult.initiationTransactionId,
-        maskedAadhaar: maskAadhaarNumber(aadhaarNumber),
-        message: otpResult.message
+        initiationTransactionId: session.initiationTransactionId,
+        authorizationUrl: session.authorizationUrl,
+        mock: Boolean(config.decentroMock),
+        message: session.message
       },
-      "Aadhaar OTP sent"
+      "DigiLocker session started"
     );
   } catch (error: any) {
-    console.error("sendDeliveryAadhaarOtp error:", error);
-    return errorResponse(res, error?.message || "Failed to send Aadhaar OTP", 400);
+    console.error("startDeliveryDigiLocker error:", error);
+    return errorResponse(res, error?.message || "Failed to start DigiLocker", 400);
   }
 };
 
-export const verifyDeliveryAadhaarOtp = async (req: AuthRequest, res: Response) => {
+export const completeDeliveryDigiLocker = async (req: AuthRequest, res: Response) => {
   try {
     const user = ensureDeliveryUser(req, res);
     if (!user) return;
 
     if (!isDecentroConfigured()) {
       return errorResponse(res, "Decentro KYC is not configured on the server", 503);
-    }
-
-    const otp = String(req.body.otp || "").replace(/\D/g, "");
-    if (!/^\d{6}$/.test(otp)) {
-      return errorResponse(res, "Enter the 6-digit Aadhaar OTP", 400);
     }
 
     const partner = await findDeliveryPartnerForUser(user);
@@ -154,21 +159,24 @@ export const verifyDeliveryAadhaarOtp = async (req: AuthRequest, res: Response) 
     }
 
     const initiationTransactionId = String(
-      req.body.initiationTransactionId || req.body.initiation_transaction_id || docs.aadhaarOtpTxnId || ""
+      req.body.initiationTransactionId ||
+        req.body.initiation_transaction_id ||
+        docs.aadhaarOtpTxnId ||
+        ""
     );
     if (!initiationTransactionId) {
-      return errorResponse(res, "Request Aadhaar OTP first", 400);
+      return errorResponse(res, "Start DigiLocker verification first", 400);
     }
 
-    const shareCode = String(docs.aadhaarShareCode || createEphemeralShareCode());
-    const profile = await validateAadhaarOtp({
+    const code = String(req.body.code || req.body.authorization_code || "").trim() || undefined;
+    const profile = await fetchDigiLockerEAadhaar({
       initiationTransactionId,
-      otp,
-      shareCode
+      code
     });
 
     const lockedName = profile.name.trim();
     const now = new Date();
+    const masked = profile.maskedAadhaar || docs.aadhaarMasked || "";
 
     await Promise.all([
       User.updateOne({ _id: user.id }, { $set: { name: lockedName } }),
@@ -183,11 +191,11 @@ export const verifyDeliveryAadhaarOtp = async (req: AuthRequest, res: Response) 
             "documents.aadhaarVerified": true,
             "documents.aadhaarVerifiedAt": now,
             "documents.aadhaarName": lockedName,
-            "documents.aadhaarMasked": profile.maskedAadhaar || maskAadhaarNumber(docs.aadhaarNumber || ""),
+            "documents.aadhaarMasked": masked,
             "documents.nameLocked": true,
             "documents.aadhaarOtpTxnId": "",
             "documents.aadhaarShareCode": "",
-            "documents.kycProvider": "decentro",
+            "documents.kycProvider": "decentro-digilocker",
             "documents.submittedAt": now,
             "documents.isComplete": true
           }
@@ -207,11 +215,46 @@ export const verifyDeliveryAadhaarOtp = async (req: AuthRequest, res: Response) 
           gender: profile.gender
         }
       },
-      "Aadhaar verified. Name locked from Aadhaar."
+      "Aadhaar verified via DigiLocker. Name locked."
     );
   } catch (error: any) {
-    console.error("verifyDeliveryAadhaarOtp error:", error);
-    return errorResponse(res, error?.message || "Failed to verify Aadhaar OTP", 400);
+    console.error("completeDeliveryDigiLocker error:", error);
+    return errorResponse(res, error?.message || "Failed to complete DigiLocker verification", 400);
+  }
+};
+
+/** Public HTTPS callback for DigiLocker redirect — deep-links back into the delivery app. */
+export const digilockerCallback = async (req: Request, res: Response) => {
+  try {
+    const code = String(req.query.code || "").trim();
+    const error = String(req.query.error || req.query.error_description || "").trim();
+    const deepLinkParams = new URLSearchParams();
+    if (code) deepLinkParams.set("code", code);
+    if (error) deepLinkParams.set("error", error);
+    const deepLink = `vyaha-delivery://kyc/digilocker${deepLinkParams.toString() ? `?${deepLinkParams}` : ""}`;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DigiLocker — return to app</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 2rem; text-align: center; color: #101828; }
+    a { color: #16A34A; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Verification complete</h1>
+  <p>Return to the <strong>Vyaha Delivery</strong> app and tap <em>I've finished in DigiLocker</em>.</p>
+  <p><a href="${deepLink}">Open Vyaha Delivery</a></p>
+  <script>setTimeout(function(){ window.location.href = ${JSON.stringify(deepLink)}; }, 400);</script>
+</body>
+</html>`);
+  } catch (error: any) {
+    console.error("digilockerCallback error:", error);
+    return errorResponse(res, "DigiLocker callback failed", 500);
   }
 };
 

@@ -25,6 +25,9 @@ import {
 import {
   sendDeliveryAadhaarOtp,
   verifyDeliveryAadhaarOtp,
+  startDeliveryDigiLocker,
+  completeDeliveryDigiLocker,
+  digilockerCallback,
   verifyDeliveryPan,
   skipDeliveryPan,
   verifyDeliveryBank,
@@ -43,7 +46,10 @@ import { roleMiddleware } from "../middlewares/role.middleware";
 
 const router = express.Router();
 
-// Apply auth middleware to all delivery routes
+// Public DigiLocker redirect (no auth) — Decentro returns here after SSO
+router.get("/kyc/digilocker/callback", digilockerCallback);
+
+// Apply auth middleware to all other delivery routes
 router.use(authMiddleware);
 
 // =================== PROFILE ===================
@@ -52,7 +58,10 @@ router.put("/profile", updateDeliveryProfile);
 router.put("/bank-details", updateBankDetails);
 router.get("/app-update-info", getDeliveryAppUpdateInfo);
 
-// =================== DIGITAL KYC (Decentro) ===================
+// =================== DIGITAL KYC (Decentro DigiLocker) ===================
+router.post("/kyc/digilocker/start", startDeliveryDigiLocker);
+router.post("/kyc/digilocker/complete", completeDeliveryDigiLocker);
+// Deprecated Aadhaar OTP endpoints (Decentro sunset) — return 410
 router.post("/kyc/aadhaar/send-otp", sendDeliveryAadhaarOtp);
 router.post("/kyc/aadhaar/verify-otp", verifyDeliveryAadhaarOtp);
 router.post("/kyc/pan/verify", verifyDeliveryPan);

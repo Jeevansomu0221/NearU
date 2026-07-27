@@ -5,6 +5,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   LayoutAnimation,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -20,13 +21,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import {
+  completeDigiLocker,
   saveRegistrationBasics,
-  sendAadhaarOtp,
   skipBank,
   skipPan,
-  verifyAadhaarOtp,
+  startDigiLocker,
   verifyBank,
-  verifyPan
+  verifyPan,
+  type AadhaarVerifyResult
 } from "../api/kyc.api";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -37,7 +39,7 @@ const GREEN = "#16A34A";
 const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "EV", "Cycle", "Car"];
 const DRAFT_KEY = "delivery_kyc_registration_draft_v1";
 const STEP_META = [
-  { title: "Aadhaar", hint: "OTP on Aadhaar-linked mobile" },
+  { title: "DigiLocker", hint: "Verify Aadhaar via DigiLocker" },
   { title: "Details", hint: "Vehicle & emergency contact" },
   { title: "PAN", hint: "Optional — add later in Profile" },
   { title: "Bank", hint: "Optional — needed for payouts" }
@@ -87,11 +89,11 @@ export default function KycRegistrationScreen({ navigation }: any) {
   const [profile, setProfile] = useState<DeliveryProfile | null>(null);
   const [statusNote, setStatusNote] = useState("");
 
-  const [aadhaarNumber, setAadhaarNumber] = useState("");
   const [aadhaarConsent, setAadhaarConsent] = useState(false);
-  const [aadhaarOtpSent, setAadhaarOtpSent] = useState(false);
-  const [aadhaarOtp, setAadhaarOtp] = useState("");
+  const [digilockerStarted, setDigilockerStarted] = useState(false);
   const [initiationTransactionId, setInitiationTransactionId] = useState("");
+  const [digilockerCode, setDigilockerCode] = useState<string | undefined>();
+  const [isMockDigiLocker, setIsMockDigiLocker] = useState(false);
   const [lockedName, setLockedName] = useState("");
 
   const [vehicleType, setVehicleType] = useState<DeliveryProfile["vehicleType"]>("Bike");
@@ -144,8 +146,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
     const docs = data.documents || {};
     if (docs.aadhaarVerified) {
       setLockedName(docs.aadhaarName || data.name || "");
-      setAadhaarNumber(docs.aadhaarNumber || "");
-      setAadhaarOtpSent(true);
+      setDigilockerStarted(true);
     }
     setVehicleType(data.vehicleType || "Bike");
     setVehicleNumber(data.vehicleNumber || "");
@@ -164,6 +165,14 @@ export default function KycRegistrationScreen({ navigation }: any) {
     else if (!docs.panVerified && !docs.panSkipped) setStep(2);
     else if (!isBankDone(docs)) setStep(3);
     else finishToMain().catch(() => {});
+  };
+
+  const applyDigiLockerResult = (data: AadhaarVerifyResult) => {
+    const name = data.extracted?.name || data.name || "";
+    setProfile(data);
+    setLockedName(name);
+    setBankAccountHolderName(name);
+    animateStep(1);
   };
 
   useEffect(() => {
@@ -194,54 +203,74 @@ export default function KycRegistrationScreen({ navigation }: any) {
     load();
   }, []);
 
-  const handleSendAadhaarOtp = async () => {
-    if (!/^\d{12}$/.test(aadhaarNumber)) {
-      Alert.alert("Invalid Aadhaar", "Enter a valid 12-digit Aadhaar number.");
-      return;
-    }
+  useEffect(() => {
+    const handleUrl = (url: string | null) => {
+      if (!url || !url.includes("kyc/digilocker")) return;
+      try {
+        const query = url.includes("?") ? url.split("?")[1] : "";
+        const params = new URLSearchParams(query);
+        const code = params.get("code") || undefined;
+        const error = params.get("error");
+        if (error) {
+          Alert.alert("DigiLocker", error);
+          return;
+        }
+        if (code) {
+          setDigilockerCode(code);
+          setStatusNote("DigiLocker returned — tap Continue to finish verification");
+        }
+      } catch {
+        // ignore malformed deep links
+      }
+    };
+
+    Linking.getInitialURL().then(handleUrl).catch(() => {});
+    const sub = Linking.addEventListener("url", ({ url }) => handleUrl(url));
+    return () => sub.remove();
+  }, []);
+
+  const handleStartDigiLocker = async () => {
     if (!aadhaarConsent) {
-      Alert.alert("Consent required", "Please consent to Aadhaar verification.");
+      Alert.alert("Consent required", "Please consent to DigiLocker / Aadhaar verification.");
       return;
     }
     setBusy(true);
     try {
-      const response = await sendAadhaarOtp({ aadhaarNumber, consent: true });
-      if (!response.success || !response.data) throw new Error(response.message || "Failed to send OTP");
+      const response = await startDigiLocker({ consent: true });
+      if (!response.success || !response.data) throw new Error(response.message || "Failed to start DigiLocker");
       setInitiationTransactionId(response.data.initiationTransactionId);
-      setAadhaarOtpSent(true);
-      const serverMsg = response.data.message || response.message || "";
-      if (/111111|mock/i.test(serverMsg)) {
-        setStatusNote("Mock mode: enter OTP 111111 (no SMS is sent)");
-        setAadhaarOtp("111111");
+      setDigilockerStarted(true);
+      setIsMockDigiLocker(Boolean(response.data.mock) || !response.data.authorizationUrl);
+
+      if (response.data.authorizationUrl) {
+        const canOpen = await Linking.canOpenURL(response.data.authorizationUrl);
+        if (canOpen) {
+          await Linking.openURL(response.data.authorizationUrl);
+        } else {
+          await Linking.openURL(response.data.authorizationUrl);
+        }
+        setStatusNote("Finish DigiLocker in the browser, then return here and tap Continue");
       } else {
-        setStatusNote(serverMsg || "OTP sent to Aadhaar-linked mobile");
+        setStatusNote(response.data.message || "Mock DigiLocker ready — tap Continue to verify");
       }
     } catch (error: any) {
-      Alert.alert("Aadhaar OTP failed", error?.message || "Could not send OTP");
+      Alert.alert("DigiLocker failed", error?.message || "Could not start DigiLocker");
     } finally {
       setBusy(false);
     }
   };
 
-  const handleVerifyAadhaar = async () => {
-    if (!/^\d{6}$/.test(aadhaarOtp)) {
-      Alert.alert("Invalid OTP", "Enter the 6-digit OTP.");
-      return;
-    }
+  const handleCompleteDigiLocker = async () => {
     setBusy(true);
     try {
-      const response = await verifyAadhaarOtp({
-        otp: aadhaarOtp,
-        initiationTransactionId: initiationTransactionId || undefined
+      const response = await completeDigiLocker({
+        initiationTransactionId: initiationTransactionId || undefined,
+        code: digilockerCode
       });
       if (!response.success || !response.data) throw new Error(response.message || "Verification failed");
-      const name = response.data.extracted?.name || response.data.name || "";
-      setProfile(response.data);
-      setLockedName(name);
-      setBankAccountHolderName(name);
-      animateStep(1);
+      applyDigiLockerResult(response.data);
     } catch (error: any) {
-      Alert.alert("Verification failed", error?.message || "Could not verify Aadhaar OTP");
+      Alert.alert("Verification failed", error?.message || "Could not complete DigiLocker verification");
     } finally {
       setBusy(false);
     }
@@ -407,36 +436,14 @@ export default function KycRegistrationScreen({ navigation }: any) {
         <Animated.View style={{ opacity: fade }}>
           {step === 0 ? (
             <View>
-              <Field label="Aadhaar number">
-                <TextInput
-                  style={styles.input}
-                  value={aadhaarNumber}
-                  onChangeText={(v) => setAadhaarNumber(v.replace(/\D/g, "").slice(0, 12))}
-                  keyboardType="number-pad"
-                  maxLength={12}
-                  placeholder="12-digit number"
-                  placeholderTextColor="#98A2B3"
-                  editable={!profile?.documents?.aadhaarVerified}
-                />
-              </Field>
+              <Text style={styles.digiIntro}>
+                Verify your Aadhaar securely through DigiLocker. Your name will be locked from the e-Aadhaar shared with DigiLocker.
+              </Text>
               <Check
                 checked={aadhaarConsent}
                 onPress={() => setAadhaarConsent((c) => !c)}
-                label="I consent to Aadhaar verification"
+                label="I consent to DigiLocker / Aadhaar verification"
               />
-              {!aadhaarOtpSent || profile?.documents?.aadhaarVerified ? null : (
-                <Field label="OTP">
-                  <TextInput
-                    style={styles.input}
-                    value={aadhaarOtp}
-                    onChangeText={(v) => setAadhaarOtp(v.replace(/\D/g, "").slice(0, 6))}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                    placeholder="6-digit OTP"
-                    placeholderTextColor="#98A2B3"
-                  />
-                </Field>
-              )}
               {statusNote ? <Text style={styles.statusNote}>{statusNote}</Text> : null}
               {lockedName ? (
                 <View style={styles.lockRow}>
@@ -444,24 +451,40 @@ export default function KycRegistrationScreen({ navigation }: any) {
                   <Text style={styles.lockText}>{lockedName}</Text>
                 </View>
               ) : null}
-              <TouchableOpacity
-                style={[styles.primaryBtn, busy && styles.btnDisabled]}
-                onPress={aadhaarOtpSent && !profile?.documents?.aadhaarVerified ? handleVerifyAadhaar : handleSendAadhaarOtp}
-                disabled={busy}
-              >
-                {busy ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>
-                    {aadhaarOtpSent && !profile?.documents?.aadhaarVerified ? "Verify & continue" : "Send OTP"}
-                  </Text>
-                )}
-              </TouchableOpacity>
-              {aadhaarOtpSent && !profile?.documents?.aadhaarVerified ? (
-                <TouchableOpacity style={styles.linkBtn} onPress={handleSendAadhaarOtp} disabled={busy}>
-                  <Text style={styles.linkBtnText}>Resend OTP</Text>
+              {!digilockerStarted || profile?.documents?.aadhaarVerified ? (
+                <TouchableOpacity
+                  style={[styles.primaryBtn, busy && styles.btnDisabled]}
+                  onPress={handleStartDigiLocker}
+                  disabled={busy || Boolean(profile?.documents?.aadhaarVerified)}
+                >
+                  {busy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>
+                      {profile?.documents?.aadhaarVerified ? "Aadhaar verified" : "Open DigiLocker"}
+                    </Text>
+                  )}
                 </TouchableOpacity>
-              ) : null}
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, busy && styles.btnDisabled]}
+                    onPress={handleCompleteDigiLocker}
+                    disabled={busy}
+                  >
+                    {busy ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.primaryBtnText}>
+                        {isMockDigiLocker ? "Continue (mock)" : "I've finished in DigiLocker"}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.linkBtn} onPress={handleStartDigiLocker} disabled={busy}>
+                    <Text style={styles.linkBtnText}>Open DigiLocker again</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           ) : null}
 
@@ -649,6 +672,7 @@ const styles = StyleSheet.create({
   stepTitle: { fontSize: 16, fontWeight: "700", color: "#101828" },
   stepHint: { fontSize: 12, color: "#667085", marginTop: 1 },
   body: { paddingHorizontal: 16, paddingTop: 14 },
+  digiIntro: { fontSize: 13, lineHeight: 19, color: "#475467", marginBottom: 12 },
   field: { marginBottom: 10 },
   label: { fontSize: 12, fontWeight: "600", color: "#475467", marginBottom: 5 },
   fieldHint: { fontSize: 11, color: "#98A2B3", marginTop: 4 },

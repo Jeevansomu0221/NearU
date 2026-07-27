@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "crypto";
 import { config } from "../config/env";
 
 const CONSENT_PURPOSE = "NearU delivery rider KYC verification";
-// Decentro Aadhaar OTP requires purpose length <= 50 characters.
+// DigiLocker requires purpose length > 20 and Aadhaar OTP required <= 50.
 
 export type DecentroAadhaarOtpResult = {
   initiationTransactionId: string;
@@ -168,7 +168,8 @@ export const getDecentroRuntimeConfig = () => ({
   hasPaymentsModuleSecret: Boolean(config.decentroPaymentsModuleSecret),
   hasConsumerUrn: Boolean(config.decentroConsumerUrn),
   mock: config.decentroMock,
-  bankValidationType: config.decentroBankValidationType
+  bankValidationType: config.decentroBankValidationType,
+  digilockerRedirectUrl: config.decentroDigilockerRedirectUrl
 });
 
 /** Safe live probe from this server (used to detect Render IP blocks vs bad keys). */
@@ -186,14 +187,21 @@ export const probeDecentroAadhaarEndpoint = async () => {
     };
   }
 
-  const response = await fetch(`${baseUrl}/v2/kyc/aadhaar/otp`, {
+  const response = await fetch(`${baseUrl}/v2/kyc/sso/digilocker/session`, {
     method: "POST",
     headers: buildHeaders("kyc"),
     body: JSON.stringify({
       reference_id: newReferenceId(),
       consent: true,
+      consent_purpose: CONSENT_PURPOSE,
       purpose: CONSENT_PURPOSE,
-      aadhaar_number: "999999990019"
+      redirect_url: config.decentroDigilockerRedirectUrl,
+      redirect_to_signup: true,
+      pinless_signin: true,
+      pinless_signup: false,
+      usernameless_signup: false,
+      clear_cookies: true,
+      documents_for_consent: ["ADHAR"]
     })
   });
 
@@ -215,7 +223,8 @@ export const probeDecentroAadhaarEndpoint = async () => {
     status: response.status,
     contentType,
     bodyPreview,
-    diagnosis
+    diagnosis,
+    endpoint: "digilocker/session"
   };
 };
 
@@ -267,6 +276,158 @@ export const isDecentroConfigured = () =>
 
 export const generateAadhaarShareCode = () => String(Math.floor(1000 + Math.random() * 9000));
 
+export type DigiLockerSessionResult = {
+  initiationTransactionId: string;
+  authorizationUrl: string;
+  message: string;
+};
+
+export const initiateDigiLockerSession = async (redirectUrl?: string): Promise<DigiLockerSessionResult> => {
+  if (config.decentroMock) {
+    return {
+      initiationTransactionId: `MOCK-DIGILOCKER-${Date.now()}`,
+      authorizationUrl: "",
+      message: "Mock DigiLocker ready. Tap Continue after DigiLocker to complete."
+    };
+  }
+
+  const payload = await callDecentro(
+    "/v2/kyc/sso/digilocker/session",
+    {
+      reference_id: newReferenceId(),
+      consent: true,
+      consent_purpose: CONSENT_PURPOSE,
+      purpose: CONSENT_PURPOSE,
+      redirect_url: redirectUrl || config.decentroDigilockerRedirectUrl,
+      redirect_to_signup: true,
+      pinless_signin: true,
+      pinless_signup: false,
+      usernameless_signup: false,
+      clear_cookies: true,
+      documents_for_consent: ["ADHAR"]
+    },
+    "kyc"
+  );
+
+  const initiationTransactionId = String(
+    payload.decentroTxnId || payload.decentro_txn_id || payload.data?.decentroTxnId || ""
+  );
+  const authorizationUrl = String(
+    payload.data?.authorizationUrl ||
+      payload.data?.authorization_url ||
+      payload.data?.digilockerUrl ||
+      payload.data?.digilocker_url ||
+      payload.data?.url ||
+      ""
+  );
+
+  if (!initiationTransactionId) {
+    throw new Error("Decentro DigiLocker did not return a transaction id");
+  }
+  if (!authorizationUrl) {
+    throw new Error("Decentro DigiLocker did not return an authorization URL");
+  }
+
+  return {
+    initiationTransactionId,
+    authorizationUrl,
+    message: extractMessage(payload, "Open DigiLocker to share e-Aadhaar")
+  };
+};
+
+export const exchangeDigiLockerAccessToken = async (input: {
+  initiationTransactionId: string;
+  code: string;
+}): Promise<void> => {
+  if (config.decentroMock) return;
+
+  await callDecentro(
+    `/v2/kyc/sso/digilocker/${encodeURIComponent(input.initiationTransactionId)}/token`,
+    {
+      reference_id: newReferenceId(),
+      consent: true,
+      consent_purpose: CONSENT_PURPOSE,
+      purpose: CONSENT_PURPOSE,
+      code: input.code
+    },
+    "kyc"
+  );
+};
+
+const parseAadhaarProfileFromDigiLocker = (data: Record<string, any>): DecentroAadhaarProfile => {
+  const nested =
+    data.aadhaarData ||
+    data.aadhaar_data ||
+    data.eaadhaar ||
+    data.eAadhaar ||
+    data.proofOfIdentity ||
+    data.proof_of_identity ||
+    data;
+
+  const name = pickName(data) || pickName(nested);
+  if (!name) {
+    throw new Error("DigiLocker e-Aadhaar returned no name");
+  }
+
+  const uid = String(
+    nested.uid || nested.aadhaarNumber || nested.aadhaar_number || data.uid || data.maskedAadhaar || ""
+  ).replace(/\D/g, "");
+
+  return {
+    name,
+    dateOfBirth: String(nested.dob || nested.dateOfBirth || data.dob || "").slice(0, 10) || undefined,
+    gender: String(nested.gender || data.gender || "").trim() || undefined,
+    careOf: String(nested.careOf || nested.care_of || "").trim() || undefined,
+    address: formatAddress(data) || formatAddress(nested) || undefined,
+    maskedAadhaar: uid.length >= 4 ? `XXXXXXXX${uid.slice(-4)}` : undefined,
+    photo: typeof nested.photo === "string" ? nested.photo : undefined,
+    raw: data
+  };
+};
+
+export const fetchDigiLockerEAadhaar = async (input: {
+  initiationTransactionId: string;
+  code?: string;
+}): Promise<DecentroAadhaarProfile> => {
+  if (config.decentroMock) {
+    return {
+      name: "Mock DigiLocker Rider",
+      dateOfBirth: "1995-01-15",
+      gender: "M",
+      address: "Hyderabad, Telangana, 500001",
+      maskedAadhaar: "XXXXXXXX1234"
+    };
+  }
+
+  if (input.code) {
+    try {
+      await exchangeDigiLockerAccessToken({
+        initiationTransactionId: input.initiationTransactionId,
+        code: input.code
+      });
+    } catch (error) {
+      // Some DigiLocker sessions already have a token after redirect; continue to eAadhaar.
+      console.warn("[decentro] DigiLocker token exchange skipped/failed:", (error as Error)?.message);
+    }
+  }
+
+  const payload = await callDecentro(
+    `/v2/kyc/sso/digilocker/${encodeURIComponent(input.initiationTransactionId)}/eaadhaar`,
+    {
+      reference_id: newReferenceId(),
+      consent: true,
+      consent_purpose: CONSENT_PURPOSE,
+      purpose: CONSENT_PURPOSE,
+      generate_xml: false,
+      generate_pdf: false
+    },
+    "kyc"
+  );
+
+  return parseAadhaarProfileFromDigiLocker((payload.data || {}) as Record<string, any>);
+};
+
+/** @deprecated Decentro Aadhaar OTP is deprecated — use DigiLocker. Kept for mock/legacy. */
 export const sendAadhaarOtp = async (aadhaarNumber: string): Promise<DecentroAadhaarOtpResult> => {
   if (config.decentroMock) {
     return {
@@ -275,36 +436,12 @@ export const sendAadhaarOtp = async (aadhaarNumber: string): Promise<DecentroAad
     };
   }
 
-  const payload = await callDecentro(
-    "/v2/kyc/aadhaar/otp",
-    {
-      reference_id: newReferenceId(),
-      consent: true,
-      purpose: CONSENT_PURPOSE,
-      aadhaar_number: aadhaarNumber
-    },
-    "kyc"
+  throw new Error(
+    "Aadhaar OTP is deprecated by Decentro. Use DigiLocker verification instead."
   );
-
-  const initiationTransactionId = String(
-    payload.decentroTxnId ||
-      payload.decentro_txn_id ||
-      payload.data?.initiationTransactionId ||
-      payload.data?.initiation_transaction_id ||
-      ""
-  );
-
-  if (!initiationTransactionId) {
-    throw new Error("Decentro did not return an initiation transaction id");
-  }
-
-  return {
-    initiationTransactionId,
-    decentroTxnId: initiationTransactionId,
-    message: extractMessage(payload, "Aadhaar OTP sent successfully")
-  };
 };
 
+/** @deprecated Decentro Aadhaar OTP is deprecated — use DigiLocker. */
 export const validateAadhaarOtp = async (input: {
   initiationTransactionId: string;
   otp: string;
@@ -323,38 +460,9 @@ export const validateAadhaarOtp = async (input: {
     };
   }
 
-  const payload = await callDecentro(
-    "/v2/kyc/aadhaar/otp/validate",
-    {
-      reference_id: newReferenceId(),
-      consent: true,
-      purpose: CONSENT_PURPOSE,
-      initiation_transaction_id: input.initiationTransactionId,
-      otp: input.otp,
-      share_code: input.shareCode,
-      generate_pdf: false,
-      generate_xml: false
-    },
-    "kyc"
+  throw new Error(
+    "Aadhaar OTP is deprecated by Decentro. Use DigiLocker verification instead."
   );
-
-  const data = (payload.data || {}) as Record<string, any>;
-  const name = pickName(data);
-  if (!name) {
-    throw new Error("Aadhaar verified but name was not returned by Decentro");
-  }
-
-  const proof = data.proofOfIdentity || data.proof_of_identity || {};
-  return {
-    name,
-    dateOfBirth: String(proof.dob || proof.dateOfBirth || data.dob || data.dateOfBirth || "").slice(0, 10) || undefined,
-    gender: String(proof.gender || data.gender || "").trim() || undefined,
-    careOf: String(proof.careOf || proof.care_of || data.careOf || "").trim() || undefined,
-    address: formatAddress(data) || undefined,
-    maskedAadhaar: String(data.maskedAadhaar || data.masked_aadhaar || "").trim() || undefined,
-    photo: typeof data.photo === "string" ? data.photo : undefined,
-    raw: data
-  };
 };
 
 export const verifyPan = async (panNumber: string): Promise<DecentroPanResult> => {
