@@ -203,6 +203,8 @@ export const getOtpConfig = async (_req: Request, res: Response) => {
       ),
       twofactorSenderId: config.twofactorSenderId || "(not set)",
       twofactorTemplateName: config.twofactorTemplateName || "(not set)",
+      twofactorOtpChannel: config.twofactorOtpChannel || "(not set)",
+      twofactorTemplateId: config.twofactorTemplateId || "(not set)",
       firebaseConfigured: Boolean(
         config.firebaseProjectId || config.firebaseServiceAccountJson || config.firebaseServiceAccountPath
       )

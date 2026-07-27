@@ -78,6 +78,10 @@ export const config = {
   twofactorSenderId: process.env.TWOFACTOR_SENDER_ID || "",
   twofactorTemplateName: process.env.TWOFACTOR_TEMPLATE_NAME || "",
   twofactorDltEntityId: process.env.TWOFACTOR_DLT_ENTITY_ID || "",
+  /** DLT template ID from operator portal (informational / support). */
+  twofactorTemplateId: process.env.TWOFACTOR_TEMPLATE_ID || "",
+  /** Force OTP delivery channel. Only "sms" is supported by this backend. */
+  twofactorOtpChannel: (process.env.TWOFACTOR_OTP_CHANNEL || "sms").trim().toLowerCase(),
   // Keep fallback opt-in only; implicit fallback can switch provider behavior unexpectedly.
   otpFirebaseFallback: process.env.OTP_FIREBASE_FALLBACK === "true",
   otpDebug: process.env.OTP_DEBUG === "true",
@@ -156,6 +160,10 @@ export const validateEnv = (): void => {
       (!config.twofactorApiKey || !config.twofactorTemplateName || !config.twofactorSenderId)
     ) {
       missing.push("TWOFACTOR_API_KEY/TWOFACTOR_TEMPLATE_NAME/TWOFACTOR_SENDER_ID");
+    }
+
+    if (config.otpProvider === "2factor" && config.twofactorOtpChannel !== "sms") {
+      missing.push("TWOFACTOR_OTP_CHANNEL must be sms");
     }
 
     if (config.otpProvider === "firebase" && !config.firebaseProjectId && !config.firebaseServiceAccountPath && !config.firebaseServiceAccountJson) {

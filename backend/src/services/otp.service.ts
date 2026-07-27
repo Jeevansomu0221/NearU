@@ -62,18 +62,6 @@ const persistAutogenSession = async (phone: string, sessionId: string) => {
   });
 };
 
-const persistManualOtpSession = async (phone: string, otp: string) => {
-  const expiresAt = new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000);
-  await OtpSession.deleteMany({ phone });
-  await OtpSession.create({
-    phone,
-    sessionId: "",
-    manualOtp: otp,
-    attempts: 0,
-    expiresAt
-  });
-};
-
 const markResendCooldown = (phone: string) => {
   const now = Date.now();
   memoryRecords.set(phone, {
@@ -86,16 +74,27 @@ const markResendCooldown = (phone: string) => {
 
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const tryManualTemplateOtp = async (phone: string, apiKey: string, otp: string) => {
-  const templateName = encodeURIComponent(config.twofactorTemplateName);
-  const response = await fetch(`https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${otp}/${templateName}`, {
-    method: "GET"
-  });
-  const payload = (await response.json()) as TwoFactorResponse;
-
-  if (!response.ok || !isTwoFactorSuccess(payload)) {
-    throw new Error(`2Factor manual template SMS failed: ${JSON.stringify(payload)}`);
+/**
+ * Official 2Factor OTP SMS API (not transactional R1, not voice):
+ * GET /API/V1/{api_key}/SMS/{phone}/AUTOGEN/{template_name}
+ */
+const sendOtpSmsAutogen = async (phone: string, apiKey: string) => {
+  const channel = config.twofactorOtpChannel;
+  if (channel !== "sms") {
+    throw new Error(`2Factor OTP channel must be sms (got "${channel}")`);
   }
+
+  const templateName = encodeURIComponent(config.twofactorTemplateName);
+  const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/AUTOGEN/${templateName}`;
+  const response = await fetch(url, { method: "GET" });
+  const payload = (await response.json()) as TwoFactorResponse;
+  const { details } = parseTwoFactorResponse(payload);
+
+  if (!response.ok || !isTwoFactorSuccess(payload) || !details) {
+    throw new Error(`2Factor OTP SMS AUTOGEN failed: ${JSON.stringify(payload)}`);
+  }
+
+  return details;
 };
 
 const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
@@ -109,43 +108,32 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
   }
 
   if (!config.twofactorSenderId || !config.twofactorTemplateName) {
-    const message = "2Factor sender ID and template name must be configured";
+    const message = "2Factor sender ID and OTP template name must be configured";
     recordOtpAttempt(trace, { label: "CONFIG", ok: false, detail: message });
     finishOtpSendTrace(trace, "failed", message);
     throw new Error(message);
   }
 
-  const otp = generateOtp();
-  const attempts: Array<{ label: string; run: () => Promise<void> }> = [
-    {
-      label: "MANUAL_TEMPLATE_SMS",
-      run: async () => {
-        await tryManualTemplateOtp(phone, apiKey, otp);
-        await persistManualOtpSession(phone, otp);
-      }
-    }
-  ];
-
-  let lastError: Error | null = null;
-  for (const attempt of attempts) {
-    try {
-      await attempt.run();
-      markResendCooldown(phone);
-      recordOtpAttempt(trace, { label: attempt.label, ok: true, detail: "sent" });
-      finishOtpSendTrace(trace, "sent");
-      return {
-        provider: "2factor",
-        deliveryHint: `OTP sent via SMS from ${config.twofactorSenderId}.`
-      };
-    } catch (error: any) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      recordOtpAttempt(trace, { label: attempt.label, ok: false, detail: lastError.message });
-    }
+  try {
+    const sessionId = await sendOtpSmsAutogen(phone, apiKey);
+    await persistAutogenSession(phone, sessionId);
+    markResendCooldown(phone);
+    recordOtpAttempt(trace, {
+      label: "OTP_SMS_AUTOGEN",
+      ok: true,
+      detail: `channel=sms template=${config.twofactorTemplateName}`
+    });
+    finishOtpSendTrace(trace, "sent");
+    return {
+      provider: "2factor",
+      deliveryHint: `OTP sent via SMS from ${config.twofactorSenderId}.`
+    };
+  } catch (error: any) {
+    const lastError = error instanceof Error ? error : new Error(String(error));
+    recordOtpAttempt(trace, { label: "OTP_SMS_AUTOGEN", ok: false, detail: lastError.message });
+    finishOtpSendTrace(trace, "failed", lastError.message);
+    throw lastError;
   }
-
-  const message = lastError?.message || "2Factor SMS send failed";
-  finishOtpSendTrace(trace, "failed", message);
-  throw lastError || new Error(message);
 };
 
 const verifyTwoFactorSession = async (apiKey: string, sessionId: string, otp: string) => {
