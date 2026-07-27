@@ -140,6 +140,8 @@ export const sendOTP = async (req: Request, res: Response) => {
       phone: string;
       provider?: string;
       deliveryHint?: string;
+      deliveryChannel?: "sms";
+      apiPath?: string;
       useFirebaseFallback?: boolean;
       fallbackReason?: string;
       devOtp?: string;
@@ -151,6 +153,12 @@ export const sendOTP = async (req: Request, res: Response) => {
     }
     if (sendResult?.deliveryHint) {
       data.deliveryHint = sendResult.deliveryHint;
+    }
+    if (sendResult?.deliveryChannel) {
+      data.deliveryChannel = sendResult.deliveryChannel;
+    }
+    if (sendResult?.apiPath) {
+      data.apiPath = sendResult.apiPath;
     }
 
     const devOtp = OTPService.getDevOtp(phone);
@@ -205,6 +213,13 @@ export const getOtpConfig = async (_req: Request, res: Response) => {
       twofactorTemplateName: config.twofactorTemplateName || "(not set)",
       twofactorOtpChannel: config.twofactorOtpChannel || "(not set)",
       twofactorTemplateId: config.twofactorTemplateId || "(not set)",
+      /** Exact OTP SMS path we call (never transactional R1 / never VOICE). */
+      twofactorApiPath:
+        "/API/V1/{api_key}/SMS/91XXXXXXXXXX/AUTOGEN/" + (config.twofactorTemplateName || "{template}"),
+      twofactorForbiddenPaths: [
+        "/API/R1/?module=TRANS_SMS",
+        "/API/V1/{api_key}/VOICE/.../AUTOGEN"
+      ],
       firebaseConfigured: Boolean(
         config.firebaseProjectId || config.firebaseServiceAccountJson || config.firebaseServiceAccountPath
       )

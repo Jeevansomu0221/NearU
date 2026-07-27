@@ -13,6 +13,9 @@ type OtpProvider = "twilio" | "2factor" | "memory";
 export type OtpSendResult = {
   provider: "2factor" | "memory";
   deliveryHint?: string;
+  /** Sanitized proof of the exact 2Factor path (never includes the API key). */
+  apiPath?: string;
+  deliveryChannel?: "sms";
 };
 
 type OtpRecord = {
@@ -74,9 +77,23 @@ const markResendCooldown = (phone: string) => {
 
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
+/** 2Factor expects ISD format without +: 91XXXXXXXXXX */
+const toTwoFactorPhone = (phone: string) => {
+  const digits = phone.replace(/\D/g, "");
+  const local10 = digits.slice(-10);
+  return `91${local10}`;
+};
+
+const buildOtpSmsAutogenPath = (phoneWithCountry: string, templateName: string) =>
+  `/API/V1/{api_key}/SMS/${phoneWithCountry}/AUTOGEN/${templateName}`;
+
 /**
- * Official 2Factor OTP SMS API (not transactional R1, not voice):
- * GET /API/V1/{api_key}/SMS/{phone}/AUTOGEN/{template_name}
+ * Official 2Factor OTP SMS API only (NOT transactional R1, NOT voice):
+ * GET /API/V1/{api_key}/SMS/91XXXXXXXXXX/AUTOGEN/{template_name}
+ *
+ * Do not use:
+ * - https://2factor.in/API/R1/?module=TRANS_SMS  (transactional SMS)
+ * - https://2factor.in/API/V1/.../VOICE/...       (voice OTP)
  */
 const sendOtpSmsAutogen = async (phone: string, apiKey: string) => {
   const channel = config.twofactorOtpChannel;
@@ -84,8 +101,13 @@ const sendOtpSmsAutogen = async (phone: string, apiKey: string) => {
     throw new Error(`2Factor OTP channel must be sms (got "${channel}")`);
   }
 
+  const phoneWithCountry = toTwoFactorPhone(phone);
   const templateName = encodeURIComponent(config.twofactorTemplateName);
-  const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/AUTOGEN/${templateName}`;
+  const apiPath = buildOtpSmsAutogenPath(phoneWithCountry, config.twofactorTemplateName);
+  const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phoneWithCountry}/AUTOGEN/${templateName}`;
+
+  console.log(`[OTP] calling 2Factor OTP SMS (not TRANS_SMS/R1, not VOICE): ${apiPath}`);
+
   const response = await fetch(url, { method: "GET" });
   const payload = (await response.json()) as TwoFactorResponse;
   const { details } = parseTwoFactorResponse(payload);
@@ -94,7 +116,7 @@ const sendOtpSmsAutogen = async (phone: string, apiKey: string) => {
     throw new Error(`2Factor OTP SMS AUTOGEN failed: ${JSON.stringify(payload)}`);
   }
 
-  return details;
+  return { sessionId: details, apiPath, phoneWithCountry };
 };
 
 const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
@@ -115,17 +137,19 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
   }
 
   try {
-    const sessionId = await sendOtpSmsAutogen(phone, apiKey);
+    const { sessionId, apiPath, phoneWithCountry } = await sendOtpSmsAutogen(phone, apiKey);
     await persistAutogenSession(phone, sessionId);
     markResendCooldown(phone);
     recordOtpAttempt(trace, {
       label: "OTP_SMS_AUTOGEN",
       ok: true,
-      detail: `channel=sms template=${config.twofactorTemplateName}`
+      detail: `channel=sms to=${phoneWithCountry} template=${config.twofactorTemplateName} path=${apiPath}`
     });
     finishOtpSendTrace(trace, "sent");
     return {
       provider: "2factor",
+      deliveryChannel: "sms",
+      apiPath,
       deliveryHint: `OTP sent via SMS from ${config.twofactorSenderId}.`
     };
   } catch (error: any) {
