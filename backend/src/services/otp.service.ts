@@ -113,24 +113,6 @@ const tryAutogenSms = async (phone: string, apiKey: string, templateName: string
   return details;
 };
 
-const tryTransSms = async (phone: string, apiKey: string, otp: string) => {
-  const params = new URLSearchParams({
-    module: "TRANS_SMS",
-    apikey: apiKey,
-    to: phone,
-    from: config.twofactorSenderId || "VYAHA",
-    templatename: config.twofactorTemplateName,
-    var1: otp
-  });
-
-  const response = await fetch(`https://2factor.in/API/R1/?${params.toString()}`, { method: "GET" });
-  const payload = (await response.json()) as TwoFactorResponse;
-
-  if (!response.ok || !isTwoFactorSuccess(payload)) {
-    throw new Error(`2Factor TRANS_SMS failed: ${JSON.stringify(payload)}`);
-  }
-};
-
 const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
   const trace = startOtpSendTrace(phone, "2factor");
   const apiKey = config.twofactorApiKey;
@@ -150,13 +132,6 @@ const sendVia2Factor = async (phone: string): Promise<OtpSendResult> => {
 
   const otp = generateOtp();
   const attempts: Array<{ label: string; run: () => Promise<void> }> = [
-    {
-      label: "TRANS_SMS_DLT",
-      run: async () => {
-        await tryTransSms(phone, apiKey, otp);
-        await persistManualOtpSession(phone, otp);
-      }
-    },
     {
       label: "MANUAL_TEMPLATE_SMS",
       run: async () => {
