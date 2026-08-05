@@ -45,7 +45,7 @@
         ],
         "NSAppTransportSecurity": {
           "NSExceptionDomains": {
-            "129.226.13.14": {
+            "165.101.251.199": {
               "NSTemporaryExceptionAllowsInsecureHTTPLoads": true
             }
           }
