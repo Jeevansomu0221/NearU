@@ -54,7 +54,7 @@ export default function Login() {
     } catch (error: any) {
       if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
         setError(
-          `Backend is not reachable at ${API_BASE_URL}. Check your internet connection, confirm Render is awake, or set VITE_API_URL if you use a different backend.`
+          `Backend is not reachable at ${API_BASE_URL}. Check your internet connection, confirm the Oracle backend is running, or set VITE_API_URL if you use a different backend.`
         );
       } else {
         setError(error.response?.data?.message || "Invalid password");

@@ -1,8 +1,8 @@
 import axios from "axios";
 import { clearAuthData, clearStoredUser, getRefreshToken, setAccessToken, setRefreshToken } from "./storage.js";
 const API_TIMEOUT_MS = 60000;
-const PRODUCTION_API_URL = "https://vyaha-app-backend.onrender.com/api";
-const PRODUCTION_HEALTH_URL = "https://vyaha-app-backend.onrender.com/health";
+const PRODUCTION_API_URL = "http://129.226.13.14/api";
+const PRODUCTION_HEALTH_URL = "http://129.226.13.14/health";
 const resolveApiBaseUrl = () => {
     let envUrl;
     try {

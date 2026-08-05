@@ -20,7 +20,7 @@ jobs:
       run:
         working-directory: apps/admin-panel
     env:
-      VITE_API_URL: ${{ vars.VITE_API_URL || 'https://vyaha-app-backend.onrender.com' }}
+      VITE_API_URL: ${{ vars.VITE_API_URL || 'http://129.226.13.14' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
