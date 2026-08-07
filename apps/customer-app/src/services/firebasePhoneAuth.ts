@@ -1,4 +1,11 @@
-import auth, { FirebaseAuthTypes } from "@react-native-firebase/auth";
+import {
+  FirebaseAuthTypes,
+  getAuth,
+  getIdToken,
+  onAuthStateChanged,
+  signInWithPhoneNumber,
+  signOut
+} from "@react-native-firebase/auth";
 
 let confirmationResult: FirebaseAuthTypes.ConfirmationResult | null = null;
 let confirmationPhone = "";
@@ -52,11 +59,11 @@ const getIdTokenForVerifiedPhoneUser = async (
     return null;
   }
 
-  return user.getIdToken(true);
+  return getIdToken(user, true);
 };
 
 export const getFirebaseVerifiedPhoneIdToken = async (phone?: string) => {
-  return getIdTokenForVerifiedPhoneUser(auth().currentUser, phone);
+  return getIdTokenForVerifiedPhoneUser(getAuth().currentUser, phone);
 };
 
 export const waitForFirebaseVerifiedPhoneIdToken = async (phone?: string, timeoutMs = 3000) => {
@@ -81,7 +88,7 @@ export const waitForFirebaseVerifiedPhoneIdToken = async (phone?: string, timeou
     };
 
     const timeout = setTimeout(() => finish(null), timeoutMs);
-    unsubscribe = auth().onAuthStateChanged(async (user) => {
+    unsubscribe = onAuthStateChanged(getAuth(), async (user) => {
       try {
         const idToken = await getIdTokenForVerifiedPhoneUser(user, phone);
         if (idToken) {
@@ -96,13 +103,15 @@ export const waitForFirebaseVerifiedPhoneIdToken = async (phone?: string, timeou
 
 export const sendFirebaseOtp = async (phone: string) => {
   const cleanedPhone = normalizeIndianPhone(phone);
+  const auth = getAuth();
 
   clearFirebaseOtpSession();
-  if (auth().currentUser) {
-    await auth().signOut();
+  if (auth.currentUser) {
+    await signOut(auth);
   }
 
-  confirmationResult = await auth().signInWithPhoneNumber(`+91${cleanedPhone}`, true);
+  // Native RNFirebase accepts forceResend as the third argument.
+  confirmationResult = await signInWithPhoneNumber(auth, `+91${cleanedPhone}`, true as any);
   confirmationPhone = cleanedPhone;
 };
 
@@ -137,7 +146,7 @@ export const confirmFirebaseOtp = async (otp: string, phone?: string) => {
     }
 
     clearFirebaseOtpSession();
-    return userCredential.user.getIdToken(true);
+    return getIdToken(userCredential.user, true);
   } catch (error) {
     if (isFirebaseOtpSessionExpiredError(error) || isFirebaseInvalidOtpError(error)) {
       const idToken = await waitForFirebaseVerifiedPhoneIdToken(cleanedPhone);

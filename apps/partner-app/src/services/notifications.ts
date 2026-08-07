@@ -8,7 +8,7 @@ import { notifyReviewStatusRefresh } from "./reviewStatusRefresh";
 const NOTIFICATION_APP = "partner";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:partner";
 
-let messagingModule: any | null | undefined;
+let messagingInstance: any | null | undefined;
 let didSetBackgroundHandler = false;
 let messagingPackage: any | null | undefined;
 
@@ -25,36 +25,33 @@ const getMessagingPackage = () => {
   }
 };
 
-const getMessagingModule = () => {
-  if (messagingModule !== undefined) return messagingModule;
+const getMessagingInstance = () => {
+  if (messagingInstance !== undefined) return messagingInstance;
 
   const pkg = getMessagingPackage();
-  if (!pkg) {
-    messagingModule = null;
+  if (!pkg?.getMessaging) {
+    messagingInstance = null;
     return null;
   }
-
-  messagingModule = pkg.default;
-  return messagingModule;
-};
-
-const getMessaging = () => {
-  const messaging = getMessagingModule();
-  if (!messaging) return null;
 
   try {
-    return messaging();
+    messagingInstance = pkg.getMessaging();
+    return messagingInstance;
   } catch (error: any) {
     console.log("Firebase Messaging is unavailable in this build. Rebuild the native app to enable push notifications.", error?.message || error);
+    messagingInstance = null;
     return null;
   }
 };
 
-const setupBackgroundHandler = () => {
-  const messaging = getMessaging();
-  if (!messaging || didSetBackgroundHandler) return;
+const getAuthorizationStatus = () => getMessagingPackage()?.AuthorizationStatus;
 
-  messaging.setBackgroundMessageHandler(async () => {
+const setupBackgroundHandler = () => {
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  if (!pkg || !messaging || didSetBackgroundHandler) return;
+
+  pkg.setBackgroundMessageHandler(messaging, async () => {
     // FCM displays notification payloads for background messages.
   });
   didSetBackgroundHandler = true;
@@ -74,22 +71,19 @@ const requestAndroidNotificationPermission = async () => {
 };
 
 const hasNotificationPermission = async () => {
-  const messagingModule = getMessagingModule();
-  const messaging = getMessaging();
-  if (!messaging || !messagingModule) return false;
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  const AuthorizationStatus = getAuthorizationStatus();
+  if (!pkg || !messaging || !AuthorizationStatus) return false;
 
   const androidPermission = await requestAndroidNotificationPermission();
   if (!androidPermission) return false;
   if (Platform.OS === "android") return true;
 
-  const messagingPkg = getMessagingPackage();
-  const status =
-    typeof messagingPkg?.requestPermission === "function"
-      ? await messagingPkg.requestPermission(messaging)
-      : await messaging.requestPermission();
+  const status = await pkg.requestPermission(messaging);
   return (
-    status === messagingModule.AuthorizationStatus.AUTHORIZED ||
-    status === messagingModule.AuthorizationStatus.PROVISIONAL
+    status === AuthorizationStatus.AUTHORIZED ||
+    status === AuthorizationStatus.PROVISIONAL
   );
 };
 
@@ -194,21 +188,18 @@ export const registerForPushNotifications = async () => {
   if (!token) return;
 
   setupBackgroundHandler();
-  const messaging = getMessaging();
-  if (!messaging) return;
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  if (!pkg || !messaging) return;
 
   const permitted = await hasNotificationPermission();
   if (!permitted) return;
 
-  if (!messaging.isDeviceRegisteredForRemoteMessages) {
-    await messaging.registerDeviceForRemoteMessages();
+  if (!pkg.isDeviceRegisteredForRemoteMessages(messaging)) {
+    await pkg.registerDeviceForRemoteMessages(messaging);
   }
 
-  const messagingPkg = getMessagingPackage();
-  const fcmToken =
-    typeof messagingPkg?.getToken === "function"
-      ? await messagingPkg.getToken(messaging)
-      : await messaging.getToken();
+  const fcmToken = await pkg.getToken(messaging);
   await postToken(fcmToken);
 };
 
@@ -232,10 +223,11 @@ export const unregisterPushNotifications = async () => {
 
 export const setupNotificationHandlers = (navigationRef: any) => {
   setupBackgroundHandler();
-  const messaging = getMessaging();
-  if (!messaging) return () => {};
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  if (!pkg || !messaging) return () => {};
 
-  const unsubscribeMessage = messaging.onMessage(async (remoteMessage: any) => {
+  const unsubscribeMessage = pkg.onMessage(messaging, async (remoteMessage: any) => {
     if (isDeletionNotification(remoteMessage?.data)) {
       const updated = await applyDeletionStatusFromNotification(remoteMessage?.data);
       notifyDeletionRequestRefresh(updated);
@@ -243,18 +235,18 @@ export const setupNotificationHandlers = (navigationRef: any) => {
     showForegroundAlert(navigationRef, remoteMessage);
   });
 
-  const unsubscribeOpened = messaging.onNotificationOpenedApp((remoteMessage: any) => {
+  const unsubscribeOpened = pkg.onNotificationOpenedApp(messaging, (remoteMessage: any) => {
     navigateFromData(navigationRef, remoteMessage?.data);
   });
 
-  const unsubscribeTokenRefresh = messaging.onTokenRefresh((token: string) => {
+  const unsubscribeTokenRefresh = pkg.onTokenRefresh(messaging, (token: string) => {
     postToken(token).catch((error) => {
       console.log("Failed to refresh notification token:", error);
     });
   });
 
-  messaging
-    .getInitialNotification()
+  pkg
+    .getInitialNotification(messaging)
     .then((remoteMessage: any) => {
       if (remoteMessage) {
         setTimeout(() => navigateFromData(navigationRef, remoteMessage.data), 500);

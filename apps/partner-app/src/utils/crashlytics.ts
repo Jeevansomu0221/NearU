@@ -1,9 +1,5 @@
 import { NativeModules } from "react-native";
 
-type CrashlyticsInstance = {
-  setCrashlyticsCollectionEnabled: (enabled: boolean) => Promise<null>;
-};
-
 let nativeCrashlyticsAvailable: boolean | null = null;
 
 const hasNativeCrashlytics = () => {
@@ -21,10 +17,12 @@ export const initCrashlytics = async () => {
   }
 
   try {
-    const crashlytics = require("@react-native-firebase/crashlytics").default;
-    const instance = crashlytics() as CrashlyticsInstance;
+    const {
+      getCrashlytics,
+      setCrashlyticsCollectionEnabled
+    } = require("@react-native-firebase/crashlytics");
     const enabled = typeof __DEV__ === "undefined" || !__DEV__;
-    await instance.setCrashlyticsCollectionEnabled(enabled);
+    await setCrashlyticsCollectionEnabled(getCrashlytics(), enabled);
   } catch {
     // Crashlytics is optional in dev/Expo Go builds.
   }

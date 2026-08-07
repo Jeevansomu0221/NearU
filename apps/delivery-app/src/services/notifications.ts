@@ -17,7 +17,7 @@ const DELIVERY_ACCEPT_ACTION = "delivery_accept";
 const DELIVERY_REJECT_ACTION = "delivery_reject";
 const DELIVERY_VIEW_ACTION = "delivery_view";
 
-let messagingModule: any | null | undefined;
+let messagingInstance: any | null | undefined;
 let didSetBackgroundHandler = false;
 let notifeeModule: any | null | undefined;
 let didSetNotificationActionHandlers = false;
@@ -36,30 +36,26 @@ const getMessagingPackage = () => {
   }
 };
 
-const getMessagingModule = () => {
-  if (messagingModule !== undefined) return messagingModule;
+const getMessagingInstance = () => {
+  if (messagingInstance !== undefined) return messagingInstance;
 
   const pkg = getMessagingPackage();
-  if (!pkg) {
-    messagingModule = null;
+  if (!pkg?.getMessaging) {
+    messagingInstance = null;
     return null;
   }
-
-  messagingModule = pkg.default;
-  return messagingModule;
-};
-
-const getMessaging = () => {
-  const messaging = getMessagingModule();
-  if (!messaging) return null;
 
   try {
-    return messaging();
+    messagingInstance = pkg.getMessaging();
+    return messagingInstance;
   } catch (error: any) {
     console.log("Firebase Messaging is unavailable in this build. Rebuild the native app to enable push notifications.", error?.message || error);
+    messagingInstance = null;
     return null;
   }
 };
+
+const getAuthorizationStatus = () => getMessagingPackage()?.AuthorizationStatus;
 
 const getNotifeeModule = () => {
   if (notifeeModule !== undefined) return notifeeModule;
@@ -101,10 +97,11 @@ const buildDeliveryJobNotificationCopy = (remoteMessage: any) => {
 };
 
 const setupBackgroundHandler = () => {
-  const messaging = getMessaging();
-  if (!messaging || didSetBackgroundHandler) return;
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  if (!pkg || !messaging || didSetBackgroundHandler) return;
 
-  messaging.setBackgroundMessageHandler(async (remoteMessage: any) => {
+  pkg.setBackgroundMessageHandler(messaging, async (remoteMessage: any) => {
     await displayDeliveryJobNotification(remoteMessage);
   });
   didSetBackgroundHandler = true;
@@ -127,22 +124,19 @@ const requestAndroidNotificationPermission = async () => {
 };
 
 const hasNotificationPermission = async () => {
-  const messagingModule = getMessagingModule();
-  const messaging = getMessaging();
-  if (!messaging || !messagingModule) return false;
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  const AuthorizationStatus = getAuthorizationStatus();
+  if (!pkg || !messaging || !AuthorizationStatus) return false;
 
   const androidPermission = await requestAndroidNotificationPermission();
   if (!androidPermission) return false;
   if (Platform.OS === "android") return true;
 
-  const messagingPkg = getMessagingPackage();
-  const status =
-    typeof messagingPkg?.requestPermission === "function"
-      ? await messagingPkg.requestPermission(messaging)
-      : await messaging.requestPermission();
+  const status = await pkg.requestPermission(messaging);
   return (
-    status === messagingModule.AuthorizationStatus.AUTHORIZED ||
-    status === messagingModule.AuthorizationStatus.PROVISIONAL
+    status === AuthorizationStatus.AUTHORIZED ||
+    status === AuthorizationStatus.PROVISIONAL
   );
 };
 
@@ -435,21 +429,18 @@ export const registerForPushNotifications = async () => {
 
   setupNotificationActionHandlers();
   setupBackgroundHandler();
-  const messaging = getMessaging();
-  if (!messaging) return;
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  if (!pkg || !messaging) return;
 
   const permitted = await hasNotificationPermission();
   if (!permitted) return;
 
-  if (!messaging.isDeviceRegisteredForRemoteMessages) {
-    await messaging.registerDeviceForRemoteMessages();
+  if (!pkg.isDeviceRegisteredForRemoteMessages(messaging)) {
+    await pkg.registerDeviceForRemoteMessages(messaging);
   }
 
-  const messagingPkg = getMessagingPackage();
-  const fcmToken =
-    typeof messagingPkg?.getToken === "function"
-      ? await messagingPkg.getToken(messaging)
-      : await messaging.getToken();
+  const fcmToken = await pkg.getToken(messaging);
   await postToken(fcmToken);
 };
 
@@ -470,9 +461,10 @@ export const unregisterPushNotifications = async () => {
 };
 
 export const getNotificationPermissionLabel = async () => {
-  const messagingModule = getMessagingModule();
-  const messaging = getMessaging();
-  if (!messaging || !messagingModule) {
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  const AuthorizationStatus = getAuthorizationStatus();
+  if (!pkg || !messaging || !AuthorizationStatus) {
     return "Notifications require a rebuilt app with Firebase Messaging installed.";
   }
 
@@ -482,13 +474,9 @@ export const getNotificationPermissionLabel = async () => {
     return granted ? "Notifications are enabled." : "Notifications are off. Enable them to receive delivery job alerts.";
   }
 
-  const messagingPkg = getMessagingPackage();
-  const status =
-    typeof messagingPkg?.hasPermission === "function"
-      ? await messagingPkg.hasPermission(messaging)
-      : await messaging.hasPermission();
-  if (status === messagingModule.AuthorizationStatus.AUTHORIZED) return "Notifications are enabled.";
-  if (status === messagingModule.AuthorizationStatus.PROVISIONAL) return "Notifications are provisionally enabled.";
+  const status = await pkg.hasPermission(messaging);
+  if (status === AuthorizationStatus.AUTHORIZED) return "Notifications are enabled.";
+  if (status === AuthorizationStatus.PROVISIONAL) return "Notifications are provisionally enabled.";
   return "Notifications are off. Enable them to receive job and payout alerts.";
 };
 
@@ -499,10 +487,11 @@ export const openNotificationSettings = () => {
 export const setupNotificationHandlers = (navigationRef: any) => {
   setupNotificationActionHandlers();
   setupBackgroundHandler();
-  const messaging = getMessaging();
-  if (!messaging) return () => {};
+  const pkg = getMessagingPackage();
+  const messaging = getMessagingInstance();
+  if (!pkg || !messaging) return () => {};
 
-  const unsubscribeMessage = messaging.onMessage(async (remoteMessage: any) => {
+  const unsubscribeMessage = pkg.onMessage(messaging, async (remoteMessage: any) => {
     if (await displayDeliveryJobNotification(remoteMessage)) {
       return;
     }
@@ -515,18 +504,18 @@ export const setupNotificationHandlers = (navigationRef: any) => {
 
   const unsubscribeNotifeeForeground = setupForegroundNotificationActionHandler(navigationRef);
 
-  const unsubscribeOpened = messaging.onNotificationOpenedApp((remoteMessage: any) => {
+  const unsubscribeOpened = pkg.onNotificationOpenedApp(messaging, (remoteMessage: any) => {
     navigateFromData(navigationRef, remoteMessage?.data);
   });
 
-  const unsubscribeTokenRefresh = messaging.onTokenRefresh((token: string) => {
+  const unsubscribeTokenRefresh = pkg.onTokenRefresh(messaging, (token: string) => {
     postToken(token).catch((error) => {
       console.log("Failed to refresh notification token:", error);
     });
   });
 
-  messaging
-    .getInitialNotification()
+  pkg
+    .getInitialNotification(messaging)
     .then((remoteMessage: any) => {
       if (remoteMessage) {
         setTimeout(() => navigateFromData(navigationRef, remoteMessage.data), 500);
