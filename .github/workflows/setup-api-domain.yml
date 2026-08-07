@@ -1,0 +1,30 @@
+name: Setup API Domain SSL
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSL, nginx, and backend env on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: 165.101.251.199
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            mkdir -p /opt/vyaha/backend
+            cat > /opt/vyaha/backend/.env <<'ENVEOF'
+            ${{ secrets.VPS_BACKEND_ENV }}
+            ENVEOF
+            bash scripts/setup-api-domain.sh
+            cd /opt/vyaha/backend
+            pm2 restart vyaha-backend || pm2 start dist/server.js --name vyaha-backend --cwd /opt/vyaha/backend
+            pm2 save
+            curl -fsS http://127.0.0.1/health
+            curl -fsS https://api.vyaha.com/health || curl -fsS http://api.vyaha.com/health
