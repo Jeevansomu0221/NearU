@@ -1786,7 +1786,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
           amount: session?.amount,
           manualConfirmRequired: false,
           orderRef: String(order._id).slice(-6).toUpperCase(),
-          payeeName: "Vyaha",
+          payeeName: config.platformUpiPayeeName,
           paid: true
         },
         "UPI payment already received"
@@ -1847,7 +1847,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
           amount: totalCodAmount,
           manualConfirmRequired: existingSession.manualConfirmRequired,
           orderRef,
-          payeeName: "Vyaha",
+          payeeName: config.platformUpiPayeeName,
           paid: paymentState.paid
         },
         paymentState.paid ? "UPI payment already received" : "UPI collection QR ready"
@@ -1889,7 +1889,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
         ...session,
         amount: totalCodAmount,
         orderRef,
-        payeeName: "Vyaha"
+        payeeName: config.platformUpiPayeeName
       },
       "UPI collection QR created"
     );

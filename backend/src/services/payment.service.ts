@@ -153,7 +153,7 @@ export const PaymentService = {
 
     const platformVpa = config.platformUpiVpa || process.env.PLATFORM_UPI_VPA || "";
     if (platformVpa) {
-      const payeeName = config.platformUpiPayeeName || process.env.PLATFORM_UPI_PAYEE_NAME || "Vyaha";
+      const payeeName = config.platformUpiPayeeName || process.env.PLATFORM_UPI_PAYEE_NAME || "Vyaha Technologies";
       const upiUri = buildPlatformUpiUri(platformVpa, payeeName, amount, `Vyaha COD ${orderRef}`);
       return attachUpiQrDataUrl({
         provider: "platform_upi",
