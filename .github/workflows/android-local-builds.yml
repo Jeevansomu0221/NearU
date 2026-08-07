@@ -117,7 +117,7 @@ jobs:
         working-directory: ${{ matrix.app_dir }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'http://165.101.251.199' }}
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://api.vyaha.com' }}
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
         run: |
           for attempt in 1 2 3; do
@@ -163,7 +163,7 @@ jobs:
         working-directory: ${{ matrix.app_dir }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'http://165.101.251.199' }}
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://api.vyaha.com' }}
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
         run: |
           for attempt in 1 2 3; do
@@ -184,7 +184,7 @@ jobs:
         working-directory: ${{ matrix.app_dir }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'http://165.101.251.199' }}
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://api.vyaha.com' }}
           EAS_LOCAL_BUILD_SKIP_CLEANUP: 1
         run: |
           for attempt in 1 2 3; do

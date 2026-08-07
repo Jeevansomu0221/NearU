@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://165.101.251.199',
+        target: process.env.VITE_API_URL || 'https://api.vyaha.com',
         changeOrigin: true,
         secure: true
       }

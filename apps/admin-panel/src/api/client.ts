@@ -1,7 +1,7 @@
 import axios from "axios";
 import { clearToken } from "../utils/auth";
 
-const PRODUCTION_API_URL = "http://165.101.251.199/api";
+const PRODUCTION_API_URL = "https://api.vyaha.com/api";
 const LOCAL_API_URL = "http://localhost:5000/api";
 
 const resolveApiBaseUrl = () => {

@@ -20,7 +20,7 @@ const DEV_LAN_HOST = "10.3.8.130";
 const ANDROID_EMULATOR_HOST = "10.0.2.2";
 const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
 const API_TIMEOUT_MS = 60000;
-const PRODUCTION_API_URL = "http://165.101.251.199/api";
+const PRODUCTION_API_URL = "https://api.vyaha.com/api";
 const isDev = typeof __DEV__ !== "undefined" && __DEV__;
 
 const logDebug = (...args: any[]) => {

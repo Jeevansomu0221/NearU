@@ -44,11 +44,7 @@
           "groww"
         ],
         "NSAppTransportSecurity": {
-          "NSExceptionDomains": {
-            "165.101.251.199": {
-              "NSTemporaryExceptionAllowsInsecureHTTPLoads": true
-            }
-          }
+          "NSAllowsArbitraryLoads": false
         }
       }
     },
@@ -88,8 +84,7 @@
             "compileSdkVersion": 36,
             "targetSdkVersion": 36,
             "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true,
-            "usesCleartextTraffic": true
+            "enableShrinkResourcesInReleaseBuilds": true
           }
         }
       ],

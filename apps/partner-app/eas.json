@@ -7,7 +7,7 @@
     "development": {
       "developmentClient": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://165.101.251.199",
+        "EXPO_PUBLIC_API_URL": "https://api.vyaha.com",
         "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
       },
       "android": {
@@ -17,7 +17,7 @@
     "preview": {
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://165.101.251.199",
+        "EXPO_PUBLIC_API_URL": "https://api.vyaha.com",
         "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
       },
       "android": {
@@ -28,7 +28,7 @@
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://165.101.251.199",
+        "EXPO_PUBLIC_API_URL": "https://api.vyaha.com",
         "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
       },
       "android": {

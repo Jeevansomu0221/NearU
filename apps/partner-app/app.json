@@ -14,16 +14,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSExceptionDomains": {
-            "165.101.251.199": {
-              "NSTemporaryExceptionAllowsInsecureHTTPLoads": true
-            }
-          }
-        }
-      }
+      "supportsTablet": true
     },
     "android": {
       "package": "com.vyaha.partner",
@@ -61,8 +52,7 @@
             "compileSdkVersion": 36,
             "targetSdkVersion": 36,
             "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true,
-            "usesCleartextTraffic": true
+            "enableShrinkResourcesInReleaseBuilds": true
           }
         }
       ],
