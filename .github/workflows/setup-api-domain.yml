@@ -1,15 +1,15 @@
-name: Setup API Domain SSL
+name: Deploy Backend to VPS
 
 on:
   workflow_dispatch:
 
 jobs:
-  setup:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure SSL, nginx, and backend env on VPS
+      - name: Deploy backend env and latest code to VPS
         uses: appleboy/ssh-action@v1.2.0
         env:
           BACKEND_ENV: ${{ secrets.VPS_BACKEND_ENV }}
@@ -27,10 +27,8 @@ jobs:
             else
               cd /opt/vyaha/repo && git fetch --depth 1 origin main && git reset --hard origin/main
             fi
+            rsync -a --delete /opt/vyaha/repo/backend/ /opt/vyaha/backend/ --exclude node_modules --exclude dist
             printf '%s' "$BACKEND_ENV" > /opt/vyaha/backend/.env
-            bash /opt/vyaha/repo/scripts/setup-api-domain.sh
-            cd /opt/vyaha/backend
-            pm2 restart vyaha-backend || pm2 start dist/server.js --name vyaha-backend --cwd /opt/vyaha/backend
-            pm2 save
-            curl -fsS http://127.0.0.1/health
-            curl -fsS https://api.vyaha.com/health || curl -fsS http://api.vyaha.com/health
+            bash /opt/vyaha/repo/scripts/vps-deploy-backend.sh
+            curl -fsS http://127.0.0.1:5000/health
+            curl -fsS https://api.vyaha.com/health
