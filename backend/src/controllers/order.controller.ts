@@ -1615,6 +1615,7 @@ const normalizeCodUpiSessionPayload = (session: any) => {
   return {
     provider: session.provider,
     razorpayQrId: session.razorpayQrId,
+    paymentLinkId: session.paymentLinkId,
     qrImageUrl: session.qrImageUrl,
     qrDataUrl: session.qrDataUrl,
     upiUri: session.upiUri,
@@ -1726,6 +1727,7 @@ const syncCodUpiPaymentState = async (orders: any[], orderIdForRazorpay: string)
     {
       provider: session.provider,
       razorpayQrId: session.razorpayQrId || undefined,
+      paymentLinkId: session.paymentLinkId || undefined,
       amount: session.amount || undefined
     },
     orderIdForRazorpay
@@ -1810,15 +1812,16 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
     const amountPaise = Math.round(totalCodAmount * 100);
     const orderRef = String(order._id).slice(-6).toUpperCase();
 
-    // Reuse an unexpired session for the same amount: reopening the QR is
-    // instant, and a payment the customer already made on it stays trackable.
+    // Only reuse Razorpay-backed sessions (QR or Payment Link). Never reuse
+    // old platform_upi / personal Kotak QR sessions after merchant rotation.
     const REUSE_MIN_VALIDITY_MS = 5 * 60 * 1000;
     const existingSession = codOrders
       .map((deliveryOrder: any) => deliveryOrder.codUpiSession)
       .find(
         (candidate: any) =>
-          candidate?.provider &&
-          (candidate.qrImageUrl || candidate.qrDataUrl || candidate.upiUri) &&
+          (candidate?.provider === "razorpay_qr" || candidate?.provider === "razorpay_link") &&
+          (candidate?.razorpayQrId || candidate?.paymentLinkId) &&
+          (candidate.qrImageUrl || candidate.qrDataUrl || candidate.paymentUrl) &&
           Number(candidate.amount) === Number(totalCodAmount) &&
           candidate.expiresAt &&
           new Date(candidate.expiresAt).getTime() > Date.now() + REUSE_MIN_VALIDITY_MS
@@ -1840,6 +1843,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
         {
           provider: existingSession.provider,
           razorpayQrId: existingSession.razorpayQrId,
+          paymentLinkId: existingSession.paymentLinkId,
           qrImageUrl: existingSession.qrImageUrl,
           qrDataUrl: existingSession.qrDataUrl,
           upiUri: existingSession.upiUri,
@@ -1864,6 +1868,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
     const codUpiSession = {
       provider: session.provider,
       razorpayQrId: session.razorpayQrId,
+      paymentLinkId: session.paymentLinkId,
       qrImageUrl: session.qrImageUrl,
       qrDataUrl: session.qrDataUrl,
       upiUri: session.upiUri,
