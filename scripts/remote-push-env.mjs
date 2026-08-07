@@ -24,10 +24,10 @@ conn
         console.error(err);
         process.exit(1);
       }
-      const stream = sftp.createWriteStream("/opt/vyaha/backend/.env");
+      const stream = sftp.createWriteStream("/tmp/vyaha-backend.env");
       stream.on("close", () => {
         conn.exec(
-          "cd /opt/vyaha/repo && git fetch --depth 1 origin main && git reset --hard origin/main && rsync -a --delete backend/ /opt/vyaha/backend/ --exclude node_modules --exclude dist && cd /opt/vyaha/backend && npm ci && npm run build && pm2 restart vyaha-backend && sleep 2 && curl -fsS https://api.vyaha.com/health",
+          "cd /opt/vyaha/repo && git fetch --depth 1 origin main && git reset --hard origin/main && rsync -a --delete backend/ /opt/vyaha/backend/ --exclude node_modules --exclude dist && mv /tmp/vyaha-backend.env /opt/vyaha/backend/.env && cd /opt/vyaha/backend && npm ci && npm run build && pm2 restart vyaha-backend && sleep 2 && curl -fsS https://api.vyaha.com/health",
           (e, stdout) => {
             stdout.on("data", (d) => process.stdout.write(d));
             stdout.on("close", (code) => {

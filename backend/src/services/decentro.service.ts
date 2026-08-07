@@ -120,7 +120,7 @@ const callDecentro = async (
 
   if (module === "kyc" && !config.decentroKycModuleSecret && !config.decentroMock) {
     throw new Error(
-      "DECENTRO_KYC_MODULE_SECRET is missing on the server. Add the KYC & Onboarding module secret in Render env vars and redeploy."
+      "DECENTRO_KYC_MODULE_SECRET is missing on the server. Add the KYC & Onboarding module secret to backend/.env and redeploy the VPS."
     );
   }
 
@@ -140,7 +140,7 @@ const callDecentro = async (
   } catch {
     const hint =
       response.status === 403 || response.status === 401
-        ? ` Auth failed on host ${host}. Set DECENTRO_BASE_URL=https://in.staging.decentro.tech on Render.`
+        ? ` Auth failed on host ${host}. Set DECENTRO_BASE_URL=https://in.staging.decentro.tech on the VPS backend/.env.`
         : "";
     const snippet = rawText.replace(/\s+/g, " ").slice(0, 120);
     throw new Error(
@@ -172,7 +172,7 @@ export const getDecentroRuntimeConfig = () => ({
   digilockerRedirectUrl: config.decentroDigilockerRedirectUrl
 });
 
-/** Safe live probe from this server (used to detect Render IP blocks vs bad keys). */
+/** Safe live probe from this server (used to detect VPS/IP blocks vs bad keys). */
 export const probeDecentroAadhaarEndpoint = async () => {
   const baseUrl = resolveDecentroBaseUrl();
   const host = getDecentroHost(baseUrl);
