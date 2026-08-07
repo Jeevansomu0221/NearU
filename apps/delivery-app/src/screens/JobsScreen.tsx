@@ -28,7 +28,6 @@ const AVAILABILITY_STORAGE_KEY = "driverAvailability";
 const GREEN_PRIMARY = "#16A34A";
 const GREEN_DARK = "#15803D";
 const GREEN_DEEP = "#166534";
-const GREEN_SOFT = "#DCFCE7";
 
 interface CalculatedJob extends DeliveryJob {
   distance?: number | null;
@@ -350,18 +349,6 @@ export default function JobsScreen({ navigation }: any) {
     navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job });
   };
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    if (Number.isNaN(date.getTime())) return "Time unavailable";
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-
-  const getItemsSummary = (items: any[]) => {
-    if (!Array.isArray(items) || items.length === 0) return "No items";
-    const totalItems = items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
-    return `${totalItems} item${totalItems === 1 ? "" : "s"}`;
-  };
-
   const renderHeader = () => (
     <View>
       <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
@@ -433,21 +420,22 @@ export default function JobsScreen({ navigation }: any) {
     <View style={styles.skeletonContainer}>
       {[1, 2, 3].map((i) => (
         <View key={i} style={styles.skeletonCard}>
-          <View style={styles.skeletonRow}>
-            <View style={styles.skeletonBlock} />
-            <View style={[styles.skeletonBlock, { width: 60 }]} />
-          </View>
-          <View style={[styles.skeletonBlock, { width: "80%", marginTop: 12 }]} />
-          <View style={[styles.skeletonBlock, { width: "60%", marginTop: 8 }]} />
-          <View style={styles.skeletonMetrics}>
-            <View style={[styles.skeletonBlock, { width: 80 }]} />
-            <View style={[styles.skeletonBlock, { width: 80 }]} />
-            <View style={[styles.skeletonBlock, { width: 80 }]} />
+          <View style={[styles.skeletonBlock, { width: 72, height: 28 }]} />
+          <View style={[styles.skeletonBlock, { width: "70%", marginTop: 16 }]} />
+          <View style={[styles.skeletonBlock, { width: "90%", marginTop: 8 }]} />
+          <View style={[styles.skeletonBlock, { width: "55%", marginTop: 18 }]} />
+          <View style={[styles.skeletonBlock, { width: "85%", marginTop: 8 }]} />
+          <View style={styles.skeletonActions}>
+            <View style={[styles.skeletonBlock, { flex: 1, height: 48 }]} />
+            <View style={[styles.skeletonBlock, { flex: 1, height: 48 }]} />
           </View>
         </View>
       ))}
     </View>
   );
+
+  const formatKm = (value?: number | null) =>
+    typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)} km` : "--";
 
   const renderJobItem = ({ item }: { item: CalculatedJob }) => {
     const earnings = getOrderRiderEarnings(item);
@@ -455,96 +443,100 @@ export default function JobsScreen({ navigation }: any) {
     const pickupStops = item.pickupStops?.length
       ? item.pickupStops
       : [{ partnerId: item.partnerId, orderId: item._id, sequence: 1, status: item.status, items: item.items, itemTotal: item.itemTotal, deliveryFee: item.deliveryFee, grandTotal: item.grandTotal }];
+    const pickupDistance =
+      typeof item.distance === "number"
+        ? item.distance
+        : typeof item.distanceToRestaurant === "number"
+        ? item.distanceToRestaurant
+        : null;
+    const dropDistance =
+      typeof item.distanceToCustomer === "number"
+        ? item.distanceToCustomer
+        : typeof item.estimatedDistance === "number"
+        ? item.estimatedDistance
+        : typeof item.totalDistance === "number" && typeof pickupDistance === "number"
+        ? Math.max(item.totalDistance - pickupDistance, 0)
+        : null;
+
     return (
       <TouchableOpacity
         style={styles.jobCard}
         onPress={() => navigation.getParent()?.navigate("JobDetails", { orderId: item._id, job: item })}
         activeOpacity={0.9}
       >
-        <View style={styles.jobTop}>
-          <View style={styles.jobTopLeft}>
-            <Text style={styles.orderId}>
-              {item.isBundledDelivery ? "Bundled Job" : `#${item._id?.slice(-6).toUpperCase() || "N/A"}`}
-            </Text>
-            <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
-          </View>
-          <View style={styles.jobEarningsBadge}>
-            <Text style={styles.jobEarningsValue}>Rs {earnings}</Text>
-            <Text style={styles.jobEarningsLabel}>earnings</Text>
-          </View>
-        </View>
+        <Text style={styles.jobPayout}>₹{earnings}</Text>
 
         <View style={styles.routeSection}>
-          <View style={styles.routeStop}>
-            <View style={styles.routePinStore} />
-            <View style={styles.routeLine} />
-            <View style={styles.routePinHome} />
+          <View style={styles.routeTimeline}>
+            {pickupStops.map((stop, index) => (
+              <React.Fragment key={stop.orderId || `${item._id}-pin-${index}`}>
+                <View style={styles.routeIconWrap}>
+                  <Ionicons name="restaurant-outline" size={16} color="#667085" />
+                </View>
+                {index < pickupStops.length - 1 ? (
+                  <View style={styles.routeDashTrack}>
+                    {Array.from({ length: 4 }).map((_, dashIndex) => (
+                      <View key={`mid-${index}-${dashIndex}`} style={styles.routeDashDot} />
+                    ))}
+                  </View>
+                ) : null}
+              </React.Fragment>
+            ))}
+            <View style={styles.routeDashTrack}>
+              {Array.from({ length: 5 }).map((_, dashIndex) => (
+                <View key={`drop-${dashIndex}`} style={styles.routeDashDot} />
+              ))}
+            </View>
+            <View style={styles.routeIconWrap}>
+              <Ionicons name="person-outline" size={16} color="#667085" />
+            </View>
           </View>
+
           <View style={styles.routeInfo}>
             {pickupStops.map((stop, index) => (
               <View key={stop.orderId || `${item._id}-${index}`} style={styles.routeInfoBlock}>
-                <Text style={styles.routeName}>
-                  Pickup {pickupStops.length > 1 ? index + 1 : ""} {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
+                <Text style={styles.routeTitleLine} numberOfLines={1}>
+                  <Text style={styles.routeName}>
+                    {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
+                  </Text>
+                  <Text style={styles.routeDistance}> ({formatKm(index === 0 ? pickupDistance : null)})</Text>
                 </Text>
-                <Text style={styles.routeAddress} numberOfLines={1}>{formatAddress(stop.partnerId?.address, { short: true })}</Text>
+                <Text style={styles.routeAddress} numberOfLines={2}>
+                  {formatAddress(stop.partnerId?.address, { short: true })}
+                </Text>
               </View>
             ))}
             <View style={styles.routeInfoBlock}>
-              <Text style={styles.routeName}>{item.customerId?.name || "Customer"}</Text>
-              <Text style={styles.routeAddress} numberOfLines={1}>{formatAddress(item.deliveryAddress, { short: true })}</Text>
+              <Text style={styles.routeTitleLine} numberOfLines={1}>
+                <Text style={styles.routeName}>{item.customerId?.name || "Customer"}</Text>
+                <Text style={styles.routeDistance}> ({formatKm(dropDistance)})</Text>
+              </Text>
+              <Text style={styles.routeAddress} numberOfLines={3}>
+                {formatAddress(item.deliveryAddress)}
+              </Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.metricsRow}>
-          <View style={styles.metricItem}>
-            <Ionicons name="location-outline" size={15} color="#667085" />
-            <Text style={styles.metricText}>
-              {typeof item.distance === "number" ? `${item.distance} km` : "--"}
-            </Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metricItem}>
-            <Ionicons name="time-outline" size={15} color="#667085" />
-            <Text style={styles.metricText}>
-              {typeof item.travelTime === "number" ? `${item.travelTime} min` : "-- min"}
-            </Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metricItem}>
-            <Ionicons name="basket-outline" size={15} color="#667085" />
-            <Text style={styles.metricText}>{getItemsSummary(item.items || [])}</Text>
-          </View>
-        </View>
-
-        <View style={styles.jobFooter}>
-          <View style={styles.jobFooterLeft}>
-            <Text style={styles.jobFooterTotal}>Rs {item.grandTotal || 0}</Text>
-            <Text style={styles.jobFooterTotalLabel}>order value</Text>
-          </View>
-          <View style={styles.jobFooterActions}>
-            <TouchableOpacity
-              style={styles.rejectBtn}
-              onPress={() => handleRejectJob(item)}
-              disabled={Boolean(acceptingJobId)}
-            >
-              <Ionicons name="close" size={16} color="#B42318" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.acceptBtn, accepted && styles.acceptBtnBusy]}
-              onPress={() => handleAcceptJob(item)}
-              disabled={Boolean(acceptingJobId)}
-            >
-              {accepted ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                  <Text style={styles.acceptBtnText}>Accept</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+        <View style={styles.jobFooterActions}>
+          <TouchableOpacity
+            style={styles.rejectBtn}
+            onPress={() => handleRejectJob(item)}
+            disabled={Boolean(acceptingJobId)}
+          >
+            <Text style={styles.rejectBtnText}>Reject</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.acceptBtn, accepted && styles.acceptBtnBusy]}
+            onPress={() => handleAcceptJob(item)}
+            disabled={Boolean(acceptingJobId)}
+          >
+            {accepted ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.acceptBtnText}>Accept</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -633,7 +625,7 @@ export default function JobsScreen({ navigation }: any) {
                 <View style={styles.confirmMetaRow}>
                   <Text style={styles.confirmMetaLabel}>Earnings</Text>
                   <Text style={[styles.confirmMetaValue, { color: "#087443", fontWeight: "800" }]}>
-                    Rs {getOrderRiderEarnings(selectedJobAction.job)}
+                    ₹{getOrderRiderEarnings(selectedJobAction.job)}
                   </Text>
                 </View>
               </View>
@@ -826,201 +818,131 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#ECECEC"
-  },
-  skeletonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between"
+    shadowColor: "#101828",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2
   },
   skeletonBlock: {
     height: 14,
     borderRadius: 7,
     backgroundColor: "#F2F4F7"
   },
-  skeletonMetrics: {
+  skeletonActions: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#F2F4F7"
+    gap: 10,
+    marginTop: 18
   },
   jobCard: {
     backgroundColor: "#FFFFFF",
     marginHorizontal: 16,
     marginTop: 14,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#ECECEC"
+    shadowColor: "#101828",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3
   },
-  jobTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 14
-  },
-  jobTopLeft: {
-    flex: 1,
-    minWidth: 0
-  },
-  orderId: {
-    fontSize: 17,
+  jobPayout: {
+    fontSize: 28,
     fontWeight: "800",
-    color: "#1D2939"
-  },
-  timeText: {
-    fontSize: 12,
-    color: "#98A2B3",
-    marginTop: 3
-  },
-  jobEarningsBadge: {
-    backgroundColor: GREEN_SOFT,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    alignItems: "center"
-  },
-  jobEarningsValue: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: GREEN_DEEP
-  },
-  jobEarningsLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: GREEN_DEEP,
-    marginTop: 1
+    color: "#101828",
+    marginBottom: 14,
+    letterSpacing: -0.4
   },
   routeSection: {
     flexDirection: "row",
     gap: 12,
-    marginBottom: 14,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 14,
-    padding: 12
+    marginBottom: 16
   },
-  routeStop: {
+  routeTimeline: {
     alignItems: "center",
-    width: 20
+    width: 22,
+    paddingTop: 2
   },
-  routePinStore: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
-    backgroundColor: "#2E7D32"
+  routeIconWrap: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center"
   },
-  routeLine: {
+  routeDashTrack: {
+    flexGrow: 1,
+    minHeight: 20,
+    marginVertical: 4,
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 3
+  },
+  routeDashDot: {
     width: 2,
-    flex: 1,
-    backgroundColor: "#D0D5DD",
-    marginVertical: 4
-  },
-  routePinHome: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#1565C0",
-    borderWidth: 2,
-    borderColor: "#E0F2FE"
+    height: 3,
+    borderRadius: 1,
+    backgroundColor: "#D0D5DD"
   },
   routeInfo: {
     flex: 1,
-    justifyContent: "space-between",
-    gap: 8
+    gap: 16,
+    minWidth: 0
   },
   routeInfoBlock: {
-    flex: 1,
     justifyContent: "center"
   },
+  routeTitleLine: {
+    flexShrink: 1
+  },
   routeName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
-    color: "#1D2939"
+    color: "#101828"
   },
-  routeAddress: {
-    fontSize: 12,
-    color: "#667085",
-    marginTop: 2
-  },
-  metricsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    marginBottom: 12,
-    backgroundColor: "#F0FDF4",
-    borderRadius: 12,
-    paddingHorizontal: 8
-  },
-  metricItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5
-  },
-  metricDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: "#E5E7EB"
-  },
-  metricText: {
-    fontSize: 12,
-    fontWeight: "700",
+  routeDistance: {
+    fontSize: 13,
+    fontWeight: "600",
     color: "#667085"
   },
-  jobFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#F2F4F7"
-  },
-  jobFooterLeft: {
-    flex: 1
-  },
-  jobFooterTotal: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: "#1D2939"
-  },
-  jobFooterTotalLabel: {
-    fontSize: 11,
-    color: "#98A2B3",
-    marginTop: 1
+  routeAddress: {
+    fontSize: 13,
+    color: "#667085",
+    marginTop: 3,
+    lineHeight: 18
   },
   jobFooterActions: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     alignItems: "center"
   },
   rejectBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FEF3F2",
-    borderWidth: 1,
-    borderColor: "#FECDCA"
+    backgroundColor: "#FEE4E2"
+  },
+  rejectBtnText: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#D92D20"
   },
   acceptBtn: {
-    flexDirection: "row",
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: "#4CAF50"
+    justifyContent: "center",
+    backgroundColor: "#166534"
   },
   acceptBtnBusy: {
     opacity: 0.75
   },
   acceptBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "800",
     color: "#FFFFFF"
   },
