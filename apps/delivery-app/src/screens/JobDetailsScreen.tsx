@@ -88,6 +88,7 @@ const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (session.provider === "razorpay_qr" && session.qrImageUrl) {
     return session.qrImageUrl;
   }
+  // Prefer native UPI QR (opens PhonePe/GPay directly).
   if (session.qrDataUrl) {
     return session.qrDataUrl;
   }

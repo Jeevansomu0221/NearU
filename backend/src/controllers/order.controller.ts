@@ -1812,20 +1812,33 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
     const amountPaise = Math.round(totalCodAmount * 100);
     const orderRef = String(order._id).slice(-6).toUpperCase();
 
-    // Only reuse Razorpay-backed sessions (QR or Payment Link). Never reuse
-    // old platform_upi / personal Kotak QR sessions after merchant rotation.
+    // Only reuse native UPI / Razorpay QR sessions. Skip old https payment-link
+    // QRs that open the Razorpay webpage instead of PhonePe.
     const REUSE_MIN_VALIDITY_MS = 5 * 60 * 1000;
     const existingSession = codOrders
       .map((deliveryOrder: any) => deliveryOrder.codUpiSession)
-      .find(
-        (candidate: any) =>
-          (candidate?.provider === "razorpay_qr" || candidate?.provider === "razorpay_link") &&
-          (candidate?.razorpayQrId || candidate?.paymentLinkId) &&
-          (candidate.qrImageUrl || candidate.qrDataUrl || candidate.paymentUrl) &&
-          Number(candidate.amount) === Number(totalCodAmount) &&
-          candidate.expiresAt &&
-          new Date(candidate.expiresAt).getTime() > Date.now() + REUSE_MIN_VALIDITY_MS
-      );
+      .find((candidate: any) => {
+        if (!candidate?.expiresAt) return false;
+        if (new Date(candidate.expiresAt).getTime() <= Date.now() + REUSE_MIN_VALIDITY_MS) {
+          return false;
+        }
+        if (Number(candidate.amount) !== Number(totalCodAmount)) return false;
+
+        if (candidate.provider === "razorpay_qr" && candidate.razorpayQrId && candidate.qrImageUrl) {
+          return true;
+        }
+
+        if (
+          candidate.provider === "razorpay_link" &&
+          candidate.paymentLinkId &&
+          String(candidate.upiUri || "").startsWith("upi://") &&
+          (candidate.qrDataUrl || candidate.upiUri)
+        ) {
+          return true;
+        }
+
+        return false;
+      });
 
     if (existingSession) {
       for (const deliveryOrder of codOrders) {

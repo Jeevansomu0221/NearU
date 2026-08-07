@@ -44,6 +44,42 @@ const attachQrDataUrlFromPayload = async (
   }
 };
 
+/** Follow Razorpay UPI payment-link redirects until we get a native upi:// deep link. */
+const resolveUpiDeepLinkFromShortUrl = async (shortUrl: string): Promise<string | null> => {
+  let url = shortUrl;
+  for (let hop = 0; hop < 6; hop += 1) {
+    const response = await fetch(url, {
+      method: "GET",
+      redirect: "manual",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+        Accept: "text/html,application/xhtml+xml"
+      }
+    });
+
+    const location = String(response.headers.get("location") || "").trim();
+    if (location.startsWith("upi://")) {
+      return location;
+    }
+
+    if (response.status >= 300 && response.status < 400 && location) {
+      url = new URL(location, url).toString();
+      continue;
+    }
+
+    const body = await response.text();
+    const upiIndex = body.indexOf("upi://");
+    if (upiIndex >= 0) {
+      const endQuote = body.indexOf('"', upiIndex);
+      return body.slice(upiIndex, endQuote > upiIndex ? endQuote : upiIndex + 400);
+    }
+    break;
+  }
+
+  return null;
+};
+
 let razorpayClient: Razorpay | null = null;
 
 const getRazorpayClient = () => {
@@ -147,10 +183,11 @@ export const PaymentService = {
       console.warn("Razorpay UPI QR unavailable, trying payment link:", razorpayMessage);
     }
 
-    // New Vyaha Razorpay accounts often have Payment Links before UPI QR Codes.
-    // Never fall back to a personal bank VPA (old Kotak) — money must hit Razorpay.
+    // Prefer UPI Payment Links: resolve to native upi:// so PhonePe/GPay open
+    // directly instead of the Razorpay "Proceed to Pay" webpage.
     try {
       const link = await (razorpay as any).paymentLink.create({
+        upi_link: true,
         amount: amountPaise,
         currency: "INR",
         accept_partial: false,
@@ -158,19 +195,7 @@ export const PaymentService = {
         notify: { sms: false, email: false },
         reminder_enable: false,
         notes,
-        expire_by: Math.floor(Date.now() / 1000) + 3600,
-        options: {
-          checkout: {
-            name: "Vyaha Technologies",
-            method: {
-              upi: true,
-              card: false,
-              netbanking: false,
-              wallet: false,
-              emi: false
-            }
-          }
-        }
+        expire_by: Math.floor(Date.now() / 1000) + 3600
       });
 
       const shortUrl = String(link?.short_url || "").trim();
@@ -178,14 +203,20 @@ export const PaymentService = {
         throw new Error("Razorpay did not return a payment link URL");
       }
 
+      const upiUri = await resolveUpiDeepLinkFromShortUrl(shortUrl);
+      if (!upiUri?.startsWith("upi://")) {
+        throw new Error("Could not resolve Razorpay UPI deep link from payment link");
+      }
+
       return attachQrDataUrlFromPayload(
         {
           provider: "razorpay_link",
           paymentLinkId: String(link.id),
           paymentUrl: shortUrl,
+          upiUri,
           amount
         },
-        shortUrl
+        upiUri
       );
     } catch (linkError: any) {
       const razorpayMessage =
@@ -193,13 +224,13 @@ export const PaymentService = {
         linkError?.error?.reason ||
         linkError?.message ||
         String(linkError);
-      errors.push(`payment_links: ${razorpayMessage}`);
-      console.error("Razorpay payment link creation failed:", razorpayMessage, linkError?.error || "");
+      errors.push(`upi_payment_links: ${razorpayMessage}`);
+      console.error("Razorpay UPI payment link creation failed:", razorpayMessage, linkError?.error || "");
     }
 
     throw new Error(
       `COD UPI collection requires the Vyaha Razorpay account. Failed: ${errors.join(" | ")}. ` +
-        "Enable Payment Links or UPI QR Codes in the Razorpay dashboard."
+        "Enable UPI Payment Links or UPI QR Codes in the Razorpay dashboard."
     );
   },
 
