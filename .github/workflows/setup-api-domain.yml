@@ -18,6 +18,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           envs: BACKEND_ENV
+          timeout: 60s
+          command_timeout: 15m
           script_stop: true
           script: |
             set -euo pipefail
@@ -27,8 +29,16 @@ jobs:
             else
               cd /opt/vyaha/repo && git fetch --depth 1 origin main && git reset --hard origin/main
             fi
-            rsync -a --delete /opt/vyaha/repo/backend/ /opt/vyaha/backend/ --exclude node_modules --exclude dist
+            rsync -a --delete /opt/vyaha/repo/backend/ /opt/vyaha/backend/ --exclude node_modules --exclude dist --exclude .env
             printf '%s' "$BACKEND_ENV" > /opt/vyaha/backend/.env
-            bash /opt/vyaha/repo/scripts/vps-deploy-backend.sh
+            cd /opt/vyaha/backend
+            npm ci
+            npm run build
+            pm2 delete vyaha-backend || true
+            pm2 start dist/server.js --name vyaha-backend --cwd /opt/vyaha/backend --update-env
+            pm2 save
+            sleep 3
+            grep -E '^(RAZORPAY_KEY_ID|API_BASE_URL)=' /opt/vyaha/backend/.env
             curl -fsS http://127.0.0.1:5000/health
-            curl -fsS https://api.vyaha.com/health
+            curl -fsS http://127.0.0.1:5000/health/razorpay
+            curl -fsS https://api.vyaha.com/health/razorpay

@@ -32,9 +32,9 @@ const remoteCmd = [
   "grep -E '^(RAZORPAY_KEY_ID|API_BASE_URL)=' /opt/vyaha/backend/.env",
   "curl -fsS http://127.0.0.1:5000/health",
   "echo",
-  "curl -fsS http://127.0.0.1:5000/health/razorpay || true",
+  "curl -fsS http://127.0.0.1:5000/health/razorpay",
   "echo",
-  "curl -fsS https://api.vyaha.com/health",
+  "curl -fsS https://api.vyaha.com/health/razorpay",
   "echo"
 ].join(" && ");
 

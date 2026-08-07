@@ -98,6 +98,18 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", message: "Vyaha backend is running" });
 });
 
+// Key IDs are public (sent to apps). Helps confirm which Razorpay MID is live.
+app.get("/health/razorpay", (_req, res) => {
+  const keyId = config.razorpayKeyId || "";
+  res.json({
+    status: keyId ? "ok" : "missing",
+    keyId,
+    payeeName: config.platformUpiPayeeName || "",
+    expectedKeyId: "rzp_live_TMrGfC1MZ7Pmqy",
+    usingExpectedKey: keyId === "rzp_live_TMrGfC1MZ7Pmqy"
+  });
+});
+
 app.get("/health/decentro", async (_req, res) => {
   // Safe diagnostics only — never returns secrets.
   try {
