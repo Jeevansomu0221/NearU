@@ -12,7 +12,8 @@
     "test": "jest --runInBand",
     "dev": "ts-node src/server.ts",
     "mongo:dev": "node scripts/start-mongo-dev.js",
-    "seed:partner-mock-menus": "ts-node scripts/seedMockPartnerMenus.ts"
+    "seed:partner-mock-menus": "ts-node scripts/seedMockPartnerMenus.ts",
+    "eko:probe": "ts-node scripts/eko-probe.ts"
   },
   "keywords": [],
   "author": "",

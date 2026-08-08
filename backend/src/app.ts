@@ -17,6 +17,7 @@ import notificationRoutes from "./routes/notification.routes";
 import { config } from "./config/env";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import { getDecentroRuntimeConfig, probeDecentroAadhaarEndpoint } from "./services/decentro.service";
+import { getEkoRuntimeConfig, probeEkoSettlementBalance } from "./services/eko.service";
 
 const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
@@ -124,6 +125,23 @@ app.get("/health/decentro", async (_req, res) => {
       status: "error",
       message: error?.message || "Decentro probe failed",
       decentro: getDecentroRuntimeConfig()
+    });
+  }
+});
+
+app.get("/health/eko", async (_req, res) => {
+  try {
+    const probe = await probeEkoSettlementBalance();
+    res.json({
+      status: probe.ok ? "ok" : "error",
+      eko: getEkoRuntimeConfig(),
+      probe
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: "error",
+      message: error?.message || "Eko probe failed",
+      eko: getEkoRuntimeConfig()
     });
   }
 });

@@ -127,7 +127,16 @@ export const config = {
     return "penniless";
   })(),
   /** When true, Aadhaar/PAN/bank KYC succeed with fake sandbox data (OTP 111111). */
-  decentroMock: process.env.DECENTRO_MOCK === "true"
+  decentroMock: process.env.DECENTRO_MOCK === "true",
+
+  /** Eko ICICI live payouts / settlement (https://api.eko.in:25002/ekoicici). */
+  ekoBaseUrl: (process.env.EKO_BASE_URL || "https://api.eko.in:25002/ekoicici").replace(/\/$/, ""),
+  ekoDeveloperKey: process.env.EKO_DEVELOPER_KEY || "",
+  /** Authenticator / access key from Eko email — used only server-side for HMAC secret-key. */
+  ekoAccessKey: process.env.EKO_ACCESS_KEY || process.env.EKO_AUTHENTICATOR_KEY || "",
+  ekoInitiatorId: (process.env.EKO_INITIATOR_ID || "").replace(/\D/g, ""),
+  /** Optional — some Eko v1 balance APIs require user_code from onboarding. */
+  ekoUserCode: (process.env.EKO_USER_CODE || "").trim()
 };
 
 export const validateEnv = (): void => {

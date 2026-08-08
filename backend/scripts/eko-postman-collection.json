@@ -1,0 +1,49 @@
+{
+  "info": {
+    "name": "Vyaha Eko Live",
+    "description": "Settlement balance probe for Eko ICICI live environment. Set collection variables before sending.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "eko_base_url", "value": "https://api.eko.in:25002/ekoicici" },
+    { "key": "eko_developer_key", "value": "" },
+    { "key": "eko_access_key", "value": "" },
+    { "key": "eko_initiator_id", "value": "6300500275" },
+    { "key": "eko_user_code", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const accessKey = pm.collectionVariables.get('eko_access_key');",
+          "const developerKey = pm.collectionVariables.get('eko_developer_key');",
+          "const timestamp = Date.now().toString();",
+          "const encodedKey = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(accessKey));",
+          "const hash = CryptoJS.HmacSHA256(timestamp, encodedKey);",
+          "const secretKey = CryptoJS.enc.Base64.stringify(hash);",
+          "pm.request.headers.upsert({ key: 'developer_key', value: developerKey });",
+          "pm.request.headers.upsert({ key: 'secret-key-timestamp', value: timestamp });",
+          "pm.request.headers.upsert({ key: 'secret-key', value: secretKey });",
+          "pm.request.headers.upsert({ key: 'content-type', value: 'application/json' });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Settlement balance inquiry",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{eko_base_url}}/v1/customers/mobile_number:{{eko_initiator_id}}/balance?initiator_id={{eko_initiator_id}}",
+          "host": ["{{eko_base_url}}"],
+          "path": ["v1", "customers", "mobile_number:{{eko_initiator_id}}", "balance"],
+          "query": [{ "key": "initiator_id", "value": "{{eko_initiator_id}}" }]
+        }
+      }
+    }
+  ]
+}
