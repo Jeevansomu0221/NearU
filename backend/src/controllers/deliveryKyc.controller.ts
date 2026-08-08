@@ -164,11 +164,18 @@ export const completeDeliveryDigiLocker = async (req: AuthRequest, res: Response
         docs.aadhaarOtpTxnId ||
         ""
     );
-    if (!initiationTransactionId) {
+    const bodyReferenceId = String(req.body.reference_id || req.body.referenceId || "").trim();
+    const bodyVerificationId = String(req.body.verification_id || req.body.verificationId || "").trim();
+    const sessionToken =
+      initiationTransactionId ||
+      (bodyReferenceId && bodyVerificationId
+        ? `${bodyReferenceId}:${bodyVerificationId}`
+        : "");
+    if (!sessionToken) {
       return errorResponse(res, "Start DigiLocker verification first", 400);
     }
 
-    const profile = await fetchDigiLockerEAadhaar({ initiationTransactionId });
+    const profile = await fetchDigiLockerEAadhaar({ initiationTransactionId: sessionToken });
 
     const lockedName = profile.name.trim();
     const now = new Date();
@@ -224,9 +231,13 @@ export const digilockerCallback = async (req: Request, res: Response) => {
   try {
     const code = String(req.query.code || "").trim();
     const error = String(req.query.error || req.query.error_description || "").trim();
+    const referenceId = String(req.query.reference_id || req.query.referenceId || "").trim();
+    const verificationId = String(req.query.verification_id || req.query.verificationId || "").trim();
     const deepLinkParams = new URLSearchParams();
     if (code) deepLinkParams.set("code", code);
     if (error) deepLinkParams.set("error", error);
+    if (referenceId) deepLinkParams.set("reference_id", referenceId);
+    if (verificationId) deepLinkParams.set("verification_id", verificationId);
     const deepLink = `vyaha-delivery://kyc/digilocker${deepLinkParams.toString() ? `?${deepLinkParams}` : ""}`;
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");

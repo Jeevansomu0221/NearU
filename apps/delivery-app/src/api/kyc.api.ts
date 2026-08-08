@@ -26,6 +26,8 @@ export const startDigiLocker = (payload: {
 export const completeDigiLocker = (payload: {
   initiationTransactionId?: string;
   code?: string;
+  reference_id?: string;
+  verification_id?: string;
 }): Promise<ApiResponse<AadhaarVerifyResult>> => {
   return apiPost<AadhaarVerifyResult>("/delivery/kyc/digilocker/complete", payload);
 };
@@ -53,6 +55,7 @@ export const verifyBank = (payload: {
       beneficiaryName?: string | null;
       nameMatchScore?: number | null;
       adminFallback?: boolean;
+      ekoError?: string;
       decentroError?: string;
     }
   >

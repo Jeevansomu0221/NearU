@@ -93,6 +93,8 @@ export default function KycRegistrationScreen({ navigation }: any) {
   const [digilockerStarted, setDigilockerStarted] = useState(false);
   const [initiationTransactionId, setInitiationTransactionId] = useState("");
   const [digilockerCode, setDigilockerCode] = useState<string | undefined>();
+  const [digilockerReferenceId, setDigilockerReferenceId] = useState<string | undefined>();
+  const [digilockerVerificationId, setDigilockerVerificationId] = useState<string | undefined>();
   const [isMockDigiLocker, setIsMockDigiLocker] = useState(false);
   const [lockedName, setLockedName] = useState("");
 
@@ -211,12 +213,16 @@ export default function KycRegistrationScreen({ navigation }: any) {
         const params = new URLSearchParams(query);
         const code = params.get("code") || undefined;
         const error = params.get("error");
+        const referenceId = params.get("reference_id") || undefined;
+        const verificationId = params.get("verification_id") || undefined;
         if (error) {
           Alert.alert("DigiLocker", error);
           return;
         }
-        if (code) {
-          setDigilockerCode(code);
+        if (code) setDigilockerCode(code);
+        if (referenceId) setDigilockerReferenceId(referenceId);
+        if (verificationId) setDigilockerVerificationId(verificationId);
+        if (code || referenceId || verificationId) {
           setStatusNote("DigiLocker returned — tap Continue to finish verification");
         }
       } catch {
@@ -265,7 +271,9 @@ export default function KycRegistrationScreen({ navigation }: any) {
     try {
       const response = await completeDigiLocker({
         initiationTransactionId: initiationTransactionId || undefined,
-        code: digilockerCode
+        code: digilockerCode,
+        reference_id: digilockerReferenceId,
+        verification_id: digilockerVerificationId
       });
       if (!response.success || !response.data) throw new Error(response.message || "Verification failed");
       applyDigiLockerResult(response.data);
