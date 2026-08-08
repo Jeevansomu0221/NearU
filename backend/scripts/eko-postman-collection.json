@@ -1,15 +1,17 @@
 {
   "info": {
+    "_postman_id": "vyaha-eko-live-001",
     "name": "Vyaha Eko Live",
-    "description": "Settlement balance probe for Eko ICICI live environment. Set collection variables before sending.",
+    "description": "Eko ICICI live APIs for Vyaha (settlement + KYC).\n\n1. Collection Variables: paste eko_developer_key + eko_access_key\n2. Run Settlement balance (read-only)\n3. Run DigiLocker create (needs E-value for full KYC journey)\n4. PAN Lite / Bank sync may return empty until Eko enables those products + wallet funded",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "eko_base_url", "value": "https://api.eko.in:25002/ekoicici" },
+    { "key": "eko_kyc_base_url", "value": "https://api.eko.in/ekoicici/v3" },
     { "key": "eko_developer_key", "value": "" },
     { "key": "eko_access_key", "value": "" },
     { "key": "eko_initiator_id", "value": "6300500275" },
-    { "key": "eko_user_code", "value": "" }
+    { "key": "eko_redirect_url", "value": "https://api.vyaha.com/api/delivery/kyc/digilocker/callback" }
   ],
   "event": [
     {
@@ -19,6 +21,9 @@
         "exec": [
           "const accessKey = pm.collectionVariables.get('eko_access_key');",
           "const developerKey = pm.collectionVariables.get('eko_developer_key');",
+          "if (!accessKey || !developerKey) {",
+          "  throw new Error('Set eko_developer_key and eko_access_key in collection Variables');",
+          "}",
           "const timestamp = Date.now().toString();",
           "const encodedKey = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(accessKey));",
           "const hash = CryptoJS.HmacSHA256(timestamp, encodedKey);",
@@ -26,24 +31,83 @@
           "pm.request.headers.upsert({ key: 'developer_key', value: developerKey });",
           "pm.request.headers.upsert({ key: 'secret-key-timestamp', value: timestamp });",
           "pm.request.headers.upsert({ key: 'secret-key', value: secretKey });",
-          "pm.request.headers.upsert({ key: 'content-type', value: 'application/json' });"
+          "pm.request.headers.upsert({ key: 'Accept', value: 'application/json' });",
+          "if (pm.request.method && pm.request.method.toUpperCase() === 'GET') {",
+          "  pm.request.headers.remove('Content-Type');",
+          "  pm.request.headers.remove('content-type');",
+          "} else {",
+          "  pm.request.headers.upsert({ key: 'Content-Type', value: 'application/json' });",
+          "}"
         ]
       }
     }
   ],
   "item": [
     {
-      "name": "Settlement balance inquiry",
+      "name": "1. Settlement balance inquiry",
       "request": {
         "method": "GET",
         "header": [],
-        "url": {
-          "raw": "{{eko_base_url}}/v1/customers/mobile_number:{{eko_initiator_id}}/balance?initiator_id={{eko_initiator_id}}",
-          "host": ["{{eko_base_url}}"],
-          "path": ["v1", "customers", "mobile_number:{{eko_initiator_id}}", "balance"],
-          "query": [{ "key": "initiator_id", "value": "{{eko_initiator_id}}" }]
-        }
-      }
+        "url": "{{eko_base_url}}/v1/customers/mobile_number:{{eko_initiator_id}}/balance?initiator_id={{eko_initiator_id}}",
+        "description": "Read-only. Expected SUCCESS with balance (may be 0.0)."
+      },
+      "response": []
+    },
+    {
+      "name": "2. DigiLocker create URL",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"initiator_id\": \"{{eko_initiator_id}}\",\n  \"redirect_url\": \"{{eko_redirect_url}}\",\n  \"document_requested\": [\"AADHAAR\"],\n  \"client_ref_id\": \"dl{{$timestamp}}\"\n}"
+        },
+        "url": "{{eko_kyc_base_url}}/tools/kyc/digilocker",
+        "description": "Creates DigiLocker consent URL. Save reference_id + verification_id from response."
+      },
+      "response": []
+    },
+    {
+      "name": "3. DigiLocker get document",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"initiator_id\": \"{{eko_initiator_id}}\",\n  \"document_type\": \"AADHAAR\",\n  \"source\": \"API\",\n  \"client_ref_id\": \"doc{{$timestamp}}\",\n  \"verification_id\": \"PASTE_VERIFICATION_ID\",\n  \"reference_id\": 0\n}"
+        },
+        "url": "{{eko_kyc_base_url}}/tools/kyc/digilocker/document",
+        "description": "Call after user finishes DigiLocker. Paste verification_id and reference_id from step 2."
+      },
+      "response": []
+    },
+    {
+      "name": "4. PAN Lite",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"initiator_id\": \"{{eko_initiator_id}}\",\n  \"pan_number\": \"ABCDE1234F\",\n  \"name\": \"Test User\",\n  \"dob\": \"1990-01-01\",\n  \"client_ref_id\": \"pan{{$timestamp}}\"\n}"
+        },
+        "url": "{{eko_kyc_base_url}}/tools/kyc/pan-lite",
+        "description": "Needs E-value + PAN product enabled. Empty/204 means ask Eko to enable."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Bank account verify (sync)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"initiator_id\": \"{{eko_initiator_id}}\",\n  \"account\": \"1234567890\",\n  \"ifsc\": \"SBIN0000001\",\n  \"client_ref_id\": \"bav{{$timestamp}}\"\n}"
+        },
+        "url": "{{eko_kyc_base_url}}/tools/kyc/bank-account/sync",
+        "description": "Penny-drop style bank verify. Needs E-value + product enabled."
+      },
+      "response": []
     }
   ]
 }

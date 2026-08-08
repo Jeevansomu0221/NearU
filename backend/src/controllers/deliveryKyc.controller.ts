@@ -6,10 +6,10 @@ import { successResponse, errorResponse } from "../utils/response";
 import {
   fetchDigiLockerEAadhaar,
   initiateDigiLockerSession,
-  isDecentroConfigured,
+  isEkoConfigured,
   validateBankAccount,
   verifyPan
-} from "../services/decentro.service";
+} from "../services/eko.service";
 import { config } from "../config/env";
 
 interface AuthRequest extends Request {
@@ -69,20 +69,20 @@ const serializeProfile = async (userId: string, partner: any) => {
   };
 };
 
-/** @deprecated Aadhaar OTP is deprecated by Decentro — use DigiLocker. */
+/** @deprecated Aadhaar OTP removed — use DigiLocker. */
 export const sendDeliveryAadhaarOtp = async (_req: AuthRequest, res: Response) => {
   return errorResponse(
     res,
-    "Aadhaar OTP is deprecated by Decentro. Use DigiLocker via /delivery/kyc/digilocker/start",
+    "Aadhaar OTP is no longer supported. Use DigiLocker via /delivery/kyc/digilocker/start",
     410
   );
 };
 
-/** @deprecated Aadhaar OTP is deprecated by Decentro — use DigiLocker. */
+/** @deprecated Aadhaar OTP removed — use DigiLocker. */
 export const verifyDeliveryAadhaarOtp = async (_req: AuthRequest, res: Response) => {
   return errorResponse(
     res,
-    "Aadhaar OTP is deprecated by Decentro. Use DigiLocker via /delivery/kyc/digilocker/complete",
+    "Aadhaar OTP is no longer supported. Use DigiLocker via /delivery/kyc/digilocker/complete",
     410
   );
 };
@@ -92,8 +92,8 @@ export const startDeliveryDigiLocker = async (req: AuthRequest, res: Response) =
     const user = ensureDeliveryUser(req, res);
     if (!user) return;
 
-    if (!isDecentroConfigured()) {
-      return errorResponse(res, "Decentro KYC is not configured on the server", 503);
+    if (!isEkoConfigured()) {
+      return errorResponse(res, "Eko KYC is not configured on the server", 503);
     }
 
     if (req.body.consent !== true && String(req.body.consent || "").toUpperCase() !== "Y") {
@@ -117,7 +117,7 @@ export const startDeliveryDigiLocker = async (req: AuthRequest, res: Response) =
         $set: {
           "documents.aadhaarOtpTxnId": session.initiationTransactionId,
           "documents.aadhaarShareCode": "",
-          "documents.kycProvider": "decentro-digilocker"
+          "documents.kycProvider": "eko-digilocker"
         }
       }
     );
@@ -127,7 +127,7 @@ export const startDeliveryDigiLocker = async (req: AuthRequest, res: Response) =
       {
         initiationTransactionId: session.initiationTransactionId,
         authorizationUrl: session.authorizationUrl,
-        mock: Boolean(config.decentroMock),
+        mock: Boolean(config.ekoMock),
         message: session.message
       },
       "DigiLocker session started"
@@ -143,8 +143,8 @@ export const completeDeliveryDigiLocker = async (req: AuthRequest, res: Response
     const user = ensureDeliveryUser(req, res);
     if (!user) return;
 
-    if (!isDecentroConfigured()) {
-      return errorResponse(res, "Decentro KYC is not configured on the server", 503);
+    if (!isEkoConfigured()) {
+      return errorResponse(res, "Eko KYC is not configured on the server", 503);
     }
 
     const partner = await findDeliveryPartnerForUser(user);
@@ -168,11 +168,7 @@ export const completeDeliveryDigiLocker = async (req: AuthRequest, res: Response
       return errorResponse(res, "Start DigiLocker verification first", 400);
     }
 
-    const code = String(req.body.code || req.body.authorization_code || "").trim() || undefined;
-    const profile = await fetchDigiLockerEAadhaar({
-      initiationTransactionId,
-      code
-    });
+    const profile = await fetchDigiLockerEAadhaar({ initiationTransactionId });
 
     const lockedName = profile.name.trim();
     const now = new Date();
@@ -195,7 +191,7 @@ export const completeDeliveryDigiLocker = async (req: AuthRequest, res: Response
             "documents.nameLocked": true,
             "documents.aadhaarOtpTxnId": "",
             "documents.aadhaarShareCode": "",
-            "documents.kycProvider": "decentro-digilocker",
+            "documents.kycProvider": "eko-digilocker",
             "documents.submittedAt": now,
             "documents.isComplete": true
           }
@@ -263,8 +259,8 @@ export const verifyDeliveryPan = async (req: AuthRequest, res: Response) => {
     const user = ensureDeliveryUser(req, res);
     if (!user) return;
 
-    if (!isDecentroConfigured()) {
-      return errorResponse(res, "Decentro KYC is not configured on the server", 503);
+    if (!isEkoConfigured()) {
+      return errorResponse(res, "Eko KYC is not configured on the server", 503);
     }
 
     const panNumber = String(req.body.panNumber || req.body.pan_number || "")
@@ -285,7 +281,20 @@ export const verifyDeliveryPan = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Verify Aadhaar before PAN", 400);
     }
 
-    const panResult = await verifyPan(panNumber);
+    const docs: any = partner.documents || {};
+    const matchName = String(docs.aadhaarName || partner.name || "").trim();
+    const dob =
+      partner.dateOfBirth instanceof Date
+        ? partner.dateOfBirth.toISOString().slice(0, 10)
+        : partner.dateOfBirth
+          ? String(partner.dateOfBirth).slice(0, 10)
+          : undefined;
+
+    const panResult = await verifyPan({
+      panNumber,
+      name: matchName || "Rider",
+      dateOfBirth: dob
+    });
     const now = new Date();
 
     await DeliveryPartner.updateOne(
@@ -293,11 +302,11 @@ export const verifyDeliveryPan = async (req: AuthRequest, res: Response) => {
       {
         $set: {
           "documents.panNumber": panNumber,
-          "documents.panName": panResult.name || "",
+          "documents.panName": panResult.name || matchName || "",
           "documents.panVerified": true,
           "documents.panVerifiedAt": now,
           "documents.panSkipped": false,
-          "documents.kycProvider": "decentro"
+          "documents.kycProvider": "eko"
         }
       }
     );
@@ -360,8 +369,8 @@ export const verifyDeliveryBank = async (req: AuthRequest, res: Response) => {
     const user = ensureDeliveryUser(req, res);
     if (!user) return;
 
-    if (!isDecentroConfigured()) {
-      return errorResponse(res, "Decentro KYC is not configured on the server", 503);
+    if (!isEkoConfigured()) {
+      return errorResponse(res, "Eko KYC is not configured on the server", 503);
     }
 
     const accountNumber = String(req.body.bankAccountNumber || req.body.accountNumber || "").replace(/\D/g, "");
@@ -424,7 +433,7 @@ export const verifyDeliveryBank = async (req: AuthRequest, res: Response) => {
             "documents.bankVerificationStatus": "VERIFIED",
             "documents.bankReviewComment": "",
             "documents.bankDetailsSkipped": false,
-            "documents.kycProvider": "decentro"
+            "documents.kycProvider": "eko"
           }
         }
       );
@@ -437,11 +446,11 @@ export const verifyDeliveryBank = async (req: AuthRequest, res: Response) => {
           beneficiaryName: bankResult.beneficiaryName || null,
           nameMatchScore: bankResult.nameMatchScore ?? null
         },
-        "Bank account verified via Decentro"
+        "Bank account verified via Eko"
       );
-    } catch (decentroError: any) {
+    } catch (ekoError: any) {
       if (!allowAdminFallback) {
-        throw decentroError;
+        throw ekoError;
       }
 
       await DeliveryPartner.updateOne(
@@ -453,9 +462,9 @@ export const verifyDeliveryBank = async (req: AuthRequest, res: Response) => {
             "documents.bankAccountHolderName": matchName,
             "documents.bankUpiId": upiId,
             "documents.bankVerificationStatus": "PENDING",
-            "documents.bankReviewComment": `Decentro verification failed: ${decentroError?.message || "unknown error"}. Pending admin review.`,
+            "documents.bankReviewComment": `Eko verification failed: ${ekoError?.message || "unknown error"}. Pending admin review.`,
             "documents.bankDetailsSkipped": false,
-            "documents.kycProvider": "decentro"
+            "documents.kycProvider": "eko"
           }
         }
       );
@@ -466,9 +475,9 @@ export const verifyDeliveryBank = async (req: AuthRequest, res: Response) => {
         {
           ...(await serializeProfile(user.id, refreshed || partner)),
           adminFallback: true,
-          decentroError: decentroError?.message || "Decentro bank verification failed"
+          ekoError: ekoError?.message || "Eko bank verification failed"
         },
-        "Decentro bank verification failed. Details submitted for admin review.",
+        "Eko bank verification failed. Details submitted for admin review.",
         200
       );
     }

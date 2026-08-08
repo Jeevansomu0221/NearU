@@ -16,8 +16,7 @@ import supportRoutes from "./routes/support.routes";
 import notificationRoutes from "./routes/notification.routes";
 import { config } from "./config/env";
 import { errorMiddleware } from "./middlewares/error.middleware";
-import { getDecentroRuntimeConfig, probeDecentroAadhaarEndpoint } from "./services/decentro.service";
-import { getEkoRuntimeConfig, probeEkoSettlementBalance } from "./services/eko.service";
+import { getEkoRuntimeConfig, probeEkoDigiLocker, probeEkoSettlementBalance } from "./services/eko.service";
 
 const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
@@ -111,31 +110,16 @@ app.get("/health/razorpay", (_req, res) => {
   });
 });
 
-app.get("/health/decentro", async (_req, res) => {
-  // Safe diagnostics only — never returns secrets.
-  try {
-    const probe = await probeDecentroAadhaarEndpoint();
-    res.json({
-      status: "ok",
-      decentro: getDecentroRuntimeConfig(),
-      probe
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      status: "error",
-      message: error?.message || "Decentro probe failed",
-      decentro: getDecentroRuntimeConfig()
-    });
-  }
-});
-
 app.get("/health/eko", async (_req, res) => {
   try {
-    const probe = await probeEkoSettlementBalance();
+    const [balance, digilocker] = await Promise.all([
+      probeEkoSettlementBalance(),
+      probeEkoDigiLocker()
+    ]);
     res.json({
-      status: probe.ok ? "ok" : "error",
+      status: balance.ok || digilocker.ok ? "ok" : "error",
       eko: getEkoRuntimeConfig(),
-      probe
+      probe: { balance, digilocker }
     });
   } catch (error: any) {
     res.status(500).json({

@@ -284,7 +284,7 @@ export const updateDeliveryProfile = async (req: AuthRequest, res: Response) => 
 
     if (name !== undefined) {
       if (partnerForNameLock?.documents?.nameLocked || partnerForNameLock?.documents?.aadhaarVerified) {
-        // Name is locked to Decentro Aadhaar extract — ignore client overrides.
+        // Name is locked to DigiLocker Aadhaar extract — ignore client overrides.
       } else if (typeof name !== "string" || name.trim().length < 3) {
         return errorResponse(res, "Name must be at least 3 characters", 400);
       } else {
@@ -1235,7 +1235,7 @@ export const updateBankDetails = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, validationError, 400);
     }
 
-    // Prefer Decentro via /delivery/kyc/bank/verify. This endpoint remains as admin-fallback submit.
+    // Prefer Eko via /delivery/kyc/bank/verify. This endpoint remains as admin-fallback submit.
     await DeliveryPartner.updateOne(
       { _id: deliveryPartner._id },
       {

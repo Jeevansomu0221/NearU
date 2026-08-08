@@ -106,37 +106,21 @@ export const config = {
   testLoginOtp: process.env.TEST_LOGIN_OTP || "000000",
   testLoginCredentials: parseTestLoginCredentials(),
   allowMultiDeviceSessions: process.env.ALLOW_MULTI_DEVICE_SESSIONS !== "false",
-  /** Decentro: staging https://in.staging.decentro.tech — production https://in.decentro.tech (must match credential environment). */
-  // VyahaTechnologies_* keys currently authenticate on staging only (prod returns invalid_client_credentials).
-  decentroBaseUrl: (process.env.DECENTRO_BASE_URL || "https://in.staging.decentro.tech").replace(/\/$/, ""),
-  decentroClientId: process.env.DECENTRO_CLIENT_ID || "",
-  decentroClientSecret: process.env.DECENTRO_CLIENT_SECRET || "",
-  decentroKycModuleSecret: process.env.DECENTRO_KYC_MODULE_SECRET || "",
-  decentroPaymentsModuleSecret: process.env.DECENTRO_PAYMENTS_MODULE_SECRET || "",
-  decentroCoreBankingModuleSecret: process.env.DECENTRO_CORE_BANKING_MODULE_SECRET || "",
-  decentroProviderSecret: process.env.DECENTRO_PROVIDER_SECRET || "",
-  decentroConsumerUrn: process.env.DECENTRO_CONSUMER_URN || "",
-  decentroDigilockerRedirectUrl:
-    process.env.DECENTRO_DIGILOCKER_REDIRECT_URL ||
-    `${(process.env.API_BASE_URL || "http://localhost:5000").replace(/\/$/, "")}/api/delivery/kyc/digilocker/callback`,
-  decentroBankValidationType: (() => {
-    const raw = (process.env.DECENTRO_BANK_VALIDATION_TYPE || "penniless").toLowerCase().trim();
-    // Common typo on dashboards: pennyless → penniless
-    if (raw === "pennyless") return "penniless";
-    if (raw === "pennydrop" || raw === "hybrid" || raw === "penniless") return raw;
-    return "penniless";
-  })(),
-  /** When true, Aadhaar/PAN/bank KYC succeed with fake sandbox data (OTP 111111). */
-  decentroMock: process.env.DECENTRO_MOCK === "true",
 
-  /** Eko ICICI live payouts / settlement (https://api.eko.in:25002/ekoicici). */
+  /** Eko ICICI — settlement (v1 balance) + KYC tools (v3 DigiLocker/PAN/bank). */
   ekoBaseUrl: (process.env.EKO_BASE_URL || "https://api.eko.in:25002/ekoicici").replace(/\/$/, ""),
+  ekoKycBaseUrl: (process.env.EKO_KYC_BASE_URL || "https://api.eko.in/ekoicici/v3").replace(/\/$/, ""),
   ekoDeveloperKey: process.env.EKO_DEVELOPER_KEY || "",
   /** Authenticator / access key from Eko email — used only server-side for HMAC secret-key. */
   ekoAccessKey: process.env.EKO_ACCESS_KEY || process.env.EKO_AUTHENTICATOR_KEY || "",
   ekoInitiatorId: (process.env.EKO_INITIATOR_ID || "").replace(/\D/g, ""),
-  /** Optional — some Eko v1 balance APIs require user_code from onboarding. */
-  ekoUserCode: (process.env.EKO_USER_CODE || "").trim()
+  /** Optional — some Eko APIs require user_code from onboarding. */
+  ekoUserCode: (process.env.EKO_USER_CODE || "").trim(),
+  ekoDigilockerRedirectUrl:
+    process.env.EKO_DIGILOCKER_REDIRECT_URL ||
+    `${(process.env.API_BASE_URL || "http://localhost:5000").replace(/\/$/, "")}/api/delivery/kyc/digilocker/callback`,
+  /** When true, DigiLocker/PAN/bank KYC succeed with fake data (no live Eko calls). */
+  ekoMock: process.env.EKO_MOCK === "true"
 };
 
 export const validateEnv = (): void => {
