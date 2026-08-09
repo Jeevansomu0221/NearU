@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View
 } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type Region } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { fetchDrivingRoute } from "../utils/directions";
 import type { LatLng } from "../utils/mapCoordinates";
@@ -27,6 +27,13 @@ type Props = {
   height?: number;
 };
 
+type Region = {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+};
+
 const DEFAULT_REGION: Region = {
   latitude: 17.385,
   longitude: 78.4867,
@@ -40,14 +47,101 @@ const pinColor = (kind: MapPin["kind"]) => {
   return "#E65100";
 };
 
-export default function DeliveryJobMap({
+const hasNativeMapView = () => {
+  if (Platform.OS === "web") return false;
+
+  try {
+    const config =
+      UIManager.getViewManagerConfig?.("AIRMap") ||
+      UIManager.getViewManagerConfig?.("RNMapsMapView") ||
+      // Older RN helpers
+      (UIManager as any).AIRMap ||
+      (UIManager as any).RNMapsMapView;
+    return Boolean(config);
+  } catch {
+    return false;
+  }
+};
+
+type MapsModule = {
+  default: React.ComponentType<any>;
+  Marker: React.ComponentType<any>;
+  Polyline: React.ComponentType<any>;
+  PROVIDER_GOOGLE?: string;
+};
+
+let cachedMapsModule: MapsModule | null | undefined;
+
+const getMapsModule = (): MapsModule | null => {
+  if (cachedMapsModule !== undefined) return cachedMapsModule;
+  if (!hasNativeMapView()) {
+    cachedMapsModule = null;
+    return null;
+  }
+
+  try {
+    cachedMapsModule = require("react-native-maps") as MapsModule;
+    return cachedMapsModule;
+  } catch {
+    cachedMapsModule = null;
+    return null;
+  }
+};
+
+class MapErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.warn("DeliveryJobMap failed to render native map:", error);
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+function MapFallback({
+  height,
+  onOpenExternalMaps,
+  message
+}: {
+  height: number;
+  onOpenExternalMaps: () => void;
+  message: string;
+}) {
+  return (
+    <View style={[styles.wrap, styles.fallbackWrap, { height }]}>
+      <Ionicons name="map-outline" size={36} color="#64748B" />
+      <Text style={styles.fallbackTitle}>Map preview unavailable</Text>
+      <Text style={styles.fallbackText}>{message}</Text>
+      <TouchableOpacity style={styles.fallbackMapsButton} onPress={onOpenExternalMaps} activeOpacity={0.85}>
+        <Ionicons name="navigate" size={18} color="#FFFFFF" />
+        <Text style={styles.fallbackMapsLabel}>Open in Google Maps</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function NativeDeliveryJobMap({
   riderLocation,
   destination,
   pins = [],
   onOpenExternalMaps,
-  height = 280
-}: Props) {
-  const mapRef = useRef<MapView | null>(null);
+  height = 280,
+  maps
+}: Props & { maps: MapsModule }) {
+  const MapView = maps.default;
+  const Marker = maps.Marker;
+  const Polyline = maps.Polyline;
+  const mapRef = useRef<any>(null);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
   const [loadingRoute, setLoadingRoute] = useState(false);
 
@@ -74,15 +168,13 @@ export default function DeliveryJobMap({
       ...(riderLocation ? [riderLocation] : [])
     ];
 
-    const unique = coords.filter(
+    return coords.filter(
       (point, index, arr) =>
         arr.findIndex(
           (candidate) =>
             candidate.latitude === point.latitude && candidate.longitude === point.longitude
         ) === index
     );
-
-    return unique;
   }, [markers, destination, riderLocation]);
 
   useEffect(() => {
@@ -112,7 +204,7 @@ export default function DeliveryJobMap({
     if (!mapRef.current || fitCoordinates.length === 0) return;
 
     if (fitCoordinates.length === 1) {
-      mapRef.current.animateToRegion(
+      mapRef.current.animateToRegion?.(
         {
           ...fitCoordinates[0],
           latitudeDelta: 0.02,
@@ -123,7 +215,7 @@ export default function DeliveryJobMap({
       return;
     }
 
-    mapRef.current.fitToCoordinates(fitCoordinates, {
+    mapRef.current.fitToCoordinates?.(fitCoordinates, {
       edgePadding: { top: 48, right: 48, bottom: 48, left: 48 },
       animated: true
     });
@@ -143,7 +235,7 @@ export default function DeliveryJobMap({
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+        provider={Platform.OS === "android" ? maps.PROVIDER_GOOGLE : undefined}
         initialRegion={initialRegion}
         showsUserLocation={false}
         showsMyLocationButton={false}
@@ -184,11 +276,70 @@ export default function DeliveryJobMap({
   );
 }
 
+export default function DeliveryJobMap(props: Props) {
+  const height = props.height ?? 280;
+  const maps = getMapsModule();
+  const fallback = (
+    <MapFallback
+      height={height}
+      onOpenExternalMaps={props.onOpenExternalMaps}
+      message={
+        Platform.OS === "web"
+          ? "Embedded maps are available in the Android/iOS app."
+          : "Rebuild the delivery app (expo run:android) to enable the in-app map. You can still navigate with Google Maps."
+      }
+    />
+  );
+
+  if (!maps) {
+    return fallback;
+  }
+
+  return (
+    <MapErrorBoundary fallback={fallback}>
+      <NativeDeliveryJobMap {...props} height={height} maps={maps} />
+    </MapErrorBoundary>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
     backgroundColor: "#E8EEF5",
     overflow: "hidden"
+  },
+  fallbackWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    gap: 8
+  },
+  fallbackTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#334155"
+  },
+  fallbackText: {
+    textAlign: "center",
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#64748B",
+    marginBottom: 8
+  },
+  fallbackMapsButton: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#1A73E8",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10
+  },
+  fallbackMapsLabel: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700"
   },
   mapsButton: {
     position: "absolute",

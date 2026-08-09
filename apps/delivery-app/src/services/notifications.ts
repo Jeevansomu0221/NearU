@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../utils/authStorage";
-import { Alert, Linking, PermissionsAndroid, Platform, Vibration } from "react-native";
+import { Linking, PermissionsAndroid, Platform, Vibration } from "react-native";
 import api from "../api/client";
 import { acceptJob, rejectJob } from "../api/delivery.api";
 import {
@@ -16,6 +16,29 @@ const ANDROID_NOTIFICATION_CHANNEL_ID = "vyaha_alerts";
 const DELIVERY_ACCEPT_ACTION = "delivery_accept";
 const DELIVERY_REJECT_ACTION = "delivery_reject";
 const DELIVERY_VIEW_ACTION = "delivery_view";
+
+type AlertButton = {
+  text?: string;
+  style?: "default" | "cancel" | "destructive";
+  onPress?: () => void | Promise<void>;
+};
+
+const showAlert = (title: string, message?: string, buttons?: AlertButton[]) => {
+  if (Platform.OS === "web") {
+    const confirmed = typeof window !== "undefined" ? window.confirm([title, message].filter(Boolean).join("\n\n")) : false;
+    if (!confirmed) {
+      buttons?.find((button) => button.style === "cancel")?.onPress?.();
+      return;
+    }
+    const action = buttons?.find((button) => button.style !== "cancel") || buttons?.[0];
+    void action?.onPress?.();
+    return;
+  }
+
+  // Avoid static Alert import — react-native-web has no Alert export and breaks Expo web bundling.
+  const { Alert } = require("react-native") as typeof import("react-native");
+  Alert.alert(title, message, buttons as any);
+};
 
 let messagingInstance: any | null | undefined;
 let didSetBackgroundHandler = false;
@@ -372,7 +395,7 @@ const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
   const orderId = getNotificationOrderId(remoteMessage?.data);
 
   if (isDeletionNotification(remoteMessage?.data)) {
-    Alert.alert(title, body, [
+    showAlert(title, body, [
       {
         text: "OK",
         onPress: () => acknowledgeDeletionNotification(navigationRef, remoteMessage?.data)
@@ -382,7 +405,7 @@ const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
   }
 
   if (isVerificationStatusNotification(remoteMessage?.data)) {
-    Alert.alert(title, body, [
+    showAlert(title, body, [
       {
         text: "OK",
         onPress: () => acknowledgeVerificationStatusNotification()
@@ -391,7 +414,7 @@ const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
     return;
   }
 
-  const actions: any[] = [
+  const actions: AlertButton[] = [
     { text: "Later", style: "cancel" },
     {
       text: "View",
@@ -414,13 +437,13 @@ const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
             navigateFromData(navigationRef, remoteMessage?.data);
             return;
           }
-          Alert.alert("Could not accept job", response.message || "Please try again.");
+          showAlert("Could not accept job", response.message || "Please try again.");
         }
       }
     );
   }
 
-  Alert.alert(title, body, actions);
+  showAlert(title, body, actions);
 };
 
 export const registerForPushNotifications = async () => {
