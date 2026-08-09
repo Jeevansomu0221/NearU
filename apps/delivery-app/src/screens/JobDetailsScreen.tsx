@@ -27,7 +27,15 @@ import {
   type CodUpiSession
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
+import DeliveryJobMap, { type MapPin } from "../components/DeliveryJobMap";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
+import {
+  getLatLngFromMapsLink,
+  getLatLngFromPoint,
+  resolveLatLng,
+  type LatLng,
+  type MapLocation
+} from "../utils/mapCoordinates";
 import { getCurrentRiderLocation } from "../utils/riderLocation";
 import { getOrderRiderEarnings } from "../utils/riderEarnings";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -36,25 +44,6 @@ interface Props {
   route: any;
   navigation: any;
 }
-
-type CoordinateValue = number | string | null | undefined;
-
-type MapLocation = {
-  coordinates?:
-    | [CoordinateValue, CoordinateValue]
-    | {
-        latitude?: CoordinateValue;
-        longitude?: CoordinateValue;
-        lat?: CoordinateValue;
-        lng?: CoordinateValue;
-        lon?: CoordinateValue;
-      };
-  latitude?: CoordinateValue;
-  longitude?: CoordinateValue;
-  lat?: CoordinateValue;
-  lng?: CoordinateValue;
-  lon?: CoordinateValue;
-};
 
 type MapTarget = {
   address?: AddressLike;
@@ -119,9 +108,34 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     onAction: () => void;
   } | null>(null);
   const [noLocationModal, setNoLocationModal] = useState<NoLocationModalState | null>(null);
+  const [riderLocation, setRiderLocation] = useState<LatLng | null>(null);
   const codQrDisplayUri = useMemo(() => getCodQrDisplayUri(codUpiSession), [codUpiSession]);
   const showRazorpayPoster = isRazorpayPosterQr(codUpiSession);
   const qrPulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshRiderLocation = async () => {
+      const location = await getCurrentRiderLocation({ showDeniedAlert: false });
+      if (!cancelled && location?.coords) {
+        setRiderLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude
+        });
+      }
+    };
+
+    void refreshRiderLocation();
+    const intervalId = setInterval(() => {
+      void refreshRiderLocation();
+    }, 20000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!upiPaymentVisible) return;
@@ -141,7 +155,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     loadJobDetails();
-    getCurrentRiderLocation({ showDeniedAlert: false }).catch(() => {});
   }, []);
 
   const refreshUpiPaymentStatus = useCallback(async () => {
@@ -274,76 +287,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const handleCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`);
-  };
-
-  const toCoordinateNumber = (value: CoordinateValue) => {
-    if (value === null || value === undefined || value === "") return null;
-
-    const parsed = typeof value === "string" ? Number(value.trim()) : Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const getLatLngFromPoint = (location?: MapLocation) => {
-    if (!location) return null;
-
-    const coordinateArray = Array.isArray(location.coordinates) ? location.coordinates : null;
-    const coordinateObject = !Array.isArray(location.coordinates) ? location.coordinates : null;
-    const latitude = toCoordinateNumber(
-      location.latitude ?? location.lat ?? coordinateObject?.latitude ?? coordinateObject?.lat ?? coordinateArray?.[1]
-    );
-    const longitude = toCoordinateNumber(
-      location.longitude ?? location.lng ?? location.lon ?? coordinateObject?.longitude ?? coordinateObject?.lng ?? coordinateObject?.lon ?? coordinateArray?.[0]
-    );
-
-    if (
-      typeof latitude !== "number" ||
-      typeof longitude !== "number" ||
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude) ||
-      (latitude === 0 && longitude === 0)
-    ) {
-      return null;
-    }
-
-    return { latitude, longitude };
-  };
-
-  const getLatLngFromMapsLink = (mapsLink?: string) => {
-    if (!mapsLink) return null;
-
-    let decodedLink = mapsLink;
-    try {
-      decodedLink = decodeURIComponent(mapsLink);
-    } catch {
-      decodedLink = mapsLink;
-    }
-    const coordinatePatterns = [
-      /(?:destination|query|q)=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i,
-      /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
-      /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i
-    ];
-
-    for (const pattern of coordinatePatterns) {
-      const match = decodedLink.match(pattern);
-      const latitude = toCoordinateNumber(match?.[1]);
-      const longitude = toCoordinateNumber(match?.[2]);
-
-      if (
-        typeof latitude === "number" &&
-        typeof longitude === "number" &&
-        Number.isFinite(latitude) &&
-        Number.isFinite(longitude) &&
-        latitude >= -90 &&
-        latitude <= 90 &&
-        longitude >= -180 &&
-        longitude <= 180 &&
-        !(latitude === 0 && longitude === 0)
-      ) {
-        return { latitude, longitude };
-      }
-    }
-
-    return null;
   };
 
   const openCoordinateDirections = async (
@@ -702,8 +645,115 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     ? job.pickupStops
     : [{ partnerId: job.partnerId, orderId: job._id, sequence: 1, status: job.status, items: job.items, itemTotal: job.itemTotal, deliveryFee: job.deliveryFee, grandTotal: job.grandTotal }];
 
+  const isPickupPhase = job.status === "READY" || job.status === "ASSIGNED";
+  const activePickupStop = pickupStops.find((stop) => stop.status !== "PICKED_UP" && stop.status !== "DELIVERED") || pickupStops[0];
+  const activePickupCoords = resolveLatLng({
+    location: activePickupStop?.partnerId?.location,
+    googleMapsLink:
+      activePickupStop?.partnerId?.googleMapsLink ||
+      getAddressGoogleMapsLink(activePickupStop?.partnerId?.address)
+  });
+  const deliveryCoords = resolveLatLng({
+    location: job.deliveryLocation,
+    googleMapsLink: job.deliveryGoogleMapsLink
+  });
+  const activeDestination = isPickupPhase ? activePickupCoords : deliveryCoords;
+  const activeMapsTarget: MapTarget = isPickupPhase
+    ? {
+        address: activePickupStop?.partnerId?.address,
+        googleMapsLink:
+          activePickupStop?.partnerId?.googleMapsLink ||
+          getAddressGoogleMapsLink(activePickupStop?.partnerId?.address),
+        location: activePickupStop?.partnerId?.location,
+        destinationLabel:
+          activePickupStop?.partnerId?.restaurantName || activePickupStop?.partnerId?.shopName,
+        contactPhone: activePickupStop?.partnerId?.phone
+      }
+    : {
+        address: job.deliveryAddress,
+        googleMapsLink: job.deliveryGoogleMapsLink,
+        location: job.deliveryLocation,
+        requireCoordinates: true,
+        destinationLabel: job.customerId?.name || "Customer",
+        contactPhone: job.customerId?.phone
+      };
+
+  const mapPins: MapPin[] = [];
+  pickupStops.forEach((stop, index) => {
+    const coordinate = resolveLatLng({
+      location: stop.partnerId?.location,
+      googleMapsLink: stop.partnerId?.googleMapsLink || getAddressGoogleMapsLink(stop.partnerId?.address)
+    });
+    if (coordinate) {
+      mapPins.push({
+        id: `pickup-${stop.orderId || index}`,
+        coordinate,
+        title: stop.partnerId?.restaurantName || stop.partnerId?.shopName || `Pickup ${index + 1}`,
+        kind: "pickup"
+      });
+    }
+  });
+  if (deliveryCoords) {
+    mapPins.push({
+      id: "drop",
+      coordinate: deliveryCoords,
+      title: job.customerId?.name || "Customer",
+      kind: "drop"
+    });
+  }
+
+  const statusHeadline = isPickupPhase
+    ? "Ready for pickup!"
+    : job.status === "PICKED_UP"
+      ? "Out for delivery"
+      : job.status.replace("_", " ");
+  const statusSubtitle = isPickupPhase
+    ? activePickupStop?.partnerId?.restaurantName ||
+      activePickupStop?.partnerId?.shopName ||
+      "Restaurant"
+    : job.customerId?.name || "Customer";
+  const statusAddress = isPickupPhase
+    ? formatAddress(activePickupStop?.partnerId?.address)
+    : job.deliveryAddress;
+  const statusPhone = isPickupPhase ? activePickupStop?.partnerId?.phone : job.customerId?.phone;
+  const statusCallLabel = isPickupPhase ? "Call Restaurant" : "Call Customer";
+
+  const bottomPad = Math.max(insets.bottom, 12);
+
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.screen}>
+      <DeliveryJobMap
+        height={Math.round(Dimensions.get("window").height * 0.38)}
+        riderLocation={riderLocation}
+        destination={activeDestination}
+        pins={mapPins}
+        onOpenExternalMaps={() => {
+          void handleOpenMaps(activeMapsTarget);
+        }}
+      />
+
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]}
+      >
+      {/* Live stop summary */}
+      <View style={styles.liveStopCard}>
+        <View style={styles.liveStopHeader}>
+          <View style={styles.liveStopCheck}>
+            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+          </View>
+          <Text style={styles.liveStopTitle}>{statusHeadline}</Text>
+        </View>
+        <Text style={styles.liveStopName}>{statusSubtitle}</Text>
+        <Text style={styles.liveStopAddress}>{statusAddress}</Text>
+        {statusPhone ? (
+          <TouchableOpacity style={styles.liveCallButton} onPress={() => handleCall(statusPhone)}>
+            <Ionicons name="call" size={16} color="#2E7D32" />
+            <Text style={styles.liveCallText}>{statusCallLabel}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.orderHeader}>
@@ -765,7 +815,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               }
             >
               <Ionicons name="navigate" size={16} color="#1976D2" />
-              <Text style={styles.mapButtonText}>Directions in Google Maps</Text>
+              <Text style={styles.mapButtonText}>Open in Google Maps</Text>
             </TouchableOpacity>
           </View>
         ))}
@@ -809,7 +859,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             }
           >
             <Ionicons name="navigate" size={16} color="#1976D2" />
-            <Text style={styles.mapButtonText}>Directions in Google Maps</Text>
+            <Text style={styles.mapButtonText}>Open in Google Maps</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -913,84 +963,66 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         </View>
       </View>
 
-      {/* Action Buttons */}
-      {job.status === "READY" && (
-        <View style={styles.actionSection}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleAcceptDelivery}
-            disabled={updating}
-          >
-            {updating ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>Accept Delivery</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <Text style={styles.actionHint}>
-            Accept this job from here and continue straight to pickup
-          </Text>
-        </View>
-      )}
-
-      {job.status === "ASSIGNED" && (
-        <View style={styles.actionSection}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handlePickUp}
-            disabled={updating}
-          >
-            {updating ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>
-                  {job.isBundledDelivery ? "All Pickups Completed" : "Mark as Picked Up"}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <Text style={styles.actionHint}>
-            {job.isBundledDelivery
-              ? "Use this after collecting orders from every restaurant listed above"
-              : "Click this when you've collected the order from the restaurant"}
-          </Text>
-        </View>
-      )}
-
-      {job.status === "PICKED_UP" && (
-        <View style={styles.actionSection}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deliverButton]}
-            onPress={handleDeliver}
-            disabled={updating}
-          >
-            {updating ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>
-                  {job.paymentMethod === "CASH_ON_DELIVERY" 
-                    ? "Collect Payment & Deliver" 
-                    : "Mark as Delivered"}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <Text style={styles.actionHint}>
-            {job.paymentMethod === "CASH_ON_DELIVERY"
-              ? `Collect ₹${job.grandTotal} via cash or Vyaha UPI QR before marking as delivered`
-              : "Click after delivering to the customer"}
-          </Text>
-        </View>
-      )}
-
       <View style={styles.spacer} />
+      </ScrollView>
+
+      {(job.status === "READY" || job.status === "ASSIGNED" || job.status === "PICKED_UP") && (
+        <View style={[styles.bottomActionBar, { paddingBottom: bottomPad }]}>
+          {job.status === "READY" && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleAcceptDelivery}
+              disabled={updating}
+            >
+              {updating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Accept Delivery</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {job.status === "ASSIGNED" && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.reachedPickupButton]}
+              onPress={handlePickUp}
+              disabled={updating}
+            >
+              {updating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.actionButtonText}>
+                  {job.isBundledDelivery ? "All pickups completed" : "Reached pickup location"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {job.status === "PICKED_UP" && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deliverButton]}
+              onPress={handleDeliver}
+              disabled={updating}
+            >
+              {updating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>
+                    {job.paymentMethod === "CASH_ON_DELIVERY"
+                      ? "Collect Payment & Deliver"
+                      : "Mark as Delivered"}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       <Modal visible={codPaymentChoiceVisible} transparent animationType="fade" onRequestClose={() => setCodPaymentChoiceVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -1244,14 +1276,82 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  scrollContent: {
+    paddingBottom: 12,
+  },
+  liveStopCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 14,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  liveStopHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  liveStopCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#22C55E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  liveStopTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  liveStopName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  liveStopAddress: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#667085',
+  },
+  liveCallButton: {
+    marginTop: 14,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  liveCallText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2E7D32',
+  },
+  bottomActionBar: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  reachedPickupButton: {
+    backgroundColor: '#FF6B00',
   },
   loadingContainer: {
     flex: 1,
@@ -1536,7 +1636,7 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     marginLeft: 8,
   },
   actionHint: {
@@ -1547,7 +1647,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   spacer: {
-    height: 40,
+    height: 24,
   },
   modalOverlay: {
     flex: 1,
