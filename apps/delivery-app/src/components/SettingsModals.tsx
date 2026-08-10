@@ -274,8 +274,14 @@ export default function SettingsModals({
           <DetailRow label="Vehicle" value={`${vehicleType}${vehicleNumber ? ` (${vehicleNumber})` : ""}`} />
           <DetailRow label="License number" value={profile?.licenseNumber || "Not added"} />
           <DetailRow label="Address" value={profile?.address || "Not added"} />
-          <DetailRow label="Emergency contact" value={profile?.emergencyContactName || "Not added"} />
-          <DetailRow label="Emergency phone" value={profile?.emergencyContactPhone || "Not added"} />
+          <DetailRow
+            label="Emergency contact"
+            value={
+              profile?.emergencyContactName
+                ? `${profile.emergencyContactName}${profile.emergencyContactPhone ? ` · ${profile.emergencyContactPhone}` : ""}`
+                : "Add from Profile → Emergency Contact"
+            }
+          />
           <DetailRow label="Verification status" value={verificationStatusLabel} />
           <DetailRow label="Total deliveries" value={String(profile?.totalDeliveries || 0)} />
           <DetailRow label="Rating" value={`${(profile?.rating || 0).toFixed(1)} / 5`} />

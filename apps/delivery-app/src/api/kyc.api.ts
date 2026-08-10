@@ -67,11 +67,6 @@ export const skipBank = (): Promise<ApiResponse<DeliveryProfile>> => {
 };
 
 export const saveRegistrationBasics = (payload: {
-  vehicleType: DeliveryProfile["vehicleType"];
-  vehicleNumber?: string;
-  licenseNumber?: string;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
   termsAccepted: boolean;
 }): Promise<ApiResponse<DeliveryProfile>> => {
   return apiPost<DeliveryProfile>("/delivery/kyc/registration-basics", payload);

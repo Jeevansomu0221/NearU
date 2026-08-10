@@ -156,17 +156,13 @@ const getMissingDeliveryProfileFields = (profile: DeliveryProfileCompletionInput
     !/^Delivery\s\d{4}$/.test(safeTrimmedString(profile.name)) &&
     safeTrimmedString(profile.name).length >= 3;
 
-  // Digital KYC: Aadhaar OTP verification is the only mandatory identity gate.
+  // Digital KYC: Aadhaar verification + terms are the onboarding gates.
+  // Vehicle and emergency contact are optional (managed later in Profile).
   if (!profile.documents?.aadhaarVerified) {
     missingFields.push("Aadhaar verification");
   }
   if (!hasRealName) missingFields.push("name");
   if (!profile.termsAcceptedAt) missingFields.push("accepted terms");
-  if (!safeTrimmedString(profile.vehicleType)) missingFields.push("vehicle type");
-  if (!safeTrimmedString(profile.emergencyContactName)) missingFields.push("emergency contact name");
-  if (!emergencyPhoneRegex.test(safeTrimmedString(profile.emergencyContactPhone))) {
-    missingFields.push("emergency contact phone");
-  }
 
   return missingFields;
 };

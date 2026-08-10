@@ -24,7 +24,6 @@ interface AuthRequest extends Request {
 
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-const emergencyPhoneRegex = /^[0-9]{10}$/;
 
 const ensureDeliveryUser = (req: AuthRequest, res: Response) => {
   const user = req.user;
@@ -556,37 +555,17 @@ export const completeDeliveryRegistrationBasics = async (req: AuthRequest, res: 
       return errorResponse(res, "Verify Aadhaar before completing registration", 400);
     }
 
-    const vehicleType = String(req.body.vehicleType || partner.vehicleType || "Bike").trim();
-    const vehicleNumber = String(req.body.vehicleNumber || "").trim().toUpperCase();
-    const licenseNumber = String(req.body.licenseNumber || "").trim().toUpperCase();
-    const emergencyContactName = String(req.body.emergencyContactName || "").trim();
-    const emergencyContactPhone = String(req.body.emergencyContactPhone || "").replace(/\D/g, "").slice(-10);
     const termsAccepted = Boolean(req.body.termsAccepted);
 
-    if (!emergencyContactName) {
-      return errorResponse(res, "Emergency contact name is required", 400);
-    }
-    if (!emergencyPhoneRegex.test(emergencyContactPhone)) {
-      return errorResponse(res, "Emergency contact phone must be 10 digits", 400);
-    }
     if (!termsAccepted && !partner.termsAcceptedAt) {
       return errorResponse(res, "Please accept the terms to continue", 400);
-    }
-
-    const motorVehicle = !["cycle", "bicycle", "ev"].includes(vehicleType.toLowerCase());
-    if (motorVehicle && !vehicleNumber) {
-      return errorResponse(res, "Vehicle number is required", 400);
     }
 
     await DeliveryPartner.updateOne(
       { _id: partner._id },
       {
         $set: {
-          vehicleType,
-          vehicleNumber: motorVehicle ? vehicleNumber : "",
-          licenseNumber: motorVehicle ? licenseNumber : "",
-          emergencyContactName,
-          emergencyContactPhone,
+          vehicleType: partner.vehicleType || "Bike",
           ...(termsAccepted ? { termsAcceptedAt: partner.termsAcceptedAt || new Date() } : {}),
           status: partner.status === "PENDING" || partner.status === "INACTIVE" ? "ACTIVE" : partner.status
         }

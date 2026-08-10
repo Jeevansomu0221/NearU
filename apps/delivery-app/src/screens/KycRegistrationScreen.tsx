@@ -38,18 +38,35 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const GREEN = "#16A34A";
-const VEHICLE_TYPES: DeliveryProfile["vehicleType"][] = ["Bike", "Scooter", "EV", "Cycle", "Car"];
-const DRAFT_KEY = "delivery_kyc_registration_draft_v1";
+const DRAFT_KEY = "delivery_kyc_registration_draft_v2";
 const STEP_META = [
   { title: "DigiLocker", hint: "Verify Aadhaar via DigiLocker" },
-  { title: "Details", hint: "Vehicle & emergency contact" },
+  { title: "Terms", hint: "Accept partner terms to continue" },
   { title: "PAN", hint: "Optional — add later in Profile" },
   { title: "Bank", hint: "Optional — needed for payouts" }
 ] as const;
 
 type Step = 0 | 1 | 2 | 3;
 
-const motorVehicle = (type: string) => !["cycle", "bicycle", "ev"].includes(type.toLowerCase());
+type KycDraft = {
+  step?: Step;
+  aadhaarConsent?: boolean;
+  digilockerStarted?: boolean;
+  initiationTransactionId?: string;
+  digilockerCode?: string;
+  digilockerReferenceId?: string;
+  digilockerVerificationId?: string;
+  isMockDigiLocker?: boolean;
+  lockedName?: string;
+  termsAccepted?: boolean;
+  panNumber?: string;
+  panConsent?: boolean;
+  bankAccountHolderName?: string;
+  bankAccountNumber?: string;
+  bankIfsc?: string;
+  bankUpiId?: string;
+  updatedAt?: string;
+};
 
 const Field = ({
   label,
@@ -82,6 +99,16 @@ const Check = ({
   </Pressable>
 );
 
+const loadStoredDraft = async (): Promise<KycDraft | null> => {
+  try {
+    const raw = await AsyncStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as KycDraft;
+  } catch {
+    return null;
+  }
+};
+
 export default function KycRegistrationScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const fade = useRef(new Animated.Value(1)).current;
@@ -90,6 +117,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
   const [step, setStep] = useState<Step>(0);
   const [profile, setProfile] = useState<DeliveryProfile | null>(null);
   const [statusNote, setStatusNote] = useState("");
+  const draftHydratedRef = useRef(false);
 
   const [aadhaarConsent, setAadhaarConsent] = useState(false);
   const [digilockerStarted, setDigilockerStarted] = useState(false);
@@ -104,11 +132,6 @@ export default function KycRegistrationScreen({ navigation }: any) {
   const initiationTxnRef = useRef("");
   const [lockedName, setLockedName] = useState("");
 
-  const [vehicleType, setVehicleType] = useState<DeliveryProfile["vehicleType"]>("Bike");
-  const [vehicleNumber, setVehicleNumber] = useState("");
-  const [licenseNumber, setLicenseNumber] = useState("");
-  const [emergencyContactName, setEmergencyContactName] = useState("");
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [panNumber, setPanNumber] = useState("");
@@ -140,6 +163,15 @@ export default function KycRegistrationScreen({ navigation }: any) {
   const isBankDone = (docs?: DeliveryProfile["documents"] | null) =>
     docs?.bankVerificationStatus === "VERIFIED" || Boolean(docs?.bankDetailsSkipped);
 
+  const resolveStepFromProfile = (data: DeliveryProfile): Step | "done" => {
+    const docs = data.documents || {};
+    if (!docs.aadhaarVerified) return 0;
+    if (!data.termsAcceptedAt) return 1;
+    if (!docs.panVerified && !docs.panSkipped) return 2;
+    if (!isBankDone(docs)) return 3;
+    return "done";
+  };
+
   const goAfterPan = async (data: DeliveryProfile) => {
     setProfile(data);
     if (isBankDone(data.documents)) {
@@ -149,18 +181,34 @@ export default function KycRegistrationScreen({ navigation }: any) {
     animateStep(3);
   };
 
-  const hydrateFromProfile = (data: DeliveryProfile) => {
+  const applyDraftFields = (draft: KycDraft) => {
+    if (typeof draft.aadhaarConsent === "boolean") setAadhaarConsent(draft.aadhaarConsent);
+    if (typeof draft.digilockerStarted === "boolean") setDigilockerStarted(draft.digilockerStarted);
+    if (draft.initiationTransactionId) {
+      setInitiationTransactionId(draft.initiationTransactionId);
+      initiationTxnRef.current = draft.initiationTransactionId;
+    }
+    if (draft.digilockerCode) setDigilockerCode(draft.digilockerCode);
+    if (draft.digilockerReferenceId) setDigilockerReferenceId(draft.digilockerReferenceId);
+    if (draft.digilockerVerificationId) setDigilockerVerificationId(draft.digilockerVerificationId);
+    if (typeof draft.isMockDigiLocker === "boolean") setIsMockDigiLocker(draft.isMockDigiLocker);
+    if (draft.lockedName) setLockedName(draft.lockedName);
+    if (typeof draft.termsAccepted === "boolean") setTermsAccepted(draft.termsAccepted);
+    if (draft.panNumber) setPanNumber(draft.panNumber);
+    if (typeof draft.panConsent === "boolean") setPanConsent(draft.panConsent);
+    if (draft.bankAccountHolderName) setBankAccountHolderName(draft.bankAccountHolderName);
+    if (draft.bankAccountNumber) setBankAccountNumber(draft.bankAccountNumber);
+    if (draft.bankIfsc) setBankIfsc(draft.bankIfsc);
+    if (draft.bankUpiId) setBankUpiId(draft.bankUpiId);
+  };
+
+  const hydrateFromProfile = (data: DeliveryProfile, draft?: KycDraft | null) => {
     setProfile(data);
     const docs = data.documents || {};
     if (docs.aadhaarVerified) {
       setLockedName(docs.aadhaarName || data.name || "");
       setDigilockerStarted(true);
     }
-    setVehicleType(data.vehicleType || "Bike");
-    setVehicleNumber(data.vehicleNumber || "");
-    setLicenseNumber(data.licenseNumber || "");
-    setEmergencyContactName(data.emergencyContactName || "");
-    setEmergencyContactPhone(data.emergencyContactPhone || "");
     setTermsAccepted(Boolean(data.termsAcceptedAt));
     setPanNumber(docs.panNumber || "");
     setBankAccountHolderName(docs.bankAccountHolderName || docs.aadhaarName || data.name || "");
@@ -168,11 +216,16 @@ export default function KycRegistrationScreen({ navigation }: any) {
     setBankIfsc(docs.bankIfsc || "");
     setBankUpiId(docs.bankUpiId || "");
 
-    if (!docs.aadhaarVerified) setStep(0);
-    else if (!data.termsAcceptedAt || !data.emergencyContactName) setStep(1);
-    else if (!docs.panVerified && !docs.panSkipped) setStep(2);
-    else if (!isBankDone(docs)) setStep(3);
-    else finishToMain().catch(() => {});
+    if (draft) applyDraftFields(draft);
+
+    const resolved = resolveStepFromProfile(data);
+    if (resolved === "done") {
+      finishToMain().catch(() => {});
+      return;
+    }
+
+    // Server progress wins for which step to open; draft restores in-progress form fields.
+    setStep(resolved);
   };
 
   const applyDigiLockerResult = (data: AadhaarVerifyResult) => {
@@ -246,25 +299,37 @@ export default function KycRegistrationScreen({ navigation }: any) {
   useEffect(() => {
     const load = async () => {
       try {
+        const draft = await loadStoredDraft();
         const response = await getDeliveryProfile();
         if (response.success && response.data) {
           const docs = response.data.documents || {};
           if (
             response.data.status === "ACTIVE" &&
             docs.aadhaarVerified &&
+            response.data.termsAcceptedAt &&
             (docs.panVerified || docs.panSkipped) &&
             isBankDone(docs)
           ) {
             await finishToMain();
             return;
           }
-          hydrateFromProfile(response.data);
+          hydrateFromProfile(response.data, draft);
+        } else if (draft) {
+          applyDraftFields(draft);
+          if (typeof draft.step === "number") setStep(draft.step);
         } else {
           Alert.alert("Error", response.message || "Failed to load profile");
         }
       } catch (error: any) {
-        Alert.alert("Error", error?.message || "Failed to load profile");
+        const draft = await loadStoredDraft();
+        if (draft) {
+          applyDraftFields(draft);
+          if (typeof draft.step === "number") setStep(draft.step);
+        } else {
+          Alert.alert("Error", error?.message || "Failed to load profile");
+        }
       } finally {
+        draftHydratedRef.current = true;
         setLoading(false);
       }
     };
@@ -280,6 +345,50 @@ export default function KycRegistrationScreen({ navigation }: any) {
     const sub = Linking.addEventListener("url", ({ url }) => handleUrl(url));
     return () => sub.remove();
   }, [initiationTransactionId]);
+
+  useEffect(() => {
+    if (!draftHydratedRef.current || loading) return;
+
+    const draft: KycDraft = {
+      step,
+      aadhaarConsent,
+      digilockerStarted,
+      initiationTransactionId: initiationTransactionId || undefined,
+      digilockerCode,
+      digilockerReferenceId,
+      digilockerVerificationId,
+      isMockDigiLocker,
+      lockedName: lockedName || undefined,
+      termsAccepted,
+      panNumber: panNumber || undefined,
+      panConsent,
+      bankAccountHolderName: bankAccountHolderName || undefined,
+      bankAccountNumber: bankAccountNumber || undefined,
+      bankIfsc: bankIfsc || undefined,
+      bankUpiId: bankUpiId || undefined,
+      updatedAt: new Date().toISOString()
+    };
+
+    AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft)).catch(() => {});
+  }, [
+    loading,
+    step,
+    aadhaarConsent,
+    digilockerStarted,
+    initiationTransactionId,
+    digilockerCode,
+    digilockerReferenceId,
+    digilockerVerificationId,
+    isMockDigiLocker,
+    lockedName,
+    termsAccepted,
+    panNumber,
+    panConsent,
+    bankAccountHolderName,
+    bankAccountNumber,
+    bankIfsc,
+    bankUpiId
+  ]);
 
   const handleStartDigiLocker = async () => {
     if (!aadhaarConsent) {
@@ -332,18 +441,6 @@ export default function KycRegistrationScreen({ navigation }: any) {
   };
 
   const handleSaveBasics = async () => {
-    if (!emergencyContactName.trim()) {
-      Alert.alert("Missing details", "Emergency contact name is required.");
-      return;
-    }
-    if (!/^\d{10}$/.test(emergencyContactPhone)) {
-      Alert.alert("Missing details", "Enter a valid 10-digit emergency number.");
-      return;
-    }
-    if (motorVehicle(vehicleType) && !vehicleNumber.trim()) {
-      Alert.alert("Missing details", "Vehicle number is required.");
-      return;
-    }
     if (!termsAccepted) {
       Alert.alert("Terms required", "Please accept the terms to continue.");
       return;
@@ -351,11 +448,6 @@ export default function KycRegistrationScreen({ navigation }: any) {
     setBusy(true);
     try {
       const response = await saveRegistrationBasics({
-        vehicleType,
-        vehicleNumber: vehicleNumber.trim().toUpperCase(),
-        licenseNumber: licenseNumber.trim().toUpperCase(),
-        emergencyContactName: emergencyContactName.trim(),
-        emergencyContactPhone,
         termsAccepted: true
       });
       if (!response.success || !response.data) throw new Error(response.message || "Failed to save");
@@ -548,61 +640,9 @@ export default function KycRegistrationScreen({ navigation }: any) {
               <Field label="Name (from Aadhaar)">
                 <TextInput style={[styles.input, styles.inputLocked]} value={lockedName || profile?.name || ""} editable={false} />
               </Field>
-              <Field label="Vehicle">
-                <View style={styles.chipRow}>
-                  {VEHICLE_TYPES.map((type) => (
-                    <TouchableOpacity
-                      key={type}
-                      style={[styles.chip, vehicleType === type && styles.chipActive]}
-                      onPress={() => setVehicleType(type)}
-                    >
-                      <Text style={[styles.chipText, vehicleType === type && styles.chipTextActive]}>{type}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </Field>
-              {motorVehicle(vehicleType) ? (
-                <>
-                  <Field label="Vehicle number">
-                    <TextInput
-                      style={styles.input}
-                      value={vehicleNumber}
-                      onChangeText={(v) => setVehicleNumber(v.toUpperCase())}
-                      autoCapitalize="characters"
-                      placeholder="TS09AB1234"
-                      placeholderTextColor="#98A2B3"
-                    />
-                  </Field>
-                  <Field label="License (optional)">
-                    <TextInput
-                      style={styles.input}
-                      value={licenseNumber}
-                      onChangeText={(v) => setLicenseNumber(v.toUpperCase())}
-                      autoCapitalize="characters"
-                      placeholder="License number"
-                      placeholderTextColor="#98A2B3"
-                    />
-                  </Field>
-                </>
-              ) : null}
-              <Field label="Emergency contact">
-                <TextInput
-                  style={styles.input}
-                  value={emergencyContactName}
-                  onChangeText={setEmergencyContactName}
-                  placeholder="Name"
-                  placeholderTextColor="#98A2B3"
-                />
-                <TextInput
-                  style={[styles.input, { marginTop: 8 }]}
-                  value={emergencyContactPhone}
-                  onChangeText={(v) => setEmergencyContactPhone(v.replace(/\D/g, "").slice(0, 10))}
-                  keyboardType="number-pad"
-                  maxLength={10}
-                  placeholder="10-digit mobile"
-                  placeholderTextColor="#98A2B3"
-                />
-              </Field>
+              <Text style={styles.termsCopy}>
+                Review and accept the delivery partner terms to continue. You can add an emergency contact later from Profile.
+              </Text>
               <Check checked={termsAccepted} onPress={() => setTermsAccepted((c) => !c)} label="I accept partner terms" />
               <TouchableOpacity style={[styles.primaryBtn, busy && styles.btnDisabled]} onPress={handleSaveBasics} disabled={busy}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Continue</Text>}
@@ -778,6 +818,7 @@ const styles = StyleSheet.create({
   stepHint: { fontSize: 12, color: "#667085", marginTop: 1 },
   body: { paddingHorizontal: 16, paddingTop: 14 },
   digiIntro: { fontSize: 13, lineHeight: 19, color: "#475467", marginBottom: 12 },
+  termsCopy: { fontSize: 13, lineHeight: 19, color: "#475467", marginBottom: 12 },
   field: { marginBottom: 10 },
   label: { fontSize: 12, fontWeight: "600", color: "#475467", marginBottom: 5 },
   fieldHint: { fontSize: 11, color: "#98A2B3", marginTop: 4 },
@@ -838,18 +879,6 @@ const styles = StyleSheet.create({
   linkBtnText: { color: GREEN, fontSize: 13, fontWeight: "600" },
   actionRow: { flexDirection: "row", gap: 10, marginTop: 6 },
   twoCol: { flexDirection: "row", gap: 10 },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#D0D5DD",
-    backgroundColor: "#fff"
-  },
-  chipActive: { backgroundColor: "#ECFDF3", borderColor: GREEN },
-  chipText: { fontSize: 12, color: "#475467", fontWeight: "600" },
-  chipTextActive: { color: GREEN },
   btnDisabled: { opacity: 0.65 },
   webShell: { flex: 1, backgroundColor: "#fff" },
   webHeader: {

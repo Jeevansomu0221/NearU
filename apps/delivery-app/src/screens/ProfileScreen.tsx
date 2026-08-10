@@ -297,6 +297,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [panSaving, setPanSaving] = useState(false);
   const [panDraft, setPanDraft] = useState("");
   const [panConsent, setPanConsent] = useState(false);
+  const [emergencySaving, setEmergencySaving] = useState(false);
   const [stats, setStats] = useState<DeliveryStats | null>(null);
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -644,6 +645,35 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
+  const handleSaveEmergencyContact = async () => {
+    const contactName = emergencyContactName.trim();
+    const contactPhone = emergencyContactPhone.trim();
+    if (contactName.length < 3) {
+      Alert.alert("Missing details", "Emergency contact name must be at least 3 characters.");
+      return;
+    }
+    if (!/^[0-9]{10}$/.test(contactPhone)) {
+      Alert.alert("Missing details", "Enter a valid 10-digit emergency mobile number.");
+      return;
+    }
+    setEmergencySaving(true);
+    try {
+      const response = await updateDeliveryProfile({
+        emergencyContactName: contactName,
+        emergencyContactPhone: contactPhone
+      });
+      if (!response.success || !response.data) {
+        throw new Error(response.message || "Failed to save emergency contact");
+      }
+      syncProfile(response.data);
+      Alert.alert("Saved", "Emergency contact updated.");
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to save emergency contact");
+    } finally {
+      setEmergencySaving(false);
+    }
+  };
+
   const mandatoryDocsComplete = useMemo(() => {
     const normalized = normalizeDocuments(documents);
     return Boolean(
@@ -659,16 +689,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (index === 0) {
       if (name.trim().length < 3) return "Please enter your full name.";
       if (!isAdultDateOfBirth(dateOfBirth)) return "Enter date of birth as YYYY-MM-DD. Delivery partners must be at least 18.";
-      if (emergencyContactName.trim().length < 3) return "Emergency contact name is required.";
-      if (!/^[0-9]{10}$/.test(emergencyContactPhone.trim())) return "Emergency contact phone must be 10 digits.";
     }
     if (index === 1) {
-      if (requiresMotorDocuments) {
-        if (!vehicleNumber.trim()) return "Vehicle number is required.";
-        if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,12}$/i.test(vehicleNumber.trim())) return "Vehicle number format looks invalid.";
-        if (!licenseNumber.trim()) return "Driving license number is required.";
-        if (!/^[A-Z]{2}[0-9]{2}[0-9A-Z]{8,14}$/i.test(licenseNumber.trim())) return "Driving license number format looks invalid.";
-      }
+      // Vehicle details are optional — can be added later from profile.
     }
     if (index === 2) {
       const aadhaarNumber = documents.aadhaarNumber?.trim() || "";
@@ -788,8 +811,13 @@ export default function ProfileScreen({ navigation, route }: any) {
       const bankUpiId = bankDetailsSkipped ? "" : documents.bankUpiId?.trim().toLowerCase() || "";
       const response = await updateDeliveryProfile({
         name: name.trim(), email: email.trim() || undefined, dateOfBirth: dateOfBirth.trim(),
-        emergencyContactName: emergencyContactName.trim(),
-        emergencyContactPhone: emergencyContactPhone.trim(), vehicleType,
+        ...(emergencyContactName.trim().length >= 3
+          ? { emergencyContactName: emergencyContactName.trim() }
+          : {}),
+        ...( /^[0-9]{10}$/.test(emergencyContactPhone.trim())
+          ? { emergencyContactPhone: emergencyContactPhone.trim() }
+          : {}),
+        vehicleType,
         vehicleNumber: requiresMotorDocuments ? vehicleNumber.trim().toUpperCase() : "",
         licenseNumber: requiresMotorDocuments ? licenseNumber.trim().toUpperCase() : "",
         profilePhotoUrl, isAvailable, termsAccepted, status: "PENDING",
@@ -937,6 +965,43 @@ export default function ProfileScreen({ navigation, route }: any) {
               )
             ) : null}
             {documents.reuploadNotes ? <View style={s.alertBox}><Ionicons name="alert-circle" size={16} color="#B42318" /><Text style={s.alertBoxText}>{documents.reuploadNotes}</Text></View> : null}
+          </View>
+
+          {/* Emergency contact */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Emergency Contact</Text>
+            <Text style={s.sectionSub}>Add someone we can reach if there is a safety issue during a delivery.</Text>
+            <Text style={s.inputLabel}>Contact name</Text>
+            <TextInput
+              style={s.input}
+              value={emergencyContactName}
+              onChangeText={setEmergencyContactName}
+              placeholder="Emergency contact name"
+              placeholderTextColor="#98A2B3"
+              selectionColor={GREEN_PRIMARY}
+            />
+            <Text style={s.inputLabel}>Mobile number</Text>
+            <TextInput
+              style={s.input}
+              value={emergencyContactPhone}
+              onChangeText={(v) => setEmergencyContactPhone(v.replace(/\D/g, "").slice(0, 10))}
+              placeholder="10-digit mobile number"
+              placeholderTextColor="#98A2B3"
+              keyboardType="number-pad"
+              maxLength={10}
+              selectionColor={GREEN_PRIMARY}
+            />
+            <TouchableOpacity
+              style={[s.btnPrimary, { marginTop: 14 }, emergencySaving && s.btnDisabled]}
+              onPress={handleSaveEmergencyContact}
+              disabled={emergencySaving}
+            >
+              {emergencySaving ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={s.btnPrimaryText}>Save emergency contact</Text>
+              )}
+            </TouchableOpacity>
           </View>
 
           {/* Bank Details */}
@@ -1197,10 +1262,6 @@ export default function ProfileScreen({ navigation, route }: any) {
 
             <Text style={s.inputLabel}>Date of Birth</Text>
             <TextInput style={s.input} value={dateOfBirth} onChangeText={(v) => setDateOfBirth(v.replace(/[^0-9-]/g, "").slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor="#98A2B3" keyboardType="numbers-and-punctuation" selectionColor={GREEN_PRIMARY} />
-
-            <Text style={s.sectionTitleSm}>Emergency Contact</Text>
-            <TextInput style={s.input} value={emergencyContactName} onChangeText={setEmergencyContactName} placeholder="Emergency contact name" placeholderTextColor="#98A2B3" selectionColor={GREEN_PRIMARY} />
-            <TextInput style={[s.input, { marginTop: 10 }]} value={emergencyContactPhone} onChangeText={(v) => setEmergencyContactPhone(v.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile number" placeholderTextColor="#98A2B3" keyboardType="number-pad" maxLength={10} selectionColor={GREEN_PRIMARY} />
           </View>
         );
 
@@ -1218,7 +1279,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
             <View style={s.infoCard}>
               <Ionicons name="information-circle-outline" size={20} color="#667085" />
-              <Text style={s.infoCardText}>EV and Bicycle/Cycle riders do not need to submit driving license or vehicle number.</Text>
+              <Text style={s.infoCardText}>Vehicle details are optional during registration. You can skip or update them later from Profile. EV and Bicycle/Cycle riders do not need a license or vehicle number.</Text>
             </View>
             {requiresMotorDocuments ? (
               <>
