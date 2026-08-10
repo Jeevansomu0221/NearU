@@ -19,8 +19,9 @@ jobs:
         with:
           host: ${{ github.event.inputs.host }}
           username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          password: ${{ secrets.VPS_PASSWORD }}
           script_stop: true
+          command_timeout: 15m
           script: |
             set -euo pipefail
             APP_DIR=/opt/vyaha/backend
@@ -34,3 +35,5 @@ jobs:
             rsync -a --delete backend/ "$APP_DIR/" --exclude node_modules --exclude dist
             printf '%s' "${{ secrets.VPS_BACKEND_ENV }}" > "$APP_DIR/.env"
             bash /opt/vyaha/repo/scripts/vps-deploy-backend.sh
+            curl -fsS http://127.0.0.1/health
+            curl -fsS http://127.0.0.1/health/eko || true
