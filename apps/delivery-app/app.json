@@ -37,9 +37,6 @@
         "android.permission.READ_PHONE_STATE"
       ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "plugins": [
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
