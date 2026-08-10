@@ -11,15 +11,23 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq nginx certbot python3-certbot-nginx
 
-# Ensure backend is up before opening Cloudflare traffic
 if command -v pm2 >/dev/null 2>&1; then
   pm2 resurrect 2>/dev/null || true
   pm2 restart vyaha-backend --update-env 2>/dev/null || true
 fi
 
 CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
-if [[ -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" ]]; then
-  echo "==> Existing Let's Encrypt cert found for ${DOMAIN}; writing HTTPS nginx config"
+SSL_EXTRA=""
+if [[ -f /etc/letsencrypt/options-ssl-nginx.conf ]]; then
+  SSL_EXTRA="${SSL_EXTRA}
+    include /etc/letsencrypt/options-ssl-nginx.conf;"
+fi
+if [[ -f /etc/letsencrypt/ssl-dhparams.pem ]]; then
+  SSL_EXTRA="${SSL_EXTRA}
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;"
+fi
+
+write_https_config() {
   cat > /etc/nginx/sites-available/vyaha-backend <<NGINX
 server {
     listen 80;
@@ -29,14 +37,12 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     server_name ${DOMAIN};
 
     ssl_certificate ${CERT_DIR}/fullchain.pem;
-    ssl_certificate_key ${CERT_DIR}/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    ssl_certificate_key ${CERT_DIR}/privkey.pem;${SSL_EXTRA}
 
     client_max_body_size 10m;
 
@@ -53,8 +59,9 @@ server {
     }
 }
 NGINX
-else
-  echo "==> No cert yet; HTTP-only then certbot"
+}
+
+write_http_config() {
   cat > /etc/nginx/sites-available/vyaha-backend <<NGINX
 server {
     listen 80;
@@ -76,6 +83,14 @@ server {
     }
 }
 NGINX
+}
+
+if [[ -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" ]]; then
+  echo "==> Existing Let's Encrypt cert found for ${DOMAIN}; writing HTTPS nginx config"
+  write_https_config
+else
+  echo "==> No cert yet; HTTP-only then certbot"
+  write_http_config
 fi
 
 ln -sf /etc/nginx/sites-available/vyaha-backend /etc/nginx/sites-enabled/vyaha-backend
@@ -83,7 +98,6 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
 
-# Open firewall ports Cloudflare needs
 ufw allow OpenSSH || true
 ufw allow 80/tcp || true
 ufw allow 443/tcp || true
@@ -93,15 +107,22 @@ if [[ ! -f "${CERT_DIR}/fullchain.pem" ]]; then
   certbot --nginx -d "${DOMAIN}" --non-interactive --agree-tos -m "${EMAIL}" --redirect
 else
   certbot renew --quiet || true
-  # Re-apply HTTPS config in case renew changed nothing but listen 443 was missing
-  if ! ss -lnt | grep -q ':443'; then
-    echo "==> 443 still closed after renew; forcing certbot nginx install"
-    certbot --nginx -d "${DOMAIN}" --non-interactive --agree-tos -m "${EMAIL}" --redirect || true
+  write_https_config
+  nginx -t
+  systemctl reload nginx
+fi
+
+# If certbot --nginx mutated config, ensure 443 is listening
+if ! ss -lnt | grep -q ':443'; then
+  echo "==> 443 not listening; re-running certbot --nginx"
+  certbot --nginx -d "${DOMAIN}" --non-interactive --agree-tos -m "${EMAIL}" --redirect || true
+  if [[ -f "${CERT_DIR}/fullchain.pem" ]]; then
+    write_https_config
+    nginx -t
+    systemctl reload nginx
   fi
 fi
 
-nginx -t
-systemctl reload nginx
 systemctl enable nginx
 
 echo "==> Listening ports:"
