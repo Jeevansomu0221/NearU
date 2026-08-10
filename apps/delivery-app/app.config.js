@@ -28,7 +28,6 @@ module.exports = {
           apiKey: googleMapsApiKey
         }
       }
-    },
-    plugins: [...(appJson.expo.plugins || []), "react-native-webview"]
+    }
   }
 };
