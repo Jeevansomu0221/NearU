@@ -152,6 +152,14 @@ const PartnerSchema = new Schema(
       type: String,
       default: "22:00"
     },
+    termsAcceptedAt: {
+      type: Date,
+      default: null
+    },
+    partnerAgreementAcceptedAt: {
+      type: Date,
+      default: null
+    },
     weeklyHolidays: {
       type: [String],
       default: []
@@ -192,6 +200,22 @@ const PartnerSchema = new Schema(
       menuProofUrl: String,
       restaurantPhotosUrls: [String],
       operatingHoursNote: String,
+      aadhaarVerified: { type: Boolean, default: false },
+      aadhaarVerifiedAt: Date,
+      aadhaarName: String,
+      aadhaarMasked: String,
+      panVerified: { type: Boolean, default: false },
+      panVerifiedAt: Date,
+      panName: String,
+      panSkipped: { type: Boolean, default: false },
+      bankVerificationStatus: {
+        type: String,
+        enum: ["", "VERIFIED", "PENDING_ADMIN", "REJECTED"],
+        default: ""
+      },
+      bankVerifiedAt: Date,
+      bankDetailsSkipped: { type: Boolean, default: false },
+      kycProvider: String,
       // ADD THIS: Document submission tracking
       submittedAt: Date,
       isComplete: { type: Boolean, default: false },
@@ -250,6 +274,8 @@ const PartnerSchema = new Schema(
       autoAcceptOrders: { type: Boolean, default: false },
       estimatedPrepTime: { type: Number, default: 20, min: 1 },
       deliveryMode: { type: String, enum: ["self", "platform"], default: "platform" },
+      takeawayAvailable: { type: Boolean, default: true },
+      packagingNote: { type: String, default: "" },
       selfDeliveryPartners: {
         type: [
           {

@@ -15,7 +15,7 @@ export default function WelcomeApprovedScreen({ navigation }: any) {
         <Text style={styles.heroEyebrow}>Approved</Text>
         <Text style={styles.heroTitle}>Your shop has been approved</Text>
         <Text style={styles.heroSubtitle}>
-          Finish your menu setup so customers can discover the shop and start placing orders.
+          Your documents are verified. Finish menu setup, confirm shop timings, then go live to start receiving orders.
         </Text>
       </View>
 
@@ -31,6 +31,10 @@ export default function WelcomeApprovedScreen({ navigation }: any) {
         </View>
         <View style={styles.stepRow}>
           <Text style={styles.stepNumber}>3</Text>
+          <Text style={styles.stepText}>Confirm partner agreement and open your shop</Text>
+        </View>
+        <View style={styles.stepRow}>
+          <Text style={styles.stepNumber}>4</Text>
           <Text style={styles.stepText}>Check shop timings and availability</Text>
         </View>
 

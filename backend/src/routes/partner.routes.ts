@@ -22,8 +22,21 @@ import { getShopsWithImages, getPartnerPublicProfile, getPartnerReviews } from "
 import menuRoutes from "./menu.routes";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { roleMiddleware } from "../middlewares/role.middleware";
+import {
+  getPartnerKycStatus,
+  startPartnerDigiLocker,
+  completePartnerDigiLocker,
+  partnerDigiLockerCallback,
+  verifyPartnerPan,
+  skipPartnerPan,
+  verifyPartnerBank,
+  skipPartnerBank,
+  acceptPartnerOnboardingTerms
+} from "../controllers/partnerKyc.controller";
 
 const router = Router();
+
+router.get("/kyc/digilocker/callback", partnerDigiLockerCallback);
 
 /* ======================================================
    PUBLIC ROUTES
@@ -38,6 +51,15 @@ router.post("/complete-setup", authMiddleware, completeSetup);
 router.get("/onboarding-draft", authMiddleware, getPartnerOnboardingDraft);
 router.put("/onboarding-draft", authMiddleware, savePartnerOnboardingDraft);
 router.delete("/onboarding-draft", authMiddleware, clearPartnerOnboardingDraft);
+
+router.get("/kyc/status", authMiddleware, getPartnerKycStatus);
+router.post("/kyc/digilocker/start", authMiddleware, startPartnerDigiLocker);
+router.post("/kyc/digilocker/complete", authMiddleware, completePartnerDigiLocker);
+router.post("/kyc/pan/verify", authMiddleware, verifyPartnerPan);
+router.post("/kyc/pan/skip", authMiddleware, skipPartnerPan);
+router.post("/kyc/bank/verify", authMiddleware, verifyPartnerBank);
+router.post("/kyc/bank/skip", authMiddleware, skipPartnerBank);
+router.post("/kyc/accept-agreement", authMiddleware, acceptPartnerOnboardingTerms);
 
 /* ======================================================
    PARTNER-ONLY ROUTES (approved partners)

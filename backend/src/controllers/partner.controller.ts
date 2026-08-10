@@ -8,6 +8,8 @@ import Payout from "../models/Payout.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
 import { notifyPartnerApplicationStatus } from "../services/notification.service";
 import { applyPartnerSuspensionLift } from "../utils/suspension.util";
+import MenuItem from "../models/MenuItem.model";
+import { readPartnerKycFromUser } from "./partnerKyc.controller";
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
@@ -58,10 +60,10 @@ const hasCompleteProfileDocuments = (documents: Record<string, any>) =>
   Boolean(
     firstString(documents?.fssaiNumber) &&
       firstString(documents?.fssaiUrl) &&
-      firstString(documents?.panNumber) &&
-      firstString(documents?.panFrontUrl, documents?.ownerPanUrl) &&
-      firstString(documents?.aadhaarNumber) &&
-      firstString(documents?.aadhaarFrontUrl, documents?.ownerIdProofUrl) &&
+      (firstString(documents?.panNumber) || documents?.panSkipped) &&
+      (firstString(documents?.panFrontUrl, documents?.ownerPanUrl) || documents?.panSkipped || documents?.panVerified) &&
+      (firstString(documents?.aadhaarNumber) || documents?.aadhaarVerified) &&
+      (firstString(documents?.aadhaarFrontUrl, documents?.ownerIdProofUrl) || documents?.aadhaarVerified) &&
       (!isGstRegisteredValue(documents?.gstRegistered) || (firstString(documents?.gstNumber) && firstString(documents?.gstUrl)))
   );
 
@@ -222,6 +224,22 @@ const buildPartnerBankSummary = (partner: any) => {
   };
 };
 
+const ONBOARDING_MAX_STEP = 9;
+
+const sanitizeMenuDraft = (items: unknown) => {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item: any) => ({
+      name: String(item?.name || "").trim(),
+      description: String(item?.description || "").trim(),
+      price: Number.isFinite(Number(item?.price)) ? Math.max(0, Number(item.price)) : 0,
+      isVegetarian: item?.isVegetarian !== false,
+      imageUrl: String(item?.imageUrl || "").trim()
+    }))
+    .filter((item) => item.name.length > 0 && item.price > 0)
+    .slice(0, 30);
+};
+
 const sanitizeOnboardingDraft = (draft: any) => {
   if (!draft || typeof draft !== "object") return null;
 
@@ -229,14 +247,20 @@ const sanitizeOnboardingDraft = (draft: any) => {
   const safeAddress = typeof draft.address === "object" && draft.address ? draft.address : {};
   const safeDocuments = typeof draft.documents === "object" && draft.documents ? draft.documents : {};
   const safeLocation = typeof draft.shopLocation === "object" && draft.shopLocation ? draft.shopLocation : null;
+  const safeMedia = typeof draft.media === "object" && draft.media ? draft.media : {};
+  const safeOperations = typeof draft.operations === "object" && draft.operations ? draft.operations : {};
+  const safeKyc = typeof draft.kyc === "object" && draft.kyc ? draft.kyc : {};
 
   return {
-    activeStep: Number.isFinite(Number(draft.activeStep)) ? Math.max(0, Math.min(4, Number(draft.activeStep))) : 0,
+    activeStep: Number.isFinite(Number(draft.activeStep))
+      ? Math.max(0, Math.min(ONBOARDING_MAX_STEP, Number(draft.activeStep)))
+      : 0,
     form: {
       ownerName: String(safeForm.ownerName || ""),
       restaurantName: String(safeForm.restaurantName || ""),
       phone: String(safeForm.phone || safeForm.ownerPhone || ""),
-      restaurantPhone: String(safeForm.restaurantPhone || "")
+      restaurantPhone: String(safeForm.restaurantPhone || ""),
+      email: String(safeForm.email || "")
     },
     address: {
       state: String(safeAddress.state || ""),
@@ -269,8 +293,30 @@ const sanitizeOnboardingDraft = (draft: any) => {
       gstUrl: String(safeDocuments.gstUrl || ""),
       shopLicenseUrl: String(safeDocuments.shopLicenseUrl || ""),
       ownerPanUrl: String(safeDocuments.ownerPanUrl || ""),
-      menuProofUrl: String(safeDocuments.menuProofUrl || "")
+      menuProofUrl: String(safeDocuments.menuProofUrl || ""),
+      restaurantPhotosUrls: Array.isArray(safeDocuments.restaurantPhotosUrls)
+        ? safeDocuments.restaurantPhotosUrls.map((url: unknown) => String(url || "")).filter(Boolean)
+        : []
     },
+    media: {
+      shopImageUrl: String(safeMedia.shopImageUrl || ""),
+      bannerImageUrl: String(safeMedia.bannerImageUrl || ""),
+      restaurantPhotosUrls: Array.isArray(safeMedia.restaurantPhotosUrls)
+        ? safeMedia.restaurantPhotosUrls.map((url: unknown) => String(url || "")).filter(Boolean)
+        : []
+    },
+    operations: {
+      openingTime: String(safeOperations.openingTime || "08:00"),
+      closingTime: String(safeOperations.closingTime || "22:00"),
+      weeklyHolidays: Array.isArray(safeOperations.weeklyHolidays)
+        ? safeOperations.weeklyHolidays.map((day: unknown) => String(day || "")).filter(Boolean)
+        : [],
+      deliveryMode: safeOperations.deliveryMode === "self" ? "self" : "platform",
+      takeawayAvailable: safeOperations.takeawayAvailable !== false,
+      packagingNote: String(safeOperations.packagingNote || "")
+    },
+    menuDraft: sanitizeMenuDraft(draft.menuDraft),
+    kyc: safeKyc,
     selectedCategory: String(draft.selectedCategory || ""),
     shopLocation: safeLocation && Number.isFinite(Number(safeLocation.latitude)) && Number.isFinite(Number(safeLocation.longitude))
       ? {
@@ -278,7 +324,7 @@ const sanitizeOnboardingDraft = (draft: any) => {
           longitude: Number(safeLocation.longitude)
         }
       : null,
-    updatedAt: new Date().toISOString()
+    updatedAt: draft.updatedAt ? String(draft.updatedAt) : new Date().toISOString()
   };
 };
 
@@ -377,6 +423,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       phone,
       ownerPhone,
       restaurantPhone,
+      email
     } = req.body;
 
     const {
@@ -384,7 +431,12 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       category,
       documents,
       userId,
-      location: incomingLocation
+      location: incomingLocation,
+      media,
+      operations,
+      menuDraft,
+      termsAccepted,
+      partnerAgreementAccepted
     } = req.body;
 
     console.log("📝 Submitting partner profile for phone:", phone);
@@ -474,8 +526,48 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       gstUrl: firstString(documents?.gstUrl),
       shopLicenseUrl: firstString(documents?.shopLicenseUrl),
       menuProofUrl: firstString(documents?.menuProofUrl),
-      operatingHoursNote: firstString(documents?.operatingHoursNote)
+      operatingHoursNote: firstString(documents?.operatingHoursNote, operations?.packagingNote),
+      restaurantPhotosUrls: Array.isArray(media?.restaurantPhotosUrls)
+        ? media.restaurantPhotosUrls.map((url: unknown) => String(url || "")).filter(Boolean)
+        : Array.isArray(documents?.restaurantPhotosUrls)
+          ? documents.restaurantPhotosUrls.map((url: unknown) => String(url || "")).filter(Boolean)
+          : []
     };
+
+    const resolvedUserId = tokenUserId || userId;
+    const objectId = toObjectId(resolvedUserId);
+    const draftKyc = objectId ? await readPartnerKycFromUser(objectId) : null;
+    const aadhaarVerified = Boolean(draftKyc?.aadhaarVerified);
+    const panVerified = Boolean(draftKyc?.panVerified);
+    const panSkipped = Boolean(draftKyc?.panSkipped);
+    const bankVerified = draftKyc?.bankVerificationStatus === "VERIFIED";
+    const bankSkipped = Boolean(draftKyc?.bankDetailsSkipped);
+
+    if (!termsAccepted && !draftKyc?.termsAcceptedAt) {
+      return res.status(400).json({ success: false, message: "You must accept the terms and conditions" });
+    }
+    if (!partnerAgreementAccepted && !draftKyc?.partnerAgreementAcceptedAt) {
+      return res.status(400).json({ success: false, message: "You must accept the Restaurant Partner agreement" });
+    }
+
+    if (aadhaarVerified) {
+      normalizedDocs.aadhaarNumber = firstString(draftKyc?.aadhaarNumber, normalizedDocs.aadhaarNumber);
+      normalizedDocs.aadhaarFrontUrl = normalizedDocs.aadhaarFrontUrl || "eko-digilocker-verified";
+    }
+    if (panVerified) {
+      normalizedDocs.panNumber = firstString(draftKyc?.panNumber, normalizedDocs.panNumber).toUpperCase();
+      normalizedDocs.panFrontUrl = normalizedDocs.panFrontUrl || "eko-pan-verified";
+    } else if (panSkipped && !normalizedDocs.panFrontUrl) {
+      normalizedDocs.panNumber = normalizedDocs.panNumber || "";
+    }
+    if (bankVerified || bankSkipped) {
+      normalizedDocs.bankAccountHolderName = firstString(
+        draftKyc?.bankAccountHolderName,
+        normalizedDocs.bankAccountHolderName
+      );
+      normalizedDocs.bankAccountNumber = firstString(draftKyc?.bankAccountNumber, normalizedDocs.bankAccountNumber);
+      normalizedDocs.bankIfsc = firstString(draftKyc?.bankIfsc, normalizedDocs.bankIfsc).toUpperCase();
+    }
 
     const hasAnyBankInput = Boolean(
       normalizedDocs.bankAccountHolderName ||
@@ -487,11 +579,11 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     if (!fssaiRegex.test(normalizedDocs.fssaiNumber)) {
       return res.status(400).json({ success: false, message: "FSSAI number must be 14 digits" });
     }
-    if (!panRegex.test(normalizedDocs.panNumber)) {
-      return res.status(400).json({ success: false, message: "PAN number must match AAAAA9999A format" });
+    if (!aadhaarVerified && !aadhaarRegex.test(normalizedDocs.aadhaarNumber)) {
+      return res.status(400).json({ success: false, message: "Aadhaar number must be 12 digits or verify via DigiLocker" });
     }
-    if (!aadhaarRegex.test(normalizedDocs.aadhaarNumber)) {
-      return res.status(400).json({ success: false, message: "Aadhaar number must be 12 digits" });
+    if (!panVerified && !panSkipped && !panRegex.test(normalizedDocs.panNumber)) {
+      return res.status(400).json({ success: false, message: "PAN number must match AAAAA9999A format or verify via Eko" });
     }
     if (normalizedDocs.gstRegistered) {
       if (!gstRegex.test(normalizedDocs.gstNumber)) {
@@ -516,10 +608,17 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
 
     const hasMandatoryDocuments = Boolean(
       normalizedDocs.fssaiUrl &&
-      normalizedDocs.panFrontUrl &&
-      normalizedDocs.aadhaarFrontUrl &&
+      (panVerified || panSkipped || normalizedDocs.panFrontUrl) &&
+      (aadhaarVerified || normalizedDocs.aadhaarFrontUrl) &&
       (!normalizedDocs.gstRegistered || (normalizedDocs.gstNumber && normalizedDocs.gstUrl))
     );
+
+    if (!aadhaarVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Owner Aadhaar must be verified via DigiLocker before submitting"
+      });
+    }
 
     if (!hasMandatoryDocuments) {
       return res.status(400).json({
@@ -540,19 +639,39 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       bankAccountNumber: normalizedBankAccountNumber,
       bankIfsc: normalizedBankIfsc,
       panFrontUrl: normalizedDocs.panFrontUrl,
-      aadhaarFrontUrl: normalizedDocs.aadhaarFrontUrl
+      aadhaarFrontUrl: normalizedDocs.aadhaarFrontUrl,
+      aadhaarVerified,
+      panVerified,
+      panSkipped
     };
 
     let partner = await Partner.findOne({ phone });
 
+    const normalizedOpeningTime = firstString(operations?.openingTime, "08:00");
+    const normalizedClosingTime = firstString(operations?.closingTime, "22:00");
+    const normalizedWeeklyHolidays = Array.isArray(operations?.weeklyHolidays)
+      ? operations.weeklyHolidays.map((day: unknown) => String(day || "")).filter(Boolean)
+      : [];
+    const normalizedDeliveryMode = operations?.deliveryMode === "self" ? "self" : "platform";
+    const normalizedTakeaway = operations?.takeawayAvailable !== false;
+    const normalizedPackagingNote = firstString(operations?.packagingNote, normalizedDocs.operatingHoursNote);
+    const normalizedShopImageUrl = firstString(media?.shopImageUrl);
+    const normalizedBannerImageUrl = firstString(media?.bannerImageUrl);
+    const normalizedMenuDraft = sanitizeMenuDraft(menuDraft);
+    const agreementNow = new Date();
+
     // Prepare partner data
     const partnerData: any = {
-      ownerName,
+      ownerName: firstString(draftKyc?.aadhaarName, ownerName),
       restaurantName,
       shopName: restaurantName,
       phone,
       ownerPhone: firstString(ownerPhone, phone),
       restaurantPhone: firstString(restaurantPhone),
+      email: firstString(email).toLowerCase(),
+      shopDescription: "",
+      shopImageUrl: normalizedShopImageUrl,
+      bannerImageUrl: normalizedBannerImageUrl,
       address: {
         state: state.trim(),
         city: city.trim(),
@@ -568,6 +687,13 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         coordinates: resolvedCoordinates || [0, 0]
       },
       category: category || "other",
+      openingTime: normalizedOpeningTime,
+      closingTime: normalizedClosingTime,
+      weeklyHolidays: normalizedWeeklyHolidays,
+      termsAcceptedAt: draftKyc?.termsAcceptedAt ? new Date(draftKyc.termsAcceptedAt) : agreementNow,
+      partnerAgreementAcceptedAt: draftKyc?.partnerAgreementAcceptedAt
+        ? new Date(draftKyc.partnerAgreementAcceptedAt)
+        : agreementNow,
       documents: {
         fssaiNumber: normalizedDocs.fssaiNumber,
         fssaiUrl: normalizedDocs.fssaiUrl,
@@ -589,24 +715,37 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         bankIfsc: normalizedBankIfsc,
         addressProofUrl: "",
         menuProofUrl: normalizedDocs.menuProofUrl,
-        restaurantPhotosUrls: Array.isArray(documents?.restaurantPhotosUrls) ? documents.restaurantPhotosUrls : [],
-        operatingHoursNote: normalizedDocs.operatingHoursNote,
+        restaurantPhotosUrls: normalizedDocs.restaurantPhotosUrls,
+        operatingHoursNote: normalizedPackagingNote,
+        aadhaarVerified,
+        aadhaarVerifiedAt: aadhaarVerified && draftKyc?.aadhaarVerifiedAt ? new Date(draftKyc.aadhaarVerifiedAt) : null,
+        aadhaarName: firstString(draftKyc?.aadhaarName),
+        aadhaarMasked: firstString(draftKyc?.aadhaarMasked),
+        panVerified,
+        panVerifiedAt: panVerified && draftKyc?.panVerifiedAt ? new Date(draftKyc.panVerifiedAt) : null,
+        panName: firstString(draftKyc?.panName),
+        panSkipped,
+        bankVerificationStatus: bankVerified ? "VERIFIED" : draftKyc?.bankVerificationStatus || "",
+        bankVerifiedAt:
+          bankVerified && draftKyc?.bankVerifiedAt ? new Date(draftKyc.bankVerifiedAt) : null,
+        bankDetailsSkipped: bankSkipped,
+        kycProvider: firstString(draftKyc?.kycProvider, aadhaarVerified ? "eko-digilocker" : ""),
         submittedAt: hasMandatoryDocuments ? new Date() : null,
         isComplete: hasCompleteProfileDocuments(documentsForCompletion)
       },
+      settings: {
+        deliveryMode: normalizedDeliveryMode,
+        takeawayAvailable: normalizedTakeaway,
+        packagingNote: normalizedPackagingNote
+      },
       status: "PENDING",
-      isOpen: true,
-      openingTime: "08:00",
-      closingTime: "22:00",
+      isOpen: false,
       rating: 4,
       menuItemsCount: 0,
-      hasCompletedSetup: false,
-      shopImageUrl: "" // Initialize empty
+      hasCompletedSetup: false
     };
 
     // Prefer authenticated user id; fallback to body userId only if present.
-    const resolvedUserId = tokenUserId || userId;
-    const objectId = toObjectId(resolvedUserId);
     if (objectId) {
       partnerData.userId = objectId;
     }
@@ -640,6 +779,31 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
           partnerOnboardingDraft: null
         }
       });
+    }
+
+    if (normalizedMenuDraft.length > 0 && partner) {
+      const createdItems = await Promise.all(
+        normalizedMenuDraft.map((item) =>
+          MenuItem.create({
+            partnerId: partner._id,
+            name: item.name,
+            description: item.description,
+            price: item.price,
+            category: "Main Items",
+            imageUrl: item.imageUrl,
+            isVegetarian: item.isVegetarian,
+            preparationTime: 15,
+            isAvailable: true,
+            extraChoices: []
+          })
+        )
+      );
+      partner.menuItemsCount = createdItems.length;
+      if (createdItems.length > 0) {
+        partner.hasCompletedSetup = true;
+        partner.setupCompletedAt = new Date();
+      }
+      await partner.save();
     }
 
     return res.json({
@@ -922,6 +1086,7 @@ export const completeSetup = async (req: Request, res: Response) => {
 
     partner.hasCompletedSetup = true;
     partner.setupCompletedAt = new Date();
+    partner.isOpen = true;
     await partner.save();
     
     res.json({

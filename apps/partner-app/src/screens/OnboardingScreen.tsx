@@ -19,21 +19,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, { uploadMultipart } from "../api/client";
 import { partnerTheme } from "../theme";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
-
-const CATEGORIES = ["bakery", "restaurant", "cloud-kitchen", "grocery", "tiffin-center", "fast-food", "sweets", "ice-creams", "juice", "other"];
-
-const CATEGORY_LABELS: Record<string, string> = {
-  bakery: "Bakery",
-  restaurant: "Restaurant",
-  "cloud-kitchen": "Cloud Kitchen",
-  grocery: "Grocery",
-  "tiffin-center": "Tiffin Center",
-  "fast-food": "Fast Food",
-  sweets: "Sweets",
-  "ice-creams": "Ice Creams",
-  juice: "Juice",
-  other: "Other"
-};
+import { ONBOARDING_STEPS, CATEGORIES, CATEGORY_LABELS } from "./onboarding/constants";
+import KycIdentityStep from "./onboarding/KycIdentityStep";
+import BankStep from "./onboarding/BankStep";
+import MediaStep, { type MediaState } from "./onboarding/MediaStep";
+import MenuDraftStep, { type MenuDraftItem } from "./onboarding/MenuDraftStep";
+import OperationsStep, { type OperationsState } from "./onboarding/OperationsStep";
+import AgreementStep, { validateAndSaveAgreement } from "./onboarding/AgreementStep";
+import type { PartnerKycState } from "../api/kyc.api";
 
 const INDIAN_CITIES = [
   "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata",
@@ -121,6 +114,9 @@ type UploadingKey =
   | "shopLicenseUrl"
   | "ownerPanUrl"
   | "menuProofUrl"
+  | "shopImageUrl"
+  | "bannerImageUrl"
+  | "restaurantPhoto"
   | null;
 
 type PendingDocument = {
@@ -136,6 +132,7 @@ type OnboardingDraft = {
     restaurantName: string;
     phone: string;
     restaurantPhone: string;
+    email: string;
   };
   address: {
     state: string;
@@ -147,10 +144,16 @@ type OnboardingDraft = {
     nearbyPlaces: string;
   };
   documents: DocumentState;
+  media: MediaState;
+  operations: OperationsState;
+  menuDraft: MenuDraftItem[];
+  kyc: PartnerKycState;
   selectedCategory: string;
   shopLocation: { latitude: number; longitude: number } | null;
   updatedAt?: string;
 };
+
+const STEPS = ONBOARDING_STEPS;
 
 const parseDraftUpdatedAt = (draft: { updatedAt?: string } | null | undefined) => {
   if (!draft?.updatedAt) return 0;
@@ -171,22 +174,27 @@ const pickNewerDraft = (
 };
 
 const mandatoryDocs: Array<{ key: keyof DocumentState; title: string; subtitle: string }> = [
-  { key: "fssaiUrl", title: "FSSAI License", subtitle: "Certificate name should match the restaurant name or PAN name" },
-  { key: "panFrontUrl", title: "PAN Card", subtitle: "PAN of the person who owns the restaurant" },
-  { key: "aadhaarFrontUrl", title: "Aadhaar - Front", subtitle: "Owner Aadhaar front side only" }
+  { key: "fssaiUrl", title: "FSSAI License", subtitle: "Certificate name should match the restaurant name or PAN name" }
 ];
 
 const optionalDocs: Array<{ key: keyof DocumentState; title: string; subtitle: string }> = [
   { key: "gstUrl", title: "GST Certificate", subtitle: "Required only if GST registered" }
 ];
 
-const STEPS = [
-  { key: "basic", title: "Basic details", subtitle: "Tell us who owns the shop." },
-  { key: "address", title: "Shop address", subtitle: "Help customers and delivery partners find you." },
-  { key: "category", title: "Business category", subtitle: "Pick the right business type." },
-  { key: "documents", title: "Documents", subtitle: "Upload the required proofs." },
-  { key: "bank", title: "Bank details", subtitle: "Optional for now. No bank proof upload is needed." }
-] as const;
+const defaultOperations = (): OperationsState => ({
+  openingTime: "08:00",
+  closingTime: "22:00",
+  weeklyHolidays: [],
+  deliveryMode: "platform",
+  takeawayAvailable: true,
+  packagingNote: ""
+});
+
+const defaultMedia = (): MediaState => ({
+  shopImageUrl: "",
+  bannerImageUrl: "",
+  restaurantPhotosUrls: []
+});
 
 const DRAFT_STORAGE_KEY = "partnerOnboardingDraft";
 
@@ -244,7 +252,8 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
       ownerName: String(safeForm.ownerName || ""),
       restaurantName: String(safeForm.restaurantName || ""),
       phone: String(safeForm.phone || safeForm.ownerPhone || ""),
-      restaurantPhone: String(safeForm.restaurantPhone || "")
+      restaurantPhone: String(safeForm.restaurantPhone || ""),
+      email: String(safeForm.email || "")
     },
     address: {
       state: String(safeAddress.state || ""),
@@ -278,6 +287,39 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
       ownerPanUrl: String(safeDocuments.ownerPanUrl || ""),
       menuProofUrl: String(safeDocuments.menuProofUrl || "")
     },
+    media:
+      typeof draft.media === "object" && draft.media
+        ? {
+            shopImageUrl: String(draft.media.shopImageUrl || ""),
+            bannerImageUrl: String(draft.media.bannerImageUrl || ""),
+            restaurantPhotosUrls: Array.isArray(draft.media.restaurantPhotosUrls)
+              ? draft.media.restaurantPhotosUrls.map((url: unknown) => String(url || "")).filter(Boolean)
+              : []
+          }
+        : defaultMedia(),
+    operations:
+      typeof draft.operations === "object" && draft.operations
+        ? {
+            openingTime: String(draft.operations.openingTime || "08:00"),
+            closingTime: String(draft.operations.closingTime || "22:00"),
+            weeklyHolidays: Array.isArray(draft.operations.weeklyHolidays)
+              ? draft.operations.weeklyHolidays.map((day: unknown) => String(day || "")).filter(Boolean)
+              : [],
+            deliveryMode: draft.operations.deliveryMode === "self" ? "self" : "platform",
+            takeawayAvailable: draft.operations.takeawayAvailable !== false,
+            packagingNote: String(draft.operations.packagingNote || "")
+          }
+        : defaultOperations(),
+    menuDraft: Array.isArray(draft.menuDraft)
+      ? draft.menuDraft.map((item: any) => ({
+          name: String(item?.name || ""),
+          description: String(item?.description || ""),
+          price: String(item?.price || ""),
+          isVegetarian: item?.isVegetarian !== false,
+          imageUrl: String(item?.imageUrl || "")
+        }))
+      : [{ name: "", description: "", price: "", isVegetarian: true, imageUrl: "" }],
+    kyc: typeof draft.kyc === "object" && draft.kyc ? draft.kyc : {},
     selectedCategory: String(draft.selectedCategory || ""),
     shopLocation:
       safeLocation && Number.isFinite(Number(safeLocation.latitude)) && Number.isFinite(Number(safeLocation.longitude))
@@ -301,7 +343,8 @@ export default function OnboardingScreen({ navigation }: any) {
     ownerName: "",
     restaurantName: "",
     phone: "",
-    restaurantPhone: ""
+    restaurantPhone: "",
+    email: ""
   });
   const [address, setAddress] = useState({
     state: "",
@@ -336,6 +379,14 @@ export default function OnboardingScreen({ navigation }: any) {
     menuProofUrl: ""
   });
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [media, setMedia] = useState<MediaState>(defaultMedia());
+  const [operations, setOperations] = useState<OperationsState>(defaultOperations());
+  const [menuDraft, setMenuDraft] = useState<MenuDraftItem[]>([
+    { name: "", description: "", price: "", isVegetarian: true, imageUrl: "" }
+  ]);
+  const [kyc, setKyc] = useState<PartnerKycState>({});
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [partnerAgreementAccepted, setPartnerAgreementAccepted] = useState(false);
   const [autoFilledPhone, setAutoFilledPhone] = useState("");
   const [shopLocation, setShopLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [capturingLocation, setCapturingLocation] = useState(false);
@@ -350,6 +401,10 @@ export default function OnboardingScreen({ navigation }: any) {
     form,
     address,
     documents,
+    media,
+    operations,
+    menuDraft,
+    kyc,
     selectedCategory,
     shopLocation,
     updatedAt: new Date().toISOString()
@@ -446,6 +501,12 @@ export default function OnboardingScreen({ navigation }: any) {
         setForm((prev) => ({ ...prev, ...draft.form }));
         setAddress((prev) => ({ ...prev, ...draft.address }));
         setDocuments(draft.documents);
+        setMedia(draft.media);
+        setOperations(draft.operations);
+        setMenuDraft(draft.menuDraft);
+        setKyc(draft.kyc);
+        setTermsAccepted(Boolean(draft.kyc?.termsAcceptedAt));
+        setPartnerAgreementAccepted(Boolean(draft.kyc?.partnerAgreementAcceptedAt));
         setSelectedCategory(draft.selectedCategory);
         setShopLocation(draft.shopLocation);
         latestDraftRef.current = draft;
@@ -491,7 +552,7 @@ export default function OnboardingScreen({ navigation }: any) {
         draftSaveTimerRef.current = null;
       }
     };
-  }, [activeStep, form, address, documents, selectedCategory, shopLocation, hydratingDraft]);
+  }, [activeStep, form, address, documents, media, operations, menuDraft, kyc, selectedCategory, shopLocation, hydratingDraft]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -647,11 +708,36 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
-  const validateStep = (step: number, nextDocuments = documents) => {
+  const pickMediaAsset = async (key: "shopImageUrl" | "bannerImageUrl" | "restaurantPhoto") => {
+    if (pickerBusy || uploadingKey) return;
+    try {
+      setPickerBusy(true);
+      const asset = await pickAsset();
+      if (!asset?.uri) return;
+      setUploadingKey(key);
+      const uploadedUrl = await uploadImageToCloudinary(asset);
+      if (key === "restaurantPhoto") {
+        setMedia((prev) => ({
+          ...prev,
+          restaurantPhotosUrls: [...prev.restaurantPhotosUrls, uploadedUrl].slice(0, 5)
+        }));
+      } else {
+        setMedia((prev) => ({ ...prev, [key]: uploadedUrl }));
+      }
+    } catch (error: any) {
+      Alert.alert("Upload failed", error?.message || "Could not upload image.");
+    } finally {
+      setUploadingKey(null);
+      setPickerBusy(false);
+    }
+  };
+
+  const validateStep = (step: number, nextDocuments = documents, nextKyc = kyc) => {
     if (step === 0) {
       if (!form.ownerName || !form.restaurantName || !form.phone || !form.restaurantPhone) return "Please fill all basic details";
       if (form.phone.length !== 10) return "Enter a valid 10-digit phone number";
       if (form.restaurantPhone.length !== 10) return "Enter a valid 10-digit restaurant phone number";
+      if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Enter a valid email address";
     }
 
     if (step === 1) {
@@ -666,9 +752,12 @@ export default function OnboardingScreen({ navigation }: any) {
     }
 
     if (step === 3) {
+      if (!nextKyc.aadhaarVerified) return "Please verify owner Aadhaar via DigiLocker";
+      if (!nextKyc.panVerified && !nextKyc.panSkipped) return "Verify PAN or choose Skip for now";
+    }
+
+    if (step === 4) {
       if (!/^\d{14}$/.test(nextDocuments.fssaiNumber.trim())) return "FSSAI number must be 14 digits";
-      if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(nextDocuments.panNumber.trim().toUpperCase())) return "PAN number must match AAAAA9999A format";
-      if (!/^\d{12}$/.test(nextDocuments.aadhaarNumber.trim())) return "Aadhaar number must be 12 digits";
       if (!nextDocuments.gstRegistered) return "Please select whether you are GST registered";
       if (nextDocuments.gstRegistered === "yes") {
         if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(nextDocuments.gstNumber.trim().toUpperCase())) {
@@ -676,19 +765,19 @@ export default function OnboardingScreen({ navigation }: any) {
         }
         if (!nextDocuments.gstUrl) return "Please upload the GST certificate";
       }
-      if (!nextDocuments.fssaiUrl || !nextDocuments.panFrontUrl || !nextDocuments.aadhaarFrontUrl) {
-        return "Please upload the mandatory documents";
-      }
+      if (!nextDocuments.fssaiUrl) return "Please upload the FSSAI license";
     }
 
-    if (step === 4) {
-      const hasAnyBankInput = hasBankInput(nextDocuments);
+    if (step === 5) {
+      const bankDone =
+        nextKyc.bankVerificationStatus === "VERIFIED" ||
+        nextKyc.bankDetailsSkipped ||
+        nextKyc.bankVerificationStatus === "PENDING_ADMIN";
+      if (!bankDone) return "Verify bank account or tap Skip for now";
+    }
 
-      if (hasAnyBankInput) {
-        if (!nextDocuments.bankAccountHolderName.trim()) return "Account holder name is required if you add bank details";
-        if (!/^\d+$/.test(nextDocuments.bankAccountNumber.trim())) return "Bank account number must be numeric";
-        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(nextDocuments.bankIfsc.trim().toUpperCase())) return "IFSC format is invalid";
-      }
+    if (step === 8) {
+      if (!operations.openingTime.trim() || !operations.closingTime.trim()) return "Please set opening and closing hours";
     }
 
     return null;
@@ -707,19 +796,51 @@ export default function OnboardingScreen({ navigation }: any) {
   const goBack = () => setActiveStep((current) => Math.max(current - 1, 0));
 
   const skipToNext = () => {
+    if (activeStep === 5) {
+      void skipPartnerBankFromStep();
+      return;
+    }
+    if (activeStep === 7) {
+      setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
+      return;
+    }
     if (activeStep === STEPS.length - 1) {
-      const clearedDocuments = clearBankDetails(documents);
-      setDocuments(clearedDocuments);
-      void submit(clearedDocuments);
+      void submit();
       return;
     }
     setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
   };
 
+  const skipPartnerBankFromStep = async () => {
+    try {
+      const { skipPartnerBank } = await import("../api/kyc.api");
+      const result = await skipPartnerBank();
+      setKyc(result.kyc);
+      setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
+    } catch (error: any) {
+      Alert.alert("Could not skip", error?.message || "Please try again.");
+    }
+  };
+
   const submit = async (documentsOverride = documents) => {
-    const validationError = validateStep(0, documentsOverride) || validateStep(1, documentsOverride) || validateStep(2, documentsOverride) || validateStep(3, documentsOverride) || validateStep(4, documentsOverride);
-    if (validationError) {
-      Alert.alert("Missing Details", validationError);
+    for (let step = 0; step < STEPS.length - 1; step += 1) {
+      const validationError = validateStep(step, documentsOverride, kyc);
+      if (validationError) {
+        Alert.alert("Missing Details", validationError);
+        setActiveStep(step);
+        return;
+      }
+    }
+
+    const agreementResult = await validateAndSaveAgreement(
+      termsAccepted,
+      partnerAgreementAccepted,
+      kyc,
+      setKyc
+    );
+    if (!agreementResult.ok) {
+      Alert.alert("Agreement required", agreementResult.message || "Please accept the agreements.");
+      setActiveStep(STEPS.length - 1);
       return;
     }
 
@@ -729,14 +850,26 @@ export default function OnboardingScreen({ navigation }: any) {
       const userStr = await AsyncStorage.getItem("user");
       const fallbackUserId = userStr ? JSON.parse(userStr).id : "";
       const docsToSubmit = documentsOverride;
-      const shouldSubmitBankDetails = hasBankInput(docsToSubmit);
+      const shouldSubmitBankDetails = Boolean(
+        kyc.bankVerificationStatus === "VERIFIED" || kyc.bankVerificationStatus === "PENDING_ADMIN"
+      );
+      const menuItems = menuDraft
+        .filter((item) => item.name.trim() && Number(item.price) > 0)
+        .map((item) => ({
+          name: item.name.trim(),
+          description: item.description.trim(),
+          price: Number(item.price),
+          isVegetarian: item.isVegetarian,
+          imageUrl: item.imageUrl
+        }));
 
       const requestData: any = {
-        ownerName: form.ownerName.trim(),
+        ownerName: kyc.aadhaarName || form.ownerName.trim(),
         restaurantName: form.restaurantName.trim(),
         phone: form.phone.trim(),
         ownerPhone: form.phone.trim(),
         restaurantPhone: form.restaurantPhone.trim(),
+        email: form.email.trim(),
         address: {
           state: address.state.trim(),
           city: address.city.trim(),
@@ -751,24 +884,26 @@ export default function OnboardingScreen({ navigation }: any) {
         },
         category: selectedCategory,
         userId: userId || fallbackUserId,
+        media,
+        operations,
+        menuDraft: menuItems,
+        termsAccepted: true,
+        partnerAgreementAccepted: true,
         documents: {
           ...docsToSubmit,
           fssaiNumber: docsToSubmit.fssaiNumber.trim(),
-          panNumber: docsToSubmit.panNumber.trim().toUpperCase(),
-          aadhaarNumber: docsToSubmit.aadhaarNumber.trim(),
+          panNumber: (kyc.panNumber || docsToSubmit.panNumber).trim().toUpperCase(),
+          aadhaarNumber: (kyc.aadhaarNumber || docsToSubmit.aadhaarNumber).trim(),
           gstRegistered: docsToSubmit.gstRegistered === "yes",
           gstNumber: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstNumber.trim().toUpperCase() : "",
           gstUrl: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstUrl : "",
-          ownerIdProofUrl: docsToSubmit.aadhaarFrontUrl,
-          ownerPanUrl: docsToSubmit.panFrontUrl,
-          bankDocumentType: "",
-          bankProofUrl: "",
-          cancelledChequeUrl: "",
-          bankPassbookUrl: "",
-          bankStatementUrl: "",
-          bankAccountHolderName: shouldSubmitBankDetails ? docsToSubmit.bankAccountHolderName.trim() : "",
-          bankAccountNumber: shouldSubmitBankDetails ? docsToSubmit.bankAccountNumber.trim() : "",
-          bankIfsc: shouldSubmitBankDetails ? docsToSubmit.bankIfsc.trim().toUpperCase() : ""
+          ownerIdProofUrl: kyc.aadhaarVerified ? "eko-digilocker-verified" : docsToSubmit.aadhaarFrontUrl,
+          ownerPanUrl: kyc.panVerified ? "eko-pan-verified" : docsToSubmit.panFrontUrl,
+          bankAccountHolderName: shouldSubmitBankDetails ? (kyc.bankAccountHolderName || "").trim() : "",
+          bankAccountNumber: shouldSubmitBankDetails ? (kyc.bankAccountNumber || "").trim() : "",
+          bankIfsc: shouldSubmitBankDetails ? (kyc.bankIfsc || "").trim().toUpperCase() : "",
+          restaurantPhotosUrls: media.restaurantPhotosUrls,
+          operatingHoursNote: operations.packagingNote
         }
       };
 
@@ -870,6 +1005,17 @@ export default function OnboardingScreen({ navigation }: any) {
               maxLength={10}
               style={styles.input}
             />
+
+            <Text style={styles.label}>Owner email (optional)</Text>
+            <TextInput
+              placeholder="owner@email.com"
+              placeholderTextColor="#98A2B3"
+              value={form.email}
+              onChangeText={(v) => setForm({ ...form, email: v })}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.input}
+            />
           </View>
         );
 
@@ -948,11 +1094,23 @@ export default function OnboardingScreen({ navigation }: any) {
       case 3:
         return (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Documents</Text>
-            <Text style={styles.sectionHint}>Upload only the required documents for approval.</Text>
+            <Text style={styles.sectionTitle}>Owner verification</Text>
+            <KycIdentityStep
+              kyc={kyc}
+              onKycChange={setKyc}
+              onOwnerNameLocked={(name) => setForm((prev) => ({ ...prev, ownerName: name }))}
+            />
+          </View>
+        );
+
+      case 4:
+        return (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Business & legal documents</Text>
+            <Text style={styles.sectionHint}>Upload FSSAI and GST documents. Owner identity is already verified via DigiLocker.</Text>
 
             <Text style={styles.subSectionTitle}>FSSAI requirements</Text>
-            <Text style={styles.subSectionHint}>The name on the FSSAI certificate should match either the restaurant name or the name on the PAN card. The address should also match the restaurant address.</Text>
+            <Text style={styles.subSectionHint}>The name on the FSSAI certificate should match either the restaurant name or the name on the PAN card.</Text>
             <Text style={styles.label}>FSSAI number *</Text>
             <TextInput
               placeholder="14-digit FSSAI number"
@@ -964,32 +1122,7 @@ export default function OnboardingScreen({ navigation }: any) {
             />
             {renderDocCard("FSSAI License", "Certificate name should match restaurant name or PAN name", "fssaiUrl", true)}
 
-            <Text style={styles.subSectionTitle}>PAN details</Text>
-            <Text style={styles.subSectionHint}>PAN details should be of the person who owns the restaurant.</Text>
-            <Text style={styles.label}>PAN number *</Text>
-            <TextInput
-              placeholder="AAAAA9999A"
-              placeholderTextColor="#98A2B3"
-              autoCapitalize="characters"
-              value={documents.panNumber}
-              onChangeText={(value) => setDocuments((prev) => ({ ...prev, panNumber: value.toUpperCase().slice(0, 10) }))}
-              style={styles.input}
-            />
-            {renderDocCard("PAN Card", "PAN of the person who owns the restaurant", "panFrontUrl", true)}
-
-            <Text style={styles.label}>Aadhaar number *</Text>
-            <TextInput
-              placeholder="12-digit Aadhaar number"
-              placeholderTextColor="#98A2B3"
-              value={documents.aadhaarNumber}
-              onChangeText={(value) => setDocuments((prev) => ({ ...prev, aadhaarNumber: value.replace(/\D/g, "").slice(0, 12) }))}
-              keyboardType="number-pad"
-              style={styles.input}
-            />
-            {renderDocCard("Aadhaar - Front", "Owner Aadhaar front side only", "aadhaarFrontUrl", true)}
-
             <Text style={styles.subSectionTitle}>GST registration</Text>
-            <Text style={styles.subSectionHint}>Tell us whether this restaurant is GST registered. If yes, add the GSTIN and certificate.</Text>
             <View style={styles.categoryGrid}>
               {(["yes", "no"] as const).map((value) => {
                 const selected = documents.gstRegistered === value;
@@ -1030,42 +1163,56 @@ export default function OnboardingScreen({ navigation }: any) {
           </View>
         );
 
-      case 4:
+      case 5:
         return (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Bank details</Text>
-            <Text style={styles.sectionHint}>This step is optional. You can skip it now and add it later from Profile when you're ready. No cancelled cheque, passbook, or bank statement upload is required.</Text>
+            <Text style={styles.sectionTitle}>Bank / payout details</Text>
+            <BankStep kyc={kyc} onKycChange={setKyc} defaultHolderName={kyc.aadhaarName || form.ownerName} />
+          </View>
+        );
 
-            <Text style={styles.label}>Account holder name</Text>
-            <TextInput
-              placeholder="Enter payout account holder name"
-              placeholderTextColor="#98A2B3"
-              value={documents.bankAccountHolderName}
-              onChangeText={(value) => setDocuments((prev) => ({ ...prev, bankAccountHolderName: value }))}
-              style={styles.input}
+      case 6:
+        return (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Restaurant photos</Text>
+            <MediaStep media={media} uploadingKey={uploadingKey} onPick={pickMediaAsset} />
+          </View>
+        );
+
+      case 7:
+        return (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Menu setup</Text>
+            <MenuDraftStep items={menuDraft} onChange={setMenuDraft} />
+          </View>
+        );
+
+      case 8:
+        return (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Operating information</Text>
+            <OperationsStep operations={operations} onChange={setOperations} />
+          </View>
+        );
+
+      case 9:
+        return (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Review & submit</Text>
+            <AgreementStep
+              kyc={kyc}
+              onKycChange={setKyc}
+              termsAccepted={termsAccepted}
+              partnerAgreementAccepted={partnerAgreementAccepted}
+              onTermsAcceptedChange={setTermsAccepted}
+              onPartnerAgreementAcceptedChange={setPartnerAgreementAccepted}
+              summary={{
+                restaurantName: form.restaurantName,
+                ownerName: kyc.aadhaarName || form.ownerName,
+                city: address.city,
+                category: CATEGORY_LABELS[selectedCategory] || selectedCategory
+              }}
             />
-
-            <Text style={styles.label}>Bank account number</Text>
-            <TextInput
-              placeholder="Enter payout bank account number"
-              placeholderTextColor="#98A2B3"
-              value={documents.bankAccountNumber}
-              onChangeText={(value) => setDocuments((prev) => ({ ...prev, bankAccountNumber: value.replace(/\D/g, "") }))}
-              keyboardType="number-pad"
-              style={styles.input}
-            />
-
-            <Text style={styles.label}>Bank IFSC code</Text>
-            <TextInput
-              placeholder="Enter bank IFSC"
-              placeholderTextColor="#98A2B3"
-              autoCapitalize="characters"
-              value={documents.bankIfsc}
-              onChangeText={(value) => setDocuments((prev) => ({ ...prev, bankIfsc: value.toUpperCase() }))}
-              style={styles.input}
-            />
-
-            <Text style={styles.helperText}>Bank proof upload is not required.</Text>
           </View>
         );
 
@@ -1165,7 +1312,7 @@ export default function OnboardingScreen({ navigation }: any) {
         <View style={styles.hero}>
           <Text style={styles.heroEyebrow}>Vyaha Partner</Text>
           <Text style={styles.heroTitle}>Set up your shop in a few guided steps</Text>
-          <Text style={styles.heroSubtitle}>We'll walk through the essentials first. Bank details can be skipped for now and finished later.</Text>
+          <Text style={styles.heroSubtitle}>Phone login, Eko verification, shop details, menu and operating info — then submit for Vyaha review.</Text>
         </View>
 
         <View style={styles.stepperCard}>
@@ -1207,9 +1354,9 @@ export default function OnboardingScreen({ navigation }: any) {
             {savingDraft ? <ActivityIndicator color={partnerTheme.colors.primary} size="small" /> : <Text style={styles.draftButtonText}>Save draft</Text>}
           </TouchableOpacity>
 
-          {activeStep === STEPS.length - 1 ? (
+          {(activeStep === 5 || activeStep === 7) ? (
             <TouchableOpacity style={styles.skipButton} onPress={skipToNext} disabled={submitting}>
-              <Text style={styles.skipButtonText}>Skip & Submit</Text>
+              <Text style={styles.skipButtonText}>{activeStep === 5 ? "Skip bank" : "Skip menu"}</Text>
             </TouchableOpacity>
           ) : null}
 
