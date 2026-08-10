@@ -384,7 +384,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
       });
       if (!response.success || !response.data) throw new Error(response.message || "Bank verify failed");
       if (response.data.adminFallback) {
-        Alert.alert("Under review", response.data.decentroError || "Sent for admin review. You can start delivering.");
+        Alert.alert("Under review", response.data.ekoError || "Sent for admin review. You can start delivering.");
       }
       await finishToMain();
     } catch (error: any) {
@@ -445,7 +445,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
           {step === 0 ? (
             <View>
               <Text style={styles.digiIntro}>
-                Verify your Aadhaar securely through DigiLocker. Your name will be locked from the e-Aadhaar shared with DigiLocker.
+                Verify your Aadhaar securely through DigiLocker (via Eko). Your name will be locked from the e-Aadhaar shared with DigiLocker.
               </Text>
               <Check
                 checked={aadhaarConsent}

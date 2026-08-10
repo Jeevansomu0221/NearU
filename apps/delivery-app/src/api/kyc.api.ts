@@ -56,7 +56,6 @@ export const verifyBank = (payload: {
       nameMatchScore?: number | null;
       adminFallback?: boolean;
       ekoError?: string;
-      decentroError?: string;
     }
   >
 > => {

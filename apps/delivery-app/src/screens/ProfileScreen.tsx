@@ -606,7 +606,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       syncProfile(profileResponse.data);
       setEditingBank(false);
       if (response.data?.adminFallback) {
-        Alert.alert("Submitted for review", response.data.decentroError || "Decentro could not verify automatically. Admin will review.");
+        Alert.alert("Submitted for review", response.data.ekoError || "Eko could not verify automatically. Admin will review.");
       } else {
         Alert.alert("Verified", "Bank account verified. You can withdraw earnings.");
       }
@@ -958,11 +958,11 @@ export default function ProfileScreen({ navigation, route }: any) {
                     </View>
                   ) : null}
                   {bankStatus === "PENDING" ? (
-                    <Text style={s.sectionSub}>Your bank details are under review (Decentro fallback). Withdrawals unlock after verification.</Text>
+                    <Text style={s.sectionSub}>Your bank details are under review (Eko fallback). Withdrawals unlock after verification.</Text>
                   ) : bankStatus === "VERIFIED" ? (
                     <Text style={s.sectionSub}>Verified payout details are locked for security.</Text>
                   ) : (
-                    <Text style={s.sectionSub}>Add payout details for withdrawals. We verify via Decentro (admin only if that fails).</Text>
+                    <Text style={s.sectionSub}>Add payout details for withdrawals. We verify via Eko (admin only if that fails).</Text>
                   )}
                   {editingBank && canEditBank ? (
               <>
@@ -977,7 +977,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <View style={s.btnRow}>
                   <TouchableOpacity style={s.btnOutline} onPress={() => setEditingBank(false)}><Text style={s.btnOutlineText}>Cancel</Text></TouchableOpacity>
                   <TouchableOpacity style={[s.btnPrimary, bankSaving && s.btnDisabled]} onPress={handleSaveBankDetails} disabled={bankSaving}>
-                    {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnPrimaryText}>Verify with Decentro</Text>}
+                    {bankSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnPrimaryText}>Verify with Eko</Text>}
                   </TouchableOpacity>
                 </View>
               </>
