@@ -102,7 +102,7 @@
         "header": [],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"initiator_id\": \"{{eko_initiator_id}}\",\n  \"account\": \"1234567890\",\n  \"ifsc\": \"SBIN0000001\",\n  \"client_ref_id\": \"bav{{$timestamp}}\"\n}"
+          "raw": "{\n  \"initiator_id\": \"{{eko_initiator_id}}\",\n  \"bank_account\": \"1234567890\",\n  \"ifsc\": \"SBIN0000001\",\n  \"client_ref_id\": \"bav{{$timestamp}}\"\n}"
         },
         "url": "{{eko_kyc_base_url}}/tools/kyc/bank-account/sync",
         "description": "Penny-drop style bank verify. Needs E-value + product enabled."

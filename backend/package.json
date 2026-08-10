@@ -13,7 +13,8 @@
     "dev": "ts-node src/server.ts",
     "mongo:dev": "node scripts/start-mongo-dev.js",
     "seed:partner-mock-menus": "ts-node scripts/seedMockPartnerMenus.ts",
-    "eko:probe": "ts-node scripts/eko-probe.ts"
+    "eko:probe": "ts-node scripts/eko-probe.ts",
+    "eko:kyc-probe": "ts-node scripts/eko-kyc-probe.ts"
   },
   "keywords": [],
   "author": "",

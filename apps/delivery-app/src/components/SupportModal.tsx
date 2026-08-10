@@ -74,12 +74,12 @@ const DELIVERY_FAQS: FAQEntry[] = [
   {
     question: "What documents do I need?",
     answer:
-      "Complete Aadhaar OTP verification (mandatory to go online). PAN and bank details are optional during signup — add them later in Profile for payouts. Verification is digital via Decentro; no document photo uploads are required."
+      "Complete DigiLocker Aadhaar verification (mandatory to go online). PAN and bank details are optional during signup — add them later in Profile for payouts. Name is extracted from DigiLocker; no document photo uploads are required."
   },
   {
     question: "How long does profile verification take?",
     answer:
-      "Aadhaar OTP verification is instant and activates your rider account automatically. Bank verification is also instant via Decentro (admin review only if automated verify fails)."
+      "DigiLocker Aadhaar verification is instant and activates your rider account automatically. Bank verification is also instant via Eko (admin review only if automated verify fails)."
   },
   {
     question: "Can I update my bank details?",

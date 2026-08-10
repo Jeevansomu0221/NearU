@@ -398,7 +398,7 @@ export const validateBankAccount = async (input: {
 
   const body: Record<string, unknown> = {
     initiator_id: config.ekoInitiatorId,
-    account: input.accountNumber,
+    bank_account: input.accountNumber,
     ifsc: input.ifsc,
     client_ref_id: newClientRefId()
   };
@@ -420,8 +420,18 @@ export const validateBankAccount = async (input: {
       ""
   ).trim();
 
+  const accountStatus = String(nested.account_status || nested.status || "").toUpperCase();
+  const statusCode = String(nested.account_status_code || nested.accountStatusCode || "").toUpperCase();
+  if (
+    accountStatus === "INVALID" ||
+    statusCode.includes("INVALID") ||
+    statusCode.includes("FAIL")
+  ) {
+    throw new Error("Bank account could not be verified. Check account number and IFSC.");
+  }
+
   return {
-    accountStatus: String(nested.account_status || nested.status || "VALID"),
+    accountStatus: accountStatus || "VALID",
     beneficiaryName: beneficiaryName || undefined,
     nameMatchScore:
       nested.name_match_score != null ? Number(nested.name_match_score) : undefined,
