@@ -9,6 +9,8 @@ import {
   isEkoConfigured,
   toValidDateOrUndefined,
   validateBankAccount,
+  verifyFssai,
+  verifyGstin,
   verifyPan
 } from "../services/eko.service";
 
@@ -36,23 +38,33 @@ const ensurePartnerUser = (req: AuthRequest, res: Response) => {
 };
 
 const emptyKyc = () => ({
-  aadhaarVerified: false,
-  aadhaarVerifiedAt: "",
-  aadhaarName: "",
-  aadhaarMasked: "",
-  aadhaarNumber: "",
   panVerified: false,
   panVerifiedAt: "",
   panNumber: "",
   panName: "",
   panSkipped: false,
+  fssaiVerified: false,
+  fssaiVerifiedAt: "",
+  fssaiNumber: "",
+  fssaiBusinessName: "",
+  fssaiLicenseStatus: "",
+  gstVerified: false,
+  gstVerifiedAt: "",
+  gstNumber: "",
+  gstLegalName: "",
+  gstStatus: "",
+  aadhaarVerified: false,
+  aadhaarVerifiedAt: "",
+  aadhaarName: "",
+  aadhaarMasked: "",
+  aadhaarNumber: "",
+  aadhaarOtpTxnId: "",
   bankVerificationStatus: "",
   bankVerifiedAt: "",
   bankDetailsSkipped: false,
   bankAccountHolderName: "",
   bankAccountNumber: "",
   bankIfsc: "",
-  aadhaarOtpTxnId: "",
   kycProvider: "",
   termsAcceptedAt: "",
   partnerAgreementAcceptedAt: ""
@@ -304,21 +316,23 @@ export const verifyPartnerPan = async (req: AuthRequest, res: Response) => {
     if (!loaded) {
       return errorResponse(res, "User not found", 404);
     }
-    if (!loaded.kyc.aadhaarVerified) {
-      return errorResponse(res, "Verify Aadhaar before PAN", 400);
-    }
 
-    const matchName = String(loaded.kyc.aadhaarName || loaded.user.name || "").trim();
+    const ownerName = String(
+      req.body.ownerName ||
+        (loaded.draft as any)?.form?.ownerName ||
+        loaded.user.name ||
+        ""
+    ).trim();
     const panResult = await verifyPan({
       panNumber,
-      name: matchName || "Partner",
+      name: ownerName || "Partner",
       dateOfBirth: undefined
     });
     const now = new Date().toISOString();
 
     const kyc = await saveKycToDraft(user.id, {
       panNumber,
-      panName: panResult.name || matchName || "",
+      panName: panResult.name || ownerName || "",
       panVerified: true,
       panVerifiedAt: now,
       panSkipped: false,
@@ -340,9 +354,6 @@ export const skipPartnerPan = async (req: AuthRequest, res: Response) => {
     const loaded = await loadUserDraft(user.id);
     if (!loaded) {
       return errorResponse(res, "User not found", 404);
-    }
-    if (!loaded.kyc.aadhaarVerified) {
-      return errorResponse(res, "Verify Aadhaar before skipping PAN", 400);
     }
     if (loaded.kyc.panVerified) {
       return successResponse(res, serializeKyc(loaded.kyc), "PAN is already verified");
@@ -388,14 +399,14 @@ export const verifyPartnerBank = async (req: AuthRequest, res: Response) => {
     if (!loaded) {
       return errorResponse(res, "User not found", 404);
     }
-    if (!loaded.kyc.aadhaarVerified) {
-      return errorResponse(res, "Verify Aadhaar before bank verification", 400);
-    }
+
+    const matchName =
+      accountHolderName ||
+      String((loaded.draft as any)?.form?.ownerName || loaded.kyc.panName || loaded.user.name || "").trim();
+
     if (loaded.kyc.bankVerificationStatus === "VERIFIED") {
       return successResponse(res, { kyc: serializeKyc(loaded.kyc) }, "Bank details are already verified");
     }
-
-    const matchName = accountHolderName || loaded.kyc.aadhaarName || loaded.user.name || "";
 
     try {
       const bankResult = await validateBankAccount({
@@ -474,6 +485,101 @@ export const skipPartnerBank = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error("skipPartnerBank error:", error);
     return errorResponse(res, error?.message || "Failed to skip bank", 400);
+  }
+};
+
+const fssaiRegex = /^[0-9]{14}$/;
+const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+
+export const verifyPartnerFssai = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = ensurePartnerUser(req, res);
+    if (!user) return;
+
+    if (!isEkoConfigured()) {
+      return errorResponse(res, "Eko KYC is not configured on the server", 503);
+    }
+
+    const fssaiNumber = String(req.body.fssaiNumber || req.body.fssai || "").replace(/\D/g, "");
+    if (!fssaiRegex.test(fssaiNumber)) {
+      return errorResponse(res, "FSSAI number must be 14 digits", 400);
+    }
+
+    const result = await verifyFssai({ fssaiNumber });
+    const now = new Date().toISOString();
+    const kyc = await saveKycToDraft(user.id, {
+      fssaiNumber: result.fssaiNumber,
+      fssaiBusinessName: result.businessName || "",
+      fssaiLicenseStatus: result.licenseStatus || "Active",
+      fssaiVerified: true,
+      fssaiVerifiedAt: now,
+      kycProvider: "eko"
+    });
+
+    return successResponse(
+      res,
+      {
+        kyc,
+        businessName: result.businessName || null,
+        licenseStatus: result.licenseStatus || null,
+        expiryDate: result.expiryDate || null
+      },
+      "FSSAI license verified"
+    );
+  } catch (error: any) {
+    console.error("verifyPartnerFssai error:", error);
+    return errorResponse(res, error?.message || "Failed to verify FSSAI", 400);
+  }
+};
+
+export const verifyPartnerGst = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = ensurePartnerUser(req, res);
+    if (!user) return;
+
+    if (!isEkoConfigured()) {
+      return errorResponse(res, "Eko KYC is not configured on the server", 503);
+    }
+
+    const gstin = String(req.body.gstNumber || req.body.gstin || "")
+      .trim()
+      .toUpperCase();
+    if (!gstRegex.test(gstin)) {
+      return errorResponse(res, "GSTIN must be a valid 15-character GST number", 400);
+    }
+
+    const loaded = await loadUserDraft(user.id);
+    const businessName = String(
+      req.body.businessName ||
+        (loaded?.draft as any)?.form?.restaurantName ||
+        (loaded?.draft as any)?.form?.ownerName ||
+        ""
+    ).trim();
+
+    const result = await verifyGstin({ gstin, businessName: businessName || undefined });
+    const now = new Date().toISOString();
+    const kyc = await saveKycToDraft(user.id, {
+      gstNumber: result.gstin,
+      gstLegalName: result.legalName || result.tradeName || "",
+      gstStatus: result.status || "Active",
+      gstVerified: true,
+      gstVerifiedAt: now,
+      kycProvider: "eko"
+    });
+
+    return successResponse(
+      res,
+      {
+        kyc,
+        legalName: result.legalName || null,
+        tradeName: result.tradeName || null,
+        status: result.status || null
+      },
+      "GSTIN verified"
+    );
+  } catch (error: any) {
+    console.error("verifyPartnerGst error:", error);
+    return errorResponse(res, error?.message || "Failed to verify GSTIN", 400);
   }
 };
 

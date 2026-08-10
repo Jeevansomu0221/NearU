@@ -29,6 +29,8 @@ import {
   partnerDigiLockerCallback,
   verifyPartnerPan,
   skipPartnerPan,
+  verifyPartnerFssai,
+  verifyPartnerGst,
   verifyPartnerBank,
   skipPartnerBank,
   acceptPartnerOnboardingTerms
@@ -57,6 +59,8 @@ router.post("/kyc/digilocker/start", authMiddleware, startPartnerDigiLocker);
 router.post("/kyc/digilocker/complete", authMiddleware, completePartnerDigiLocker);
 router.post("/kyc/pan/verify", authMiddleware, verifyPartnerPan);
 router.post("/kyc/pan/skip", authMiddleware, skipPartnerPan);
+router.post("/kyc/fssai/verify", authMiddleware, verifyPartnerFssai);
+router.post("/kyc/gst/verify", authMiddleware, verifyPartnerGst);
 router.post("/kyc/bank/verify", authMiddleware, verifyPartnerBank);
 router.post("/kyc/bank/skip", authMiddleware, skipPartnerBank);
 router.post("/kyc/accept-agreement", authMiddleware, acceptPartnerOnboardingTerms);

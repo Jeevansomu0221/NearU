@@ -51,6 +51,24 @@ export type EkoBankResult = {
   raw?: Record<string, unknown>;
 };
 
+export type EkoGstResult = {
+  gstin: string;
+  valid: boolean;
+  legalName?: string;
+  tradeName?: string;
+  status?: string;
+  raw?: Record<string, unknown>;
+};
+
+export type EkoFssaiResult = {
+  fssaiNumber: string;
+  valid: boolean;
+  businessName?: string;
+  licenseStatus?: string;
+  expiryDate?: string;
+  raw?: Record<string, unknown>;
+};
+
 type EkoApiResponse = {
   status?: number | string;
   message?: string;
@@ -439,6 +457,92 @@ export const verifyPan = async (input: {
     status: panStatus || "VALID",
     nameMatch: nested.name_match != null ? String(nested.name_match) : undefined,
     dobMatch: nested.dob_match != null ? String(nested.dob_match) : undefined,
+    raw: nested
+  };
+};
+
+export const verifyGstin = async (input: {
+  gstin: string;
+  businessName?: string;
+}): Promise<EkoGstResult> => {
+  if (config.ekoMock) {
+    return {
+      gstin: input.gstin.toUpperCase(),
+      valid: true,
+      legalName: input.businessName || "Mock GST Business",
+      status: "Active"
+    };
+  }
+
+  const body: Record<string, unknown> = {
+    initiator_id: config.ekoInitiatorId,
+    gstin: input.gstin.toUpperCase(),
+    client_ref_id: newClientRefId()
+  };
+  if (input.businessName) {
+    body.business_name = input.businessName.slice(0, 100);
+  }
+  if (config.ekoUserCode) {
+    body.user_code = config.ekoUserCode;
+  }
+
+  const { data } = await callEkoKyc("/tools/kyc/gstin", body);
+  const nested = (data.data || {}) as Record<string, any>;
+  const gstStatus = String(nested.gst_in_status || nested.gstin_status || nested.status || "").trim();
+  const isValid =
+    nested.valid === true ||
+    (nested.valid !== false && Boolean(gstStatus) && !/cancel|invalid|suspend/i.test(gstStatus));
+
+  if (nested.valid === false || /cancel|invalid/i.test(gstStatus)) {
+    throw new Error("GSTIN is not valid according to government records");
+  }
+
+  return {
+    gstin: String(nested.GSTIN || nested.gstin || input.gstin).toUpperCase(),
+    valid: isValid,
+    legalName: String(nested.legal_name_of_business || nested.legalName || "").trim() || undefined,
+    tradeName: String(nested.trade_name || nested.tradeName || "").trim() || undefined,
+    status: gstStatus || "Active",
+    raw: nested
+  };
+};
+
+export const verifyFssai = async (input: { fssaiNumber: string }): Promise<EkoFssaiResult> => {
+  if (config.ekoMock) {
+    return {
+      fssaiNumber: input.fssaiNumber,
+      valid: true,
+      businessName: "Mock Food Business",
+      licenseStatus: "Active"
+    };
+  }
+
+  const body: Record<string, unknown> = {
+    initiator_id: config.ekoInitiatorId,
+    fssai: input.fssaiNumber.replace(/\D/g, ""),
+    client_ref_id: newClientRefId()
+  };
+  if (config.ekoUserCode) {
+    body.user_code = config.ekoUserCode;
+  }
+
+  const { data } = await callEkoKyc("/tools/kyc/touras/fetch-fssai", body);
+  const nested = (data.data || {}) as Record<string, any>;
+  const licenseStatus = String(
+    nested.license_status || nested.status || nested.fbo_status || nested.license_category || ""
+  ).trim();
+
+  if (/cancel|suspend|expir|invalid/i.test(licenseStatus)) {
+    throw new Error(`FSSAI license is not active (${licenseStatus || "invalid"})`);
+  }
+
+  return {
+    fssaiNumber: String(nested.fssai_number || nested.fssai || input.fssaiNumber).replace(/\D/g, ""),
+    valid: true,
+    businessName: String(nested.fbo_name || nested.business_name || nested.company_name || nested.name || "").trim() ||
+      undefined,
+    licenseStatus: licenseStatus || "Active",
+    expiryDate: String(nested.expiry_date || nested.valid_upto || "").trim() || undefined,
     raw: nested
   };
 };

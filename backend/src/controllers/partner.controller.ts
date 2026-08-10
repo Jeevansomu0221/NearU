@@ -59,12 +59,10 @@ const isGstRegisteredValue = (value: any) => value === true || value === "true" 
 const hasCompleteProfileDocuments = (documents: Record<string, any>) =>
   Boolean(
     firstString(documents?.fssaiNumber) &&
-      firstString(documents?.fssaiUrl) &&
-      (firstString(documents?.panNumber) || documents?.panSkipped) &&
-      (firstString(documents?.panFrontUrl, documents?.ownerPanUrl) || documents?.panSkipped || documents?.panVerified) &&
-      (firstString(documents?.aadhaarNumber) || documents?.aadhaarVerified) &&
-      (firstString(documents?.aadhaarFrontUrl, documents?.ownerIdProofUrl) || documents?.aadhaarVerified) &&
-      (!isGstRegisteredValue(documents?.gstRegistered) || (firstString(documents?.gstNumber) && firstString(documents?.gstUrl)))
+      documents?.fssaiVerified &&
+      (documents?.panVerified || documents?.panSkipped) &&
+      firstString(documents?.panNumber) &&
+      (!isGstRegisteredValue(documents?.gstRegistered) || (firstString(documents?.gstNumber) && documents?.gstVerified))
   );
 
 const selfDeliveryEligibleStatuses = ["VERIFIED", "ACTIVE"];
@@ -224,7 +222,7 @@ const buildPartnerBankSummary = (partner: any) => {
   };
 };
 
-const ONBOARDING_MAX_STEP = 9;
+const ONBOARDING_MAX_STEP = 8;
 
 const sanitizeMenuDraft = (items: unknown) => {
   if (!Array.isArray(items)) return [];
@@ -537,9 +535,10 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     const resolvedUserId = tokenUserId || userId;
     const objectId = toObjectId(resolvedUserId);
     const draftKyc = objectId ? await readPartnerKycFromUser(objectId) : null;
-    const aadhaarVerified = Boolean(draftKyc?.aadhaarVerified);
     const panVerified = Boolean(draftKyc?.panVerified);
     const panSkipped = Boolean(draftKyc?.panSkipped);
+    const fssaiVerified = Boolean(draftKyc?.fssaiVerified);
+    const gstVerified = Boolean(draftKyc?.gstVerified);
     const bankVerified = draftKyc?.bankVerificationStatus === "VERIFIED";
     const bankSkipped = Boolean(draftKyc?.bankDetailsSkipped);
 
@@ -550,15 +549,17 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "You must accept the Restaurant Partner agreement" });
     }
 
-    if (aadhaarVerified) {
-      normalizedDocs.aadhaarNumber = firstString(draftKyc?.aadhaarNumber, normalizedDocs.aadhaarNumber);
-      normalizedDocs.aadhaarFrontUrl = normalizedDocs.aadhaarFrontUrl || "eko-digilocker-verified";
-    }
     if (panVerified) {
       normalizedDocs.panNumber = firstString(draftKyc?.panNumber, normalizedDocs.panNumber).toUpperCase();
       normalizedDocs.panFrontUrl = normalizedDocs.panFrontUrl || "eko-pan-verified";
-    } else if (panSkipped && !normalizedDocs.panFrontUrl) {
-      normalizedDocs.panNumber = normalizedDocs.panNumber || "";
+    }
+    if (fssaiVerified) {
+      normalizedDocs.fssaiNumber = firstString(draftKyc?.fssaiNumber, normalizedDocs.fssaiNumber);
+      normalizedDocs.fssaiUrl = normalizedDocs.fssaiUrl || "eko-fssai-verified";
+    }
+    if (gstVerified) {
+      normalizedDocs.gstNumber = firstString(draftKyc?.gstNumber, normalizedDocs.gstNumber).toUpperCase();
+      normalizedDocs.gstUrl = normalizedDocs.gstUrl || "eko-gst-verified";
     }
     if (bankVerified || bankSkipped) {
       normalizedDocs.bankAccountHolderName = firstString(
@@ -579,18 +580,21 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     if (!fssaiRegex.test(normalizedDocs.fssaiNumber)) {
       return res.status(400).json({ success: false, message: "FSSAI number must be 14 digits" });
     }
-    if (!aadhaarVerified && !aadhaarRegex.test(normalizedDocs.aadhaarNumber)) {
-      return res.status(400).json({ success: false, message: "Aadhaar number must be 12 digits or verify via DigiLocker" });
+    if (!fssaiVerified) {
+      return res.status(400).json({ success: false, message: "Verify FSSAI license via Eko before submitting" });
+    }
+    if (!panVerified && !panSkipped) {
+      return res.status(400).json({ success: false, message: "Verify PAN via Eko or skip before submitting" });
     }
     if (!panVerified && !panSkipped && !panRegex.test(normalizedDocs.panNumber)) {
-      return res.status(400).json({ success: false, message: "PAN number must match AAAAA9999A format or verify via Eko" });
+      return res.status(400).json({ success: false, message: "PAN number must match AAAAA9999A format" });
     }
     if (normalizedDocs.gstRegistered) {
       if (!gstRegex.test(normalizedDocs.gstNumber)) {
         return res.status(400).json({ success: false, message: "GSTIN must be a valid 15-character GST number" });
       }
-      if (!normalizedDocs.gstUrl) {
-        return res.status(400).json({ success: false, message: "GST certificate is required when GST registered is yes" });
+      if (!gstVerified) {
+        return res.status(400).json({ success: false, message: "Verify GSTIN via Eko before submitting" });
       }
     }
 
@@ -607,23 +611,15 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     }
 
     const hasMandatoryDocuments = Boolean(
-      normalizedDocs.fssaiUrl &&
-      (panVerified || panSkipped || normalizedDocs.panFrontUrl) &&
-      (aadhaarVerified || normalizedDocs.aadhaarFrontUrl) &&
-      (!normalizedDocs.gstRegistered || (normalizedDocs.gstNumber && normalizedDocs.gstUrl))
+      fssaiVerified &&
+      (panVerified || panSkipped) &&
+      (!normalizedDocs.gstRegistered || gstVerified)
     );
-
-    if (!aadhaarVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "Owner Aadhaar must be verified via DigiLocker before submitting"
-      });
-    }
 
     if (!hasMandatoryDocuments) {
       return res.status(400).json({
         success: false,
-        message: "FSSAI, PAN, Aadhaar front, and GST details when registered are mandatory"
+        message: "Verify PAN, FSSAI, and GST (if registered) via Eko before submitting"
       });
     }
 
@@ -639,10 +635,10 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       bankAccountNumber: normalizedBankAccountNumber,
       bankIfsc: normalizedBankIfsc,
       panFrontUrl: normalizedDocs.panFrontUrl,
-      aadhaarFrontUrl: normalizedDocs.aadhaarFrontUrl,
-      aadhaarVerified,
       panVerified,
-      panSkipped
+      panSkipped,
+      fssaiVerified,
+      gstVerified
     };
 
     let partner = await Partner.findOne({ phone });
@@ -662,7 +658,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
 
     // Prepare partner data
     const partnerData: any = {
-      ownerName: firstString(draftKyc?.aadhaarName, ownerName),
+      ownerName: firstString(draftKyc?.panName, ownerName),
       restaurantName,
       shopName: restaurantName,
       phone,
@@ -717,19 +713,26 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         menuProofUrl: normalizedDocs.menuProofUrl,
         restaurantPhotosUrls: normalizedDocs.restaurantPhotosUrls,
         operatingHoursNote: normalizedPackagingNote,
-        aadhaarVerified,
-        aadhaarVerifiedAt: aadhaarVerified && draftKyc?.aadhaarVerifiedAt ? new Date(draftKyc.aadhaarVerifiedAt) : null,
-        aadhaarName: firstString(draftKyc?.aadhaarName),
-        aadhaarMasked: firstString(draftKyc?.aadhaarMasked),
         panVerified,
         panVerifiedAt: panVerified && draftKyc?.panVerifiedAt ? new Date(draftKyc.panVerifiedAt) : null,
         panName: firstString(draftKyc?.panName),
         panSkipped,
+        fssaiVerified,
+        fssaiVerifiedAt: fssaiVerified && draftKyc?.fssaiVerifiedAt ? new Date(draftKyc.fssaiVerifiedAt) : null,
+        fssaiBusinessName: firstString(draftKyc?.fssaiBusinessName),
+        fssaiLicenseStatus: firstString(draftKyc?.fssaiLicenseStatus),
+        gstVerified: normalizedDocs.gstRegistered ? gstVerified : false,
+        gstVerifiedAt:
+          normalizedDocs.gstRegistered && gstVerified && draftKyc?.gstVerifiedAt
+            ? new Date(draftKyc.gstVerifiedAt)
+            : null,
+        gstLegalName: firstString(draftKyc?.gstLegalName),
+        gstStatus: firstString(draftKyc?.gstStatus),
         bankVerificationStatus: bankVerified ? "VERIFIED" : draftKyc?.bankVerificationStatus || "",
         bankVerifiedAt:
           bankVerified && draftKyc?.bankVerifiedAt ? new Date(draftKyc.bankVerifiedAt) : null,
         bankDetailsSkipped: bankSkipped,
-        kycProvider: firstString(draftKyc?.kycProvider, aadhaarVerified ? "eko-digilocker" : ""),
+        kycProvider: firstString(draftKyc?.kycProvider, "eko"),
         submittedAt: hasMandatoryDocuments ? new Date() : null,
         isComplete: hasCompleteProfileDocuments(documentsForCompletion)
       },

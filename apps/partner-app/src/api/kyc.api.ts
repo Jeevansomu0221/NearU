@@ -1,16 +1,21 @@
 import api from "./client";
 
 export type PartnerKycState = {
-  aadhaarVerified?: boolean;
-  aadhaarVerifiedAt?: string;
-  aadhaarName?: string;
-  aadhaarMasked?: string;
-  aadhaarNumber?: string;
   panVerified?: boolean;
   panVerifiedAt?: string;
   panNumber?: string;
   panName?: string;
   panSkipped?: boolean;
+  fssaiVerified?: boolean;
+  fssaiVerifiedAt?: string;
+  fssaiNumber?: string;
+  fssaiBusinessName?: string;
+  fssaiLicenseStatus?: string;
+  gstVerified?: boolean;
+  gstVerifiedAt?: string;
+  gstNumber?: string;
+  gstLegalName?: string;
+  gstStatus?: string;
   bankVerificationStatus?: string;
   bankVerifiedAt?: string;
   bankDetailsSkipped?: boolean;
@@ -19,13 +24,6 @@ export type PartnerKycState = {
   bankIfsc?: string;
   termsAcceptedAt?: string;
   partnerAgreementAcceptedAt?: string;
-};
-
-export type DigiLockerStartResult = {
-  initiationTransactionId: string;
-  authorizationUrl: string;
-  mock?: boolean;
-  message?: string;
 };
 
 const unwrap = <T,>(response: { data: { success: boolean; data?: T; message?: string } }) => {
@@ -40,28 +38,7 @@ export const getPartnerKycStatus = async () => {
   return unwrap<PartnerKycState>(response);
 };
 
-export const startPartnerDigiLocker = async (payload: { consent: boolean }) => {
-  const response = await api.post<{ success: boolean; data: DigiLockerStartResult }>(
-    "/partners/kyc/digilocker/start",
-    payload
-  );
-  return unwrap<DigiLockerStartResult>(response);
-};
-
-export const completePartnerDigiLocker = async (payload: {
-  initiationTransactionId?: string;
-  code?: string;
-  reference_id?: string;
-  verification_id?: string;
-}) => {
-  const response = await api.post<{
-    success: boolean;
-    data: { kyc: PartnerKycState; extracted?: { name?: string } };
-  }>("/partners/kyc/digilocker/complete", payload);
-  return unwrap<{ kyc: PartnerKycState; extracted?: { name?: string } }>(response);
-};
-
-export const verifyPartnerPan = async (payload: { panNumber: string; consent: boolean }) => {
+export const verifyPartnerPan = async (payload: { panNumber: string; consent: boolean; ownerName?: string }) => {
   const response = await api.post<{ success: boolean; data: { kyc: PartnerKycState; panName?: string } }>(
     "/partners/kyc/pan/verify",
     payload
@@ -72,6 +49,42 @@ export const verifyPartnerPan = async (payload: { panNumber: string; consent: bo
 export const skipPartnerPan = async () => {
   const response = await api.post<{ success: boolean; data: { kyc: PartnerKycState } }>("/partners/kyc/pan/skip", {});
   return unwrap<{ kyc: PartnerKycState }>(response);
+};
+
+export const verifyPartnerFssai = async (payload: { fssaiNumber: string }) => {
+  const response = await api.post<{
+    success: boolean;
+    data: {
+      kyc: PartnerKycState;
+      businessName?: string | null;
+      licenseStatus?: string | null;
+      expiryDate?: string | null;
+    };
+  }>("/partners/kyc/fssai/verify", payload);
+  return unwrap<{
+    kyc: PartnerKycState;
+    businessName?: string | null;
+    licenseStatus?: string | null;
+    expiryDate?: string | null;
+  }>(response);
+};
+
+export const verifyPartnerGst = async (payload: { gstNumber: string; businessName?: string }) => {
+  const response = await api.post<{
+    success: boolean;
+    data: {
+      kyc: PartnerKycState;
+      legalName?: string | null;
+      tradeName?: string | null;
+      status?: string | null;
+    };
+  }>("/partners/kyc/gst/verify", payload);
+  return unwrap<{
+    kyc: PartnerKycState;
+    legalName?: string | null;
+    tradeName?: string | null;
+    status?: string | null;
+  }>(response);
 };
 
 export const verifyPartnerBank = async (payload: {

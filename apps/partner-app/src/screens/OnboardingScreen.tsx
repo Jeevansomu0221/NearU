@@ -20,7 +20,7 @@ import api, { uploadMultipart } from "../api/client";
 import { partnerTheme } from "../theme";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 import { ONBOARDING_STEPS, CATEGORIES, CATEGORY_LABELS } from "./onboarding/constants";
-import KycIdentityStep from "./onboarding/KycIdentityStep";
+import LegalDocumentsStep from "./onboarding/LegalDocumentsStep";
 import BankStep from "./onboarding/BankStep";
 import MediaStep, { type MediaState } from "./onboarding/MediaStep";
 import MenuDraftStep, { type MenuDraftItem } from "./onboarding/MenuDraftStep";
@@ -752,23 +752,13 @@ export default function OnboardingScreen({ navigation }: any) {
     }
 
     if (step === 3) {
-      if (!nextKyc.aadhaarVerified) return "Please verify owner Aadhaar via DigiLocker";
-      if (!nextKyc.panVerified && !nextKyc.panSkipped) return "Verify PAN or choose Skip for now";
+      if (!nextKyc.fssaiVerified) return "Verify FSSAI license via Eko";
+      if (!nextKyc.panVerified && !nextKyc.panSkipped) return "Verify PAN via Eko or skip for now";
+      if (nextDocuments.gstRegistered === "yes" && !nextKyc.gstVerified) return "Verify GSTIN via Eko";
+      if (!nextDocuments.gstRegistered) return "Please select whether you are GST registered";
     }
 
     if (step === 4) {
-      if (!/^\d{14}$/.test(nextDocuments.fssaiNumber.trim())) return "FSSAI number must be 14 digits";
-      if (!nextDocuments.gstRegistered) return "Please select whether you are GST registered";
-      if (nextDocuments.gstRegistered === "yes") {
-        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(nextDocuments.gstNumber.trim().toUpperCase())) {
-          return "GSTIN must be a valid 15-character GST number";
-        }
-        if (!nextDocuments.gstUrl) return "Please upload the GST certificate";
-      }
-      if (!nextDocuments.fssaiUrl) return "Please upload the FSSAI license";
-    }
-
-    if (step === 5) {
       const bankDone =
         nextKyc.bankVerificationStatus === "VERIFIED" ||
         nextKyc.bankDetailsSkipped ||
@@ -776,7 +766,7 @@ export default function OnboardingScreen({ navigation }: any) {
       if (!bankDone) return "Verify bank account or tap Skip for now";
     }
 
-    if (step === 8) {
+    if (step === 7) {
       if (!operations.openingTime.trim() || !operations.closingTime.trim()) return "Please set opening and closing hours";
     }
 
@@ -796,11 +786,11 @@ export default function OnboardingScreen({ navigation }: any) {
   const goBack = () => setActiveStep((current) => Math.max(current - 1, 0));
 
   const skipToNext = () => {
-    if (activeStep === 5) {
+    if (activeStep === 4) {
       void skipPartnerBankFromStep();
       return;
     }
-    if (activeStep === 7) {
+    if (activeStep === 6) {
       setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
       return;
     }
@@ -864,7 +854,7 @@ export default function OnboardingScreen({ navigation }: any) {
         }));
 
       const requestData: any = {
-        ownerName: kyc.aadhaarName || form.ownerName.trim(),
+        ownerName: kyc.panName || form.ownerName.trim(),
         restaurantName: form.restaurantName.trim(),
         phone: form.phone.trim(),
         ownerPhone: form.phone.trim(),
@@ -891,14 +881,13 @@ export default function OnboardingScreen({ navigation }: any) {
         partnerAgreementAccepted: true,
         documents: {
           ...docsToSubmit,
-          fssaiNumber: docsToSubmit.fssaiNumber.trim(),
           panNumber: (kyc.panNumber || docsToSubmit.panNumber).trim().toUpperCase(),
-          aadhaarNumber: (kyc.aadhaarNumber || docsToSubmit.aadhaarNumber).trim(),
+          fssaiNumber: (kyc.fssaiNumber || docsToSubmit.fssaiNumber).trim(),
           gstRegistered: docsToSubmit.gstRegistered === "yes",
-          gstNumber: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstNumber.trim().toUpperCase() : "",
-          gstUrl: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstUrl : "",
-          ownerIdProofUrl: kyc.aadhaarVerified ? "eko-digilocker-verified" : docsToSubmit.aadhaarFrontUrl,
+          gstNumber: docsToSubmit.gstRegistered === "yes" ? (kyc.gstNumber || docsToSubmit.gstNumber).trim().toUpperCase() : "",
           ownerPanUrl: kyc.panVerified ? "eko-pan-verified" : docsToSubmit.panFrontUrl,
+          fssaiUrl: kyc.fssaiVerified ? "eko-fssai-verified" : docsToSubmit.fssaiUrl,
+          gstUrl: kyc.gstVerified ? "eko-gst-verified" : docsToSubmit.gstUrl,
           bankAccountHolderName: shouldSubmitBankDetails ? (kyc.bankAccountHolderName || "").trim() : "",
           bankAccountNumber: shouldSubmitBankDetails ? (kyc.bankAccountNumber || "").trim() : "",
           bankIfsc: shouldSubmitBankDetails ? (kyc.bankIfsc || "").trim().toUpperCase() : "",
@@ -1094,11 +1083,27 @@ export default function OnboardingScreen({ navigation }: any) {
       case 3:
         return (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Owner verification</Text>
-            <KycIdentityStep
+            <Text style={styles.sectionTitle}>PAN, FSSAI & GST</Text>
+            <LegalDocumentsStep
               kyc={kyc}
               onKycChange={setKyc}
-              onOwnerNameLocked={(name) => setForm((prev) => ({ ...prev, ownerName: name }))}
+              ownerName={form.ownerName}
+              restaurantName={form.restaurantName}
+              panNumber={documents.panNumber}
+              onPanNumberChange={(value) => setDocuments((prev) => ({ ...prev, panNumber: value }))}
+              fssaiNumber={documents.fssaiNumber}
+              onFssaiNumberChange={(value) => setDocuments((prev) => ({ ...prev, fssaiNumber: value }))}
+              gstRegistered={documents.gstRegistered}
+              onGstRegisteredChange={(value) =>
+                setDocuments((prev) => ({
+                  ...prev,
+                  gstRegistered: value,
+                  gstNumber: value === "yes" ? prev.gstNumber : "",
+                  gstUrl: value === "yes" ? prev.gstUrl : ""
+                }))
+              }
+              gstNumber={documents.gstNumber}
+              onGstNumberChange={(value) => setDocuments((prev) => ({ ...prev, gstNumber: value }))}
             />
           </View>
         );
@@ -1106,72 +1111,12 @@ export default function OnboardingScreen({ navigation }: any) {
       case 4:
         return (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Business & legal documents</Text>
-            <Text style={styles.sectionHint}>Upload FSSAI and GST documents. Owner identity is already verified via DigiLocker.</Text>
-
-            <Text style={styles.subSectionTitle}>FSSAI requirements</Text>
-            <Text style={styles.subSectionHint}>The name on the FSSAI certificate should match either the restaurant name or the name on the PAN card.</Text>
-            <Text style={styles.label}>FSSAI number *</Text>
-            <TextInput
-              placeholder="14-digit FSSAI number"
-              placeholderTextColor="#98A2B3"
-              value={documents.fssaiNumber}
-              onChangeText={(value) => setDocuments((prev) => ({ ...prev, fssaiNumber: value.replace(/\D/g, "").slice(0, 14) }))}
-              keyboardType="number-pad"
-              style={styles.input}
-            />
-            {renderDocCard("FSSAI License", "Certificate name should match restaurant name or PAN name", "fssaiUrl", true)}
-
-            <Text style={styles.subSectionTitle}>GST registration</Text>
-            <View style={styles.categoryGrid}>
-              {(["yes", "no"] as const).map((value) => {
-                const selected = documents.gstRegistered === value;
-                return (
-                  <TouchableOpacity
-                    key={value}
-                    style={[styles.categoryChip, selected && styles.categoryChipSelected]}
-                    onPress={() =>
-                      setDocuments((prev) => ({
-                        ...prev,
-                        gstRegistered: value,
-                        gstNumber: value === "yes" ? prev.gstNumber : "",
-                        gstUrl: value === "yes" ? prev.gstUrl : ""
-                      }))
-                    }
-                  >
-                    <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>
-                      {value === "yes" ? "Yes, GST registered" : "No GST registration"}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {documents.gstRegistered === "yes" ? (
-              <>
-                <Text style={styles.label}>GSTIN *</Text>
-                <TextInput
-                  placeholder="15-character GSTIN"
-                  placeholderTextColor="#98A2B3"
-                  autoCapitalize="characters"
-                  value={documents.gstNumber}
-                  onChangeText={(value) => setDocuments((prev) => ({ ...prev, gstNumber: value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15) }))}
-                  style={styles.input}
-                />
-                {renderDocCard("GST Certificate", "Required because you selected GST registered", "gstUrl", true)}
-              </>
-            ) : null}
+            <Text style={styles.sectionTitle}>Bank / payout details</Text>
+            <BankStep kyc={kyc} onKycChange={setKyc} defaultHolderName={kyc.panName || form.ownerName} />
           </View>
         );
 
       case 5:
-        return (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Bank / payout details</Text>
-            <BankStep kyc={kyc} onKycChange={setKyc} defaultHolderName={kyc.aadhaarName || form.ownerName} />
-          </View>
-        );
-
-      case 6:
         return (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Restaurant photos</Text>
@@ -1179,7 +1124,7 @@ export default function OnboardingScreen({ navigation }: any) {
           </View>
         );
 
-      case 7:
+      case 6:
         return (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Menu setup</Text>
@@ -1187,7 +1132,7 @@ export default function OnboardingScreen({ navigation }: any) {
           </View>
         );
 
-      case 8:
+      case 7:
         return (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Operating information</Text>
@@ -1195,7 +1140,7 @@ export default function OnboardingScreen({ navigation }: any) {
           </View>
         );
 
-      case 9:
+      case 8:
         return (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Review & submit</Text>
@@ -1208,7 +1153,7 @@ export default function OnboardingScreen({ navigation }: any) {
               onPartnerAgreementAcceptedChange={setPartnerAgreementAccepted}
               summary={{
                 restaurantName: form.restaurantName,
-                ownerName: kyc.aadhaarName || form.ownerName,
+                ownerName: kyc.panName || form.ownerName,
                 city: address.city,
                 category: CATEGORY_LABELS[selectedCategory] || selectedCategory
               }}
@@ -1312,7 +1257,7 @@ export default function OnboardingScreen({ navigation }: any) {
         <View style={styles.hero}>
           <Text style={styles.heroEyebrow}>Vyaha Partner</Text>
           <Text style={styles.heroTitle}>Set up your shop in a few guided steps</Text>
-          <Text style={styles.heroSubtitle}>Phone login, Eko verification, shop details, menu and operating info — then submit for Vyaha review.</Text>
+          <Text style={styles.heroSubtitle}>Verify PAN, FSSAI and GST with Eko, add shop details, then submit for Vyaha review.</Text>
         </View>
 
         <View style={styles.stepperCard}>
@@ -1354,9 +1299,9 @@ export default function OnboardingScreen({ navigation }: any) {
             {savingDraft ? <ActivityIndicator color={partnerTheme.colors.primary} size="small" /> : <Text style={styles.draftButtonText}>Save draft</Text>}
           </TouchableOpacity>
 
-          {(activeStep === 5 || activeStep === 7) ? (
+          {(activeStep === 4 || activeStep === 6) ? (
             <TouchableOpacity style={styles.skipButton} onPress={skipToNext} disabled={submitting}>
-              <Text style={styles.skipButtonText}>{activeStep === 5 ? "Skip bank" : "Skip menu"}</Text>
+              <Text style={styles.skipButtonText}>{activeStep === 4 ? "Skip bank" : "Skip menu"}</Text>
             </TouchableOpacity>
           ) : null}
 
