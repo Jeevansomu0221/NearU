@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   LayoutAnimation,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +20,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { WebView, type WebViewNavigation } from "react-native-webview";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import {
   completeDigiLocker,
@@ -96,6 +98,10 @@ export default function KycRegistrationScreen({ navigation }: any) {
   const [digilockerReferenceId, setDigilockerReferenceId] = useState<string | undefined>();
   const [digilockerVerificationId, setDigilockerVerificationId] = useState<string | undefined>();
   const [isMockDigiLocker, setIsMockDigiLocker] = useState(false);
+  const [digilockerWebUrl, setDigilockerWebUrl] = useState<string | null>(null);
+  const [webCompleting, setWebCompleting] = useState(false);
+  const digilockerReturnHandled = useRef(false);
+  const initiationTxnRef = useRef("");
   const [lockedName, setLockedName] = useState("");
 
   const [vehicleType, setVehicleType] = useState<DeliveryProfile["vehicleType"]>("Bike");
@@ -174,7 +180,67 @@ export default function KycRegistrationScreen({ navigation }: any) {
     setProfile(data);
     setLockedName(name);
     setBankAccountHolderName(name);
+    setDigilockerWebUrl(null);
     animateStep(1);
+  };
+
+  const finishDigiLockerFromReturn = async (params: {
+    code?: string;
+    referenceId?: string;
+    verificationId?: string;
+  }) => {
+    if (digilockerReturnHandled.current) return;
+    digilockerReturnHandled.current = true;
+    setDigilockerWebUrl(null);
+    if (params.code) setDigilockerCode(params.code);
+    if (params.referenceId) setDigilockerReferenceId(params.referenceId);
+    if (params.verificationId) setDigilockerVerificationId(params.verificationId);
+    setStatusNote("Finishing DigiLocker verification…");
+    setWebCompleting(true);
+    setBusy(true);
+    try {
+      const response = await completeDigiLocker({
+        initiationTransactionId: initiationTxnRef.current || initiationTransactionId || undefined,
+        code: params.code,
+        reference_id: params.referenceId,
+        verification_id: params.verificationId
+      });
+      if (!response.success || !response.data) throw new Error(response.message || "Verification failed");
+      applyDigiLockerResult(response.data);
+    } catch (error: any) {
+      digilockerReturnHandled.current = false;
+      setStatusNote("DigiLocker returned — tap Continue to finish verification");
+      Alert.alert("Verification failed", error?.message || "Could not complete DigiLocker verification");
+    } finally {
+      setWebCompleting(false);
+      setBusy(false);
+    }
+  };
+
+  const handleDigiLockerReturnUrl = (url: string | null) => {
+    if (!url) return false;
+    const isCallback =
+      url.includes("kyc/digilocker/callback") ||
+      url.includes("vyaha-delivery://kyc/digilocker") ||
+      url.includes("kyc/digilocker?");
+    if (!isCallback) return false;
+    try {
+      const query = url.includes("?") ? url.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      const code = params.get("code") || undefined;
+      const error = params.get("error");
+      const referenceId = params.get("reference_id") || undefined;
+      const verificationId = params.get("verification_id") || undefined;
+      if (error) {
+        setDigilockerWebUrl(null);
+        Alert.alert("DigiLocker", error);
+        return true;
+      }
+      void finishDigiLockerFromReturn({ code, referenceId, verificationId });
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -207,33 +273,13 @@ export default function KycRegistrationScreen({ navigation }: any) {
 
   useEffect(() => {
     const handleUrl = (url: string | null) => {
-      if (!url || !url.includes("kyc/digilocker")) return;
-      try {
-        const query = url.includes("?") ? url.split("?")[1] : "";
-        const params = new URLSearchParams(query);
-        const code = params.get("code") || undefined;
-        const error = params.get("error");
-        const referenceId = params.get("reference_id") || undefined;
-        const verificationId = params.get("verification_id") || undefined;
-        if (error) {
-          Alert.alert("DigiLocker", error);
-          return;
-        }
-        if (code) setDigilockerCode(code);
-        if (referenceId) setDigilockerReferenceId(referenceId);
-        if (verificationId) setDigilockerVerificationId(verificationId);
-        if (code || referenceId || verificationId) {
-          setStatusNote("DigiLocker returned — tap Continue to finish verification");
-        }
-      } catch {
-        // ignore malformed deep links
-      }
+      handleDigiLockerReturnUrl(url);
     };
 
     Linking.getInitialURL().then(handleUrl).catch(() => {});
     const sub = Linking.addEventListener("url", ({ url }) => handleUrl(url));
     return () => sub.remove();
-  }, []);
+  }, [initiationTransactionId]);
 
   const handleStartDigiLocker = async () => {
     if (!aadhaarConsent) {
@@ -241,21 +287,18 @@ export default function KycRegistrationScreen({ navigation }: any) {
       return;
     }
     setBusy(true);
+    digilockerReturnHandled.current = false;
     try {
       const response = await startDigiLocker({ consent: true });
       if (!response.success || !response.data) throw new Error(response.message || "Failed to start DigiLocker");
       setInitiationTransactionId(response.data.initiationTransactionId);
+      initiationTxnRef.current = response.data.initiationTransactionId;
       setDigilockerStarted(true);
       setIsMockDigiLocker(Boolean(response.data.mock) || !response.data.authorizationUrl);
 
       if (response.data.authorizationUrl) {
-        const canOpen = await Linking.canOpenURL(response.data.authorizationUrl);
-        if (canOpen) {
-          await Linking.openURL(response.data.authorizationUrl);
-        } else {
-          await Linking.openURL(response.data.authorizationUrl);
-        }
-        setStatusNote("Finish DigiLocker in the browser, then return here and tap Continue");
+        setDigilockerWebUrl(response.data.authorizationUrl);
+        setStatusNote("Complete DigiLocker inside the app, then we’ll finish automatically");
       } else {
         setStatusNote(response.data.message || "Mock DigiLocker ready — tap Continue to verify");
       }
@@ -282,6 +325,10 @@ export default function KycRegistrationScreen({ navigation }: any) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const onDigiLockerNavChange = (nav: WebViewNavigation) => {
+    if (nav?.url) handleDigiLockerReturnUrl(nav.url);
   };
 
   const handleSaveBasics = async () => {
@@ -445,7 +492,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
           {step === 0 ? (
             <View>
               <Text style={styles.digiIntro}>
-                Verify your Aadhaar securely through DigiLocker (via Eko). Your name will be locked from the e-Aadhaar shared with DigiLocker.
+                Verify your Aadhaar securely through DigiLocker (via Eko) inside the app. Your name will be locked from the e-Aadhaar shared with DigiLocker.
               </Text>
               <Check
                 checked={aadhaarConsent}
@@ -469,7 +516,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <Text style={styles.primaryBtnText}>
-                      {profile?.documents?.aadhaarVerified ? "Aadhaar verified" : "Open DigiLocker"}
+                      {profile?.documents?.aadhaarVerified ? "Aadhaar verified" : "Verify with DigiLocker"}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -484,7 +531,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
                       <ActivityIndicator color="#fff" />
                     ) : (
                       <Text style={styles.primaryBtnText}>
-                        {isMockDigiLocker ? "Continue (mock)" : "I've finished in DigiLocker"}
+                        {isMockDigiLocker ? "Continue (mock)" : webCompleting ? "Finishing…" : "I've finished in DigiLocker"}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -647,6 +694,56 @@ export default function KycRegistrationScreen({ navigation }: any) {
           ) : null}
         </Animated.View>
       </ScrollView>
+
+      <Modal
+        visible={Boolean(digilockerWebUrl)}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setDigilockerWebUrl(null)}
+      >
+        <View style={[styles.webShell, { paddingTop: insets.top }]}>
+          <View style={styles.webHeader}>
+            <Text style={styles.webTitle}>DigiLocker</Text>
+            <TouchableOpacity
+              style={styles.webClose}
+              onPress={() => {
+                setDigilockerWebUrl(null);
+                setStatusNote("Closed DigiLocker — tap Continue after finishing, or open again");
+              }}
+              hitSlop={8}
+            >
+              <Ionicons name="close" size={22} color="#101828" />
+            </TouchableOpacity>
+          </View>
+          {webCompleting ? (
+            <View style={styles.webLoading}>
+              <ActivityIndicator color={GREEN} size="large" />
+              <Text style={styles.webLoadingText}>Finishing verification…</Text>
+            </View>
+          ) : digilockerWebUrl ? (
+            <WebView
+              source={{ uri: digilockerWebUrl }}
+              onNavigationStateChange={onDigiLockerNavChange}
+              onShouldStartLoadWithRequest={(request) => {
+                if (handleDigiLockerReturnUrl(request.url)) return false;
+                return true;
+              }}
+              startInLoadingState
+              renderLoading={() => (
+                <View style={styles.webLoading}>
+                  <ActivityIndicator color={GREEN} />
+                </View>
+              )}
+              setSupportMultipleWindows={false}
+              javaScriptEnabled
+              domStorageEnabled
+              sharedCookiesEnabled
+              thirdPartyCookiesEnabled
+              style={styles.webview}
+            />
+          ) : null}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -753,5 +850,26 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#ECFDF3", borderColor: GREEN },
   chipText: { fontSize: 12, color: "#475467", fontWeight: "600" },
   chipTextActive: { color: GREEN },
-  btnDisabled: { opacity: 0.65 }
+  btnDisabled: { opacity: 0.65 },
+  webShell: { flex: 1, backgroundColor: "#fff" },
+  webHeader: {
+    height: 48,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#EAECF0"
+  },
+  webTitle: { fontSize: 16, fontWeight: "700", color: "#101828" },
+  webClose: { padding: 6 },
+  webview: { flex: 1 },
+  webLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    gap: 10
+  },
+  webLoadingText: { fontSize: 13, color: "#475467", fontWeight: "600" }
 });

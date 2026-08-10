@@ -7,6 +7,7 @@ import {
   fetchDigiLockerEAadhaar,
   initiateDigiLockerSession,
   isEkoConfigured,
+  toValidDateOrUndefined,
   validateBankAccount,
   verifyPan
 } from "../services/eko.service";
@@ -180,30 +181,30 @@ export const completeDeliveryDigiLocker = async (req: AuthRequest, res: Response
     const lockedName = profile.name.trim();
     const now = new Date();
     const masked = profile.maskedAadhaar || docs.aadhaarMasked || "";
+    const parsedDob = toValidDateOrUndefined(profile.dateOfBirth);
+
+    const partnerUpdate: Record<string, unknown> = {
+      name: lockedName,
+      address: profile.address || partner.address || "",
+      status: "ACTIVE",
+      "documents.aadhaarVerified": true,
+      "documents.aadhaarVerifiedAt": now,
+      "documents.aadhaarName": lockedName,
+      "documents.aadhaarMasked": masked,
+      "documents.nameLocked": true,
+      "documents.aadhaarOtpTxnId": "",
+      "documents.aadhaarShareCode": "",
+      "documents.kycProvider": "eko-digilocker",
+      "documents.submittedAt": now,
+      "documents.isComplete": true
+    };
+    if (parsedDob) {
+      partnerUpdate.dateOfBirth = parsedDob;
+    }
 
     await Promise.all([
       User.updateOne({ _id: user.id }, { $set: { name: lockedName } }),
-      DeliveryPartner.updateOne(
-        { _id: partner._id },
-        {
-          $set: {
-            name: lockedName,
-            dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth) : partner.dateOfBirth,
-            address: profile.address || partner.address || "",
-            status: "ACTIVE",
-            "documents.aadhaarVerified": true,
-            "documents.aadhaarVerifiedAt": now,
-            "documents.aadhaarName": lockedName,
-            "documents.aadhaarMasked": masked,
-            "documents.nameLocked": true,
-            "documents.aadhaarOtpTxnId": "",
-            "documents.aadhaarShareCode": "",
-            "documents.kycProvider": "eko-digilocker",
-            "documents.submittedAt": now,
-            "documents.isComplete": true
-          }
-        }
-      )
+      DeliveryPartner.updateOne({ _id: partner._id }, { $set: partnerUpdate })
     ]);
 
     const refreshed = await DeliveryPartner.findById(partner._id).lean();
@@ -213,7 +214,7 @@ export const completeDeliveryDigiLocker = async (req: AuthRequest, res: Response
         ...(await serializeProfile(user.id, refreshed || partner)),
         extracted: {
           name: lockedName,
-          dateOfBirth: profile.dateOfBirth,
+          dateOfBirth: parsedDob ? parsedDob.toISOString().slice(0, 10) : profile.dateOfBirth,
           address: profile.address,
           gender: profile.gender
         }

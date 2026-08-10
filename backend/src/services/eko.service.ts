@@ -265,6 +265,65 @@ const pickName = (data: Record<string, any> | undefined) => {
   return "";
 };
 
+/** Normalize DigiLocker / Aadhaar DOB into YYYY-MM-DD, or undefined if unusable. */
+export const parseAadhaarDob = (raw: unknown): string | undefined => {
+  if (raw == null) return undefined;
+  const text = String(raw).trim();
+  if (!text || /^invalid/i.test(text)) return undefined;
+
+  // YYYY-MM-DD or YYYY/MM/DD
+  let match = text.match(/^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})$/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  // DD-MM-YYYY or DD/MM/YYYY (common Aadhaar format)
+  match = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  // DDMMYYYY
+  match = text.match(/^(\d{2})(\d{2})(\d{4})$/);
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getUTCFullYear();
+    const month = parsed.getUTCMonth() + 1;
+    const day = parsed.getUTCDate();
+    if (year >= 1900 && year <= 2100) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  return undefined;
+};
+
+export const toValidDateOrUndefined = (raw: unknown): Date | undefined => {
+  const iso = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : parseAadhaarDob(raw);
+  if (!iso) return undefined;
+  const date = new Date(`${iso}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+};
+
 const formatAddress = (data: Record<string, any> | undefined) => {
   if (!data) return "";
   if (typeof data.address === "string") return data.address.trim();
@@ -327,12 +386,14 @@ export const fetchDigiLockerEAadhaar = async (input: {
     );
   }
 
-  const dob = String(userDetails.dob || nested.dob || nested.dateOfBirth || "").slice(0, 10);
+  const dob = parseAadhaarDob(
+    userDetails.dob || nested.dob || nested.dateOfBirth || userDetails.date_of_birth || nested.date_of_birth
+  );
   const uid = String(userDetails.uid || nested.uid || nested.aadhaar_number || "").replace(/\D/g, "");
 
   return {
     name,
-    dateOfBirth: dob || undefined,
+    dateOfBirth: dob,
     gender: String(userDetails.gender || nested.gender || "").trim() || undefined,
     address: formatAddress(nested) || formatAddress(userDetails) || undefined,
     maskedAadhaar: uid.length >= 4 ? `XXXXXXXX${uid.slice(-4)}` : undefined,
