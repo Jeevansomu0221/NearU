@@ -27,7 +27,8 @@ import {
   type CodUpiSession
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
-import DeliveryJobMap, { type MapPin } from "../components/DeliveryJobMap";
+import DeliveryJobMap from "../components/DeliveryJobMap";
+import type { MapPin } from "../utils/mapCoordinates";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
 import {
   getLatLngFromMapsLink,

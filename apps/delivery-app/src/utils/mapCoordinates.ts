@@ -5,6 +5,13 @@ export type LatLng = {
   longitude: number;
 };
 
+export type MapPin = {
+  id: string;
+  coordinate: LatLng;
+  title?: string;
+  kind: "rider" | "pickup" | "drop";
+};
+
 export type MapLocation = {
   coordinates?:
     | [CoordinateValue, CoordinateValue]

@@ -46,12 +46,34 @@ export const decodePolyline = (encoded: string): LatLng[] => {
   return coordinates;
 };
 
-export const fetchDrivingRoute = async (
-  origin: LatLng,
-  destination: LatLng
-): Promise<LatLng[] | null> => {
+const straightLine = (origin: LatLng, destination: LatLng): LatLng[] => [origin, destination];
+
+const fetchOsrmRoute = async (origin: LatLng, destination: LatLng): Promise<LatLng[] | null> => {
+  try {
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}` +
+      `?overview=full&geometries=geojson`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+    const coords = data?.routes?.[0]?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length < 2) {
+      return null;
+    }
+
+    return coords.map((pair: [number, number]) => ({
+      longitude: pair[0],
+      latitude: pair[1]
+    }));
+  } catch {
+    return null;
+  }
+};
+
+const fetchGoogleRoute = async (origin: LatLng, destination: LatLng): Promise<LatLng[] | null> => {
   if (!GOOGLE_MAPS_API_KEY) {
-    return [origin, destination];
+    return null;
   }
 
   const params = new URLSearchParams({
@@ -68,12 +90,26 @@ export const fetchDrivingRoute = async (
     const data = await response.json();
 
     if (data?.status !== "OK" || !data?.routes?.[0]?.overview_polyline?.points) {
-      return [origin, destination];
+      return null;
     }
 
     const points = decodePolyline(data.routes[0].overview_polyline.points);
-    return points.length > 1 ? points : [origin, destination];
+    return points.length > 1 ? points : null;
   } catch {
-    return [origin, destination];
+    return null;
   }
+};
+
+export const fetchDrivingRoute = async (
+  origin: LatLng,
+  destination: LatLng
+): Promise<LatLng[] | null> => {
+  // Prefer OSRM — Google Directions often fails when the key is Android-app restricted.
+  const osrm = await fetchOsrmRoute(origin, destination);
+  if (osrm) return osrm;
+
+  const google = await fetchGoogleRoute(origin, destination);
+  if (google) return google;
+
+  return straightLine(origin, destination);
 };

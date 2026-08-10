@@ -24,6 +24,10 @@
 # React Native Firebase
 -keep class io.invertase.firebase.** { *; }
 
+# WebView (OSM in-app map preview)
+-keep class com.reactnativecommunity.webview.** { *; }
+-dontwarn com.reactnativecommunity.webview.**
+
 # Razorpay
 -keep class com.razorpay.** { *; }
 -dontwarn com.razorpay.**

@@ -1,23 +1,18 @@
-import React, { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
-  UIManager,
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fetchDrivingRoute } from "../utils/directions";
-import type { LatLng } from "../utils/mapCoordinates";
+import type { LatLng, MapPin } from "../utils/mapCoordinates";
+import OsmWebMap from "./OsmWebMap";
 
-export type MapPin = {
-  id: string;
-  coordinate: LatLng;
-  title?: string;
-  kind: "rider" | "pickup" | "drop";
-};
+export type { MapPin };
 
 type Props = {
   riderLocation?: LatLng | null;
@@ -27,134 +22,26 @@ type Props = {
   height?: number;
 };
 
-type Region = {
-  latitude: number;
-  longitude: number;
-  latitudeDelta: number;
-  longitudeDelta: number;
-};
+const MAP_LOAD_TIMEOUT_MS = 12000;
 
-const DEFAULT_REGION: Region = {
-  latitude: 17.385,
-  longitude: 78.4867,
-  latitudeDelta: 0.08,
-  longitudeDelta: 0.08
-};
-
-const MAP_READY_TIMEOUT_MS = 5000;
-const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
-
-const pinColor = (kind: MapPin["kind"]) => {
-  if (kind === "rider") return "#1976D2";
-  if (kind === "pickup") return "#2E7D32";
-  return "#E65100";
-};
-
-const hasNativeMapView = () => {
-  if (Platform.OS === "web") return false;
-
-  try {
-    const config =
-      UIManager.getViewManagerConfig?.("AIRMap") ||
-      UIManager.getViewManagerConfig?.("RNMapsMapView") ||
-      // Older RN helpers
-      (UIManager as any).AIRMap ||
-      (UIManager as any).RNMapsMapView;
-    return Boolean(config);
-  } catch {
-    return false;
-  }
-};
-
-/** Android Google Maps tiles need a valid API key; without one MapView stays white forever. */
-const canRenderGoogleTiles = () => {
-  if (Platform.OS !== "android") return true;
-  return Boolean(GOOGLE_MAPS_API_KEY);
-};
-
-type MapsModule = {
-  default: React.ComponentType<any>;
-  Marker: React.ComponentType<any>;
-  Polyline: React.ComponentType<any>;
-  PROVIDER_GOOGLE?: string;
-};
-
-let cachedMapsModule: MapsModule | null | undefined;
-
-const getMapsModule = (): MapsModule | null => {
-  if (cachedMapsModule !== undefined) return cachedMapsModule;
-  if (!hasNativeMapView()) {
-    cachedMapsModule = null;
-    return null;
-  }
-
-  try {
-    cachedMapsModule = require("react-native-maps") as MapsModule;
-    return cachedMapsModule;
-  } catch {
-    cachedMapsModule = null;
-    return null;
-  }
-};
-
-class MapErrorBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: unknown) {
-    console.warn("DeliveryJobMap failed to render native map:", error);
-  }
-
-  render() {
-    if (this.state.hasError) return this.props.fallback;
-    return this.props.children;
-  }
-}
-
-function MapFallback({
-  height,
-  onOpenExternalMaps,
-  message
-}: {
-  height: number;
-  onOpenExternalMaps: () => void;
-  message: string;
-}) {
-  return (
-    <View style={[styles.wrap, styles.fallbackWrap, { height }]}>
-      <Ionicons name="map-outline" size={36} color="#64748B" />
-      <Text style={styles.fallbackTitle}>Map preview unavailable</Text>
-      <Text style={styles.fallbackText}>{message}</Text>
-      <TouchableOpacity style={styles.fallbackMapsButton} onPress={onOpenExternalMaps} activeOpacity={0.85}>
-        <Ionicons name="navigate" size={18} color="#FFFFFF" />
-        <Text style={styles.fallbackMapsLabel}>Open in Google Maps</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function NativeDeliveryJobMap({
+/**
+ * In-app map preview for delivery jobs.
+ *
+ * Uses OpenStreetMap via WebView so the preview works without Google Maps SDK
+ * tiles / Android API-key SHA restrictions (those caused infinite loading on
+ * react-native-maps). Turn-by-turn still opens in Google Maps via the FAB.
+ */
+export default function DeliveryJobMap({
   riderLocation,
   destination,
   pins = [],
   onOpenExternalMaps,
-  height = 280,
-  maps
-}: Props & { maps: MapsModule }) {
-  const MapView = maps.default;
-  const Marker = maps.Marker;
-  const Polyline = maps.Polyline;
-  const mapRef = useRef<any>(null);
+  height = 280
+}: Props) {
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [mapReady, setMapReady] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
 
   const markers = useMemo(() => {
     const list = [...pins];
@@ -171,22 +58,6 @@ function NativeDeliveryJobMap({
     }
     return list;
   }, [pins, riderLocation]);
-
-  const fitCoordinates = useMemo(() => {
-    const coords = [
-      ...markers.map((marker) => marker.coordinate),
-      ...(destination ? [destination] : []),
-      ...(riderLocation ? [riderLocation] : [])
-    ];
-
-    return coords.filter(
-      (point, index, arr) =>
-        arr.findIndex(
-          (candidate) =>
-            candidate.latitude === point.latitude && candidate.longitude === point.longitude
-        ) === index
-    );
-  }, [markers, destination, riderLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,91 +89,40 @@ function NativeDeliveryJobMap({
   }, [riderLocation?.latitude, riderLocation?.longitude, destination?.latitude, destination?.longitude]);
 
   useEffect(() => {
-    if (mapReady) return;
-
-    const timer = setTimeout(() => {
-      setTimedOut(true);
-    }, MAP_READY_TIMEOUT_MS);
-
+    if (mapReady || mapFailed) return;
+    const timer = setTimeout(() => setMapFailed(true), MAP_LOAD_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [mapReady]);
+  }, [mapReady, mapFailed]);
 
-  useEffect(() => {
-    if (!mapRef.current || !mapReady || fitCoordinates.length === 0) return;
-
-    if (fitCoordinates.length === 1) {
-      mapRef.current.animateToRegion?.(
-        {
-          ...fitCoordinates[0],
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02
-        },
-        350
-      );
-      return;
-    }
-
-    mapRef.current.fitToCoordinates?.(fitCoordinates, {
-      edgePadding: { top: 48, right: 48, bottom: 48, left: 48 },
-      animated: true
-    });
-  }, [fitCoordinates, mapReady]);
-
-  if (timedOut && !mapReady) {
+  if (Platform.OS === "web" || mapFailed) {
     return (
-      <MapFallback
-        height={height}
-        onOpenExternalMaps={onOpenExternalMaps}
-        message="The in-app map could not load. Use Google Maps to navigate to this stop."
-      />
+      <View style={[styles.wrap, styles.fallbackWrap, { height }]}>
+        <Ionicons name="map-outline" size={36} color="#64748B" />
+        <Text style={styles.fallbackTitle}>Map preview unavailable</Text>
+        <Text style={styles.fallbackText}>
+          {Platform.OS === "web"
+            ? "Embedded maps are available in the Android/iOS app."
+            : "The in-app map could not load. Use Google Maps to navigate to this stop."}
+        </Text>
+        <TouchableOpacity style={styles.fallbackMapsButton} onPress={onOpenExternalMaps} activeOpacity={0.85}>
+          <Ionicons name="navigate" size={18} color="#FFFFFF" />
+          <Text style={styles.fallbackMapsLabel}>Open in Google Maps</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
-  const initialRegion =
-    fitCoordinates.length > 0
-      ? {
-          ...fitCoordinates[0],
-          latitudeDelta: 0.04,
-          longitudeDelta: 0.04
-        }
-      : DEFAULT_REGION;
-
-  const useGoogleProvider = Platform.OS === "android" && Boolean(maps.PROVIDER_GOOGLE) && Boolean(GOOGLE_MAPS_API_KEY);
-
   return (
     <View style={[styles.wrap, { height }]}>
-      <MapView
-        ref={mapRef}
-        style={StyleSheet.absoluteFill}
-        provider={useGoogleProvider ? maps.PROVIDER_GOOGLE : undefined}
-        initialRegion={initialRegion}
-        showsUserLocation={false}
-        showsMyLocationButton={false}
-        showsCompass={false}
-        toolbarEnabled={false}
-        loadingEnabled={!mapReady}
-        onMapReady={() => setMapReady(true)}
-      >
-        {markers.map((pin) => (
-          <Marker
-            key={pin.id}
-            coordinate={pin.coordinate}
-            title={pin.title}
-            pinColor={pinColor(pin.kind)}
-          />
-        ))}
-        {routeCoords.length > 1 ? (
-          <Polyline coordinates={routeCoords} strokeColor="#1A73E8" strokeWidth={4} />
-        ) : null}
-      </MapView>
+      <OsmWebMap
+        height={height}
+        pins={markers}
+        routeCoords={routeCoords}
+        onReady={() => setMapReady(true)}
+        onError={() => setMapFailed(true)}
+      />
 
-      {!mapReady ? (
-        <View style={styles.mapBootOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#0F9D58" />
-        </View>
-      ) : null}
-
-      {mapReady && loadingRoute ? (
+      {loadingRoute ? (
         <View style={styles.routeLoading}>
           <ActivityIndicator size="small" color="#1A73E8" />
         </View>
@@ -313,40 +133,12 @@ function NativeDeliveryJobMap({
         <Text style={styles.mapsButtonLabel}>MAPS</Text>
       </TouchableOpacity>
 
-      {mapReady && fitCoordinates.length === 0 ? (
+      {markers.length === 0 ? (
         <View style={styles.emptyOverlay}>
           <Text style={styles.emptyText}>Location pin unavailable for this stop</Text>
         </View>
       ) : null}
     </View>
-  );
-}
-
-export default function DeliveryJobMap(props: Props) {
-  const height = props.height ?? 280;
-  const maps = getMapsModule();
-  const fallback = (
-    <MapFallback
-      height={height}
-      onOpenExternalMaps={props.onOpenExternalMaps}
-      message={
-        Platform.OS === "web"
-          ? "Embedded maps are available in the Android/iOS app."
-          : !canRenderGoogleTiles()
-            ? "Google Maps is not configured for this build. Open Google Maps to navigate."
-            : "Rebuild the delivery app (expo run:android) to enable the in-app map. You can still navigate with Google Maps."
-      }
-    />
-  );
-
-  if (!maps || !canRenderGoogleTiles()) {
-    return fallback;
-  }
-
-  return (
-    <MapErrorBoundary fallback={fallback}>
-      <NativeDeliveryJobMap {...props} height={height} maps={maps} />
-    </MapErrorBoundary>
   );
 }
 
@@ -411,12 +203,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.4
-  },
-  mapBootOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E8EEF5"
   },
   routeLoading: {
     position: "absolute",
