@@ -35,5 +35,9 @@ jobs:
             rsync -a --delete backend/ "$APP_DIR/" --exclude node_modules --exclude dist
             printf '%s' "${{ secrets.VPS_BACKEND_ENV }}" > "$APP_DIR/.env"
             bash /opt/vyaha/repo/scripts/vps-deploy-backend.sh
-            curl -fsS http://127.0.0.1/health
+            # Cloudflare Full SSL needs origin :443 — restore certs if deploy left HTTP-only
+            bash /opt/vyaha/repo/scripts/restore-api-ssl.sh
+            curl -fsS http://127.0.0.1:5000/health
             curl -fsS http://127.0.0.1/health/eko || true
+            curl -fsSk https://127.0.0.1/health -H 'Host: api.vyaha.com' || true
+            ss -lnt | grep -E ':80|:443|:5000' || true

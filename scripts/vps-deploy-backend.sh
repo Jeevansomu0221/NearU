@@ -55,8 +55,45 @@ pm2 start dist/server.js --name vyaha-backend --cwd "$APP_DIR"
 pm2 save
 pm2 startup systemd -u root --hp /root 2>/dev/null || true
 
-echo "==> Configuring Nginx..."
-cat > /etc/nginx/sites-available/vyaha-backend <<'NGINX'
+echo "==> Configuring Nginx (preserve SSL if cert exists)..."
+DOMAIN="${DOMAIN:-api.vyaha.com}"
+CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
+if [[ -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" ]]; then
+  cat > /etc/nginx/sites-available/vyaha-backend <<NGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${DOMAIN};
+
+    ssl_certificate ${CERT_DIR}/fullchain.pem;
+    ssl_certificate_key ${CERT_DIR}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size 10m;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 300s;
+    }
+}
+NGINX
+else
+  cat > /etc/nginx/sites-available/vyaha-backend <<'NGINX'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -77,6 +114,7 @@ server {
     }
 }
 NGINX
+fi
 
 ln -sf /etc/nginx/sites-available/vyaha-backend /etc/nginx/sites-enabled/vyaha-backend
 rm -f /etc/nginx/sites-enabled/default
@@ -94,5 +132,8 @@ echo "==> Health check..."
 sleep 2
 curl -fsS "http://127.0.0.1:5000/health" && echo ""
 curl -fsS "http://127.0.0.1/health" && echo ""
+if [[ -f "${CERT_DIR}/fullchain.pem" ]]; then
+  curl -fsSk "https://127.0.0.1/health" -H "Host: ${DOMAIN}" && echo "" || true
+fi
 
 echo "==> Deploy complete. Backend running at http://$(curl -4 -s ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
