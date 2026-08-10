@@ -41,6 +41,9 @@ const DEFAULT_REGION: Region = {
   longitudeDelta: 0.08
 };
 
+const MAP_READY_TIMEOUT_MS = 5000;
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
+
 const pinColor = (kind: MapPin["kind"]) => {
   if (kind === "rider") return "#1976D2";
   if (kind === "pickup") return "#2E7D32";
@@ -61,6 +64,12 @@ const hasNativeMapView = () => {
   } catch {
     return false;
   }
+};
+
+/** Android Google Maps tiles need a valid API key; without one MapView stays white forever. */
+const canRenderGoogleTiles = () => {
+  if (Platform.OS !== "android") return true;
+  return Boolean(GOOGLE_MAPS_API_KEY);
 };
 
 type MapsModule = {
@@ -144,6 +153,8 @@ function NativeDeliveryJobMap({
   const mapRef = useRef<any>(null);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
   const [loadingRoute, setLoadingRoute] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
 
   const markers = useMemo(() => {
     const list = [...pins];
@@ -183,14 +194,20 @@ function NativeDeliveryJobMap({
     const loadRoute = async () => {
       if (!riderLocation || !destination) {
         setRouteCoords([]);
+        setLoadingRoute(false);
         return;
       }
 
       setLoadingRoute(true);
-      const route = await fetchDrivingRoute(riderLocation, destination);
-      if (!cancelled) {
-        setRouteCoords(route || [riderLocation, destination]);
-        setLoadingRoute(false);
+      try {
+        const route = await fetchDrivingRoute(riderLocation, destination);
+        if (!cancelled) {
+          setRouteCoords(route || [riderLocation, destination]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingRoute(false);
+        }
       }
     };
 
@@ -201,7 +218,17 @@ function NativeDeliveryJobMap({
   }, [riderLocation?.latitude, riderLocation?.longitude, destination?.latitude, destination?.longitude]);
 
   useEffect(() => {
-    if (!mapRef.current || fitCoordinates.length === 0) return;
+    if (mapReady) return;
+
+    const timer = setTimeout(() => {
+      setTimedOut(true);
+    }, MAP_READY_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [mapReady]);
+
+  useEffect(() => {
+    if (!mapRef.current || !mapReady || fitCoordinates.length === 0) return;
 
     if (fitCoordinates.length === 1) {
       mapRef.current.animateToRegion?.(
@@ -219,7 +246,17 @@ function NativeDeliveryJobMap({
       edgePadding: { top: 48, right: 48, bottom: 48, left: 48 },
       animated: true
     });
-  }, [fitCoordinates]);
+  }, [fitCoordinates, mapReady]);
+
+  if (timedOut && !mapReady) {
+    return (
+      <MapFallback
+        height={height}
+        onOpenExternalMaps={onOpenExternalMaps}
+        message="The in-app map could not load. Use Google Maps to navigate to this stop."
+      />
+    );
+  }
 
   const initialRegion =
     fitCoordinates.length > 0
@@ -230,18 +267,21 @@ function NativeDeliveryJobMap({
         }
       : DEFAULT_REGION;
 
+  const useGoogleProvider = Platform.OS === "android" && Boolean(maps.PROVIDER_GOOGLE) && Boolean(GOOGLE_MAPS_API_KEY);
+
   return (
     <View style={[styles.wrap, { height }]}>
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        provider={Platform.OS === "android" ? maps.PROVIDER_GOOGLE : undefined}
+        provider={useGoogleProvider ? maps.PROVIDER_GOOGLE : undefined}
         initialRegion={initialRegion}
         showsUserLocation={false}
         showsMyLocationButton={false}
         showsCompass={false}
         toolbarEnabled={false}
-        loadingEnabled
+        loadingEnabled={!mapReady}
+        onMapReady={() => setMapReady(true)}
       >
         {markers.map((pin) => (
           <Marker
@@ -256,7 +296,13 @@ function NativeDeliveryJobMap({
         ) : null}
       </MapView>
 
-      {loadingRoute ? (
+      {!mapReady ? (
+        <View style={styles.mapBootOverlay} pointerEvents="none">
+          <ActivityIndicator size="large" color="#0F9D58" />
+        </View>
+      ) : null}
+
+      {mapReady && loadingRoute ? (
         <View style={styles.routeLoading}>
           <ActivityIndicator size="small" color="#1A73E8" />
         </View>
@@ -267,7 +313,7 @@ function NativeDeliveryJobMap({
         <Text style={styles.mapsButtonLabel}>MAPS</Text>
       </TouchableOpacity>
 
-      {fitCoordinates.length === 0 ? (
+      {mapReady && fitCoordinates.length === 0 ? (
         <View style={styles.emptyOverlay}>
           <Text style={styles.emptyText}>Location pin unavailable for this stop</Text>
         </View>
@@ -286,12 +332,14 @@ export default function DeliveryJobMap(props: Props) {
       message={
         Platform.OS === "web"
           ? "Embedded maps are available in the Android/iOS app."
-          : "Rebuild the delivery app (expo run:android) to enable the in-app map. You can still navigate with Google Maps."
+          : !canRenderGoogleTiles()
+            ? "Google Maps is not configured for this build. Open Google Maps to navigate."
+            : "Rebuild the delivery app (expo run:android) to enable the in-app map. You can still navigate with Google Maps."
       }
     />
   );
 
-  if (!maps) {
+  if (!maps || !canRenderGoogleTiles()) {
     return fallback;
   }
 
@@ -363,6 +411,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.4
+  },
+  mapBootOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E8EEF5"
   },
   routeLoading: {
     position: "absolute",

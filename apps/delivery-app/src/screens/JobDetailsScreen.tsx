@@ -109,6 +109,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   } | null>(null);
   const [noLocationModal, setNoLocationModal] = useState<NoLocationModalState | null>(null);
   const [riderLocation, setRiderLocation] = useState<LatLng | null>(null);
+  /** Local step confirmations before calling pickup/delivery APIs. */
+  const [reachedPickup, setReachedPickup] = useState(false);
+  const [reachedCustomer, setReachedCustomer] = useState(false);
   const codQrDisplayUri = useMemo(() => getCodQrDisplayUri(codUpiSession), [codUpiSession]);
   const showRazorpayPoster = isRazorpayPosterQr(codUpiSession);
   const qrPulse = useRef(new Animated.Value(0)).current;
@@ -156,6 +159,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   useEffect(() => {
     loadJobDetails();
   }, []);
+
+  useEffect(() => {
+    if (!job?.status) return;
+    if (job.status !== "ASSIGNED") {
+      setReachedPickup(false);
+    }
+    if (job.status !== "PICKED_UP") {
+      setReachedCustomer(false);
+    }
+  }, [job?.status]);
 
   const refreshUpiPaymentStatus = useCallback(async () => {
     if (pollInFlightRef.current) {
@@ -450,10 +463,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
       if (response.success) {
         setJob((current) => current ? { ...current, status: "PICKED_UP" } : response.data || null);
+        setReachedPickup(false);
+        setReachedCustomer(false);
         setStatusModal({
           title: "Order picked up",
-          message: "Nice work. Stay on this screen and complete delivery after handoff.",
-          actionLabel: "Continue Delivery",
+          message: "Map is now set to the customer drop location. Head there and mark when you arrive.",
+          actionLabel: "Continue to drop",
           onAction: () => {
             setStatusModal(null);
           }
@@ -679,21 +694,22 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       };
 
   const mapPins: MapPin[] = [];
-  pickupStops.forEach((stop, index) => {
-    const coordinate = resolveLatLng({
-      location: stop.partnerId?.location,
-      googleMapsLink: stop.partnerId?.googleMapsLink || getAddressGoogleMapsLink(stop.partnerId?.address)
-    });
-    if (coordinate) {
-      mapPins.push({
-        id: `pickup-${stop.orderId || index}`,
-        coordinate,
-        title: stop.partnerId?.restaurantName || stop.partnerId?.shopName || `Pickup ${index + 1}`,
-        kind: "pickup"
+  if (isPickupPhase) {
+    pickupStops.forEach((stop, index) => {
+      const coordinate = resolveLatLng({
+        location: stop.partnerId?.location,
+        googleMapsLink: stop.partnerId?.googleMapsLink || getAddressGoogleMapsLink(stop.partnerId?.address)
       });
-    }
-  });
-  if (deliveryCoords) {
+      if (coordinate) {
+        mapPins.push({
+          id: `pickup-${stop.orderId || index}`,
+          coordinate,
+          title: stop.partnerId?.restaurantName || stop.partnerId?.shopName || `Pickup ${index + 1}`,
+          kind: "pickup"
+        });
+      }
+    });
+  } else if (deliveryCoords) {
     mapPins.push({
       id: "drop",
       coordinate: deliveryCoords,
@@ -703,9 +719,13 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   }
 
   const statusHeadline = isPickupPhase
-    ? "Ready for pickup!"
+    ? reachedPickup
+      ? "At pickup — mark order picked"
+      : "Head to restaurant"
     : job.status === "PICKED_UP"
-      ? "Out for delivery"
+      ? reachedCustomer
+        ? "At customer — complete delivery"
+        : "Out for delivery"
       : job.status.replace("_", " ");
   const statusSubtitle = isPickupPhase
     ? activePickupStop?.partnerId?.restaurantName ||
@@ -773,95 +793,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         <Text style={styles.orderTime}>
           {formatDate(job.createdAt)} • {formatTime(job.createdAt)}
         </Text>
-      </View>
-
-      {/* Pickup Section */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="restaurant" size={20} color="#2E7D32" />
-          <Text style={styles.sectionTitle}>
-            {pickupStops.length > 1 ? `Pickup from ${pickupStops.length} Restaurants` : "Pickup from Restaurant"}
-          </Text>
-        </View>
-        {pickupStops.map((stop, index) => (
-          <View key={stop.orderId || `${job._id}-${index}`} style={styles.infoCard}>
-            <Text style={styles.restaurantName}>
-              Pickup {pickupStops.length > 1 ? index + 1 : ""} {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
-            </Text>
-            <Text style={styles.addressText}>
-              📍 {formatAddress(stop.partnerId?.address)}
-            </Text>
-            {stop.partnerId?.phone && (
-              <TouchableOpacity
-                style={styles.contactButton}
-                onPress={() => handleCall(stop.partnerId!.phone)}
-              >
-                <Ionicons name="call" size={16} color="#4CAF50" />
-                <Text style={styles.contactButtonText}>
-                  Call Restaurant: {stop.partnerId.phone}
-                </Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.mapButton}
-              onPress={() =>
-                handleOpenMaps({
-                  address: stop.partnerId?.address,
-                  googleMapsLink: stop.partnerId?.googleMapsLink || getAddressGoogleMapsLink(stop.partnerId?.address),
-                  location: stop.partnerId?.location,
-                  destinationLabel: stop.partnerId?.restaurantName || stop.partnerId?.shopName,
-                  contactPhone: stop.partnerId?.phone
-                })
-              }
-            >
-              <Ionicons name="navigate" size={16} color="#1976D2" />
-              <Text style={styles.mapButtonText}>Open in Google Maps</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-      </View>
-
-      {/* Delivery Section */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="home" size={20} color="#1976D2" />
-          <Text style={styles.sectionTitle}>Deliver to Customer</Text>
-        </View>
-        <View style={styles.infoCard}>
-          <Text style={styles.customerName}>
-            👤 {job.customerId?.name || "Customer"}
-          </Text>
-          <Text style={styles.addressText}>
-            📍 {job.deliveryAddress}
-          </Text>
-          {job.customerId?.phone && (
-            <TouchableOpacity
-              style={styles.contactButton}
-              onPress={() => handleCall(job.customerId!.phone)}
-            >
-              <Ionicons name="call" size={16} color="#4CAF50" />
-              <Text style={styles.contactButtonText}>
-                Call Customer: {job.customerId.phone}
-              </Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={styles.mapButton}
-            onPress={() =>
-              handleOpenMaps({
-                address: job.deliveryAddress,
-                googleMapsLink: job.deliveryGoogleMapsLink,
-                location: job.deliveryLocation,
-                requireCoordinates: true,
-                destinationLabel: job.customerId?.name || "Customer",
-                contactPhone: job.customerId?.phone
-              })
-            }
-          >
-            <Ionicons name="navigate" size={16} color="#1976D2" />
-            <Text style={styles.mapButtonText}>Open in Google Maps</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* Order Details */}
@@ -988,14 +919,24 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           {job.status === "ASSIGNED" && (
             <TouchableOpacity
               style={[styles.actionButton, styles.reachedPickupButton]}
-              onPress={handlePickUp}
+              onPress={() => {
+                if (!reachedPickup) {
+                  setReachedPickup(true);
+                  return;
+                }
+                void handlePickUp();
+              }}
               disabled={updating}
             >
               {updating ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.actionButtonText}>
-                  {job.isBundledDelivery ? "All pickups completed" : "Reached pickup location"}
+                  {!reachedPickup
+                    ? "Reached pickup location"
+                    : job.isBundledDelivery
+                      ? "Order picked (all pickups)"
+                      : "Order picked"}
                 </Text>
               )}
             </TouchableOpacity>
@@ -1003,19 +944,29 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
           {job.status === "PICKED_UP" && (
             <TouchableOpacity
-              style={[styles.actionButton, styles.deliverButton]}
-              onPress={handleDeliver}
+              style={[styles.actionButton, reachedCustomer ? styles.deliverButton : styles.reachedCustomerButton]}
+              onPress={() => {
+                if (!reachedCustomer) {
+                  setReachedCustomer(true);
+                  return;
+                }
+                void handleDeliver();
+              }}
               disabled={updating}
             >
               {updating ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
+                  {reachedCustomer ? (
+                    <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
+                  ) : null}
                   <Text style={styles.actionButtonText}>
-                    {job.paymentMethod === "CASH_ON_DELIVERY"
-                      ? "Collect Payment & Deliver"
-                      : "Mark as Delivered"}
+                    {!reachedCustomer
+                      ? "Reached customer location"
+                      : job.paymentMethod === "CASH_ON_DELIVERY"
+                        ? "Order delivered (cash / scanner)"
+                        : "Order delivered"}
                   </Text>
                 </>
               )}
@@ -1351,6 +1302,9 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   reachedPickupButton: {
+    backgroundColor: '#FF6B00',
+  },
+  reachedCustomerButton: {
     backgroundColor: '#FF6B00',
   },
   loadingContainer: {
