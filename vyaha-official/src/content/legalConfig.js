@@ -22,8 +22,8 @@ export const governingLaw = 'laws of India';
 export const websiteUrl = 'https://www.vyaha.com';
 /** Partner web onboarding — same flow as mobile app */
 export const partnerOnboardingUrl = import.meta.env.DEV
-  ? 'http://localhost:5175/business/login'
-  : '/business/login/';
+  ? 'http://localhost:5175/business/login?mode=register'
+  : '/business/login/?mode=register';
 export const supportEmail = 'support@vyaha.com';
 export const privacyEmail = 'privacy@vyaha.com';
 export const securityEmail = 'security@vyaha.com';

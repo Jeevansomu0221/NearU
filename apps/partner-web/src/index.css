@@ -432,6 +432,36 @@ body {
   box-shadow: 0 24px 65px rgba(20, 58, 102, 0.1);
 }
 
+.auth-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 22px;
+  padding: 5px;
+  border-radius: 14px;
+  background: #eef4ff;
+  border: 1px solid #d9e6f7;
+}
+
+.auth-mode-tab {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: transparent;
+  color: #526984;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.auth-mode-tab.is-active {
+  background: #fff;
+  color: var(--primary-dark);
+  box-shadow: 0 4px 14px rgba(20, 58, 102, 0.1);
+}
+
 .auth-panel__top {
   margin-bottom: 26px;
 }
