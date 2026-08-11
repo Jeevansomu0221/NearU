@@ -5,7 +5,7 @@
  *   dist/order/           -> customer-web
  *   dist/business/        -> partner-web
  */
-import { cpSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,6 +35,37 @@ mkdirSync(dist, { recursive: true });
 cpSync(marketingDist, dist, { recursive: true });
 cpSync(path.join(root, "apps", "customer-web", "dist"), path.join(dist, "order"), { recursive: true });
 cpSync(path.join(root, "apps", "partner-web", "dist"), path.join(dist, "business"), { recursive: true });
+
+// Render static hosting serves physical /business/<route>/index.html entries.
+// Trailing-slash URLs avoid the marketing-site catch-all on bare /business/login.
+for (const route of [
+  "login",
+  "onboarding",
+  "submitted",
+  "pending",
+  "rejected",
+  "welcome",
+  "orders",
+  "menu",
+  "profile",
+  "settings",
+  "wallet"
+]) {
+  const routeDirectory = path.join(dist, "business", route);
+  mkdirSync(routeDirectory, { recursive: true });
+  cpSync(path.join(dist, "business", "index.html"), path.join(routeDirectory, "index.html"));
+}
+
+writeFileSync(
+  path.join(dist, "_redirects"),
+  [
+    "/business/login      /business/login/        301",
+    "/business/onboarding /business/onboarding/  301",
+    "/business/*          /business/index.html    200",
+    "/*                   /index.html             200"
+  ].join("\n") + "\n"
+);
+
 rmSync(marketingDist, { recursive: true, force: true });
 
 console.log("\nUnified site ready at vyaha-official/dist");
