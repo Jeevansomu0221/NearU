@@ -44,6 +44,13 @@ server {
     index index.html;
     client_max_body_size 10m;
 
+    location = /business {
+        return 301 /business/;
+    }
+    location = /order {
+        return 301 /order/;
+    }
+
     location /business/ {
         try_files \$uri \$uri/ /business/index.html;
     }
@@ -72,6 +79,13 @@ server {
 
     root ${WEB_ROOT};
     index index.html;
+
+    location = /business {
+        return 301 /business/;
+    }
+    location = /order {
+        return 301 /order/;
+    }
 
     location /business/ {
         try_files \$uri \$uri/ /business/index.html;

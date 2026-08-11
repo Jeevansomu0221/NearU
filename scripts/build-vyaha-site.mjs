@@ -59,9 +59,12 @@ for (const route of [
 writeFileSync(
   path.join(dist, "_redirects"),
   [
+    "/business            /business/              301",
     "/business/login      /business/login/        301",
     "/business/onboarding /business/onboarding/  301",
+    "/order               /order/                 301",
     "/business/*          /business/index.html    200",
+    "/order/*             /order/index.html       200",
     "/*                   /index.html             200"
   ].join("\n") + "\n"
 );

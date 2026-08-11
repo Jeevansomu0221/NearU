@@ -7,7 +7,7 @@ import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter basename="/order">
+    <BrowserRouter basename="/order/">
       <CartProvider>
         <App />
       </CartProvider>

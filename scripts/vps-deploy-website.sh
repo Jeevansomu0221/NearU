@@ -62,6 +62,14 @@ server {
 
     client_max_body_size 10m;
 
+    # Bare /business and /order must NOT fall through to the marketing SPA.
+    location = /business {
+        return 301 /business/;
+    }
+    location = /order {
+        return 301 /order/;
+    }
+
     location /business/ {
         try_files \$uri \$uri/ /business/index.html;
     }
