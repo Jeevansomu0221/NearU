@@ -16,26 +16,26 @@ type PartnerTheme = {
 const light: PartnerTheme = {
   isDark: false,
   colors: {
-    background: "#f6f3ef",
-    card: "#ffffff",
-    text: "#1f1f1f",
-    muted: "#6b6b6b",
-    primary: "#ff6b35",
-    primaryDark: "#c94f24",
-    border: "#e8dfd7"
+    background: "#F4F8FF",
+    card: "#FFFFFF",
+    text: "#123456",
+    muted: "#5E7897",
+    primary: "#60A5FA",
+    primaryDark: "#143A66",
+    border: "#D9E6F7"
   }
 };
 
 const dark: PartnerTheme = {
   isDark: true,
   colors: {
-    background: "#121212",
-    card: "#1e1e1e",
-    text: "#f5f5f5",
-    muted: "#a0a0a0",
-    primary: "#ff8a5c",
-    primaryDark: "#ff6b35",
-    border: "#333"
+    background: "#0B1220",
+    card: "#111827",
+    text: "#F8FBFF",
+    muted: "#9FB0C5",
+    primary: "#60A5FA",
+    primaryDark: "#E5EDF7",
+    border: "#263449"
   }
 };
 

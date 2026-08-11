@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { vyahaLogos } from '../assets/logos';
+import { partnerOnboardingUrl } from '../content/legalConfig';
 
 const socialLinks = [
   {
@@ -72,7 +73,7 @@ function Footer() {
           <div className="footer-column">
             <h4>For Partners</h4>
             <ul>
-              <li><Link to="/restaurants">Partner With Us</Link></li>
+              <li><a href={partnerOnboardingUrl}>Partner With Us</a></li>
               <li><Link to="/partner-policy">Restaurant Partner Policy</Link></li>
               <li><Link to="/delivery">Become a Delivery Partner</Link></li>
               <li><Link to="/delivery-policy">Delivery Partner Policy</Link></li>

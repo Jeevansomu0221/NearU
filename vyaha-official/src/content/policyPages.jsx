@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { vyahaLogos } from '../assets/logos';
-import { effectiveDate, businessName, legalContacts, governingLaw, registeredOffice, legalEntityName, gstin, serviceAreasFormatted } from './legalConfig';
+import { effectiveDate, businessName, legalContacts, governingLaw, registeredOffice, legalEntityName, gstin, serviceAreasFormatted, partnerOnboardingUrl } from './legalConfig';
 import {
   AppBrandGrid,
   ContactBlock,
@@ -88,7 +88,7 @@ export const pageData = {
           <li>Complete verification and begin accepting orders.</li>
         </ol>
         <p>By onboarding, you agree to the <Link to="/partner-policy">Restaurant Partner Policy</Link>, <Link to="/terms">Terms of Service</Link>, and <Link to="/privacy">Privacy Policy</Link>.</p>
-        <button type="button" className="cta-button">Start Partnering</button>
+        <a href={partnerOnboardingUrl} className="cta-button">Start Partnering</a>
       </>
     ),
   },
@@ -598,7 +598,7 @@ export const pageData = {
           <li>Admin support for onboarding, verification, and issue handling.</li>
           <li>Business insights, promotions, and payout support as features become available.</li>
         </ul>
-        <Link className="cta-button" to="/partner">Register Your Restaurant</Link>
+        <a href={partnerOnboardingUrl} className="cta-button">Register Your Restaurant</a>
       </>
     ),
   },

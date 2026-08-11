@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { vyahaLogos } from '../assets/logos';
+import { partnerOnboardingUrl } from '../content/legalConfig';
 import './Home.css';
 
 const STORE_BADGE =
@@ -173,9 +174,9 @@ function Home() {
             <Link to="/apps" className="home-store-badge">
               <img src={STORE_BADGE} alt="Get Vyaha on Google Play" />
             </Link>
-            <Link to="/restaurants" className="home-btn home-btn--ghost">
+            <a href={partnerOnboardingUrl} className="home-btn home-btn--ghost">
               Partner with Vyaha
-            </Link>
+            </a>
           </div>
         </div>
 
@@ -232,9 +233,9 @@ function Home() {
                 <li>We send your money within 2 weeks</li>
                 <li>Support on everything you need</li>
               </ul>
-              <Link to="/restaurants">
+              <a href={partnerOnboardingUrl}>
                 Partner with Vyaha <span aria-hidden="true">→</span>
-              </Link>
+              </a>
             </article>
 
             <article className="home-trio__card home-trio__card--customer">

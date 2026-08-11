@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { usePartnerTheme } from "../contexts/PartnerThemeContext";
+import partnerLogo from "../assets/vyaha-partner-text-logo.png";
 
 const links = [
   { to: "/", label: "Dashboard", end: true },
@@ -16,7 +17,7 @@ export default function PartnerShell({ title }: { title?: string }) {
   return (
     <div className="partner-app" data-theme={isDarkMode ? "dark" : "light"}>
       <header className="partner-header">
-        <strong>{title || "Vyaha Business"}</strong>
+        <img src={partnerLogo} alt="Vyaha Partner" className="partner-header__logo" />
         <a href="https://www.vyaha.com/partner">Partner program</a>
       </header>
       <div className="partner-layout">

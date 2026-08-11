@@ -1,4 +1,4 @@
-export { default as api, API_BASE_URL, warmApi, uploadMultipart } from "./client.js";
+export { default as api, API_BASE_URL, API_HEALTH_URL, warmApi, checkApiHealth, uploadMultipart } from "./client.js";
 export * from "./storage.js";
 export * from "./types.js";
 export * from "./auth.api.js";
@@ -8,6 +8,7 @@ export * from "./menu.api.js";
 export * from "./payment.api.js";
 export * from "./support.api.js";
 export * from "./partner.api.js";
+export * from "./partnerKyc.api.js";
 export * from "./otpAuthFlow.js";
 export * from "./profile.js";
 export * from "./firebasePhoneAuth.js";

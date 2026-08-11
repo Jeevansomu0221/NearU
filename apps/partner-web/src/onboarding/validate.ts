@@ -1,0 +1,55 @@
+import type { PartnerKycState } from "@vyaha/api-client";
+import type { DocumentState } from "./types";
+
+export const validateStep = (
+  step: number,
+  form: { ownerName: string; restaurantName: string; phone: string; restaurantPhone: string; email: string },
+  address: { state: string; city: string; pincode: string; area: string; colony: string; roadStreet: string },
+  selectedCategory: string,
+  documents: DocumentState,
+  kyc: PartnerKycState,
+  operations: { openingTime: string; closingTime: string }
+): string | null => {
+  if (step === 0) {
+    if (!form.ownerName || !form.restaurantName || !form.phone || !form.restaurantPhone) {
+      return "Please fill all basic details";
+    }
+    if (form.phone.length !== 10) return "Enter a valid 10-digit phone number";
+    if (form.restaurantPhone.length !== 10) return "Enter a valid 10-digit restaurant phone number";
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      return "Enter a valid email address";
+    }
+  }
+
+  if (step === 1) {
+    if (!address.state || !address.city || !address.pincode || !address.area || !address.colony || !address.roadStreet) {
+      return "Please fill all address fields";
+    }
+    if (!/^\d{6}$/.test(address.pincode)) return "Pincode must be exactly 6 digits";
+  }
+
+  if (step === 2 && !selectedCategory) return "Please select a business category";
+
+  if (step === 3) {
+    if (!kyc.fssaiVerified) return "Verify FSSAI license via Eko";
+    if (!kyc.panVerified && !kyc.panSkipped) return "Verify PAN via Eko or skip for now";
+    if (documents.gstRegistered === "yes" && !kyc.gstVerified) return "Verify GSTIN via Eko";
+    if (!documents.gstRegistered) return "Please select whether you are GST registered";
+  }
+
+  if (step === 4) {
+    const bankDone =
+      kyc.bankVerificationStatus === "VERIFIED" ||
+      kyc.bankDetailsSkipped ||
+      kyc.bankVerificationStatus === "PENDING_ADMIN";
+    if (!bankDone) return "Verify bank account or click Skip bank";
+  }
+
+  if (step === 7) {
+    if (!operations.openingTime.trim() || !operations.closingTime.trim()) {
+      return "Please set opening and closing hours";
+    }
+  }
+
+  return null;
+};
