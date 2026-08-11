@@ -15,7 +15,9 @@
     "stop:web": "node scripts/kill-web-ports.mjs",
     "build:customer-web": "npm run build -w customer-web",
     "build:partner-web": "npm run build -w partner-web",
-    "build:api-client": "npm run build -w @vyaha/api-client"
+    "build:api-client": "npm run build -w @vyaha/api-client",
+    "build:vyaha-site": "npm run build:site --prefix vyaha-official",
+    "deploy:website-vps": "node scripts/remote-deploy-website.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.3"

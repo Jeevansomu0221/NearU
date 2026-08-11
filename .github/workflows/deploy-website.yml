@@ -1,0 +1,36 @@
+name: Deploy Website to VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: VPS IP or hostname
+        required: true
+        default: "165.101.251.199"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy website over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ github.event.inputs.host }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            mkdir -p /opt/vyaha/repo /var/www/vyaha
+            if [[ ! -d /opt/vyaha/repo/.git ]]; then
+              git clone --depth 1 https://github.com/Jeevansomu0221/NearU.git /opt/vyaha/repo
+            fi
+            cd /opt/vyaha/repo
+            git fetch --depth 1 origin main
+            git reset --hard origin/main
+            bash scripts/vps-deploy-website.sh
+            bash scripts/restore-website-ssl.sh
+            curl -fsS -H 'Host: www.vyaha.com' http://127.0.0.1/business/login | head -c 200
+            curl -fsSk https://127.0.0.1/business/login -H 'Host: www.vyaha.com' | head -c 200 || true
