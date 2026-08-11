@@ -1,4 +1,4 @@
-export { default as api, API_BASE_URL, API_HEALTH_URL, warmApi, checkApiHealth, uploadMultipart } from "./client.js";
+export { default as api, API_BASE_URL, API_HEALTH_URL, warmApi, checkApiHealth, uploadMultipart, onAuthExpired } from "./client.js";
 export * from "./storage.js";
 export * from "./types.js";
 export * from "./auth.api.js";

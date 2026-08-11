@@ -99,6 +99,34 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+const AUTH_SKIP_REFRESH_PATHS = ["/auth/refresh", "/auth/send-otp", "/auth/verify-otp", "/auth/logout"];
+
+type AuthExpiredListener = () => void;
+const authExpiredListeners = new Set<AuthExpiredListener>();
+
+export const onAuthExpired = (listener: AuthExpiredListener): (() => void) => {
+  authExpiredListeners.add(listener);
+  return () => {
+    authExpiredListeners.delete(listener);
+  };
+};
+
+const notifyAuthExpired = () => {
+  authExpiredListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch {
+      // ignore listener errors
+    }
+  });
+};
+
+const shouldAttemptTokenRefresh = (url?: string) => {
+  if (!url) return true;
+  const path = url.split("?")[0] || "";
+  return !AUTH_SKIP_REFRESH_PATHS.some((skip) => path === skip || path.endsWith(skip));
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -109,7 +137,6 @@ api.interceptors.response.use(
       headers?: Record<string, string>;
     };
     const statusCode = error.response?.status;
-    const serverMessage = error.response?.data?.message || "";
     const isTimeoutError =
       error.code === "ECONNABORTED" || String(error.message || "").toLowerCase().includes("timeout");
     const isNetworkError =
@@ -119,14 +146,7 @@ api.interceptors.response.use(
       return Promise.reject(new Error(formatNetworkError(error)));
     }
 
-    if (
-      statusCode === 401 &&
-      requestConfig &&
-      !requestConfig._retryAuth &&
-      requestConfig.url !== "/auth/refresh" &&
-      (String(serverMessage).toLowerCase().includes("token expired") ||
-        String(serverMessage).toLowerCase().includes("session expired"))
-    ) {
+    if (statusCode === 401 && requestConfig && !requestConfig._retryAuth && shouldAttemptTokenRefresh(requestConfig.url)) {
       try {
         const refreshToken = await getRefreshToken();
         if (!refreshToken) {
@@ -165,6 +185,7 @@ api.interceptors.response.use(
       } catch {
         await clearAuthData();
         clearStoredUser();
+        notifyAuthExpired();
         return Promise.reject(new Error("Your session expired. Please log in again."));
       }
     }

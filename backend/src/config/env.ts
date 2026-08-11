@@ -61,7 +61,7 @@ export const config = {
   mongodbURI: process.env.MONGODB_URI || process.env.MONGO_URI || "",
   jwtSecret: process.env.JWT_SECRET || "",
   jwtExpiry: process.env.JWT_EXPIRY || "15m",
-  refreshJwtExpiry: process.env.REFRESH_JWT_EXPIRY || "7d",
+  refreshJwtExpiry: process.env.REFRESH_JWT_EXPIRY || "30d",
   apiBaseUrl: process.env.API_BASE_URL || "http://localhost:5000",
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
   requestBodyLimit: process.env.REQUEST_BODY_LIMIT || "1mb",

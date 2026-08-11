@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { RequireAnyPartnerSession } from "./auth/RequireAnyPartnerSession";
+import { RequirePartnerAuth } from "./auth/RequirePartnerAuth";
 import PartnerShell from "./components/PartnerShell";
 import LoginPage from "./pages/LoginPage";
 import OnboardingPage from "./pages/OnboardingPage";
@@ -20,10 +22,37 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/submitted" element={<ApplicationSubmittedPage />} />
-      <Route path="/pending" element={<PendingApprovalPage />} />
-      <Route path="/rejected" element={<RejectedPage />} />
-      <Route path="/welcome" element={<WelcomeApprovedPage />} />
-      <Route element={<PartnerShell />}>
+      <Route
+        path="/pending"
+        element={
+          <RequireAnyPartnerSession allowStatuses={["PENDING"]}>
+            <PendingApprovalPage />
+          </RequireAnyPartnerSession>
+        }
+      />
+      <Route
+        path="/rejected"
+        element={
+          <RequireAnyPartnerSession allowStatuses={["REJECTED"]}>
+            <RejectedPage />
+          </RequireAnyPartnerSession>
+        }
+      />
+      <Route
+        path="/welcome"
+        element={
+          <RequireAnyPartnerSession allowStatuses={["APPROVED"]}>
+            <WelcomeApprovedPage />
+          </RequireAnyPartnerSession>
+        }
+      />
+      <Route
+        element={
+          <RequirePartnerAuth>
+            <PartnerShell />
+          </RequirePartnerAuth>
+        }
+      >
         <Route path="/" element={<DashboardPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/orders/:orderId" element={<OrderDetailsPage />} />
@@ -32,7 +61,7 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/wallet" element={<PaymentHistoryPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
