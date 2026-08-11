@@ -82,5 +82,5 @@ systemctl reload nginx
 
 echo "==> Website files deployed. Run restore-website-ssl.sh for HTTPS if needed."
 echo "==> Local check:"
-curl -fsS -H "Host: ${WWW_DOMAIN}" "http://127.0.0.1/business/login" | head -c 200 || true
+curl -fsS -H "Host: ${WWW_DOMAIN}" "http://127.0.0.1/business/login/" | grep -E "Vyaha for Restaurants|Sign in to continue" | head -n 1 || true
 echo ""

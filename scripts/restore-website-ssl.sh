@@ -93,10 +93,14 @@ nginx -t
 systemctl reload nginx
 
 if [[ ! -f "${CERT_DIR}/fullchain.pem" ]]; then
-  certbot --nginx -d "${DOMAIN}" -d "${WWW_DOMAIN}" --non-interactive --agree-tos -m "${EMAIL}" --redirect
-  write_https_config
-  nginx -t
-  systemctl reload nginx
+  if certbot --nginx -d "${DOMAIN}" -d "${WWW_DOMAIN}" --non-interactive --agree-tos -m "${EMAIL}" --redirect; then
+    write_https_config
+    nginx -t
+    systemctl reload nginx
+  else
+    echo "==> Certbot failed (DNS may still point to Render/Cloudflare). Website remains on HTTP."
+    echo "==> Point vyaha.com and www.vyaha.com A records to this VPS, then re-run this script."
+  fi
 fi
 
 systemctl enable nginx
