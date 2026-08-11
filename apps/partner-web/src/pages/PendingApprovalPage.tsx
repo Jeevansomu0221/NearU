@@ -10,8 +10,8 @@ export default function PendingApprovalPage() {
     const poll = () =>
       getMyStatus().then((res) => {
         if (res.data?.restaurantName) setName(res.data.restaurantName);
-        if (res.data?.status === "APPROVED") window.location.href = "/business/welcome";
-        if (res.data?.status === "REJECTED") window.location.href = "/business/rejected";
+        if (res.data?.status === "APPROVED") window.location.href = "/business/welcome/";
+        if (res.data?.status === "REJECTED") window.location.href = "/business/rejected/";
       });
     poll();
     const timer = setInterval(poll, 15000);
