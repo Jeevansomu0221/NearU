@@ -62,6 +62,11 @@ server {
 
     client_max_body_size 10m;
 
+    location ^~ /.well-known/acme-challenge/ {
+        default_type text/plain;
+        root ${WEB_ROOT};
+    }
+
     # Bare /business and /order must NOT fall through to the marketing SPA.
     location = /business {
         return 301 /business/;
@@ -71,14 +76,21 @@ server {
     }
 
     location /business/ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
         try_files \$uri \$uri/ /business/index.html;
     }
 
     location /order/ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
         try_files \$uri \$uri/ /order/index.html;
     }
 
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    }
+
     location / {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
         try_files \$uri \$uri/ /index.html;
     }
 }
@@ -88,7 +100,12 @@ ln -sf /etc/nginx/sites-available/vyaha-website /etc/nginx/sites-enabled/vyaha-w
 nginx -t
 systemctl reload nginx
 
-echo "==> Website files deployed. Run restore-website-ssl.sh for HTTPS if needed."
+# Make Cloudflare Full SSL work: serve website on :443 for vyaha.com/www
+# (otherwise :443 is only api.vyaha.com and returns 404 for /business/*).
+bash "${REPO_DIR}/scripts/restore-website-ssl.sh" || true
+
+echo "==> Website files deployed."
 echo "==> Local check:"
-curl -fsS -H "Host: ${WWW_DOMAIN}" "http://127.0.0.1/business/login/" | grep -E "Vyaha for Restaurants|Sign in to continue" | head -n 1 || true
+curl -fsS -H "Host: ${WWW_DOMAIN}" "http://127.0.0.1/business/login/" | grep -E "Vyaha for Restaurants|auth-mode|Sign in" | head -n 2 || true
+curl -fsSk -H "Host: ${WWW_DOMAIN}" "https://127.0.0.1/business/login/" | grep -oE 'assets/index-[^"]+' | head -n 1 || true
 echo ""

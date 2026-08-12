@@ -1,35 +1,112 @@
 #!/usr/bin/env bash
-# HTTPS for vyaha.com / www.vyaha.com (static site). Safe to re-run.
-# Does not modify api.vyaha.com backend config.
+# Serve vyaha.com / www.vyaha.com on HTTP + HTTPS without touching api.vyaha.com.
+# Uses Let's Encrypt if available; otherwise a local self-signed cert so Cloudflare
+# "Full" SSL can fetch the static site from origin :443 (instead of the API 404).
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-vyaha.com}"
 WWW_DOMAIN="${WWW_DOMAIN:-www.vyaha.com}"
 EMAIL="${CERTBOT_EMAIL:-jeevansomu.ch@gmail.com}"
 WEB_ROOT="${WEB_ROOT:-/var/www/vyaha}"
+REPO_DIR="${REPO_DIR:-/opt/vyaha/repo}"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq nginx certbot python3-certbot-nginx
+apt-get install -y -qq nginx openssl certbot python3-certbot-nginx
+
+mkdir -p "${WEB_ROOT}" /etc/nginx/certs
 
 CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
-SSL_EXTRA=""
-if [[ -f /etc/letsencrypt/options-ssl-nginx.conf ]]; then
-  SSL_EXTRA="${SSL_EXTRA}
-    include /etc/letsencrypt/options-ssl-nginx.conf;"
-fi
-if [[ -f /etc/letsencrypt/ssl-dhparams.pem ]]; then
-  SSL_EXTRA="${SSL_EXTRA}
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;"
-fi
+SSL_CERT=""
+SSL_KEY=""
 
-write_https_config() {
+if [[ -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" ]]; then
+  SSL_CERT="${CERT_DIR}/fullchain.pem"
+  SSL_KEY="${CERT_DIR}/privkey.pem"
+  echo "==> Using Let's Encrypt cert for ${DOMAIN}"
+else
+  # Ensure HTTP site is live first, then try HTTP-01 via Cloudflare Flexible/proxy.
+  echo "==> Attempting Let's Encrypt for ${DOMAIN} ${WWW_DOMAIN}"
   cat > /etc/nginx/sites-available/vyaha-website <<NGINX
 server {
     listen 80;
     listen [::]:80;
     server_name ${DOMAIN} ${WWW_DOMAIN};
-    return 301 https://\$host\$request_uri;
+    root ${WEB_ROOT};
+    index index.html;
+
+    location ^~ /.well-known/acme-challenge/ {
+        default_type text/plain;
+        root ${WEB_ROOT};
+    }
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+}
+NGINX
+  ln -sf /etc/nginx/sites-available/vyaha-website /etc/nginx/sites-enabled/vyaha-website
+  nginx -t
+  systemctl reload nginx
+
+  if certbot certonly --webroot -w "${WEB_ROOT}" -d "${DOMAIN}" -d "${WWW_DOMAIN}" \
+      --non-interactive --agree-tos -m "${EMAIL}"; then
+    SSL_CERT="${CERT_DIR}/fullchain.pem"
+    SSL_KEY="${CERT_DIR}/privkey.pem"
+    echo "==> Let's Encrypt issued"
+  else
+    echo "==> Let's Encrypt failed; generating self-signed cert for Cloudflare Full SSL"
+    openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
+      -keyout /etc/nginx/certs/vyaha-website.key \
+      -out /etc/nginx/certs/vyaha-website.crt \
+      -subj "/CN=${WWW_DOMAIN}" \
+      -addext "subjectAltName=DNS:${DOMAIN},DNS:${WWW_DOMAIN}"
+    SSL_CERT="/etc/nginx/certs/vyaha-website.crt"
+    SSL_KEY="/etc/nginx/certs/vyaha-website.key"
+  fi
+fi
+
+SSL_EXTRA=""
+if [[ -f /etc/letsencrypt/options-ssl-nginx.conf ]]; then
+  SSL_EXTRA="${SSL_EXTRA}
+    include /etc/letsencrypt/options-ssl-nginx.conf;"
+fi
+
+cat > /etc/nginx/sites-available/vyaha-website <<NGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN} ${WWW_DOMAIN};
+    root ${WEB_ROOT};
+    index index.html;
+    client_max_body_size 10m;
+
+    location ^~ /.well-known/acme-challenge/ {
+        default_type text/plain;
+        root ${WEB_ROOT};
+    }
+
+    location = /business { return 301 /business/; }
+    location = /order { return 301 /order/; }
+
+    location /business/ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files \$uri \$uri/ /business/index.html;
+    }
+
+    location /order/ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files \$uri \$uri/ /order/index.html;
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    }
+
+    location / {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files \$uri \$uri/ /index.html;
+    }
 }
 
 server {
@@ -37,85 +114,43 @@ server {
     listen [::]:443 ssl;
     server_name ${DOMAIN} ${WWW_DOMAIN};
 
-    ssl_certificate ${CERT_DIR}/fullchain.pem;
-    ssl_certificate_key ${CERT_DIR}/privkey.pem;${SSL_EXTRA}
+    ssl_certificate ${SSL_CERT};
+    ssl_certificate_key ${SSL_KEY};${SSL_EXTRA}
 
     root ${WEB_ROOT};
     index index.html;
     client_max_body_size 10m;
 
-    location = /business {
-        return 301 /business/;
-    }
-    location = /order {
-        return 301 /order/;
-    }
+    location = /business { return 301 /business/; }
+    location = /order { return 301 /order/; }
 
     location /business/ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
         try_files \$uri \$uri/ /business/index.html;
     }
 
     location /order/ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
         try_files \$uri \$uri/ /order/index.html;
     }
 
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    }
+
     location / {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
         try_files \$uri \$uri/ /index.html;
     }
 }
 NGINX
-}
-
-if [[ -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" ]]; then
-  echo "==> Existing cert for ${DOMAIN}; writing HTTPS website config"
-  write_https_config
-else
-  echo "==> No cert yet; writing HTTP config then requesting cert"
-  cat > /etc/nginx/sites-available/vyaha-website <<NGINX
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${DOMAIN} ${WWW_DOMAIN};
-
-    root ${WEB_ROOT};
-    index index.html;
-
-    location = /business {
-        return 301 /business/;
-    }
-    location = /order {
-        return 301 /order/;
-    }
-
-    location /business/ {
-        try_files \$uri \$uri/ /business/index.html;
-    }
-
-    location /order/ {
-        try_files \$uri \$uri/ /order/index.html;
-    }
-
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-}
-NGINX
-fi
 
 ln -sf /etc/nginx/sites-available/vyaha-website /etc/nginx/sites-enabled/vyaha-website
 nginx -t
 systemctl reload nginx
-
-if [[ ! -f "${CERT_DIR}/fullchain.pem" ]]; then
-  if certbot --nginx -d "${DOMAIN}" -d "${WWW_DOMAIN}" --non-interactive --agree-tos -m "${EMAIL}" --redirect; then
-    write_https_config
-    nginx -t
-    systemctl reload nginx
-  else
-    echo "==> Certbot failed (DNS may still point to Render/Cloudflare). Website remains on HTTP."
-    echo "==> Point vyaha.com and www.vyaha.com A records to this VPS, then re-run this script."
-  fi
-fi
-
 systemctl enable nginx
-echo "==> Website SSL ready for ${DOMAIN} and ${WWW_DOMAIN}"
+
+echo "==> Fingerprint:"
+curl -fsS -H "Host: ${WWW_DOMAIN}" "http://127.0.0.1/business/login/" | grep -oE 'assets/index-[^"]+' | head -n 1 || true
+curl -fsSk -H "Host: ${WWW_DOMAIN}" "https://127.0.0.1/business/login/" | grep -oE 'assets/index-[^"]+' | head -n 1 || true
+echo "==> Website SSL ready for ${DOMAIN} / ${WWW_DOMAIN}"

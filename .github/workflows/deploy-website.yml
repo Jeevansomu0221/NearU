@@ -32,4 +32,6 @@ jobs:
             git reset --hard origin/main
             bash scripts/vps-deploy-website.sh
             bash scripts/restore-website-ssl.sh || true
-            curl -fsS -H 'Host: www.vyaha.com' http://127.0.0.1/business/login/ | grep -E 'Vyaha for Restaurants|Sign in to continue' | head -n 1
+            echo "HTTP:"; curl -fsS -H 'Host: www.vyaha.com' http://127.0.0.1/business/login/ | grep -oE 'assets/index-[^"]+' | head -n 1
+            echo "HTTPS:"; curl -fsSk -H 'Host: www.vyaha.com' https://127.0.0.1/business/login/ | grep -oE 'assets/index-[^"]+' | head -n 1 || true
+            grep -n "Register\|auth-mode-tab" /var/www/vyaha/business/assets/*.js | head -n 3 || true
