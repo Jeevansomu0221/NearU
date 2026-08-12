@@ -3,8 +3,8 @@ import Partner from "../models/Partner.model";
 import Order from "../models/Order.model";
 import { parseGoogleMapsLink } from "../utils/mapsParser";
 
-const DEFAULT_RADIUS_KM = 5;
-const MAX_RADIUS_KM = 10;
+const DEFAULT_RADIUS_KM = 20;
+const MAX_RADIUS_KM = 20;
 const MAX_SHOPS_FALLBACK = 100;
 
 const parseCoordinate = (value: unknown) => {

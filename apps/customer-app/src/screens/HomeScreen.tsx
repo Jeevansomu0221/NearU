@@ -77,7 +77,7 @@ const categoryOptions = [
   { key: "ice-creams", label: "Ice Creams", icon: "ice-cream" }
 ] as const;
 
-const NEARBY_RADIUS_KM = 5;
+const NEARBY_RADIUS_KM = 20;
 const LOCATION_TIMEOUT_MS = 8000;
 const INITIAL_LOCATION_REQUEST_DELAY_MS = 1200;
 const LOCATION_PERMISSION_MESSAGE = `Allow location to view shops within ${NEARBY_RADIUS_KM} km of you.`;
@@ -255,7 +255,7 @@ export default function HomeScreen({ navigation }: Props) {
       if (locationServicesEnabled === false) {
         if (!silent) {
           setShops([]);
-          setLocationMessage("Turn on device location to see shops within 5 km of you.");
+          setLocationMessage(`Turn on device location to see shops within ${NEARBY_RADIUS_KM} km of you.`);
         }
         return;
       }

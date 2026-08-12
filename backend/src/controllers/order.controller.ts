@@ -66,7 +66,7 @@ const DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const DELIVERY_FIRST_KM_FEE = 15;
 const DELIVERY_ADDITIONAL_KM_FEE = 10;
-const MAX_DELIVERY_DISTANCE_KM = 10;
+const MAX_DELIVERY_DISTANCE_KM = 20;
 const FOOD_GST_RATE = 0.05;
 
 const parseOrderPagination = (req: AuthRequest) => {

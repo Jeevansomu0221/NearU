@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const NEARBY_RADIUS_KM = 5;
+const NEARBY_RADIUS_KM = 20;
 
 export function useGeolocation() {
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
