@@ -25,6 +25,8 @@ export default function MenuPage() {
   const [form, setForm] = useState({ name: "", price: "", description: "", category: "other" });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   const load = () => getPartnerMenuItems().then((res) => setItems((res.data as MenuRow[]) || []));
 
@@ -32,27 +34,63 @@ export default function MenuPage() {
     load();
   }, []);
 
-  const save = async () => {
-    const payload = {
-      name: form.name.trim(),
-      price: Number(form.price),
-      description: form.description,
-      category: form.category,
-      isVeg: true,
-      isAvailable: true
-    };
-    if (editingId) {
-      await updateMenuItem(editingId, payload);
-    } else {
-      await createMenuItem(payload);
-      if (items.length === 0) {
-        await completeSetup();
-      }
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl(null);
+      return;
     }
-    setForm({ name: "", price: "", description: "", category: "other" });
-    setEditingId(null);
-    setMessage("Menu saved.");
-    load();
+    const url = URL.createObjectURL(imageFile);
+    setImagePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  const save = async () => {
+    try {
+      setMessage("");
+      const name = form.name.trim();
+
+      // Users often type "50/-" in this UI; Number("50/-") => NaN.
+      // Keep digits + dot only so "50/-" becomes 50.
+      const cleanedPrice = String(form.price).replace(/[^0-9.]/g, "");
+      const price = parseFloat(cleanedPrice);
+
+      if (!name) throw new Error("Name is required");
+      if (!Number.isFinite(price) || price <= 0) throw new Error("Valid price is required");
+
+      let imageUrl: string | undefined;
+      if (imageFile) {
+        const res = await uploadImage(imageFile);
+        if (!res.success || !res.data?.url) throw new Error("Image upload failed");
+        imageUrl = res.data.url;
+      }
+
+      const payload: Record<string, unknown> = {
+        name,
+        price,
+        description: form.description,
+        category: form.category,
+        // Backend expects `isVegetarian` but we rely on defaults; still keep `isAvailable`.
+        isAvailable: true,
+        ...(imageUrl ? { imageUrl } : {})
+      };
+
+      if (editingId) {
+        await updateMenuItem(editingId, payload);
+      } else {
+        await createMenuItem(payload);
+        if (items.length === 0) {
+          await completeSetup();
+        }
+      }
+
+      setForm({ name: "", price: "", description: "", category: "other" });
+      setEditingId(null);
+      setImageFile(null);
+      setMessage("Menu saved.");
+      load();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Failed to save menu item");
+    }
   };
 
   const onUpload = async (id: string, file: File) => {
@@ -79,6 +117,26 @@ export default function MenuPage() {
         <div className="field">
           <label>Description</label>
           <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        </div>
+        <div className="field" style={{ marginTop: 8 }}>
+          <label className="btn secondary" style={{ cursor: "pointer" }}>
+            Image
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                setImageFile(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {imagePreviewUrl ? (
+            <div style={{ marginTop: 8 }}>
+              <img src={imagePreviewUrl} alt="Preview" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6 }} />
+            </div>
+          ) : null}
         </div>
         <button className="btn" onClick={save}>
           {editingId ? "Update" : "Add"} item
@@ -122,6 +180,7 @@ export default function MenuPage() {
                       description: item.description || "",
                       category: item.category || "other"
                     });
+                    setImageFile(null);
                   }}
                 >
                   Edit
