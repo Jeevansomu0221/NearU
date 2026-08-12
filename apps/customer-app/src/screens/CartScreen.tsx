@@ -101,11 +101,10 @@ export default function CartScreen({ route, navigation }: any) {
   const subtotal = items.reduce((sum: number, item: CartItem) => sum + item.price * item.quantity, 0);
   const deliveryFee = pricingQuote?.deliveryFee || 0;
   const foodGst = pricingQuote?.foodGst ?? subtotal * 0.05;
-  const deliveryGst = pricingQuote?.deliveryGst ?? deliveryFee * 0.18;
   const platformFee = pricingQuote?.platformFee ?? 0;
   const total =
     pricingQuote?.payableTotal ??
-    subtotal + deliveryFee + foodGst + deliveryGst + platformFee;
+    subtotal + deliveryFee + foodGst + platformFee;
 
   const getSelectedAddress = (): SavedAddress | string | undefined => {
     const defaultSavedAddress = userProfile?.addresses?.find((address) => address.isDefault);
@@ -665,10 +664,6 @@ export default function CartScreen({ route, navigation }: any) {
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Food GST (5%)</Text>
                 <Text style={styles.summaryValue}>{formatAmount(foodGst)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Delivery GST (18%)</Text>
-                <Text style={styles.summaryValue}>{formatAmount(deliveryGst)}</Text>
               </View>
               {platformFee > 0 ? (
                 <View style={styles.summaryRow}>

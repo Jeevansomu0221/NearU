@@ -464,7 +464,6 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const itemTotal = order.itemTotal || 0;
   const deliveryFee = order.deliveryFee || 0;
   const foodGst = order.foodGst ?? itemTotal * 0.05;
-  const deliveryGst = order.deliveryGst ?? deliveryFee * 0.18;
   const platformFee = order.platformFee ?? 0;
   const tipAmount = Number(order.tipAmount || 0);
   const hasSubmittedRating = Boolean(order.ratingSubmittedAt);
@@ -672,10 +671,6 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Food GST (5%)</Text>
           <Text style={styles.summaryValue}>{formatAmount(foodGst)}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Delivery GST (18%)</Text>
-          <Text style={styles.summaryValue}>{formatAmount(deliveryGst)}</Text>
         </View>
         {platformFee > 0 ? (
           <View style={styles.summaryRow}>

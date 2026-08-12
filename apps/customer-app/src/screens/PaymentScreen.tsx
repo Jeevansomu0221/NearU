@@ -220,7 +220,6 @@ export default function PaymentScreen({ route, navigation }: any) {
   }, [items, orderSummary?.groupedShops]);
 
   const foodGst = orderSummary?.foodGst ?? (orderSummary?.subtotal || 0) * 0.05;
-  const deliveryGst = orderSummary?.deliveryGst ?? (orderSummary?.deliveryFee || 0) * 0.18;
   const platformFee = orderSummary?.platformFee ?? 0;
 
   const tipAmount = useMemo(() => {
@@ -810,10 +809,6 @@ export default function PaymentScreen({ route, navigation }: any) {
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Food GST (5%)</Text>
             <Text style={styles.priceValue}>{formatAmount(foodGst)}</Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Delivery GST (18%)</Text>
-            <Text style={styles.priceValue}>{formatAmount(deliveryGst)}</Text>
           </View>
           {platformFee > 0 ? (
             <View style={styles.priceRow}>

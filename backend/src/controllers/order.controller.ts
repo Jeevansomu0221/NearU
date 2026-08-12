@@ -86,7 +86,6 @@ const parseOrderPagination = (req: AuthRequest) => {
     skip: (page - 1) * limit
   };
 };
-const DELIVERY_GST_RATE = 0.18;
 const PLATFORM_FEE = 0;
 const PARTNER_TIMEOUT_CANCEL_MESSAGE =
   "Sorry, this order was cancelled because the restaurant did not accept it in time. If you paid online, your refund will be completed within today.";
@@ -605,14 +604,12 @@ const normalizeCoordinates = (coordinates: any): [number, number] | undefined =>
 
 const calculateTaxOffer = (itemTotal: number, deliveryFee: number) => {
   const foodGst = roundMoney(itemTotal * FOOD_GST_RATE);
-  const deliveryGst = roundMoney(deliveryFee * DELIVERY_GST_RATE);
   const platformFee = PLATFORM_FEE;
 
   return {
     foodGst,
-    deliveryGst,
+    deliveryGst: 0,
     platformFee,
-    // GST is charged; keep taxDiscount at 0 (no waiver).
     taxDiscount: 0
   };
 };
