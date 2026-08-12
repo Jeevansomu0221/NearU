@@ -474,7 +474,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       onScroll={onReviewScroll}
       scrollEventThrottle={16}
     >
-      {order.status === "PICKED_UP" && order.deliveryVerificationCode ? (
+      {order.status === "ASSIGNED" || order.status === "PICKED_UP" ? (
         <View style={[styles.sectionCard, styles.otpCard, styles.otpCardTop]}>
           <Text style={styles.otpEyebrow}>Delivery verification</Text>
           <Text style={styles.otpTitle}>Share this code with your rider</Text>
@@ -482,16 +482,19 @@ export default function OrderStatusScreen({ route, navigation }: any) {
             When your order arrives, tell the delivery partner this code so they can complete the delivery.
           </Text>
           <View style={styles.otpCodeRow}>
-            {String(order.deliveryVerificationCode)
+            {String(order.deliveryVerificationCode || "----")
               .padStart(4, "0")
               .slice(0, 4)
               .split("")
               .map((digit, index) => (
                 <View key={`${digit}-${index}`} style={styles.otpDigitBox}>
-                  <Text style={styles.otpDigit}>{digit}</Text>
+                  <Text style={styles.otpDigit}>{digit === "-" ? "·" : digit}</Text>
                 </View>
               ))}
           </View>
+          {!order.deliveryVerificationCode ? (
+            <Text style={styles.otpLoadingHint}>Refreshing code… pull down if it doesn’t appear.</Text>
+          ) : null}
         </View>
       ) : null}
 
@@ -996,6 +999,13 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#EA580C",
     letterSpacing: 1
+  },
+  otpLoadingHint: {
+    marginTop: 12,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#9A7B68",
+    textAlign: "center"
   },
   sectionTitle: {
     fontSize: 16,

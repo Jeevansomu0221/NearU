@@ -431,7 +431,7 @@ const ensureDeliveryLocationForResponse = async (orderObj: any): Promise<any> =>
     const deliveryFee = Number(order.deliveryFee || 0);
     const tipAmount = Number(order.tipAmount || 0);
     order.estimatedEarnings = roundMoney(deliveryFee + tipAmount);
-    return sanitizeOrderForDelivery(order);
+    return order;
   };
 
   const existingLocation = normalizeLocationPayload(orderObj.deliveryLocation);
@@ -1369,6 +1369,9 @@ export const assignDelivery = async (req: AuthRequest, res: Response) => {
 
     order.deliveryPartnerId = new mongoose.Types.ObjectId(deliveryPartner.userId);
     order.status = "ASSIGNED";
+    if (!String(order.deliveryVerificationCode || "").trim()) {
+      order.deliveryVerificationCode = generateDeliveryVerificationCode();
+    }
 
     await order.save();
 
@@ -1379,7 +1382,8 @@ export const assignDelivery = async (req: AuthRequest, res: Response) => {
       console.error("Failed to notify delivery assignment:", error);
     });
 
-    return successResponse(res, order, "Delivery partner assigned");
+    const safeOrder = sanitizeOrderForDelivery(order.toObject ? order.toObject() : order);
+    return successResponse(res, safeOrder, "Delivery partner assigned");
   } catch (err: any) {
     console.error("assignDelivery error:", err);
     return errorResponse(res, "Failed to assign delivery partner");
@@ -2501,13 +2505,13 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
     // Backfill verification code for in-transit orders created before this feature.
     if (
       isCustomer &&
-      orderObj.status === "PICKED_UP" &&
+      ["ASSIGNED", "PICKED_UP"].includes(String(orderObj.status || "")) &&
       !String(orderObj.deliveryVerificationCode || "").trim()
     ) {
       const code = generateDeliveryVerificationCode();
       if (isBundledDeliveryOrder(order)) {
         await Order.updateMany(
-          { deliveryBundleId: order.deliveryBundleId, status: "PICKED_UP" },
+          { deliveryBundleId: order.deliveryBundleId, status: { $in: ["ASSIGNED", "PICKED_UP"] } },
           { $set: { deliveryVerificationCode: code } }
         );
       } else {
@@ -2524,12 +2528,16 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
       delete orderObj.deliveryVerificationCode;
     }
 
-    // OTP bypass proof is for admin review (and rider confirmation), not customers/partners.
+    // OTP bypass proof is for Vyaha support review (and rider confirmation), not customers/partners.
     if (!isAdmin && !isDelivery) {
       delete orderObj.deliveryOtpBypass;
     }
 
     const responseOrder = await ensureDeliveryLocationForResponse(orderObj);
+    // Keep verification code for customers; strip only for delivery-facing responses.
+    if (isCustomer && orderObj.deliveryVerificationCode) {
+      responseOrder.deliveryVerificationCode = orderObj.deliveryVerificationCode;
+    }
     const deliverySafeOrder =
       isDelivery || isDeliveryDetailsRoute ? sanitizeOrderForDelivery(responseOrder) : responseOrder;
     return successResponse(res, deliverySafeOrder, "Order details retrieved");
@@ -2741,6 +2749,7 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       }
 
       const bundleOrderIds = bundleOrders.map((bundleOrder: any) => bundleOrder._id);
+      const sharedAssignCode = generateDeliveryVerificationCode();
       const updateResult = await Order.updateMany(
         {
           _id: { $in: bundleOrderIds },
@@ -2750,7 +2759,8 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
         {
           $set: {
             deliveryPartnerId: new mongoose.Types.ObjectId(deliveryUserId),
-            status: "ASSIGNED"
+            status: "ASSIGNED",
+            deliveryVerificationCode: sharedAssignCode
           }
         }
       );
@@ -2767,15 +2777,21 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       });
 
       console.log(`🚚 Delivery partner ${user.id} accepted bundled job ${requestedOrder.deliveryBundleId}`);
-      return successResponse(res, buildBundledDeliveryJob(bundledOrders), "Bundled delivery job accepted successfully");
+      return successResponse(
+        res,
+        sanitizeOrderForDelivery(buildBundledDeliveryJob(bundledOrders)),
+        "Bundled delivery job accepted successfully"
+      );
     }
 
+    const assignCode = generateDeliveryVerificationCode();
     const order = await Order.findOneAndUpdate(
       acceptFilter,
       {
         $set: {
           deliveryPartnerId: new mongoose.Types.ObjectId(deliveryUserId),
-          status: "ASSIGNED"
+          status: "ASSIGNED",
+          deliveryVerificationCode: assignCode
         }
       },
       { new: true }
@@ -2802,7 +2818,7 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
     });
 
     const responseOrder = populatedOrder
-      ? await ensureDeliveryLocationForResponse(populatedOrder.toObject())
+      ? sanitizeOrderForDelivery(await ensureDeliveryLocationForResponse(populatedOrder.toObject()))
       : populatedOrder;
 
     return successResponse(res, responseOrder, "Delivery job accepted successfully");

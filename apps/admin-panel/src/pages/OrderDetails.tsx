@@ -95,7 +95,7 @@ export default function OrderDetails() {
                 ? new Date(order.deliveryOtpBypass.submittedAt).toLocaleString()
                 : "Unknown"}
             </Descriptions.Item>
-            <Descriptions.Item label="Proof">
+            <Descriptions.Item label="Proof for Vyaha support">
               {order.deliveryOtpBypass.proofUrl ? (
                 <Typography.Link href={order.deliveryOtpBypass.proofUrl} target="_blank">
                   Open proof image

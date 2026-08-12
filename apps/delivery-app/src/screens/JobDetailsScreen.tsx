@@ -753,7 +753,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             ? ` Cash collected: Rs ${collectedAmount}.`
             : "";
         const bypassText = otpBypass?.proofUrl
-          ? " Delivery proof was sent to admin because the verification code was unavailable."
+          ? " Delivery proof was sent to Vyaha support because the verification code was unavailable."
           : "";
 
         setStatusModal({
@@ -1557,7 +1557,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             </Text>
             <Text style={styles.confirmText}>
               {otpBypassMode
-                ? "If the customer cannot share the code, take a clear photo of the delivered order. It will be sent to admin and the order will be marked delivered."
+                ? "If the customer cannot share the code, take a clear photo of the delivered order. It will be sent to Vyaha customer support and the order will be marked delivered."
                 : "Ask the customer for the 4-digit code shown in their NearU app, then enter it to complete delivery."}
             </Text>
 
@@ -1580,7 +1580,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                   onPress={() => setOtpBypassMode(true)}
                   disabled={updating}
                 >
-                  <Text style={styles.otpBypassLinkText}>Can't get the code? Send proof to admin</Text>
+                  <Text style={styles.otpBypassLinkText}>Can't get the code? Send proof to Vyaha support</Text>
                 </TouchableOpacity>
                 <View style={styles.confirmActions}>
                   <TouchableOpacity style={styles.confirmSecondary} onPress={resetOtpModal} disabled={updating}>
