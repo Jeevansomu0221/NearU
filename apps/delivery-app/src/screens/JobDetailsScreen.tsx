@@ -25,7 +25,9 @@ import {
   createCodUpiCollection,
   getCodUpiPaymentStatus,
   confirmCodUpiPayment,
+  calculateDistance,
   DeliveryOrder,
+  DeliveryJob,
   type CodUpiSession
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
@@ -78,6 +80,9 @@ const RZPAY_IMG_TOP = -(RZPAY_IMG_H * 0.22);
 
 const getJobRiderEarnings = getOrderRiderEarnings;
 
+const formatKm = (value?: number | null) =>
+  typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)} km` : "--";
+
 const getCodQrDisplayUri = (session: CodUpiSession | null) => {
   if (!session) return null;
   if (session.provider === "razorpay_qr" && session.qrImageUrl) {
@@ -95,7 +100,7 @@ const isRazorpayPosterQr = (session: CodUpiSession | null) => session?.provider 
 export default function JobDetailsScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { orderId, job: initialJob } = route.params;
-  const [job, setJob] = useState<DeliveryOrder | null>(initialJob || null);
+  const [job, setJob] = useState<DeliveryJob | null>(initialJob || null);
   const [loading, setLoading] = useState(!initialJob);
   const [updating, setUpdating] = useState(false);
   const [cashConfirmVisible, setCashConfirmVisible] = useState(false);
@@ -307,6 +312,63 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     returnToJobs();
   };
 
+  const enrichJobWithDistances = async (jobData: DeliveryJob): Promise<DeliveryJob> => {
+    const next: DeliveryJob = { ...jobData };
+    const alreadyHasPickup =
+      typeof next.distanceToRestaurant === "number" || typeof (next as any).distance === "number";
+    const alreadyHasDrop =
+      typeof next.distanceToCustomer === "number" || typeof next.estimatedDistance === "number";
+
+    if (alreadyHasPickup && alreadyHasDrop) {
+      return next;
+    }
+
+    try {
+      const location = await getCurrentRiderLocation({ required: false, showDeniedAlert: false });
+      if (!location) {
+        return next;
+      }
+
+      const origin = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      };
+
+      if (!alreadyHasPickup) {
+        const pickupCoords = resolveLatLng({
+          location: next.partnerId?.location || next.pickupStops?.[0]?.partnerId?.location,
+          googleMapsLink:
+            next.partnerId?.googleMapsLink ||
+            next.pickupStops?.[0]?.partnerId?.googleMapsLink ||
+            getAddressGoogleMapsLink(next.partnerId?.address || next.pickupStops?.[0]?.partnerId?.address)
+        });
+        if (pickupCoords) {
+          const response = await calculateDistance(origin, pickupCoords);
+          if (response.success && typeof response.data?.distance === "number") {
+            next.distanceToRestaurant = Number(response.data.distance.toFixed(1));
+          }
+        }
+      }
+
+      if (!alreadyHasDrop) {
+        const dropCoords = resolveLatLng({
+          location: next.deliveryLocation,
+          googleMapsLink: next.deliveryGoogleMapsLink
+        });
+        if (dropCoords) {
+          const response = await calculateDistance(origin, dropCoords);
+          if (response.success && typeof response.data?.distance === "number") {
+            next.distanceToCustomer = Number(response.data.distance.toFixed(1));
+          }
+        }
+      }
+    } catch (error) {
+      console.log("Failed to calculate job distances:", error);
+    }
+
+    return next;
+  };
+
   const loadJobDetails = async () => {
     try {
       if (!initialJob) {
@@ -314,7 +376,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       }
       const response = await getJobDetails(orderId);
       if (response.success && response.data) {
-        setJob(response.data);
+        const merged: DeliveryJob = {
+          ...response.data,
+          // Keep distances from list/notification navigation when API omits them.
+          distanceToRestaurant:
+            response.data.distanceToRestaurant ?? initialJob?.distanceToRestaurant,
+          distanceToCustomer:
+            response.data.distanceToCustomer ?? initialJob?.distanceToCustomer,
+          estimatedDistance: response.data.estimatedDistance ?? initialJob?.estimatedDistance,
+          totalDistance: response.data.totalDistance ?? initialJob?.totalDistance
+        };
+        const enriched = await enrichJobWithDistances(merged);
+        setJob(enriched);
       } else {
         handleDetailsLoadFailure(response.message || "Failed to load job details");
       }
@@ -1333,6 +1406,103 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
+              <Ionicons name="navigate" size={20} color="#4CAF50" />
+              <Text style={styles.sectionTitle}>Pickup & Drop</Text>
+            </View>
+            <View style={styles.readyRouteCard}>
+              <View style={styles.readyRouteTimeline}>
+                {pickupStops.map((stop, index) => (
+                  <React.Fragment key={stop.orderId || `${job._id}-pin-${index}`}>
+                    <View style={styles.readyRouteIconWrap}>
+                      <Ionicons name="restaurant-outline" size={16} color="#667085" />
+                    </View>
+                    {index < pickupStops.length - 1 ? (
+                      <View style={styles.readyRouteDashTrack}>
+                        {Array.from({ length: 4 }).map((_, dashIndex) => (
+                          <View key={`mid-${index}-${dashIndex}`} style={styles.readyRouteDashDot} />
+                        ))}
+                      </View>
+                    ) : null}
+                  </React.Fragment>
+                ))}
+                <View style={styles.readyRouteDashTrack}>
+                  {Array.from({ length: 5 }).map((_, dashIndex) => (
+                    <View key={`drop-${dashIndex}`} style={styles.readyRouteDashDot} />
+                  ))}
+                </View>
+                <View style={styles.readyRouteIconWrap}>
+                  <Ionicons name="person-outline" size={16} color="#667085" />
+                </View>
+              </View>
+
+              <View style={styles.readyRouteInfo}>
+                {pickupStops.map((stop, index) => {
+                  const pickupDistance =
+                    index === 0
+                      ? typeof job.distanceToRestaurant === "number"
+                        ? job.distanceToRestaurant
+                        : typeof (job as any).distance === "number"
+                          ? (job as any).distance
+                          : null
+                      : null;
+                  return (
+                    <View key={stop.orderId || `${job._id}-${index}`} style={styles.readyRouteInfoBlock}>
+                      <Text style={styles.readyRouteTitleLine} numberOfLines={1}>
+                        <Text style={styles.readyRouteName}>
+                          {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
+                        </Text>
+                        <Text style={styles.readyRouteDistance}> ({formatKm(pickupDistance)})</Text>
+                      </Text>
+                      <Text style={styles.readyRouteAddress} numberOfLines={3}>
+                        {formatAddress(stop.partnerId?.address) || "Pickup address unavailable"}
+                      </Text>
+                      {stop.partnerId?.phone ? (
+                        <TouchableOpacity
+                          style={styles.readyRouteCall}
+                          onPress={() => handleCall(stop.partnerId.phone)}
+                        >
+                          <Ionicons name="call-outline" size={14} color="#175CD3" />
+                          <Text style={styles.readyRouteCallText}>Call restaurant</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  );
+                })}
+                <View style={styles.readyRouteInfoBlock}>
+                  <Text style={styles.readyRouteTitleLine} numberOfLines={1}>
+                    <Text style={styles.readyRouteName}>{job.customerId?.name || "Customer"}</Text>
+                    <Text style={styles.readyRouteDistance}>
+                      {" "}
+                      (
+                      {formatKm(
+                        typeof job.distanceToCustomer === "number"
+                          ? job.distanceToCustomer
+                          : typeof job.estimatedDistance === "number"
+                            ? job.estimatedDistance
+                            : null
+                      )}
+                      )
+                    </Text>
+                  </Text>
+                  <Text style={styles.readyRouteAddress} numberOfLines={4}>
+                    {formatAddress(job.deliveryAddress) || "Drop address unavailable"}
+                  </Text>
+                  {job.customerId?.phone ? (
+                    <TouchableOpacity
+                      style={styles.readyRouteCall}
+                      onPress={() => handleCall(job.customerId!.phone)}
+                    >
+                      <Ionicons name="call-outline" size={14} color="#175CD3" />
+                      <Text style={styles.readyRouteCallText}>Call customer</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
               <Ionicons name="cash" size={20} color="#4CAF50" />
               <Text style={styles.sectionTitle}>Your Earnings</Text>
             </View>
@@ -2326,6 +2496,80 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginLeft: 8,
+  },
+  readyRouteCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 14,
+    flexDirection: "row",
+    gap: 12
+  },
+  readyRouteTimeline: {
+    width: 28,
+    alignItems: "center",
+    paddingTop: 2
+  },
+  readyRouteIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F2F4F7",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  readyRouteDashTrack: {
+    width: 2,
+    flexGrow: 1,
+    minHeight: 18,
+    alignItems: "center",
+    justifyContent: "space-evenly",
+    paddingVertical: 4
+  },
+  readyRouteDashDot: {
+    width: 2,
+    height: 3,
+    borderRadius: 1,
+    backgroundColor: "#D0D5DD"
+  },
+  readyRouteInfo: {
+    flex: 1,
+    gap: 14
+  },
+  readyRouteInfoBlock: {
+    gap: 4
+  },
+  readyRouteTitleLine: {
+    flexDirection: "row",
+    flexWrap: "wrap"
+  },
+  readyRouteName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1F2937"
+  },
+  readyRouteDistance: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#667085"
+  },
+  readyRouteAddress: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#667085"
+  },
+  readyRouteCall: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start"
+  },
+  readyRouteCallText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#175CD3"
   },
   infoCard: {
     backgroundColor: 'white',
