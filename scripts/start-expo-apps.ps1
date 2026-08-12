@@ -21,7 +21,6 @@ foreach ($app in $apps) {
 `$Host.UI.RawUI.WindowTitle = '$($app.Title)'
 Set-Location '$dir'
 `$env:EXPO_NO_TELEMETRY = '1'
-`$env:CI = '1'
 npx expo $expoArgs
 "@
 
