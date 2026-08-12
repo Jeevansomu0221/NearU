@@ -25,17 +25,35 @@ export default function SwipeConfirm({
 }: SwipeConfirmProps) {
   const [trackWidth, setTrackWidth] = useState(0);
   const thumbSize = 52;
-  const [fillWidth, setFillWidth] = useState(thumbSize + 12);
+  const horizontalPad = 6;
   const translateX = useRef(new Animated.Value(0)).current;
 
-  const maxTranslate = Math.max(0, trackWidth - thumbSize - 12);
+  const maxTranslate = Math.max(0, trackWidth - thumbSize - horizontalPad * 2);
   const isDisabled = disabled || loading;
+  const progressEnd = Math.max(maxTranslate, 1);
+
+  const fillWidth = translateX.interpolate({
+    inputRange: [0, progressEnd],
+    outputRange: [thumbSize + horizontalPad * 2, Math.max(trackWidth, thumbSize + horizontalPad * 2)],
+    extrapolate: "clamp"
+  });
+
+  const emptyLabelOpacity = translateX.interpolate({
+    inputRange: [0, progressEnd * 0.35, progressEnd * 0.55],
+    outputRange: [1, 0.45, 0],
+    extrapolate: "clamp"
+  });
+
+  const filledLabelOpacity = translateX.interpolate({
+    inputRange: [0, progressEnd * 0.35, progressEnd * 0.55],
+    outputRange: [0, 0.55, 1],
+    extrapolate: "clamp"
+  });
 
   const resetThumb = () => {
-    setFillWidth(thumbSize + 12);
     Animated.spring(translateX, {
       toValue: 0,
-      useNativeDriver: true,
+      useNativeDriver: false,
       bounciness: 0
     }).start();
   };
@@ -43,11 +61,10 @@ export default function SwipeConfirm({
   const confirmSwipe = async () => {
     if (isDisabled || !maxTranslate) return;
 
-    setFillWidth(maxTranslate + thumbSize + 12);
     Animated.timing(translateX, {
       toValue: maxTranslate,
       duration: 160,
-      useNativeDriver: true
+      useNativeDriver: false
     }).start(async () => {
       try {
         await onConfirm();
@@ -67,7 +84,6 @@ export default function SwipeConfirm({
           if (isDisabled || !maxTranslate) return;
           const nextX = Math.max(0, Math.min(gesture.dx, maxTranslate));
           translateX.setValue(nextX);
-          setFillWidth(nextX + thumbSize + 12);
         },
         onPanResponderRelease: (_, gesture) => {
           if (isDisabled || !maxTranslate) return;
@@ -87,24 +103,39 @@ export default function SwipeConfirm({
 
   return (
     <View
-      style={[styles.trackWrap, { backgroundColor: accentColor }]}
+      style={[
+        styles.trackWrap,
+        {
+          borderColor: accentColor,
+          backgroundColor: "#F8FAFC",
+          opacity: isDisabled && !loading ? 0.55 : 1
+        }
+      ]}
       onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
     >
-      <View
+      <View pointerEvents="none" style={[styles.trackTint, { backgroundColor: accentColor }]} />
+      <Animated.View
         pointerEvents="none"
         style={[
           styles.fill,
           {
-            backgroundColor: "rgba(255,255,255,0.18)",
+            backgroundColor: accentColor,
             width: fillWidth
           }
         ]}
       />
       <View style={styles.track}>
         {loading ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
+          <ActivityIndicator size="small" color={accentColor} />
         ) : (
-          <Text style={styles.trackHint}>{actionLabel}</Text>
+          <View style={styles.labelStack}>
+            <Animated.Text style={[styles.trackHint, { color: accentColor, opacity: emptyLabelOpacity }]}>
+              {actionLabel}
+            </Animated.Text>
+            <Animated.Text style={[styles.trackHint, styles.trackHintFilled, { opacity: filledLabelOpacity }]}>
+              {actionLabel}
+            </Animated.Text>
+          </View>
         )}
       </View>
       <Animated.View
@@ -114,6 +145,8 @@ export default function SwipeConfirm({
           {
             width: thumbSize,
             height: thumbSize,
+            left: horizontalPad,
+            top: horizontalPad,
             transform: [{ translateX }]
           }
         ]}
@@ -129,7 +162,12 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
     overflow: "hidden",
-    justifyContent: "center"
+    justifyContent: "center",
+    borderWidth: 1.5
+  },
+  trackTint: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.12
   },
   fill: {
     position: "absolute",
@@ -142,17 +180,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 72
+    paddingHorizontal: 72,
+    zIndex: 1
+  },
+  labelStack: {
+    minHeight: 22,
+    justifyContent: "center",
+    alignItems: "center"
   },
   trackHint: {
     fontSize: 16,
     fontWeight: "700",
+    textAlign: "center"
+  },
+  trackHintFilled: {
+    position: "absolute",
     color: "#FFFFFF"
   },
   thumb: {
     position: "absolute",
-    left: 6,
-    top: 6,
     borderRadius: 26,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
@@ -161,7 +207,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 3
+    elevation: 3,
+    zIndex: 2
   },
   thumbText: {
     fontSize: 16,
