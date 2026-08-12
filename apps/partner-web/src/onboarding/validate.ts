@@ -32,9 +32,11 @@ export const validateStep = (
 
   if (step === 3) {
     if (!kyc.fssaiVerified) return "Verify FSSAI license via Eko";
+    if (!documents.fssaiUrl.trim()) return "Upload your FSSAI certificate";
     if (!kyc.panVerified && !kyc.panSkipped) return "Verify PAN via Eko or skip for now";
-    if (documents.gstRegistered === "yes" && !kyc.gstVerified) return "Verify GSTIN via Eko";
     if (!documents.gstRegistered) return "Please select whether you are GST registered";
+    if (documents.gstRegistered === "yes" && !kyc.gstVerified) return "Verify GSTIN via Eko";
+    if (documents.gstRegistered === "yes" && !documents.gstUrl.trim()) return "Upload your GST certificate";
   }
 
   if (step === 4) {

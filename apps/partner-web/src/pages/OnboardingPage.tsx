@@ -213,6 +213,20 @@ export default function OnboardingPage() {
     }
   };
 
+  const uploadDocument = async (key: "fssaiUrl" | "gstUrl", file: File) => {
+    setUploadingKey(key);
+    setError("");
+    try {
+      const res = await uploadImage(file, "partner-docs");
+      if (!res.success || !res.data?.url) throw new Error("Upload failed");
+      setDocuments((prev) => ({ ...prev, [key]: res.data!.url }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload document");
+    } finally {
+      setUploadingKey(null);
+    }
+  };
+
   const goNext = () => {
     const validationError = validateStep(activeStep, form, address, selectedCategory, documents, kyc, operations);
     if (validationError) {
@@ -313,8 +327,11 @@ export default function OnboardingPage() {
           gstRegistered: documents.gstRegistered === "yes",
           gstNumber: documents.gstRegistered === "yes" ? (kyc.gstNumber || documents.gstNumber).trim().toUpperCase() : "",
           ownerPanUrl: kyc.panVerified ? "eko-pan-verified" : documents.panFrontUrl,
-          fssaiUrl: kyc.fssaiVerified ? "eko-fssai-verified" : documents.fssaiUrl,
-          gstUrl: kyc.gstVerified ? "eko-gst-verified" : documents.gstUrl,
+          fssaiUrl: documents.fssaiUrl || (kyc.fssaiVerified ? "eko-fssai-verified" : ""),
+          gstUrl:
+            documents.gstRegistered === "yes"
+              ? documents.gstUrl || (kyc.gstVerified ? "eko-gst-verified" : "")
+              : "",
           bankAccountHolderName: shouldSubmitBankDetails ? (kyc.bankAccountHolderName || "").trim() : "",
           bankAccountNumber: shouldSubmitBankDetails ? (kyc.bankAccountNumber || "").trim() : "",
           bankIfsc: shouldSubmitBankDetails ? (kyc.bankIfsc || "").trim().toUpperCase() : "",
@@ -423,6 +440,7 @@ export default function OnboardingPage() {
             onPanNumberChange={(v) => setDocuments((d) => ({ ...d, panNumber: v }))}
             fssaiNumber={documents.fssaiNumber}
             onFssaiNumberChange={(v) => setDocuments((d) => ({ ...d, fssaiNumber: v }))}
+            fssaiUrl={documents.fssaiUrl}
             gstRegistered={documents.gstRegistered}
             onGstRegisteredChange={(v) =>
               setDocuments((d) => ({
@@ -434,6 +452,9 @@ export default function OnboardingPage() {
             }
             gstNumber={documents.gstNumber}
             onGstNumberChange={(v) => setDocuments((d) => ({ ...d, gstNumber: v }))}
+            gstUrl={documents.gstUrl}
+            uploadingKey={uploadingKey}
+            onUploadDocument={uploadDocument}
           />
         );
       case 4:

@@ -583,6 +583,21 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     if (!fssaiVerified) {
       return res.status(400).json({ success: false, message: "Verify FSSAI license via Eko before submitting" });
     }
+    const fssaiStatus = String(draftKyc?.fssaiLicenseStatus || "");
+    const fssaiBusinessName = String(draftKyc?.fssaiBusinessName || "");
+    if (
+      /\binactive\b|\bcancel|\bsuspend|\bexpir|\binvalid\b|\bdummy\b|\brevok|\bsurrender/i.test(fssaiStatus) ||
+      (fssaiStatus && !/\bactive\b|\bvalid\b|\blicensed\b/i.test(fssaiStatus)) ||
+      /^dummy$/i.test(fssaiBusinessName)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "FSSAI license must be active. Re-verify a valid FSSAI number before submitting"
+      });
+    }
+    if (!String(normalizedDocs.fssaiUrl || "").trim() || normalizedDocs.fssaiUrl === "eko-fssai-verified") {
+      return res.status(400).json({ success: false, message: "Upload your FSSAI certificate before submitting" });
+    }
     if (!panVerified && !panSkipped) {
       return res.status(400).json({ success: false, message: "Verify PAN via Eko or skip before submitting" });
     }
@@ -595,6 +610,19 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       }
       if (!gstVerified) {
         return res.status(400).json({ success: false, message: "Verify GSTIN via Eko before submitting" });
+      }
+      const gstStatus = String(draftKyc?.gstStatus || "");
+      if (
+        /\binactive\b|\bcancel|\binvalid\b|\bsuspend|\bdummy\b|\brevok|\bsurrender/i.test(gstStatus) ||
+        (gstStatus && !/\bactive\b|\bvalid\b/i.test(gstStatus))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "GSTIN must be active. Re-verify a valid GSTIN before submitting"
+        });
+      }
+      if (!String(normalizedDocs.gstUrl || "").trim() || normalizedDocs.gstUrl === "eko-gst-verified") {
+        return res.status(400).json({ success: false, message: "Upload your GST certificate before submitting" });
       }
     }
 

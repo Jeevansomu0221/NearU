@@ -248,6 +248,16 @@
   font-size: 0.85rem;
 }
 
+.onb-doc-upload {
+  margin: 10px 0 18px;
+}
+
+.onb-doc-link {
+  color: var(--primary, #c45c26);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
 .onb-menu-card {
   border: 1px solid var(--border);
   border-radius: 12px;

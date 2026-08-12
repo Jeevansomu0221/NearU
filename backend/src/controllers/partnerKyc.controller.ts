@@ -70,10 +70,40 @@ const emptyKyc = () => ({
   partnerAgreementAcceptedAt: ""
 });
 
-const serializeKyc = (kyc: Record<string, any> | null | undefined) => ({
-  ...emptyKyc(),
-  ...(kyc && typeof kyc === "object" ? kyc : {})
-});
+const isActiveGovStatus = (status: string) => {
+  const value = String(status || "").trim();
+  if (!value) return false;
+  if (/\binactive\b|\bcancel|\bsuspend|\bexpir|\binvalid\b|\bdummy\b|\brevok|\bsurrender/i.test(value)) return false;
+  return /\bactive\b|\bvalid\b|\blicensed\b/i.test(value);
+};
+
+const isDummyName = (name: string) =>
+  /^dummy$/i.test(String(name || "").trim()) || /^(test|sample|fake)\b/i.test(String(name || "").trim());
+
+const serializeKyc = (kyc: Record<string, any> | null | undefined) => {
+  const next = {
+    ...emptyKyc(),
+    ...(kyc && typeof kyc === "object" ? kyc : {})
+  };
+
+  // Clear stale "verified" flags from older logic that accepted INACTIVE/DUMMY records.
+  if (
+    next.fssaiVerified &&
+    (!isActiveGovStatus(String(next.fssaiLicenseStatus || "")) || isDummyName(String(next.fssaiBusinessName || "")))
+  ) {
+    next.fssaiVerified = false;
+    next.fssaiVerifiedAt = "";
+  }
+  if (
+    next.gstVerified &&
+    (!isActiveGovStatus(String(next.gstStatus || "")) || isDummyName(String(next.gstLegalName || "")))
+  ) {
+    next.gstVerified = false;
+    next.gstVerifiedAt = "";
+  }
+
+  return next;
+};
 
 const loadUserDraft = async (userId: string) => {
   const user = await User.findById(userId).select("partnerOnboardingDraft name").lean();
@@ -121,7 +151,20 @@ export const getPartnerKycStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "User not found", 404);
     }
 
-    return successResponse(res, serializeKyc(loaded.kyc), "Partner KYC status");
+    const kyc = serializeKyc(loaded.kyc);
+    const staleFssai =
+      Boolean(loaded.kyc?.fssaiVerified) && !kyc.fssaiVerified;
+    const staleGst = Boolean(loaded.kyc?.gstVerified) && !kyc.gstVerified;
+    if (staleFssai || staleGst) {
+      await saveKycToDraft(user.id, {
+        ...(staleFssai
+          ? { fssaiVerified: false, fssaiVerifiedAt: "" }
+          : {}),
+        ...(staleGst ? { gstVerified: false, gstVerifiedAt: "" } : {})
+      });
+    }
+
+    return successResponse(res, kyc, "Partner KYC status");
   } catch (error: any) {
     console.error("getPartnerKycStatus error:", error);
     return errorResponse(res, error?.message || "Failed to load KYC status", 400);

@@ -1,5 +1,15 @@
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { partnerTheme } from "../../theme";
 import {
@@ -19,10 +29,15 @@ type Props = {
   onPanNumberChange: (value: string) => void;
   fssaiNumber: string;
   onFssaiNumberChange: (value: string) => void;
+  fssaiUrl: string;
   gstRegistered: "yes" | "no" | "";
   onGstRegisteredChange: (value: "yes" | "no") => void;
   gstNumber: string;
   onGstNumberChange: (value: string) => void;
+  gstUrl: string;
+  uploadingKey: string | null;
+  pickerBusy: boolean;
+  onPickDocument: (key: "fssaiUrl" | "gstUrl") => void;
 };
 
 const Check = ({ checked, onPress, label }: { checked: boolean; onPress: () => void; label: string }) => (
@@ -42,8 +57,50 @@ const VerifiedBadge = ({ title, subtitle }: { title: string; subtitle?: string }
   </View>
 );
 
-const InvalidHint = ({ message }: { message: string }) => (
+const InvalidHint = () => (
   <Text style={styles.invalidHint}>Tap Verify — Eko checks government records and shows whether this is legitimate.</Text>
+);
+
+const isPdfUri = (uri?: string) => (uri || "").split("?")[0].toLowerCase().endsWith(".pdf");
+
+const DocUpload = ({
+  title,
+  subtitle,
+  url,
+  busy,
+  disabled,
+  onPress
+}: {
+  title: string;
+  subtitle: string;
+  url: string;
+  busy: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) => (
+  <View style={styles.docCard}>
+    <Text style={styles.docTitle}>{title}</Text>
+    <Text style={styles.docSubtitle}>{subtitle}</Text>
+    {url ? (
+      isPdfUri(url) ? (
+        <View style={styles.pdfPreview}>
+          <Text style={styles.pdfTag}>PDF</Text>
+          <Text style={styles.pdfName} numberOfLines={1}>
+            {url.split("/").pop()?.split("?")[0] || "Uploaded document"}
+          </Text>
+        </View>
+      ) : (
+        <Image source={{ uri: url }} style={styles.docPreview} resizeMode="cover" />
+      )
+    ) : null}
+    <TouchableOpacity style={styles.docButton} onPress={onPress} disabled={disabled || busy}>
+      {busy ? (
+        <ActivityIndicator color="#fff" />
+      ) : (
+        <Text style={styles.docButtonText}>{url ? "Replace certificate" : "Upload certificate"}</Text>
+      )}
+    </TouchableOpacity>
+  </View>
 );
 
 export default function LegalDocumentsStep({
@@ -55,10 +112,15 @@ export default function LegalDocumentsStep({
   onPanNumberChange,
   fssaiNumber,
   onFssaiNumberChange,
+  fssaiUrl,
   gstRegistered,
   onGstRegisteredChange,
   gstNumber,
-  onGstNumberChange
+  onGstNumberChange,
+  gstUrl,
+  uploadingKey,
+  pickerBusy,
+  onPickDocument
 }: Props) {
   const [busy, setBusy] = useState<"" | "pan" | "fssai" | "gst">("");
   const [panConsent, setPanConsent] = useState(false);
@@ -136,7 +198,8 @@ export default function LegalDocumentsStep({
   return (
     <View>
       <Text style={styles.hint}>
-        We verify PAN, FSSAI and GST directly with Eko against government records. You will see a green verified badge when each document is legitimate.
+        We verify PAN, FSSAI and GST with Eko against government records. Only active licenses get a green badge.
+        Upload FSSAI and GST certificates for admin review.
       </Text>
 
       <Text style={styles.sectionTitle}>PAN</Text>
@@ -156,7 +219,7 @@ export default function LegalDocumentsStep({
         <VerifiedBadge title="PAN skipped" subtitle="You can add and verify PAN later from Profile." />
       ) : (
         <>
-          <InvalidHint message="" />
+          <InvalidHint />
           <Check checked={panConsent} onPress={() => setPanConsent((c) => !c)} label="I consent to PAN verification via Eko" />
           <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyPan} disabled={busy !== ""}>
             {busy === "pan" ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify PAN</Text>}
@@ -185,12 +248,20 @@ export default function LegalDocumentsStep({
         />
       ) : (
         <>
-          <InvalidHint message="" />
+          <InvalidHint />
           <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyFssai} disabled={busy !== ""}>
             {busy === "fssai" ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify FSSAI</Text>}
           </TouchableOpacity>
         </>
       )}
+      <DocUpload
+        title="FSSAI certificate"
+        subtitle="Upload a clear image or PDF of your FSSAI license"
+        url={fssaiUrl}
+        busy={uploadingKey === "fssaiUrl"}
+        disabled={pickerBusy || Boolean(uploadingKey)}
+        onPress={() => onPickDocument("fssaiUrl")}
+      />
 
       <Text style={styles.sectionTitle}>GST registration</Text>
       <View style={styles.chipRow}>
@@ -229,12 +300,20 @@ export default function LegalDocumentsStep({
             />
           ) : (
             <>
-              <InvalidHint message="" />
+              <InvalidHint />
               <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyGst} disabled={busy !== ""}>
                 {busy === "gst" ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify GSTIN</Text>}
               </TouchableOpacity>
             </>
           )}
+          <DocUpload
+            title="GST certificate"
+            subtitle="Upload a clear image or PDF of your GST certificate"
+            url={gstUrl}
+            busy={uploadingKey === "gstUrl"}
+            disabled={pickerBusy || Boolean(uploadingKey)}
+            onPress={() => onPickDocument("gstUrl")}
+          />
         </>
       ) : null}
     </View>
@@ -300,5 +379,31 @@ const styles = StyleSheet.create({
   },
   chipSelected: { backgroundColor: partnerTheme.colors.primary },
   chipText: { fontSize: 13, fontWeight: "700", color: partnerTheme.colors.mutedDark },
-  chipTextSelected: { color: "#fff" }
+  chipTextSelected: { color: "#fff" },
+  docCard: {
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    backgroundColor: partnerTheme.colors.surface
+  },
+  docTitle: { fontSize: 14, fontWeight: "800", color: partnerTheme.colors.text },
+  docSubtitle: { marginTop: 4, marginBottom: 10, fontSize: 12, lineHeight: 17, color: partnerTheme.colors.muted },
+  docPreview: { width: "100%", height: 140, borderRadius: 12, marginBottom: 10 },
+  pdfPreview: {
+    borderRadius: 12,
+    backgroundColor: partnerTheme.colors.neutralSoft,
+    padding: 12,
+    marginBottom: 10
+  },
+  pdfTag: { fontSize: 11, fontWeight: "800", color: partnerTheme.colors.primary },
+  pdfName: { marginTop: 4, fontSize: 12, color: partnerTheme.colors.text },
+  docButton: {
+    backgroundColor: partnerTheme.colors.primary,
+    borderRadius: 14,
+    alignItems: "center",
+    paddingVertical: 12
+  },
+  docButtonText: { color: "#fff", fontSize: 13, fontWeight: "800" }
 });

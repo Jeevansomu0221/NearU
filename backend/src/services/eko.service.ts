@@ -489,20 +489,31 @@ export const verifyGstin = async (input: {
   const { data } = await callEkoKyc("/tools/kyc/gstin", body);
   const nested = (data.data || {}) as Record<string, any>;
   const gstStatus = String(nested.gst_in_status || nested.gstin_status || nested.status || "").trim();
-  const isValid =
-    nested.valid === true ||
-    (nested.valid !== false && Boolean(gstStatus) && !/cancel|invalid|suspend/i.test(gstStatus));
+  const legalName = String(nested.legal_name_of_business || nested.legalName || "").trim();
+  const tradeName = String(nested.trade_name || nested.tradeName || "").trim();
+  const statusOk =
+    Boolean(gstStatus) &&
+    /\bactive\b|\bvalid\b/i.test(gstStatus) &&
+    !/\binactive\b|\bcancel|\binvalid\b|\bsuspend|\bdummy\b|\brevok|\bsurrender/i.test(gstStatus);
 
-  if (nested.valid === false || /cancel|invalid/i.test(gstStatus)) {
-    throw new Error("GSTIN is not valid according to government records");
+  if (nested.valid === false || !statusOk) {
+    throw new Error(
+      gstStatus
+        ? `GSTIN is not active (${gstStatus})`
+        : "GSTIN is not valid according to government records"
+    );
+  }
+
+  if (/^dummy$/i.test(legalName) || /^dummy$/i.test(tradeName)) {
+    throw new Error("GSTIN appears to be a dummy or test record");
   }
 
   return {
     gstin: String(nested.GSTIN || nested.gstin || input.gstin).toUpperCase(),
-    valid: isValid,
-    legalName: String(nested.legal_name_of_business || nested.legalName || "").trim() || undefined,
-    tradeName: String(nested.trade_name || nested.tradeName || "").trim() || undefined,
-    status: gstStatus || "Active",
+    valid: true,
+    legalName: legalName || undefined,
+    tradeName: tradeName || undefined,
+    status: gstStatus,
     raw: nested
   };
 };
@@ -526,22 +537,34 @@ export const verifyFssai = async (input: { fssaiNumber: string }): Promise<EkoFs
     body.user_code = config.ekoUserCode;
   }
 
-  const { data } = await callEkoKyc("/tools/kyc/touras/fetch-fssai", body);
+  const { data } = await callEkoKyc("/tools/kyc/circas/fetch-fssai", body);
   const nested = (data.data || {}) as Record<string, any>;
   const licenseStatus = String(
     nested.license_status || nested.status || nested.fbo_status || nested.license_category || ""
   ).trim();
+  const businessName = String(
+    nested.fbo_name || nested.business_name || nested.company_name || nested.name || ""
+  ).trim();
+  const statusOk =
+    Boolean(licenseStatus) &&
+    /\bactive\b|\bvalid\b|\blicensed\b/i.test(licenseStatus) &&
+    !/\binactive\b|\bcancel|\bsuspend|\bexpir|\binvalid\b|\bdummy\b|\brevok|\bsurrender/i.test(licenseStatus);
 
-  if (/cancel|suspend|expir|invalid/i.test(licenseStatus)) {
-    throw new Error(`FSSAI license is not active (${licenseStatus || "invalid"})`);
+  if (!statusOk) {
+    throw new Error(
+      `FSSAI license is not active (${licenseStatus || "unknown status"}). Only active licenses can be verified.`
+    );
+  }
+
+  if (/^dummy$/i.test(businessName) || /^(test|sample|fake)\b/i.test(businessName)) {
+    throw new Error("FSSAI license appears to be a dummy or test record and cannot be verified");
   }
 
   return {
     fssaiNumber: String(nested.fssai_number || nested.fssai || input.fssaiNumber).replace(/\D/g, ""),
     valid: true,
-    businessName: String(nested.fbo_name || nested.business_name || nested.company_name || nested.name || "").trim() ||
-      undefined,
-    licenseStatus: licenseStatus || "Active",
+    businessName: businessName || undefined,
+    licenseStatus,
     expiryDate: String(nested.expiry_date || nested.valid_upto || "").trim() || undefined,
     raw: nested
   };

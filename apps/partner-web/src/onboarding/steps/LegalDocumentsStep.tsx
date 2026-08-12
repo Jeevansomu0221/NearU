@@ -16,10 +16,14 @@ type Props = {
   onPanNumberChange: (value: string) => void;
   fssaiNumber: string;
   onFssaiNumberChange: (value: string) => void;
+  fssaiUrl: string;
   gstRegistered: "yes" | "no" | "";
   onGstRegisteredChange: (value: "yes" | "no") => void;
   gstNumber: string;
   onGstNumberChange: (value: string) => void;
+  gstUrl: string;
+  uploadingKey: string | null;
+  onUploadDocument: (key: "fssaiUrl" | "gstUrl", file: File) => void;
 };
 
 const VerifiedBadge = ({ title, subtitle }: { title: string; subtitle?: string }) => (
@@ -32,6 +36,51 @@ const VerifiedBadge = ({ title, subtitle }: { title: string; subtitle?: string }
   </div>
 );
 
+const DocUpload = ({
+  label,
+  docKey,
+  url,
+  uploadingKey,
+  onUpload
+}: {
+  label: string;
+  docKey: "fssaiUrl" | "gstUrl";
+  url: string;
+  uploadingKey: string | null;
+  onUpload: (key: "fssaiUrl" | "gstUrl", file: File) => void;
+}) => {
+  const isPdf = /\.pdf($|\?)/i.test(url);
+  return (
+    <label className="onb-upload onb-doc-upload">
+      <span>{label}</span>
+      {url ? (
+        isPdf ? (
+          <a className="onb-doc-link" href={url} target="_blank" rel="noreferrer">
+            View uploaded PDF
+          </a>
+        ) : (
+          <img src={url} alt={label} className="onb-preview" />
+        )
+      ) : null}
+      <input
+        type="file"
+        accept="image/*,application/pdf"
+        disabled={uploadingKey !== null}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onUpload(docKey, file);
+          e.target.value = "";
+        }}
+      />
+      {uploadingKey === docKey ? (
+        <span>Uploading…</span>
+      ) : (
+        <span className="btn secondary">{url ? "Replace certificate" : "Upload certificate"}</span>
+      )}
+    </label>
+  );
+};
+
 export default function LegalDocumentsStep({
   kyc,
   onKycChange,
@@ -41,10 +90,14 @@ export default function LegalDocumentsStep({
   onPanNumberChange,
   fssaiNumber,
   onFssaiNumberChange,
+  fssaiUrl,
   gstRegistered,
   onGstRegisteredChange,
   gstNumber,
-  onGstNumberChange
+  onGstNumberChange,
+  gstUrl,
+  uploadingKey,
+  onUploadDocument
 }: Props) {
   const [busy, setBusy] = useState<"" | "pan" | "fssai" | "gst">("");
   const [panConsent, setPanConsent] = useState(false);
@@ -127,7 +180,8 @@ export default function LegalDocumentsStep({
   return (
     <div className="onb-step">
       <p className="onb-hint">
-        We verify PAN, FSSAI and GST with Eko against government records. A green badge means each document is legitimate.
+        We verify PAN, FSSAI and GST with Eko against government records. Only active licenses show a green badge.
+        Also upload the FSSAI and GST certificates for admin review.
       </p>
       {error ? <p className="onb-error">{error}</p> : null}
 
@@ -181,6 +235,13 @@ export default function LegalDocumentsStep({
           {busy === "fssai" ? "Verifying…" : "Verify FSSAI"}
         </button>
       )}
+      <DocUpload
+        label="FSSAI certificate (image or PDF)"
+        docKey="fssaiUrl"
+        url={fssaiUrl}
+        uploadingKey={uploadingKey}
+        onUpload={onUploadDocument}
+      />
 
       <h4>GST registration</h4>
       <div className="onb-chips">
@@ -216,6 +277,13 @@ export default function LegalDocumentsStep({
               {busy === "gst" ? "Verifying…" : "Verify GSTIN"}
             </button>
           )}
+          <DocUpload
+            label="GST certificate (image or PDF)"
+            docKey="gstUrl"
+            url={gstUrl}
+            uploadingKey={uploadingKey}
+            onUpload={onUploadDocument}
+          />
         </>
       ) : null}
     </div>

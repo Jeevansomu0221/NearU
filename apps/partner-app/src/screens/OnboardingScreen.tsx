@@ -753,9 +753,13 @@ export default function OnboardingScreen({ navigation }: any) {
 
     if (step === 3) {
       if (!nextKyc.fssaiVerified) return "Verify FSSAI license via Eko";
+      if (!String(nextDocuments.fssaiUrl || "").trim()) return "Upload your FSSAI certificate";
       if (!nextKyc.panVerified && !nextKyc.panSkipped) return "Verify PAN via Eko or skip for now";
-      if (nextDocuments.gstRegistered === "yes" && !nextKyc.gstVerified) return "Verify GSTIN via Eko";
       if (!nextDocuments.gstRegistered) return "Please select whether you are GST registered";
+      if (nextDocuments.gstRegistered === "yes" && !nextKyc.gstVerified) return "Verify GSTIN via Eko";
+      if (nextDocuments.gstRegistered === "yes" && !String(nextDocuments.gstUrl || "").trim()) {
+        return "Upload your GST certificate";
+      }
     }
 
     if (step === 4) {
@@ -886,8 +890,11 @@ export default function OnboardingScreen({ navigation }: any) {
           gstRegistered: docsToSubmit.gstRegistered === "yes",
           gstNumber: docsToSubmit.gstRegistered === "yes" ? (kyc.gstNumber || docsToSubmit.gstNumber).trim().toUpperCase() : "",
           ownerPanUrl: kyc.panVerified ? "eko-pan-verified" : docsToSubmit.panFrontUrl,
-          fssaiUrl: kyc.fssaiVerified ? "eko-fssai-verified" : docsToSubmit.fssaiUrl,
-          gstUrl: kyc.gstVerified ? "eko-gst-verified" : docsToSubmit.gstUrl,
+          fssaiUrl: docsToSubmit.fssaiUrl || (kyc.fssaiVerified ? "eko-fssai-verified" : ""),
+          gstUrl:
+            docsToSubmit.gstRegistered === "yes"
+              ? docsToSubmit.gstUrl || (kyc.gstVerified ? "eko-gst-verified" : "")
+              : "",
           bankAccountHolderName: shouldSubmitBankDetails ? (kyc.bankAccountHolderName || "").trim() : "",
           bankAccountNumber: shouldSubmitBankDetails ? (kyc.bankAccountNumber || "").trim() : "",
           bankIfsc: shouldSubmitBankDetails ? (kyc.bankIfsc || "").trim().toUpperCase() : "",
@@ -1093,6 +1100,7 @@ export default function OnboardingScreen({ navigation }: any) {
               onPanNumberChange={(value) => setDocuments((prev) => ({ ...prev, panNumber: value }))}
               fssaiNumber={documents.fssaiNumber}
               onFssaiNumberChange={(value) => setDocuments((prev) => ({ ...prev, fssaiNumber: value }))}
+              fssaiUrl={documents.fssaiUrl}
               gstRegistered={documents.gstRegistered}
               onGstRegisteredChange={(value) =>
                 setDocuments((prev) => ({
@@ -1104,6 +1112,12 @@ export default function OnboardingScreen({ navigation }: any) {
               }
               gstNumber={documents.gstNumber}
               onGstNumberChange={(value) => setDocuments((prev) => ({ ...prev, gstNumber: value }))}
+              gstUrl={documents.gstUrl}
+              uploadingKey={uploadingKey}
+              pickerBusy={pickerBusy}
+              onPickDocument={(key) => {
+                void pickAndPreviewDocument(key);
+              }}
             />
           </View>
         );
