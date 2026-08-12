@@ -101,7 +101,7 @@ const ORDER_BUCKETS: OrderBucket[] = [
 const getOrderBucketKey = (status: string): OrderBucketKey | null => {
   if (status === "CONFIRMED") return "current";
   if (status === "ACCEPTED" || status === "PREPARING") return "assigned";
-  if (status === "READY" || status === "ASSIGNED" || status === "PICKED_UP") return "delivery";
+  if (status === "READY" || status === "ASSIGNED" || status === "PICKED_UP" || status === "REACHED_CUSTOMER") return "delivery";
   if (status === "DELIVERED") return "completed";
   return null;
 };
@@ -155,6 +155,7 @@ export default function OrdersScreen({ navigation }: any) {
         return { bg: "#FFF2D9", text: "#A15C00" };
       case "ASSIGNED":
       case "PICKED_UP":
+      case "REACHED_CUSTOMER":
         return { bg: "#E8F1FF", text: "#225EA8" };
       case "DELIVERED":
         return { bg: "#EFE8E1", text: "#6B5E55" };
@@ -179,6 +180,8 @@ export default function OrdersScreen({ navigation }: any) {
         return "Assigned";
       case "PICKED_UP":
         return "Picked Up";
+      case "REACHED_CUSTOMER":
+        return "Rider Arrived";
       case "DELIVERED":
         return "Delivered";
       case "CANCELLED":

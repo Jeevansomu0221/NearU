@@ -29,7 +29,7 @@ export default function MyJobsScreen({ navigation, route }: any) {
       if (response.success && response.data) {
         // Sort by status: ASSIGNED first, then PICKED_UP
         const sortedJobs = response.data.sort((a, b) => {
-          const statusOrder = { "ASSIGNED": 1, "PICKED_UP": 2, "DELIVERED": 3 };
+          const statusOrder = { "ASSIGNED": 1, "PICKED_UP": 2, "REACHED_CUSTOMER": 3, "DELIVERED": 4 };
           return (statusOrder[a.status as keyof typeof statusOrder] || 4) - 
                  (statusOrder[b.status as keyof typeof statusOrder] || 4);
         });

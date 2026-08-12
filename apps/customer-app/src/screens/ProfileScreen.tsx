@@ -80,6 +80,8 @@ const getStatusLabel = (status: string) => {
       return "Rider Assigned";
     case "PICKED_UP":
       return "On the Way";
+    case "REACHED_CUSTOMER":
+      return "Rider Arrived";
     case "DELIVERED":
       return "Delivered";
     case "CANCELLED":
@@ -104,6 +106,7 @@ const getStatusTone = (status: string) => {
     case "READY":
     case "ASSIGNED":
     case "PICKED_UP":
+    case "REACHED_CUSTOMER":
       return { bg: "#ECE9FE", fg: "#5925DC" };
     case "CANCELLED":
     case "REJECTED":

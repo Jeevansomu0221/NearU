@@ -19,7 +19,8 @@ import {
 import { 
   acceptJob,
   getJobDetails, 
-  markAsPickedUp, 
+  markAsPickedUp,
+  markAsReachedCustomer,
   markAsDelivered,
   createCodUpiCollection,
   getCodUpiPaymentStatus,
@@ -125,7 +126,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [riderLocation, setRiderLocation] = useState<LatLng | null>(null);
   /** Local step confirmations before calling pickup/delivery APIs. */
   const [reachedPickup, setReachedPickup] = useState(false);
-  const [reachedCustomer, setReachedCustomer] = useState(false);
   const [receiptVisible, setReceiptVisible] = useState(false);
   const [mapAreaHeight, setMapAreaHeight] = useState(280);
   const codQrDisplayUri = useMemo(() => getCodQrDisplayUri(codUpiSession), [codUpiSession]);
@@ -183,19 +183,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     if (job.status === "ASSIGNED") {
       title = reachedPickup ? "Mark picked up" : "Go to pickup";
     } else if (job.status === "PICKED_UP") {
-      title = reachedCustomer ? "Deliver order" : "Go to customer";
+      title = "Go to customer";
+    } else if (job.status === "REACHED_CUSTOMER") {
+      title = "Deliver order";
     }
 
     navigation.setOptions({ title });
-  }, [job?.status, reachedPickup, reachedCustomer, navigation]);
+  }, [job?.status, reachedPickup, navigation]);
 
   useEffect(() => {
     if (!job?.status) return;
     if (job.status !== "ASSIGNED") {
       setReachedPickup(false);
-    }
-    if (job.status !== "PICKED_UP") {
-      setReachedCustomer(false);
     }
   }, [job?.status]);
 
@@ -493,10 +492,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       if (response.success) {
         setJob((current) => current ? { ...current, status: "PICKED_UP" } : response.data || null);
         setReachedPickup(false);
-        setReachedCustomer(false);
         setStatusModal({
           title: "Order picked up",
-          message: "Head to the customer. Swipe when you reach their location to view order details and complete delivery.",
+          message: "Head to the customer. Swipe when you reach their location to notify them and complete delivery.",
           actionLabel: "Go to customer",
           onAction: () => {
             setStatusModal(null);
@@ -507,6 +505,43 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       }
     } catch (error) {
       console.error("Error marking as picked up:", error);
+      Alert.alert("Error", "Failed to update status");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleReachedCustomer = async () => {
+    try {
+      setUpdating(true);
+
+      const location = await getCurrentRiderLocation({ required: true, showDeniedAlert: true });
+      if (!location) {
+        return;
+      }
+
+      const response = await markAsReachedCustomer(orderId, {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      });
+
+      if (response.success) {
+        setJob((current) =>
+          current ? { ...current, status: "REACHED_CUSTOMER" } : response.data || null
+        );
+        setStatusModal({
+          title: "Reached customer",
+          message: "The customer has been notified. Collect the verification code and mark the order as delivered.",
+          actionLabel: "Continue",
+          onAction: () => {
+            setStatusModal(null);
+          }
+        });
+      } else {
+        Alert.alert("Error", response.message || "Failed to update status");
+      }
+    } catch (error) {
+      console.error("Error marking reached customer:", error);
       Alert.alert("Error", "Failed to update status");
     } finally {
       setUpdating(false);
@@ -894,8 +929,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     : job.deliveryAddress;
   const stopPhone = isPickupPhase ? activePickupStop?.partnerId?.phone : job.customerId?.phone;
   const isNavigatingToStop =
-    job.status === "ASSIGNED" || (job.status === "PICKED_UP" && !reachedCustomer);
-  const showDeliveryDetails = job.status === "PICKED_UP" && reachedCustomer;
+    job.status === "ASSIGNED" || job.status === "PICKED_UP";
+  const showDeliveryDetails = job.status === "REACHED_CUSTOMER";
   const bottomPad = Math.max(insets.bottom, 12);
   const orderDisplayId = job.isBundledDelivery
     ? "Bundled"
@@ -1032,21 +1067,19 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       );
     }
 
-    if (job.status === "PICKED_UP" && !reachedCustomer) {
+    if (job.status === "PICKED_UP") {
       return (
         <SwipeConfirm
           actionLabel="Reached customer location"
           accentColor="#2563EB"
           disabled={updating}
           loading={updating}
-          onConfirm={async () => {
-            setReachedCustomer(true);
-          }}
+          onConfirm={handleReachedCustomer}
         />
       );
     }
 
-    if (job.status === "PICKED_UP" && reachedCustomer) {
+    if (job.status === "REACHED_CUSTOMER") {
       return (
         <SwipeConfirm
           actionLabel="Mark as order delivered"

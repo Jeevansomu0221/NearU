@@ -625,7 +625,16 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
   }
 };
 
-const ONGOING_ORDER_STATUSES = ["PENDING", "CONFIRMED", "ACCEPTED", "PREPARING", "READY", "ASSIGNED", "PICKED_UP"];
+const ONGOING_ORDER_STATUSES = [
+  "PENDING",
+  "CONFIRMED",
+  "ACCEPTED",
+  "PREPARING",
+  "READY",
+  "ASSIGNED",
+  "PICKED_UP",
+  "REACHED_CUSTOMER"
+];
 
 /**
  * DELETE CURRENT ACCOUNT (customer only — partner/delivery must use deletion request flow)

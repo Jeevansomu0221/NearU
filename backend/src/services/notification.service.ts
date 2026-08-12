@@ -47,6 +47,10 @@ const CUSTOMER_ORDER_COPY: Record<string, { title: string; body: string }> = {
     title: "Order on the way",
     body: "Your delivery partner has picked up the order."
   },
+  REACHED_CUSTOMER: {
+    title: "Rider has arrived",
+    body: "Your delivery partner has reached your location."
+  },
   DELIVERED: {
     title: "Order delivered",
     body: "Your order has been delivered."
@@ -449,6 +453,7 @@ export const notifyPartnerDeliveryStatus = async (order: any, status: string) =>
   const partner = await Partner.findById(order.partnerId).select("userId").lean();
   const titles: Record<string, string> = {
     PICKED_UP: "Order picked up",
+    REACHED_CUSTOMER: "Rider reached customer",
     DELIVERED: "Order delivered",
     CANCELLED: "Order cancelled"
   };

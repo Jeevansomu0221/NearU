@@ -479,6 +479,7 @@ const isBundledDeliveryOrder = (order: any) =>
 const getBundleStatus = (orders: any[]) => {
   const statuses = new Set(orders.map((order) => order.status));
   if (statuses.size === 1) return orders[0]?.status || "READY";
+  if (statuses.has("REACHED_CUSTOMER")) return "REACHED_CUSTOMER";
   if (statuses.has("PICKED_UP")) return "PICKED_UP";
   if (statuses.has("ASSIGNED")) return "ASSIGNED";
   if (orders.every((order) => order.status === "READY")) return "READY";
@@ -1407,7 +1408,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Unauthorized", 401);
     }
 
-    const allowedStatuses = ["PICKED_UP", "DELIVERED"];
+    const allowedStatuses = ["PICKED_UP", "REACHED_CUSTOMER", "DELIVERED"];
 
     if (!allowedStatuses.includes(status)) {
       return errorResponse(res, "Invalid status update", 400);
@@ -1439,8 +1440,21 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "All bundled orders must be ASSIGNED before pickup", 400);
     }
 
-    if (status === "DELIVERED" && deliveryOrders.some((deliveryOrder: any) => deliveryOrder.status !== "PICKED_UP")) {
-      return errorResponse(res, "All bundled orders must be PICKED_UP before delivery", 400);
+    if (
+      status === "REACHED_CUSTOMER" &&
+      deliveryOrders.some((deliveryOrder: any) => deliveryOrder.status !== "PICKED_UP")
+    ) {
+      return errorResponse(res, "All bundled orders must be PICKED_UP before marking reached customer location", 400);
+    }
+
+    if (
+      status === "DELIVERED" &&
+      deliveryOrders.some(
+        (deliveryOrder: any) =>
+          deliveryOrder.status !== "PICKED_UP" && deliveryOrder.status !== "REACHED_CUSTOMER"
+      )
+    ) {
+      return errorResponse(res, "All bundled orders must be PICKED_UP or REACHED_CUSTOMER before delivery", 400);
     }
 
     if (status === "DELIVERED") {
@@ -1914,7 +1928,12 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
       return errorResponse(res, "This delivery does not require COD collection", 400);
     }
 
-    if (deliveryOrders.some((deliveryOrder: any) => deliveryOrder.status !== "PICKED_UP")) {
+    if (
+      deliveryOrders.some(
+        (deliveryOrder: any) =>
+          deliveryOrder.status !== "PICKED_UP" && deliveryOrder.status !== "REACHED_CUSTOMER"
+      )
+    ) {
       return errorResponse(res, "Mark the order as picked up before collecting payment", 400);
     }
 
@@ -2504,13 +2523,16 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
 
     // Ensure customers always get a handoff code while the order is with a rider.
     let customerVerificationCode = "";
-    if (isCustomer && ["ASSIGNED", "PICKED_UP"].includes(String(orderObj.status || ""))) {
+    if (isCustomer && ["ASSIGNED", "PICKED_UP", "REACHED_CUSTOMER"].includes(String(orderObj.status || ""))) {
       customerVerificationCode = String(orderObj.deliveryVerificationCode || "").trim();
       if (!customerVerificationCode) {
         customerVerificationCode = generateDeliveryVerificationCode();
         if (isBundledDeliveryOrder(order)) {
           await Order.updateMany(
-            { deliveryBundleId: order.deliveryBundleId, status: { $in: ["ASSIGNED", "PICKED_UP"] } },
+            {
+              deliveryBundleId: order.deliveryBundleId,
+              status: { $in: ["ASSIGNED", "PICKED_UP", "REACHED_CUSTOMER"] }
+            },
             { $set: { deliveryVerificationCode: customerVerificationCode } }
           );
         } else {
@@ -2696,7 +2718,7 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
 
     const activeOrder = await Order.findOne({
       deliveryPartnerId: deliveryUserId,
-      status: { $in: ["ASSIGNED", "PICKED_UP"] }
+      status: { $in: ["ASSIGNED", "PICKED_UP", "REACHED_CUSTOMER"] }
     }).select("_id status").lean();
 
     if (activeOrder) {

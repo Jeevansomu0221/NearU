@@ -70,7 +70,8 @@ const ORDER_STATUS_RANK: Record<string, number> = {
   READY: 4,
   ASSIGNED: 5,
   PICKED_UP: 6,
-  DELIVERED: 7
+  REACHED_CUSTOMER: 7,
+  DELIVERED: 8
 };
 
 const TERMINAL_ORDER_STATUSES = new Set(["CANCELLED", "REJECTED", "DELIVERED"]);
@@ -351,6 +352,8 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
         return "#FBBF24";
       case "PICKED_UP":
         return "#A78BFA";
+      case "REACHED_CUSTOMER":
+        return "#60A5FA";
       case "DELIVERED":
         return "#34D399";
       case "CANCELLED":
@@ -378,6 +381,8 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
         return "Delivery Assigned";
       case "PICKED_UP":
         return "Picked Up";
+      case "REACHED_CUSTOMER":
+        return "Rider Arrived";
       case "DELIVERED":
         return "Delivered";
       case "CANCELLED":

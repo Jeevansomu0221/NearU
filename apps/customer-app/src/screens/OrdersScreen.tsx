@@ -83,6 +83,7 @@ export default function OrdersScreen({ navigation }: any) {
       case 'READY': return '#9C27B0';
       case 'ASSIGNED': return '#673AB7';
       case 'PICKED_UP': return '#3F51B5';
+      case 'REACHED_CUSTOMER': return '#1565C0';
       case 'CANCELLED': return '#F44336';
       case 'REJECTED': return '#795548';
       case 'PENDING': return '#FF9800';
@@ -99,6 +100,7 @@ export default function OrdersScreen({ navigation }: any) {
       case 'READY': return 'Ready for Pickup';
       case 'ASSIGNED': return 'Delivery Assigned';
       case 'PICKED_UP': return 'On the Way';
+      case 'REACHED_CUSTOMER': return 'Rider Arrived';
       case 'DELIVERED': return 'Delivered';
       case 'CANCELLED': return 'Cancelled';
       case 'REJECTED': return 'Rejected by Restaurant';

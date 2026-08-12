@@ -193,7 +193,7 @@ const getPartnerPayoutCheck = async (partnerId: mongoose.Types.ObjectId | string
     userId
       ? Order.countDocuments({
           partnerId,
-          status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY", "ASSIGNED", "PICKED_UP"] }
+          status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY", "ASSIGNED", "PICKED_UP", "REACHED_CUSTOMER"] }
         })
       : Promise.resolve(0)
   ]);
@@ -223,7 +223,7 @@ const getDeliveryPayoutCheck = async (deliveryPartner: any) => {
     }),
     Order.countDocuments({
       deliveryPartnerId: deliveryPartner.userId,
-      status: { $in: ["ASSIGNED", "PICKED_UP"] }
+      status: { $in: ["ASSIGNED", "PICKED_UP", "REACHED_CUSTOMER"] }
     })
   ]);
 

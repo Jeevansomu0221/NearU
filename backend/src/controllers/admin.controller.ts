@@ -393,6 +393,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       "READY",
       "ASSIGNED",
       "PICKED_UP",
+      "REACHED_CUSTOMER",
       "DELIVERED",
       "CANCELLED",
       "REJECTED"
@@ -441,7 +442,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       void Promise.all([
         notifyCustomerOrderStatus(order, status),
         status === "READY" && previousStatus !== "READY" ? notifyDeliveryJobReady(order) : Promise.resolve(),
-        ["PICKED_UP", "DELIVERED", "CANCELLED"].includes(status)
+        ["PICKED_UP", "REACHED_CUSTOMER", "DELIVERED", "CANCELLED"].includes(status)
           ? notifyPartnerDeliveryStatus(order, status)
           : Promise.resolve()
       ]).catch((error) => {

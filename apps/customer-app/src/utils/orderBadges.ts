@@ -6,7 +6,8 @@ const ACTIVE_ORDER_STATUSES = new Set([
   "PREPARING",
   "READY",
   "ASSIGNED",
-  "PICKED_UP"
+  "PICKED_UP",
+  "REACHED_CUSTOMER"
 ]);
 
 const normalizeStatus = (status?: string) => String(status || "").toUpperCase();

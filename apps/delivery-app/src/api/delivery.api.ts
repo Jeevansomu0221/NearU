@@ -213,7 +213,7 @@ export const getMyOrderDetails = (orderId: string): Promise<ApiResponse<Delivery
  */
 export const updateDeliveryStatus = (
   orderId: string, 
-  status: "PICKED_UP" | "DELIVERED" | "CANCELLED",
+  status: "PICKED_UP" | "REACHED_CUSTOMER" | "DELIVERED" | "CANCELLED",
   location?: LocationUpdate
 ): Promise<ApiResponse<DeliveryOrder>> => {
   const data: any = { status };
@@ -231,6 +231,16 @@ export const markAsPickedUp = (
   location?: LocationUpdate
 ): Promise<ApiResponse<DeliveryOrder>> => {
   return updateDeliveryStatus(orderId, "PICKED_UP", location);
+};
+
+/**
+ * Mark rider as reached customer location
+ */
+export const markAsReachedCustomer = (
+  orderId: string,
+  location?: LocationUpdate
+): Promise<ApiResponse<DeliveryOrder>> => {
+  return updateDeliveryStatus(orderId, "REACHED_CUSTOMER", location);
 };
 
 /**

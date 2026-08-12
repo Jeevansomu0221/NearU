@@ -248,6 +248,7 @@ const OrderSchema = new Schema({
       "READY",          // Food ready for pickup
       "ASSIGNED",       // Delivery partner assigned
       "PICKED_UP",      // Delivery picked up order
+      "REACHED_CUSTOMER", // Delivery partner reached customer location
       "DELIVERED",      // Order delivered to customer
       "CANCELLED",      // Order cancelled
       "REJECTED"        // Partner rejected order

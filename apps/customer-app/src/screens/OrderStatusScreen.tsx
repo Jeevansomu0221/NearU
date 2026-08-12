@@ -37,6 +37,7 @@ const STATUS_STEPS: TimelineStep[] = [
   { status: "READY", label: "Ready", caption: "Packed and ready for pickup" },
   { status: "ASSIGNED", label: "Assigned", caption: "Delivery partner assigned" },
   { status: "PICKED_UP", label: "On the way", caption: "Your order is on the road" },
+  { status: "REACHED_CUSTOMER", label: "Rider arrived", caption: "Delivery partner reached your location" },
   { status: "DELIVERED", label: "Delivered", caption: "Order completed successfully" }
 ];
 
@@ -198,6 +199,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       case "ACCEPTED":
       case "ASSIGNED":
       case "PICKED_UP":
+      case "REACHED_CUSTOMER":
         return { bg: "#E8F1FF", text: "#225EA8", pill: "#225EA8" };
       case "PREPARING":
       case "READY":
@@ -227,6 +229,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         return "Delivery partner assigned";
       case "PICKED_UP":
         return "On the way";
+      case "REACHED_CUSTOMER":
+        return "Rider arrived";
       case "DELIVERED":
         return "Delivered";
       case "CANCELLED":
@@ -269,6 +273,8 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         return "A delivery partner has been assigned to your order.";
       case "PICKED_UP":
         return "Your order has been picked up and is on the way to you.";
+      case "REACHED_CUSTOMER":
+        return "Your delivery partner has reached your location. Please share the verification code.";
       case "DELIVERED":
         return "Your order was delivered successfully.";
       case "CANCELLED":
@@ -474,7 +480,9 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       onScroll={onReviewScroll}
       scrollEventThrottle={16}
     >
-      {order.status === "ASSIGNED" || order.status === "PICKED_UP" ? (
+      {order.status === "ASSIGNED" ||
+      order.status === "PICKED_UP" ||
+      order.status === "REACHED_CUSTOMER" ? (
         <View style={[styles.sectionCard, styles.otpCard, styles.otpCardTop]}>
           <Text style={styles.otpEyebrow}>Delivery verification</Text>
           <Text style={styles.otpTitle}>Share this code with your rider</Text>
