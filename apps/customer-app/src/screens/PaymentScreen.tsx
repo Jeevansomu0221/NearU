@@ -222,7 +222,6 @@ export default function PaymentScreen({ route, navigation }: any) {
   const foodGst = orderSummary?.foodGst ?? (orderSummary?.subtotal || 0) * 0.05;
   const deliveryGst = orderSummary?.deliveryGst ?? (orderSummary?.deliveryFee || 0) * 0.18;
   const platformFee = orderSummary?.platformFee ?? 0;
-  const taxDiscount = orderSummary?.taxDiscount ?? foodGst + deliveryGst + platformFee;
 
   const tipAmount = useMemo(() => {
     if (showCustomTip) {
@@ -810,30 +809,22 @@ export default function PaymentScreen({ route, navigation }: any) {
           ) : null}
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Food GST (5%)</Text>
-            <View style={styles.waivedValueGroup}>
-              <Text style={styles.struckValue}>{formatAmount(foodGst)}</Text>
-              <Text style={styles.freeValue}>Rs 0</Text>
-            </View>
+            <Text style={styles.priceValue}>{formatAmount(foodGst)}</Text>
           </View>
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Delivery GST (18%)</Text>
-            <View style={styles.waivedValueGroup}>
-              <Text style={styles.struckValue}>{formatAmount(deliveryGst)}</Text>
-              <Text style={styles.freeValue}>Rs 0</Text>
-            </View>
+            <Text style={styles.priceValue}>{formatAmount(deliveryGst)}</Text>
           </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Platform fee</Text>
-            <View style={styles.waivedValueGroup}>
-              <Text style={styles.struckValue}>{formatAmount(platformFee)}</Text>
-              <Text style={styles.freeValue}>Rs 0</Text>
+          {platformFee > 0 ? (
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Platform fee</Text>
+              <Text style={styles.priceValue}>{formatAmount(platformFee)}</Text>
             </View>
-          </View>
+          ) : null}
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Amount to pay</Text>
             <Text style={styles.totalValue}>{formatAmount(payableTotal)}</Text>
           </View>
-          <Text style={styles.taxNote}>You saved {formatAmount(taxDiscount)}. GST and platform fee are waived for this offer.</Text>
         </View>
 
         {paymentMethod === "CASH_ON_DELIVERY" ? (

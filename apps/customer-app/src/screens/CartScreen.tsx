@@ -103,8 +103,9 @@ export default function CartScreen({ route, navigation }: any) {
   const foodGst = pricingQuote?.foodGst ?? subtotal * 0.05;
   const deliveryGst = pricingQuote?.deliveryGst ?? deliveryFee * 0.18;
   const platformFee = pricingQuote?.platformFee ?? 0;
-  const taxDiscount = pricingQuote?.taxDiscount ?? foodGst + deliveryGst + platformFee;
-  const total = subtotal + deliveryFee;
+  const total =
+    pricingQuote?.payableTotal ??
+    subtotal + deliveryFee + foodGst + deliveryGst + platformFee;
 
   const getSelectedAddress = (): SavedAddress | string | undefined => {
     const defaultSavedAddress = userProfile?.addresses?.find((address) => address.isDefault);
@@ -663,30 +664,22 @@ export default function CartScreen({ route, navigation }: any) {
               ) : null}
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Food GST (5%)</Text>
-                <View style={styles.waivedValueGroup}>
-                  <Text style={styles.struckValue}>{formatAmount(foodGst)}</Text>
-                  <Text style={styles.freeValue}>Rs 0</Text>
-                </View>
+                <Text style={styles.summaryValue}>{formatAmount(foodGst)}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Delivery GST (18%)</Text>
-                <View style={styles.waivedValueGroup}>
-                  <Text style={styles.struckValue}>{formatAmount(deliveryGst)}</Text>
-                  <Text style={styles.freeValue}>Rs 0</Text>
-                </View>
+                <Text style={styles.summaryValue}>{formatAmount(deliveryGst)}</Text>
               </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Platform fee</Text>
-                <View style={styles.waivedValueGroup}>
-                  <Text style={styles.struckValue}>{formatAmount(platformFee)}</Text>
-                  <Text style={styles.freeValue}>Rs 0</Text>
+              {platformFee > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Platform fee</Text>
+                  <Text style={styles.summaryValue}>{formatAmount(platformFee)}</Text>
                 </View>
-              </View>
+              ) : null}
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total Amount</Text>
                 <Text style={styles.totalValue}>{formatAmount(total)}</Text>
               </View>
-              <Text style={styles.offerNote}>You saved {formatAmount(taxDiscount)} with waived GST and platform fee.</Text>
             </View>
           </ScrollView>
 

@@ -612,7 +612,8 @@ const calculateTaxOffer = (itemTotal: number, deliveryFee: number) => {
     foodGst,
     deliveryGst,
     platformFee,
-    taxDiscount: roundMoney(foodGst + deliveryGst + platformFee)
+    // GST is charged; keep taxDiscount at 0 (no waiver).
+    taxDiscount: 0
   };
 };
 
@@ -746,6 +747,9 @@ export const quoteOrderPricing = async (req: AuthRequest, res: Response) => {
       const itemTotal = Math.max(0, roundMoney(Number(group.itemTotal || group.subtotal || 0)));
       const deliveryPricing = await calculateDeliveryPricing(partner, normalizedDeliveryLocation);
       const taxOffer = calculateTaxOffer(itemTotal, deliveryPricing.deliveryFee);
+      const groupTotal = roundMoney(
+        itemTotal + deliveryPricing.deliveryFee + taxOffer.foodGst + taxOffer.deliveryGst + taxOffer.platformFee
+      );
 
       pricedGroups.push({
         partnerId: idString(partner._id),
@@ -753,8 +757,8 @@ export const quoteOrderPricing = async (req: AuthRequest, res: Response) => {
         itemTotal,
         ...deliveryPricing,
         ...taxOffer,
-        grandTotal: roundMoney(itemTotal + deliveryPricing.deliveryFee),
-        payableTotal: roundMoney(itemTotal + deliveryPricing.deliveryFee)
+        grandTotal: groupTotal,
+        payableTotal: groupTotal
       });
     }
 
@@ -1017,8 +1021,8 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Calculate totals from shop-to-customer distance. GST and platform
-    // charges are recorded as waived so the payable amount remains transparent.
+    // Calculate totals from shop-to-customer distance. Food GST (5%) and
+    // delivery GST (18%) are charged on the payable amount.
     const deliveryPricing = await calculateDeliveryPricing(partner, normalizedDeliveryLocation);
     const deliveryFee = deliveryPricing.deliveryFee;
     const taxOffer = calculateTaxOffer(itemTotal, deliveryFee);
@@ -1032,7 +1036,14 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Tip can only be added to the first order in a bundled delivery", 400);
     }
 
-    const grandTotal = roundMoney(itemTotal + deliveryFee + normalizedTipAmount);
+    const grandTotal = roundMoney(
+      itemTotal +
+        deliveryFee +
+        taxOffer.foodGst +
+        taxOffer.deliveryGst +
+        taxOffer.platformFee +
+        normalizedTipAmount
+    );
 
     // Determine payment status based on payment method
     let paymentStatus: string;

@@ -466,7 +466,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const foodGst = order.foodGst ?? itemTotal * 0.05;
   const deliveryGst = order.deliveryGst ?? deliveryFee * 0.18;
   const platformFee = order.platformFee ?? 0;
-  const taxDiscount = order.taxDiscount ?? foodGst + deliveryGst + platformFee;
+  const tipAmount = Number(order.tipAmount || 0);
   const hasSubmittedRating = Boolean(order.ratingSubmittedAt);
   const canRateOrder = order.status === "DELIVERED";
 
@@ -671,25 +671,24 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Food GST (5%)</Text>
-          <View style={styles.waivedValueGroup}>
-            <Text style={styles.struckValue}>{formatAmount(foodGst)}</Text>
-            <Text style={styles.freeValue}>Rs 0</Text>
-          </View>
+          <Text style={styles.summaryValue}>{formatAmount(foodGst)}</Text>
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Delivery GST (18%)</Text>
-          <View style={styles.waivedValueGroup}>
-            <Text style={styles.struckValue}>{formatAmount(deliveryGst)}</Text>
-            <Text style={styles.freeValue}>Rs 0</Text>
-          </View>
+          <Text style={styles.summaryValue}>{formatAmount(deliveryGst)}</Text>
         </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Platform fee</Text>
-          <View style={styles.waivedValueGroup}>
-            <Text style={styles.struckValue}>{formatAmount(platformFee)}</Text>
-            <Text style={styles.freeValue}>Rs 0</Text>
+        {platformFee > 0 ? (
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Platform fee</Text>
+            <Text style={styles.summaryValue}>{formatAmount(platformFee)}</Text>
           </View>
-        </View>
+        ) : null}
+        {tipAmount > 0 ? (
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Tip for rider</Text>
+            <Text style={styles.summaryValue}>{formatAmount(tipAmount)}</Text>
+          </View>
+        ) : null}
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Payment status</Text>
           <Text style={[styles.summaryValue, { color: statusTheme.pill }]}>
@@ -700,7 +699,6 @@ export default function OrderStatusScreen({ route, navigation }: any) {
           <Text style={styles.totalLabel}>Grand total</Text>
           <Text style={styles.totalValue}>{formatAmount(order.grandTotal || 0)}</Text>
         </View>
-        <Text style={styles.offerNote}>You saved {formatAmount(taxDiscount)} with waived GST and platform fee.</Text>
       </View>
 
       {canRateOrder ? (
