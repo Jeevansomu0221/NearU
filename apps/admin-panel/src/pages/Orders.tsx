@@ -115,7 +115,12 @@ export default function Orders() {
             },
             {
               title: "Status",
-              render: (_, order) => <Tag color={order.status === "DELIVERED" ? "green" : "blue"}>{order.status}</Tag>
+              render: (_, order) => (
+                <Space size={4} wrap>
+                  <Tag color={order.status === "DELIVERED" ? "green" : "blue"}>{order.status}</Tag>
+                  {order.deliveryOtpBypass?.used ? <Tag color="orange">OTP bypass</Tag> : null}
+                </Space>
+              )
             },
             {
               title: "Amount",

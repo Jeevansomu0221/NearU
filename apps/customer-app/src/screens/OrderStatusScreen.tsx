@@ -474,6 +474,27 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       onScroll={onReviewScroll}
       scrollEventThrottle={16}
     >
+      {order.status === "PICKED_UP" && order.deliveryVerificationCode ? (
+        <View style={[styles.sectionCard, styles.otpCard, styles.otpCardTop]}>
+          <Text style={styles.otpEyebrow}>Delivery verification</Text>
+          <Text style={styles.otpTitle}>Share this code with your rider</Text>
+          <Text style={styles.otpHint}>
+            When your order arrives, tell the delivery partner this code so they can complete the delivery.
+          </Text>
+          <View style={styles.otpCodeRow}>
+            {String(order.deliveryVerificationCode)
+              .padStart(4, "0")
+              .slice(0, 4)
+              .split("")
+              .map((digit, index) => (
+                <View key={`${digit}-${index}`} style={styles.otpDigitBox}>
+                  <Text style={styles.otpDigit}>{digit}</Text>
+                </View>
+              ))}
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.heroCard}>
         <View style={styles.heroTopRow}>
           <View>
@@ -565,27 +586,6 @@ export default function OrderStatusScreen({ route, navigation }: any) {
           ) : null}
         </View>
       )}
-
-      {order.status === "PICKED_UP" && order.deliveryVerificationCode ? (
-        <View style={[styles.sectionCard, styles.otpCard]}>
-          <Text style={styles.otpEyebrow}>Delivery verification</Text>
-          <Text style={styles.otpTitle}>Share this code with your rider</Text>
-          <Text style={styles.otpHint}>
-            When your order arrives, tell the delivery partner this code so they can complete the delivery.
-          </Text>
-          <View style={styles.otpCodeRow}>
-            {String(order.deliveryVerificationCode)
-              .padStart(4, "0")
-              .slice(0, 4)
-              .split("")
-              .map((digit, index) => (
-                <View key={`${digit}-${index}`} style={styles.otpDigitBox}>
-                  <Text style={styles.otpDigit}>{digit}</Text>
-                </View>
-              ))}
-          </View>
-        </View>
-      ) : null}
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Contact</Text>
@@ -952,6 +952,9 @@ const styles = StyleSheet.create({
   otpCard: {
     backgroundColor: "#FFF7F0",
     borderColor: "#FFD7C3"
+  },
+  otpCardTop: {
+    marginTop: 0
   },
   otpEyebrow: {
     fontSize: 11,

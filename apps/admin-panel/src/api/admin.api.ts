@@ -122,6 +122,13 @@ export interface OrderRecord {
     quantity: number;
     price: number;
   }>;
+  deliveryVerificationCode?: string;
+  deliveryOtpBypass?: {
+    used?: boolean;
+    proofUrl?: string;
+    reason?: string;
+    submittedAt?: string;
+  };
 }
 
 export interface DeliveryPartnerRecord {

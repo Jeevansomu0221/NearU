@@ -241,7 +241,8 @@ export const markAsDelivered = (
   location?: LocationUpdate,
   collectedAmount?: number,
   collectionMethod?: "CASH" | "UPI",
-  verificationCode?: string
+  verificationCode?: string,
+  otpBypass?: { proofUrl: string; reason?: string }
 ): Promise<ApiResponse<DeliveryOrder>> => {
   const data: any = { 
     status: "DELIVERED",
@@ -251,6 +252,13 @@ export const markAsDelivered = (
   };
   if (location) {
     data.location = location;
+  }
+  if (otpBypass?.proofUrl) {
+    data.otpBypass = true;
+    data.proofUrl = otpBypass.proofUrl;
+    if (otpBypass.reason) {
+      data.bypassReason = otpBypass.reason;
+    }
   }
   return apiPost<DeliveryOrder>(`/orders/delivery/${orderId}/status`, data, STATUS_UPDATE_REQUEST_CONFIG);
 };

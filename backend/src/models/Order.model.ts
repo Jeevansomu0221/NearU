@@ -300,6 +300,31 @@ const OrderSchema = new Schema({
     default: ""
   },
 
+  /** When rider cannot get OTP, they complete delivery with a proof photo for admin review */
+  deliveryOtpBypass: {
+    used: {
+      type: Boolean,
+      default: false
+    },
+    proofUrl: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    reason: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    submittedAt: {
+      type: Date
+    },
+    submittedBy: {
+      type: Types.ObjectId,
+      ref: "User"
+    }
+  },
+
   restaurantRating: {
     foodQuality: {
       type: Number,

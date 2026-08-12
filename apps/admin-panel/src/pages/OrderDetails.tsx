@@ -80,6 +80,47 @@ export default function OrderDetails() {
         </Col>
       </Row>
 
+      {order.deliveryOtpBypass?.used ? (
+        <Card
+          bordered={false}
+          title="OTP Bypass Proof"
+          extra={<Tag color="orange">Completed without code</Tag>}
+        >
+          <Descriptions column={1} size="small" style={{ marginBottom: 12 }}>
+            <Descriptions.Item label="Reason">
+              {order.deliveryOtpBypass.reason || "Customer could not provide verification code"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Submitted">
+              {order.deliveryOtpBypass.submittedAt
+                ? new Date(order.deliveryOtpBypass.submittedAt).toLocaleString()
+                : "Unknown"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Proof">
+              {order.deliveryOtpBypass.proofUrl ? (
+                <Typography.Link href={order.deliveryOtpBypass.proofUrl} target="_blank">
+                  Open proof image
+                </Typography.Link>
+              ) : (
+                "No image uploaded"
+              )}
+            </Descriptions.Item>
+          </Descriptions>
+          {order.deliveryOtpBypass.proofUrl ? (
+            <img
+              src={order.deliveryOtpBypass.proofUrl}
+              alt="Delivery OTP bypass proof"
+              style={{
+                width: "100%",
+                maxWidth: 420,
+                borderRadius: 12,
+                border: "1px solid #f0f0f0",
+                objectFit: "cover"
+              }}
+            />
+          ) : null}
+        </Card>
+      ) : null}
+
       <Card bordered={false} title="Order Items">
         <Table
           rowKey={(item) => `${item.name}-${item.price}`}

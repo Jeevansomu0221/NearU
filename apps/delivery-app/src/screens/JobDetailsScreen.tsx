@@ -41,6 +41,8 @@ import {
 } from "../utils/mapCoordinates";
 import { getCurrentRiderLocation } from "../utils/riderLocation";
 import { getOrderRiderEarnings } from "../utils/riderEarnings";
+import { getImagePicker } from "../utils/imagePicker";
+import { uploadMultipart } from "../api/client";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Props {
@@ -101,6 +103,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [codUpiSession, setCodUpiSession] = useState<CodUpiSession | null>(null);
   const [otpConfirmVisible, setOtpConfirmVisible] = useState(false);
   const [deliveryOtp, setDeliveryOtp] = useState("");
+  const [otpBypassMode, setOtpBypassMode] = useState(false);
+  const [bypassProofUrl, setBypassProofUrl] = useState("");
+  const [uploadingBypassProof, setUploadingBypassProof] = useState(false);
   const [pendingDelivery, setPendingDelivery] = useState<{
     collectedAmount?: number;
     collectionMethod: "CASH" | "UPI";
@@ -522,7 +527,86 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   ) => {
     setPendingDelivery({ collectedAmount, collectionMethod });
     setDeliveryOtp("");
+    setOtpBypassMode(false);
+    setBypassProofUrl("");
     setOtpConfirmVisible(true);
+  };
+
+  const resetOtpModal = () => {
+    setOtpConfirmVisible(false);
+    setPendingDelivery(null);
+    setDeliveryOtp("");
+    setOtpBypassMode(false);
+    setBypassProofUrl("");
+  };
+
+  const pickBypassProof = async (source: "camera" | "gallery") => {
+    const ImagePicker = await getImagePicker();
+    const permission =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (permission.status !== "granted") {
+      Alert.alert(
+        "Permission needed",
+        source === "camera"
+          ? "Allow camera access to take a delivery proof photo."
+          : "Allow gallery access to upload a delivery proof photo."
+      );
+      return;
+    }
+
+    setOtpConfirmVisible(false);
+    await new Promise((resolve) => setTimeout(resolve, Platform.OS === "android" ? 220 : 120));
+
+    let result;
+    try {
+      result =
+        source === "camera"
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.8,
+              allowsEditing: false
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.8,
+              allowsEditing: false
+            });
+    } catch (error: any) {
+      setOtpConfirmVisible(true);
+      Alert.alert("Upload failed", error?.message || "Could not open the camera or gallery.");
+      return;
+    }
+
+    setOtpConfirmVisible(true);
+
+    if (result.canceled || !result.assets?.[0]?.uri) {
+      return;
+    }
+
+    try {
+      setUploadingBypassProof(true);
+      const asset = result.assets[0];
+      const fileName = asset.fileName || `delivery-proof-${Date.now()}.jpg`;
+      const formData = new FormData();
+      // @ts-ignore React Native FormData file
+      formData.append("image", {
+        uri: asset.uri,
+        type: asset.mimeType || "image/jpeg",
+        name: fileName
+      });
+      const response = await uploadMultipart<{ url: string }>("/upload/image", formData);
+      if (!response.success || !response.data?.url) {
+        throw new Error(response.message || "Could not upload proof image");
+      }
+      setBypassProofUrl(response.data.url);
+    } catch (error: any) {
+      Alert.alert("Upload failed", error.message || "Could not upload delivery proof");
+    } finally {
+      setUploadingBypassProof(false);
+    }
   };
 
   const startCashCollection = () => {
@@ -618,20 +702,33 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     const pending = pendingDelivery || { collectionMethod: "CASH" as const };
     setOtpConfirmVisible(false);
     await confirmDelivery(pending.collectedAmount, pending.collectionMethod, code);
-    setPendingDelivery(null);
-    setDeliveryOtp("");
+  };
+
+  const submitOtpBypassDelivery = async () => {
+    if (!bypassProofUrl.trim()) {
+      Alert.alert("Proof required", "Take or upload a photo showing the order was delivered.");
+      return;
+    }
+    const pending = pendingDelivery || { collectionMethod: "CASH" as const };
+    setOtpConfirmVisible(false);
+    await confirmDelivery(pending.collectedAmount, pending.collectionMethod, undefined, {
+      proofUrl: bypassProofUrl.trim(),
+      reason: "Customer could not provide verification code"
+    });
   };
 
   const confirmDelivery = async (
     collectedAmount?: number,
     collectionMethod: "CASH" | "UPI" = "CASH",
-    verificationCode?: string
+    verificationCode?: string,
+    otpBypass?: { proofUrl: string; reason?: string }
   ) => {
     try {
       setUpdating(true);
 
       const location = await getCurrentRiderLocation({ required: true, showDeniedAlert: true });
       if (!location) {
+        setOtpConfirmVisible(true);
         return;
       }
 
@@ -643,20 +740,25 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         },
         collectedAmount,
         collectionMethod,
-        verificationCode
+        verificationCode,
+        otpBypass
       );
 
       if (response.success) {
+        resetOtpModal();
         const earnedAmount = response.data?.deliveryEarnings || getJobRiderEarnings(response.data || job);
         const collectedText = collectionMethod === "UPI"
           ? ` UPI payment of Rs ${job?.grandTotal || collectedAmount || 0} received by Vyaha.`
           : collectedAmount
             ? ` Cash collected: Rs ${collectedAmount}.`
             : "";
+        const bypassText = otpBypass?.proofUrl
+          ? " Delivery proof was sent to admin because the verification code was unavailable."
+          : "";
 
         setStatusModal({
           title: "Delivery complete",
-          message: `Successfully completed 1 delivery.${collectedText} Amount added to earnings: Rs ${earnedAmount}.`,
+          message: `Successfully completed 1 delivery.${collectedText}${bypassText} Amount added to earnings: Rs ${earnedAmount}.`,
           actionLabel: "Back to Jobs",
           onAction: () => {
             setStatusModal(null);
@@ -670,12 +772,20 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         Alert.alert("Verification failed", response.message || "Failed to complete delivery");
         setDeliveryOtp("");
         setPendingDelivery({ collectedAmount, collectionMethod });
+        if (otpBypass?.proofUrl) {
+          setOtpBypassMode(true);
+          setBypassProofUrl(otpBypass.proofUrl);
+        }
         setOtpConfirmVisible(true);
       }
     } catch (error) {
       console.error("Error marking as delivered:", error);
       Alert.alert("Error", "Failed to complete delivery");
       setPendingDelivery({ collectedAmount, collectionMethod });
+      if (otpBypass?.proofUrl) {
+        setOtpBypassMode(true);
+        setBypassProofUrl(otpBypass.proofUrl);
+      }
       setOtpConfirmVisible(true);
     } finally {
       setUpdating(false);
@@ -1432,56 +1542,129 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         transparent
         animationType="fade"
         onRequestClose={() => {
-          if (!updating) {
-            setOtpConfirmVisible(false);
-            setPendingDelivery(null);
-            setDeliveryOtp("");
+          if (!updating && !uploadingBypassProof) {
+            resetOtpModal();
           }
         }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.confirmCard}>
-            <View style={styles.confirmIcon}>
-              <Ionicons name="keypad-outline" size={28} color="#FFFFFF" />
+            <View style={[styles.confirmIcon, otpBypassMode && styles.confirmIconWarn]}>
+              <Ionicons name={otpBypassMode ? "camera-outline" : "keypad-outline"} size={28} color="#FFFFFF" />
             </View>
-            <Text style={styles.confirmTitle}>Enter verification code</Text>
-            <Text style={styles.confirmText}>
-              Ask the customer for the 4-digit code shown in their NearU app, then enter it to complete delivery.
+            <Text style={styles.confirmTitle}>
+              {otpBypassMode ? "Send delivery proof" : "Enter verification code"}
             </Text>
-            <TextInput
-              style={styles.otpInput}
-              value={deliveryOtp}
-              onChangeText={(text) => setDeliveryOtp(text.replace(/[^0-9]/g, "").slice(0, 4))}
-              keyboardType="number-pad"
-              maxLength={4}
-              placeholder="••••"
-              placeholderTextColor="#98A2B3"
-              editable={!updating}
-              autoFocus
-              textAlign="center"
-            />
-            <View style={styles.confirmActions}>
-              <TouchableOpacity
-                style={styles.confirmSecondary}
-                onPress={() => {
-                  setOtpConfirmVisible(false);
-                  setPendingDelivery(null);
-                  setDeliveryOtp("");
-                }}
-                disabled={updating}
-              >
-                <Text style={styles.confirmSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.confirmPrimary, deliveryOtp.length !== 4 && styles.confirmPrimaryDisabled]}
-                onPress={() => {
-                  void submitDeliveryVerification();
-                }}
-                disabled={updating || deliveryOtp.length !== 4}
-              >
-                {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Verify & deliver</Text>}
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.confirmText}>
+              {otpBypassMode
+                ? "If the customer cannot share the code, take a clear photo of the delivered order. It will be sent to admin and the order will be marked delivered."
+                : "Ask the customer for the 4-digit code shown in their NearU app, then enter it to complete delivery."}
+            </Text>
+
+            {!otpBypassMode ? (
+              <>
+                <TextInput
+                  style={styles.otpInput}
+                  value={deliveryOtp}
+                  onChangeText={(text) => setDeliveryOtp(text.replace(/[^0-9]/g, "").slice(0, 4))}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  placeholder="••••"
+                  placeholderTextColor="#98A2B3"
+                  editable={!updating}
+                  autoFocus
+                  textAlign="center"
+                />
+                <TouchableOpacity
+                  style={styles.otpBypassLink}
+                  onPress={() => setOtpBypassMode(true)}
+                  disabled={updating}
+                >
+                  <Text style={styles.otpBypassLinkText}>Can't get the code? Send proof to admin</Text>
+                </TouchableOpacity>
+                <View style={styles.confirmActions}>
+                  <TouchableOpacity style={styles.confirmSecondary} onPress={resetOtpModal} disabled={updating}>
+                    <Text style={styles.confirmSecondaryText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.confirmPrimary, deliveryOtp.length !== 4 && styles.confirmPrimaryDisabled]}
+                    onPress={() => {
+                      void submitDeliveryVerification();
+                    }}
+                    disabled={updating || deliveryOtp.length !== 4}
+                  >
+                    {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Verify & deliver</Text>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                {bypassProofUrl ? (
+                  <Image source={{ uri: bypassProofUrl }} style={styles.bypassProofPreview} resizeMode="cover" />
+                ) : (
+                  <View style={styles.bypassProofPlaceholder}>
+                    <Ionicons name="image-outline" size={28} color="#98A2B3" />
+                    <Text style={styles.bypassProofPlaceholderText}>No proof photo yet</Text>
+                  </View>
+                )}
+                <View style={styles.bypassProofActions}>
+                  <TouchableOpacity
+                    style={styles.bypassProofButton}
+                    onPress={() => {
+                      void pickBypassProof("camera");
+                    }}
+                    disabled={updating || uploadingBypassProof}
+                  >
+                    <Ionicons name="camera-outline" size={18} color="#175CD3" />
+                    <Text style={styles.bypassProofButtonText}>Camera</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.bypassProofButton}
+                    onPress={() => {
+                      void pickBypassProof("gallery");
+                    }}
+                    disabled={updating || uploadingBypassProof}
+                  >
+                    <Ionicons name="images-outline" size={18} color="#175CD3" />
+                    <Text style={styles.bypassProofButtonText}>Gallery</Text>
+                  </TouchableOpacity>
+                </View>
+                {uploadingBypassProof ? (
+                  <View style={styles.bypassUploadingRow}>
+                    <ActivityIndicator color="#4CAF50" />
+                    <Text style={styles.bypassUploadingText}>Uploading proof...</Text>
+                  </View>
+                ) : null}
+                <TouchableOpacity
+                  style={styles.otpBypassLink}
+                  onPress={() => {
+                    setOtpBypassMode(false);
+                    setBypassProofUrl("");
+                  }}
+                  disabled={updating || uploadingBypassProof}
+                >
+                  <Text style={styles.otpBypassLinkText}>Back to verification code</Text>
+                </TouchableOpacity>
+                <View style={styles.confirmActions}>
+                  <TouchableOpacity
+                    style={styles.confirmSecondary}
+                    onPress={resetOtpModal}
+                    disabled={updating || uploadingBypassProof}
+                  >
+                    <Text style={styles.confirmSecondaryText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.confirmPrimary, !bypassProofUrl && styles.confirmPrimaryDisabled]}
+                    onPress={() => {
+                      void submitOtpBypassDelivery();
+                    }}
+                    disabled={updating || uploadingBypassProof || !bypassProofUrl}
+                  >
+                    {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Submit & deliver</Text>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -2392,6 +2575,75 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 12,
     color: "#1F2937"
+  },
+  otpBypassLink: {
+    marginTop: 14,
+    paddingVertical: 4
+  },
+  otpBypassLinkText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#175CD3",
+    textAlign: "center"
+  },
+  bypassProofPreview: {
+    marginTop: 16,
+    width: "100%",
+    height: 160,
+    borderRadius: 16,
+    backgroundColor: "#F2F4F7"
+  },
+  bypassProofPlaceholder: {
+    marginTop: 16,
+    width: "100%",
+    height: 120,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E4E7EC",
+    borderStyle: "dashed",
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6
+  },
+  bypassProofPlaceholderText: {
+    fontSize: 13,
+    color: "#98A2B3",
+    fontWeight: "600"
+  },
+  bypassProofActions: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12
+  },
+  bypassProofButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "#EFF8FF",
+    borderWidth: 1,
+    borderColor: "#B2DDFF"
+  },
+  bypassProofButtonText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#175CD3"
+  },
+  bypassUploadingRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  bypassUploadingText: {
+    fontSize: 13,
+    color: "#667085",
+    fontWeight: "600"
   },
   confirmActions: {
     width: "100%",

@@ -36,6 +36,7 @@ const sanitizeOrderForPartner = (orderObj: any) => {
   const next = { ...orderObj };
   delete next.note;
   delete next.deliveryVerificationCode;
+  delete next.deliveryOtpBypass;
   return next;
 };
 
@@ -49,6 +50,8 @@ const stripCookingRequestsFromItems = (items: any[] = []) =>
 
 const generateDeliveryVerificationCode = () =>
   String(Math.floor(1000 + Math.random() * 9000));
+
+const isHttpUrl = (value: string) => /^https?:\/\/.+/i.test(value);
 
 const sanitizeOrderForDelivery = (orderObj: any) => {
   if (!orderObj) return orderObj;
@@ -1392,7 +1395,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
     const { orderId } = req.params;
-    const { status, collectedAmount, collectionMethod, verificationCode } = req.body;
+    const { status, collectedAmount, collectionMethod, verificationCode, otpBypass, proofUrl, bypassReason } = req.body;
     const normalizedCollectionMethod =
       String(collectionMethod || "CASH").toUpperCase() === "UPI" ? "UPI" : "CASH";
 
@@ -1437,41 +1440,50 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     }
 
     if (status === "DELIVERED") {
-      // Prefer the opened job's code; fall back to any sibling, then generate.
-      let sharedCode = String(order.deliveryVerificationCode || "").trim();
-      if (!sharedCode) {
-        sharedCode = String(
-          deliveryOrders.find((o: any) => String(o.deliveryVerificationCode || "").trim())?.deliveryVerificationCode || ""
-        ).trim();
-      }
+      const wantsOtpBypass = otpBypass === true || String(otpBypass || "").toLowerCase() === "true";
+      const proofImageUrl = String(proofUrl || "").trim();
 
-      const createdFreshCode = !sharedCode;
-      if (!sharedCode) {
-        sharedCode = generateDeliveryVerificationCode();
-      }
-
-      for (const deliveryOrder of deliveryOrders) {
-        if (String(deliveryOrder.deliveryVerificationCode || "").trim() !== sharedCode) {
-          deliveryOrder.deliveryVerificationCode = sharedCode;
-          await deliveryOrder.save();
+      if (wantsOtpBypass) {
+        if (!isHttpUrl(proofImageUrl)) {
+          return errorResponse(res, "Upload a delivery proof photo to complete without the verification code", 400);
         }
-      }
+      } else {
+        // Prefer the opened job's code; fall back to any sibling, then generate.
+        let sharedCode = String(order.deliveryVerificationCode || "").trim();
+        if (!sharedCode) {
+          sharedCode = String(
+            deliveryOrders.find((o: any) => String(o.deliveryVerificationCode || "").trim())?.deliveryVerificationCode || ""
+          ).trim();
+        }
 
-      if (createdFreshCode) {
-        return errorResponse(
-          res,
-          "Ask the customer to refresh their order screen and share the 4-digit verification code",
-          400
-        );
-      }
+        const createdFreshCode = !sharedCode;
+        if (!sharedCode) {
+          sharedCode = generateDeliveryVerificationCode();
+        }
 
-      const providedCode = String(verificationCode || "").trim();
-      if (!/^\d{4}$/.test(providedCode)) {
-        return errorResponse(res, "Enter the 4-digit delivery verification code from the customer", 400);
-      }
+        for (const deliveryOrder of deliveryOrders) {
+          if (String(deliveryOrder.deliveryVerificationCode || "").trim() !== sharedCode) {
+            deliveryOrder.deliveryVerificationCode = sharedCode;
+            await deliveryOrder.save();
+          }
+        }
 
-      if (providedCode !== sharedCode) {
-        return errorResponse(res, "Incorrect verification code. Ask the customer for the code shown in their app.", 400);
+        if (createdFreshCode) {
+          return errorResponse(
+            res,
+            "Ask the customer to refresh their order screen and share the 4-digit verification code",
+            400
+          );
+        }
+
+        const providedCode = String(verificationCode || "").trim();
+        if (!/^\d{4}$/.test(providedCode)) {
+          return errorResponse(res, "Enter the 4-digit delivery verification code from the customer", 400);
+        }
+
+        if (providedCode !== sharedCode) {
+          return errorResponse(res, "Incorrect verification code. Ask the customer for the code shown in their app.", 400);
+        }
       }
     }
 
@@ -1492,6 +1504,11 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
     let deliveryPartner: any = null;
     let createdCashLedgerAmount = 0;
+    const wantsOtpBypass =
+      status === "DELIVERED" && (otpBypass === true || String(otpBypass || "").toLowerCase() === "true");
+    const proofImageUrl = String(proofUrl || "").trim();
+    const otpBypassReason = String(bypassReason || "Customer could not provide verification code").trim().slice(0, 300);
+
     if (status === "DELIVERED") {
       deliveryPartner = await DeliveryPartner.findOne({ userId: user.id });
       if (!deliveryPartner) {
@@ -1512,6 +1529,16 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       }
       if (status === "DELIVERED") {
         deliveryOrder.deliveredAt = new Date();
+
+        if (wantsOtpBypass) {
+          deliveryOrder.deliveryOtpBypass = {
+            used: true,
+            proofUrl: proofImageUrl,
+            reason: otpBypassReason || "Customer could not provide verification code",
+            submittedAt: new Date(),
+            submittedBy: userId
+          };
+        }
 
         if (
           deliveryOrder.paymentMethod === "CASH_ON_DELIVERY" &&
@@ -2495,6 +2522,11 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
       delete orderObj.deliveryVerificationCode;
     } else if (orderObj.status === "DELIVERED" || orderObj.status === "CANCELLED" || orderObj.status === "REJECTED") {
       delete orderObj.deliveryVerificationCode;
+    }
+
+    // OTP bypass proof is for admin review (and rider confirmation), not customers/partners.
+    if (!isAdmin && !isDelivery) {
+      delete orderObj.deliveryOtpBypass;
     }
 
     const responseOrder = await ensureDeliveryLocationForResponse(orderObj);
