@@ -2,6 +2,7 @@ import type { UserRole } from "./types.js";
 export declare const TEST_LOGIN_PHONE = "1010101010";
 export declare const TEST_LOGIN_OTP = "000000";
 export declare const isTestLoginPhone: (phone: string) => boolean;
+export declare const getTestLoginOtp: (phone: string) => string;
 export declare const isTestOtpLogin: (phone: string, otp: string) => boolean;
 export type OtpAuthProvider = "2factor" | "firebase";
 export type OtpSessionInfo = {

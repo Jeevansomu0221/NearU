@@ -1,11 +1,15 @@
 import type { ApiResponse } from "./types.js";
 export declare const API_BASE_URL: string;
+export declare const API_HEALTH_URL: string;
+type AuthExpiredListener = () => void;
+export declare const onAuthExpired: (listener: AuthExpiredListener) => (() => void);
 export declare const apiGet: <T = unknown>(url: string, config?: Record<string, unknown>) => Promise<ApiResponse<T>>;
 export declare const apiPost: <T = unknown>(url: string, data?: unknown, config?: Record<string, unknown>) => Promise<ApiResponse<T>>;
 export declare const apiPut: <T = unknown>(url: string, data?: unknown, config?: Record<string, unknown>) => Promise<ApiResponse<T>>;
 export declare const apiDelete: <T = unknown>(url: string, config?: Record<string, unknown>) => Promise<ApiResponse<T>>;
 export declare const apiPatch: <T = unknown>(url: string, data?: unknown, config?: Record<string, unknown>) => Promise<ApiResponse<T>>;
 export declare const uploadMultipart: <T = unknown>(path: string, formData: FormData) => Promise<ApiResponse<T>>;
+export declare const checkApiHealth: () => Promise<boolean>;
 export declare const warmApi: () => Promise<void>;
 declare const typedApi: {
     get: <T = unknown>(url: string, config?: Record<string, unknown>) => Promise<ApiResponse<T>>;

@@ -2,8 +2,44 @@ import { sendOtp, verifyOtp, verifyFirebaseOtp } from "./auth.api.js";
 import { sendFirebaseOtp, confirmFirebaseOtp } from "./firebasePhoneAuth.js";
 export const TEST_LOGIN_PHONE = "1010101010";
 export const TEST_LOGIN_OTP = "000000";
-export const isTestLoginPhone = (phone) => phone.replace(/\D/g, "") === TEST_LOGIN_PHONE;
-export const isTestOtpLogin = (phone, otp) => isTestLoginPhone(phone) && otp === TEST_LOGIN_OTP;
+const DEFAULT_TEST_LOGIN_CREDENTIALS = {
+    "1010101010": "000000",
+    "1234567890": "123456"
+};
+const readEnv = (key) => {
+    try {
+        const viteEnv = import.meta.env;
+        if (viteEnv) {
+            const viteKey = key.replace(/^EXPO_PUBLIC_/, "VITE_");
+            const fromVite = viteEnv[viteKey] || viteEnv[key];
+            if (typeof fromVite === "string" && fromVite.trim())
+                return fromVite.trim();
+        }
+    }
+    catch {
+        // Not a Vite bundle (e.g. React Native / Metro).
+    }
+    if (typeof process !== "undefined" && process.env?.[key]) {
+        return process.env[key];
+    }
+    return undefined;
+};
+const TEST_LOGIN_CREDENTIALS = (() => {
+    const raw = readEnv("EXPO_PUBLIC_TEST_LOGIN_CREDENTIALS");
+    if (!raw) {
+        return DEFAULT_TEST_LOGIN_CREDENTIALS;
+    }
+    try {
+        return { ...DEFAULT_TEST_LOGIN_CREDENTIALS, ...JSON.parse(raw) };
+    }
+    catch {
+        return DEFAULT_TEST_LOGIN_CREDENTIALS;
+    }
+})();
+const normalizePhone = (phone) => phone.replace(/\D/g, "");
+export const isTestLoginPhone = (phone) => normalizePhone(phone) in TEST_LOGIN_CREDENTIALS;
+export const getTestLoginOtp = (phone) => TEST_LOGIN_CREDENTIALS[normalizePhone(phone)];
+export const isTestOtpLogin = (phone, otp) => getTestLoginOtp(phone) === otp;
 const toErrorMessage = (error, fallback = "Failed to send OTP") => {
     if (error instanceof Error && error.message)
         return error.message;
@@ -26,7 +62,7 @@ const normalizeSendOtpResponse = (raw) => {
 export const sendOtpWithFallback = async (phone, role) => {
     const cleanedPhone = phone.replace(/\D/g, "");
     if (isTestLoginPhone(cleanedPhone)) {
-        return { provider: "2factor", deliveryHint: `Use test OTP ${TEST_LOGIN_OTP} to continue.` };
+        return { provider: "2factor", deliveryHint: `Use test OTP ${getTestLoginOtp(cleanedPhone)} to continue.` };
     }
     try {
         const rawResponse = await sendOtp(phone, role);
@@ -58,22 +94,19 @@ export const sendOtpWithFallback = async (phone, role) => {
     }
 };
 export const verifyOtpSession = async (phone, otp, role, session) => {
-    if (isTestOtpLogin(phone, otp)) {
-        const response = await verifyOtp(phone, otp, role);
+    const cleanedPhone = normalizePhone(phone);
+    const cleanedOtp = String(otp || "").trim();
+    if (isTestOtpLogin(cleanedPhone, cleanedOtp) ||
+        isTestLoginPhone(cleanedPhone) ||
+        session.provider === "2factor") {
+        const response = await verifyOtp(cleanedPhone, cleanedOtp, role);
         if (!response.success || !response.data?.token || !response.data?.user) {
             throw new Error(response.message || "Invalid or expired OTP");
         }
         return response;
     }
-    if (session.provider === "2factor") {
-        const response = await verifyOtp(phone, otp, role);
-        if (!response.success || !response.data?.token || !response.data?.user) {
-            throw new Error(response.message || "Invalid or expired OTP");
-        }
-        return response;
-    }
-    const firebaseIdToken = await confirmFirebaseOtp(otp, phone);
-    const response = await verifyFirebaseOtp(phone, firebaseIdToken, role);
+    const firebaseIdToken = await confirmFirebaseOtp(cleanedOtp, cleanedPhone);
+    const response = await verifyFirebaseOtp(cleanedPhone, firebaseIdToken, role);
     if (!response.success || !response.data?.token || !response.data?.user) {
         throw new Error(response.message || "Invalid OTP");
     }

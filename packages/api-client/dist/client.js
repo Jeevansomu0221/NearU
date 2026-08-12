@@ -3,6 +3,18 @@ import { clearAuthData, clearStoredUser, getRefreshToken, setAccessToken, setRef
 const API_TIMEOUT_MS = 60000;
 const PRODUCTION_API_URL = "https://api.vyaha.com/api";
 const PRODUCTION_HEALTH_URL = "https://api.vyaha.com/health";
+const isBrowserLocalhost = () => {
+    if (typeof window === "undefined")
+        return false;
+    const host = window.location.hostname;
+    return host === "localhost" || host === "127.0.0.1";
+};
+const isViteDevServer = () => {
+    if (!isBrowserLocalhost())
+        return false;
+    const port = window.location.port;
+    return port === "5173" || port === "5174" || port === "5175";
+};
 const resolveApiBaseUrl = () => {
     let envUrl;
     try {
@@ -16,8 +28,11 @@ const resolveApiBaseUrl = () => {
         return trimmed.endsWith("/api") ? trimmed : `${trimmed.replace(/\/$/, "")}/api`;
     }
     if (typeof window !== "undefined") {
-        const host = window.location.hostname;
-        if (host === "localhost" || host === "127.0.0.1") {
+        if (isViteDevServer()) {
+            // Route through the Vite dev proxy to avoid CORS and port mismatches.
+            return "/api";
+        }
+        if (isBrowserLocalhost()) {
             return "http://localhost:5000/api";
         }
         return PRODUCTION_API_URL;
@@ -25,6 +40,26 @@ const resolveApiBaseUrl = () => {
     return PRODUCTION_API_URL;
 };
 export const API_BASE_URL = resolveApiBaseUrl();
+export const API_HEALTH_URL = API_BASE_URL === "/api"
+    ? "/health"
+    : API_BASE_URL.endsWith("/api")
+        ? `${API_BASE_URL.replace(/\/api\/?$/, "")}/health`
+        : PRODUCTION_HEALTH_URL;
+const formatNetworkError = (error) => {
+    const axiosError = error;
+    const code = axiosError.code || "";
+    const message = String(axiosError.message || "").toLowerCase();
+    if (code === "ECONNREFUSED" || message.includes("connection refused") || message.includes("err_connection_refused")) {
+        if (isViteDevServer() || (isBrowserLocalhost() && API_BASE_URL.includes("localhost"))) {
+            return "Cannot reach the local API server. Start it with `cd backend && npm run dev` and make sure MongoDB is available.";
+        }
+        return "Vyaha API is unreachable right now. Please try again in a moment.";
+    }
+    if (code === "ECONNABORTED" || message.includes("timeout")) {
+        return "The server is taking longer than usual. Please wait a moment and try again.";
+    }
+    return "Network error. Check your internet connection and try again.";
+};
 const api = axios.create({
     baseURL: API_BASE_URL,
     timeout: API_TIMEOUT_MS,
@@ -42,21 +77,39 @@ api.interceptors.request.use((config) => {
     }
     return config;
 });
+const AUTH_SKIP_REFRESH_PATHS = ["/auth/refresh", "/auth/send-otp", "/auth/verify-otp", "/auth/logout"];
+const authExpiredListeners = new Set();
+export const onAuthExpired = (listener) => {
+    authExpiredListeners.add(listener);
+    return () => {
+        authExpiredListeners.delete(listener);
+    };
+};
+const notifyAuthExpired = () => {
+    authExpiredListeners.forEach((listener) => {
+        try {
+            listener();
+        }
+        catch {
+            // ignore listener errors
+        }
+    });
+};
+const shouldAttemptTokenRefresh = (url) => {
+    if (!url)
+        return true;
+    const path = url.split("?")[0] || "";
+    return !AUTH_SKIP_REFRESH_PATHS.some((skip) => path === skip || path.endsWith(skip));
+};
 api.interceptors.response.use((response) => response, async (error) => {
     const requestConfig = error.config;
     const statusCode = error.response?.status;
-    const serverMessage = error.response?.data?.message || "";
     const isTimeoutError = error.code === "ECONNABORTED" || String(error.message || "").toLowerCase().includes("timeout");
     const isNetworkError = error.message === "Network Error" || isTimeoutError || (error.request && !error.response);
     if (isNetworkError) {
-        return Promise.reject(new Error("The server is taking longer than usual. Please wait a moment and try again."));
+        return Promise.reject(new Error(formatNetworkError(error)));
     }
-    if (statusCode === 401 &&
-        requestConfig &&
-        !requestConfig._retryAuth &&
-        requestConfig.url !== "/auth/refresh" &&
-        (String(serverMessage).toLowerCase().includes("token expired") ||
-            String(serverMessage).toLowerCase().includes("session expired"))) {
+    if (statusCode === 401 && requestConfig && !requestConfig._retryAuth && shouldAttemptTokenRefresh(requestConfig.url)) {
         try {
             const refreshToken = await getRefreshToken();
             if (!refreshToken) {
@@ -85,6 +138,7 @@ api.interceptors.response.use((response) => response, async (error) => {
         catch {
             await clearAuthData();
             clearStoredUser();
+            notifyAuthExpired();
             return Promise.reject(new Error("Your session expired. Please log in again."));
         }
     }
@@ -117,13 +171,17 @@ export const uploadMultipart = async (path, formData) => {
     });
     return extractData(response);
 };
-export const warmApi = async () => {
+export const checkApiHealth = async () => {
     try {
-        await axios.get(PRODUCTION_HEALTH_URL, { timeout: API_TIMEOUT_MS });
+        const response = await axios.get(API_HEALTH_URL, { timeout: 12000 });
+        return response.status >= 200 && response.status < 300;
     }
     catch {
-        // best effort
+        return false;
     }
+};
+export const warmApi = async () => {
+    await checkApiHealth();
 };
 const typedApi = {
     get: apiGet,
