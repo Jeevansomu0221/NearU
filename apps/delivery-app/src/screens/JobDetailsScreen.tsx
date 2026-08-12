@@ -13,7 +13,8 @@ import {
   Image,
   Dimensions,
   Animated,
-  AppState
+  AppState,
+  TextInput
 } from "react-native";
 import { 
   acceptJob,
@@ -98,6 +99,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const [codPaymentChoiceVisible, setCodPaymentChoiceVisible] = useState(false);
   const [upiPaymentVisible, setUpiPaymentVisible] = useState(false);
   const [codUpiSession, setCodUpiSession] = useState<CodUpiSession | null>(null);
+  const [otpConfirmVisible, setOtpConfirmVisible] = useState(false);
+  const [deliveryOtp, setDeliveryOtp] = useState("");
+  const [pendingDelivery, setPendingDelivery] = useState<{
+    collectedAmount?: number;
+    collectionMethod: "CASH" | "UPI";
+  } | null>(null);
   const [upiPaymentPaid, setUpiPaymentPaid] = useState(false);
   const [upiLoading, setUpiLoading] = useState(false);
   const [upiPolling, setUpiPolling] = useState(false);
@@ -505,8 +512,17 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     if (job?.paymentMethod === "CASH_ON_DELIVERY") {
       setCodPaymentChoiceVisible(true);
     } else {
-      await confirmDelivery();
+      requestDeliveryVerification();
     }
+  };
+
+  const requestDeliveryVerification = (
+    collectedAmount?: number,
+    collectionMethod: "CASH" | "UPI" = "CASH"
+  ) => {
+    setPendingDelivery({ collectedAmount, collectionMethod });
+    setDeliveryOtp("");
+    setOtpConfirmVisible(true);
   };
 
   const startCashCollection = () => {
@@ -590,10 +606,27 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const completeUpiDelivery = async () => {
     setUpiPaymentVisible(false);
-    await confirmDelivery(undefined, "UPI");
+    requestDeliveryVerification(undefined, "UPI");
   };
 
-  const confirmDelivery = async (collectedAmount?: number, collectionMethod: "CASH" | "UPI" = "CASH") => {
+  const submitDeliveryVerification = async () => {
+    const code = deliveryOtp.trim();
+    if (!/^\d{4}$/.test(code)) {
+      Alert.alert("Invalid code", "Enter the 4-digit verification code from the customer.");
+      return;
+    }
+    const pending = pendingDelivery || { collectionMethod: "CASH" as const };
+    setOtpConfirmVisible(false);
+    await confirmDelivery(pending.collectedAmount, pending.collectionMethod, code);
+    setPendingDelivery(null);
+    setDeliveryOtp("");
+  };
+
+  const confirmDelivery = async (
+    collectedAmount?: number,
+    collectionMethod: "CASH" | "UPI" = "CASH",
+    verificationCode?: string
+  ) => {
     try {
       setUpdating(true);
 
@@ -609,7 +642,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           longitude: location.coords.longitude
         },
         collectedAmount,
-        collectionMethod
+        collectionMethod,
+        verificationCode
       );
 
       if (response.success) {
@@ -633,11 +667,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           }
         });
       } else {
-        Alert.alert("Error", response.message || "Failed to complete delivery");
+        Alert.alert("Verification failed", response.message || "Failed to complete delivery");
+        setDeliveryOtp("");
+        setPendingDelivery({ collectedAmount, collectionMethod });
+        setOtpConfirmVisible(true);
       }
     } catch (error) {
       console.error("Error marking as delivered:", error);
       Alert.alert("Error", "Failed to complete delivery");
+      setPendingDelivery({ collectedAmount, collectionMethod });
+      setOtpConfirmVisible(true);
     } finally {
       setUpdating(false);
     }
@@ -1377,11 +1416,70 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                 style={styles.confirmPrimary}
                 onPress={() => {
                   setCashConfirmVisible(false);
-                  confirmDelivery(job.grandTotal);
+                  requestDeliveryVerification(job.grandTotal, "CASH");
                 }}
                 disabled={updating}
               >
                 {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Collected</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={otpConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!updating) {
+            setOtpConfirmVisible(false);
+            setPendingDelivery(null);
+            setDeliveryOtp("");
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIcon}>
+              <Ionicons name="keypad-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.confirmTitle}>Enter verification code</Text>
+            <Text style={styles.confirmText}>
+              Ask the customer for the 4-digit code shown in their NearU app, then enter it to complete delivery.
+            </Text>
+            <TextInput
+              style={styles.otpInput}
+              value={deliveryOtp}
+              onChangeText={(text) => setDeliveryOtp(text.replace(/[^0-9]/g, "").slice(0, 4))}
+              keyboardType="number-pad"
+              maxLength={4}
+              placeholder="••••"
+              placeholderTextColor="#98A2B3"
+              editable={!updating}
+              autoFocus
+              textAlign="center"
+            />
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.confirmSecondary}
+                onPress={() => {
+                  setOtpConfirmVisible(false);
+                  setPendingDelivery(null);
+                  setDeliveryOtp("");
+                }}
+                disabled={updating}
+              >
+                <Text style={styles.confirmSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmPrimary, deliveryOtp.length !== 4 && styles.confirmPrimaryDisabled]}
+                onPress={() => {
+                  void submitDeliveryVerification();
+                }}
+                disabled={updating || deliveryOtp.length !== 4}
+              >
+                {updating ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmPrimaryText}>Verify & deliver</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -2280,6 +2378,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#667085",
     textAlign: "center"
+  },
+  otpInput: {
+    marginTop: 18,
+    width: "100%",
+    borderWidth: 1.5,
+    borderColor: "#D0D5DD",
+    borderRadius: 16,
+    backgroundColor: "#F8FAFC",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: 12,
+    color: "#1F2937"
   },
   confirmActions: {
     width: "100%",

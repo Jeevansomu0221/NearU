@@ -35,6 +35,7 @@ const sanitizeOrderForPartner = (orderObj: any) => {
   if (!orderObj) return orderObj;
   const next = { ...orderObj };
   delete next.note;
+  delete next.deliveryVerificationCode;
   return next;
 };
 
@@ -46,9 +47,13 @@ const stripCookingRequestsFromItems = (items: any[] = []) =>
     return rest;
   });
 
+const generateDeliveryVerificationCode = () =>
+  String(Math.floor(1000 + Math.random() * 9000));
+
 const sanitizeOrderForDelivery = (orderObj: any) => {
   if (!orderObj) return orderObj;
   const next = { ...orderObj };
+  delete next.deliveryVerificationCode;
   if (Array.isArray(next.items)) {
     next.items = stripCookingRequestsFromItems(next.items);
   }
@@ -1387,7 +1392,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
     const { orderId } = req.params;
-    const { status, collectedAmount, collectionMethod } = req.body;
+    const { status, collectedAmount, collectionMethod, verificationCode } = req.body;
     const normalizedCollectionMethod =
       String(collectionMethod || "CASH").toUpperCase() === "UPI" ? "UPI" : "CASH";
 
@@ -1431,6 +1436,45 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "All bundled orders must be PICKED_UP before delivery", 400);
     }
 
+    if (status === "DELIVERED") {
+      // Prefer the opened job's code; fall back to any sibling, then generate.
+      let sharedCode = String(order.deliveryVerificationCode || "").trim();
+      if (!sharedCode) {
+        sharedCode = String(
+          deliveryOrders.find((o: any) => String(o.deliveryVerificationCode || "").trim())?.deliveryVerificationCode || ""
+        ).trim();
+      }
+
+      const createdFreshCode = !sharedCode;
+      if (!sharedCode) {
+        sharedCode = generateDeliveryVerificationCode();
+      }
+
+      for (const deliveryOrder of deliveryOrders) {
+        if (String(deliveryOrder.deliveryVerificationCode || "").trim() !== sharedCode) {
+          deliveryOrder.deliveryVerificationCode = sharedCode;
+          await deliveryOrder.save();
+        }
+      }
+
+      if (createdFreshCode) {
+        return errorResponse(
+          res,
+          "Ask the customer to refresh their order screen and share the 4-digit verification code",
+          400
+        );
+      }
+
+      const providedCode = String(verificationCode || "").trim();
+      if (!/^\d{4}$/.test(providedCode)) {
+        return errorResponse(res, "Enter the 4-digit delivery verification code from the customer", 400);
+      }
+
+      if (providedCode !== sharedCode) {
+        return errorResponse(res, "Incorrect verification code. Ask the customer for the code shown in their app.", 400);
+      }
+    }
+
     const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
     const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
     const codCollectedAmount = status === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
@@ -1455,8 +1499,17 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    const sharedPickupCode =
+      status === "PICKED_UP"
+        ? String(deliveryOrders.find((o: any) => String(o.deliveryVerificationCode || "").trim())?.deliveryVerificationCode || "").trim() ||
+          generateDeliveryVerificationCode()
+        : "";
+
     for (const deliveryOrder of deliveryOrders) {
       deliveryOrder.status = status;
+      if (status === "PICKED_UP") {
+        deliveryOrder.deliveryVerificationCode = sharedPickupCode;
+      }
       if (status === "DELIVERED") {
         deliveryOrder.deliveredAt = new Date();
 
@@ -1552,7 +1605,9 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     });
 
     const responseOrders = await Promise.all(
-      deliveryOrders.map((deliveryOrder: any) => ensureDeliveryLocationForResponse(deliveryOrder.toObject()))
+      deliveryOrders.map((deliveryOrder: any) =>
+        ensureDeliveryLocationForResponse(sanitizeOrderForDelivery(deliveryOrder.toObject()))
+      )
     );
     const responseOrder = isBundledDeliveryOrder(order) ? buildBundledDeliveryJob(responseOrders) : responseOrders[0];
     if (status === "DELIVERED") {
@@ -2414,6 +2469,32 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
 
       const [partnerOrder] = await enrichDeliveryPartnerProfiles([partnerView]);
       return successResponse(res, partnerOrder, "Order details retrieved");
+    }
+
+    // Backfill verification code for in-transit orders created before this feature.
+    if (
+      isCustomer &&
+      orderObj.status === "PICKED_UP" &&
+      !String(orderObj.deliveryVerificationCode || "").trim()
+    ) {
+      const code = generateDeliveryVerificationCode();
+      if (isBundledDeliveryOrder(order)) {
+        await Order.updateMany(
+          { deliveryBundleId: order.deliveryBundleId, status: "PICKED_UP" },
+          { $set: { deliveryVerificationCode: code } }
+        );
+      } else {
+        order.deliveryVerificationCode = code;
+        await order.save();
+      }
+      orderObj.deliveryVerificationCode = code;
+    }
+
+    // Only the customer should see the handoff code (not riders/partners).
+    if (!isCustomer && !isAdmin) {
+      delete orderObj.deliveryVerificationCode;
+    } else if (orderObj.status === "DELIVERED" || orderObj.status === "CANCELLED" || orderObj.status === "REJECTED") {
+      delete orderObj.deliveryVerificationCode;
     }
 
     const responseOrder = await ensureDeliveryLocationForResponse(orderObj);

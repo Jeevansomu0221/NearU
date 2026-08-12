@@ -293,6 +293,13 @@ const OrderSchema = new Schema({
     type: Date
   },
 
+  /** 4-digit code shown to customer; rider must enter it to mark DELIVERED */
+  deliveryVerificationCode: {
+    type: String,
+    trim: true,
+    default: ""
+  },
+
   restaurantRating: {
     foodQuality: {
       type: Number,

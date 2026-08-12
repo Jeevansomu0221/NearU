@@ -100,6 +100,7 @@ export interface Order {
     comment?: string;
   };
   ratingSubmittedAt?: string;
+  deliveryVerificationCode?: string;
 }
 
 /**

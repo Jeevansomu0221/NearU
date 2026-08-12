@@ -566,6 +566,27 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         </View>
       )}
 
+      {order.status === "PICKED_UP" && order.deliveryVerificationCode ? (
+        <View style={[styles.sectionCard, styles.otpCard]}>
+          <Text style={styles.otpEyebrow}>Delivery verification</Text>
+          <Text style={styles.otpTitle}>Share this code with your rider</Text>
+          <Text style={styles.otpHint}>
+            When your order arrives, tell the delivery partner this code so they can complete the delivery.
+          </Text>
+          <View style={styles.otpCodeRow}>
+            {String(order.deliveryVerificationCode)
+              .padStart(4, "0")
+              .slice(0, 4)
+              .split("")
+              .map((digit, index) => (
+                <View key={`${digit}-${index}`} style={styles.otpDigitBox}>
+                  <Text style={styles.otpDigit}>{digit}</Text>
+                </View>
+              ))}
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Contact</Text>
         <View style={styles.contactCard}>
@@ -927,6 +948,51 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#EFE5DA"
+  },
+  otpCard: {
+    backgroundColor: "#FFF7F0",
+    borderColor: "#FFD7C3"
+  },
+  otpEyebrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#C2410C",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginBottom: 6
+  },
+  otpTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2C2018",
+    marginBottom: 6
+  },
+  otpHint: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#7B6D63",
+    marginBottom: 16
+  },
+  otpCodeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  otpDigitBox: {
+    flex: 1,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#FFB089",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  otpDigit: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#EA580C",
+    letterSpacing: 1
   },
   sectionTitle: {
     fontSize: 16,

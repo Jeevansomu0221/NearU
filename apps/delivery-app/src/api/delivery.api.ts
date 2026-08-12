@@ -240,12 +240,14 @@ export const markAsDelivered = (
   orderId: string,
   location?: LocationUpdate,
   collectedAmount?: number,
-  collectionMethod?: "CASH" | "UPI"
+  collectionMethod?: "CASH" | "UPI",
+  verificationCode?: string
 ): Promise<ApiResponse<DeliveryOrder>> => {
   const data: any = { 
     status: "DELIVERED",
     collectedAmount,
-    collectionMethod
+    collectionMethod,
+    verificationCode
   };
   if (location) {
     data.location = location;
