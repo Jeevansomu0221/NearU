@@ -269,6 +269,22 @@ const OrderSchema = new Schema({
     type: Date
   },
 
+  /** Minutes the partner estimated for food prep when accepting the order */
+  prepTimeMinutes: {
+    type: Number,
+    min: 5,
+    max: 120
+  },
+
+  /** When food is expected to be ready (set at accept from prepTimeMinutes) */
+  estimatedReadyAt: {
+    type: Date
+  },
+
+  acceptedAt: {
+    type: Date
+  },
+
   autoCancelledAt: {
     type: Date
   },

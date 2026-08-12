@@ -1185,11 +1185,21 @@ export const updateOrderPayment = async (req: AuthRequest, res: Response) => {
  * PARTNER - UPDATE ORDER STATUS
  * ================================
  */
+const MIN_PREP_TIME_MINUTES = 5;
+const MAX_PREP_TIME_MINUTES = 90;
+const DEFAULT_PREP_TIME_MINUTES = 10;
+
+const clampPrepTimeMinutes = (value: unknown, fallback: number) => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(MAX_PREP_TIME_MINUTES, Math.max(MIN_PREP_TIME_MINUTES, Math.round(parsed)));
+};
+
 export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
     const { orderId } = req.params;
-    const { status } = req.body;
+    const { status, prepTimeMinutes } = req.body;
 
     if (!user) {
       return errorResponse(res, "Unauthorized", 401);
@@ -1215,8 +1225,12 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, `Order cannot be updated because it is ${order.status}`, 400);
     }
 
+    const isAcceptingOrder =
+      (status === "ACCEPTED" || status === "PREPARING") &&
+      order.status === "CONFIRMED";
+
     // Check payment status before allowing partner to accept
-    if (status === "ACCEPTED") {
+    if (isAcceptingOrder) {
       // For COD orders, allow if payment status is PAYMENT_PENDING_DELIVERY
       // For online payments, require PAID status
       const isCODPending = order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "PAYMENT_PENDING_DELIVERY";
@@ -1241,6 +1255,16 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 
     const previousStatus = order.status;
     order.status = status;
+
+    if (isAcceptingOrder) {
+      const defaultPrep =
+        Number((partner as any)?.settings?.estimatedPrepTime) || DEFAULT_PREP_TIME_MINUTES;
+      const minutes = clampPrepTimeMinutes(prepTimeMinutes, defaultPrep);
+      order.prepTimeMinutes = minutes;
+      order.acceptedAt = new Date();
+      order.estimatedReadyAt = new Date(Date.now() + minutes * 60 * 1000);
+    }
+
     if (status === "READY" && previousStatus !== "READY") {
       const orderPartner = partner || await Partner.findById(order.partnerId);
       order.deliveryReadyAt = new Date();

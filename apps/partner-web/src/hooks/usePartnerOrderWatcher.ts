@@ -32,8 +32,10 @@ export function usePartnerOrderWatcher(enabled: boolean) {
   }, [enabled]);
 }
 
-export async function acceptOrder(orderId: string) {
-  return updatePartnerOrderStatus(orderId, "PREPARING");
+export async function acceptOrder(orderId: string, prepTimeMinutes?: number) {
+  return updatePartnerOrderStatus(orderId, "ACCEPTED", {
+    ...(typeof prepTimeMinutes === "number" ? { prepTimeMinutes } : {})
+  });
 }
 
 export async function rejectOrder(orderId: string) {

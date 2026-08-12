@@ -13,23 +13,33 @@ export default function SettingsPage() {
   useEffect(() => {
     getPartnerProfile().then((res) => {
       const data = (res.data || {}) as Record<string, unknown>;
-      setPrepTime(String(data.estimatedPrepTime || "20"));
-      setDeliveryMode((data.deliveryMode as "platform" | "self") || "platform");
+      const settings = (data.settings || {}) as Record<string, unknown>;
+      const notifications = (data.notifications || {}) as Record<string, unknown>;
+      setPrepTime(String(settings.estimatedPrepTime ?? data.estimatedPrepTime ?? "20"));
+      setDeliveryMode(
+        (settings.deliveryMode as "platform" | "self") ||
+          (data.deliveryMode as "platform" | "self") ||
+          "platform"
+      );
       setAlerts({
-        newOrder: data.newOrderAlerts !== false,
-        payment: data.paymentAlerts !== false,
-        promo: Boolean(data.promotionalNotifications)
+        newOrder: notifications.newOrderAlerts !== false && data.newOrderAlerts !== false,
+        payment: notifications.paymentAlerts !== false && data.paymentAlerts !== false,
+        promo: Boolean(notifications.promotionalNotifications ?? data.promotionalNotifications)
       });
     });
   }, []);
 
   const save = async () => {
     await updatePartnerProfile({
-      estimatedPrepTime: Number(prepTime),
-      deliveryMode,
-      newOrderAlerts: alerts.newOrder,
-      paymentAlerts: alerts.payment,
-      promotionalNotifications: alerts.promo
+      settings: {
+        estimatedPrepTime: Number(prepTime),
+        deliveryMode
+      },
+      notifications: {
+        newOrderAlerts: alerts.newOrder,
+        paymentAlerts: alerts.payment,
+        promotionalNotifications: alerts.promo
+      }
     });
   };
 

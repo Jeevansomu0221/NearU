@@ -210,6 +210,91 @@ body {
   box-shadow: none;
 }
 
+.btn.reject-outline {
+  background: #fff;
+  color: var(--danger);
+  border: 1.5px solid var(--danger);
+  box-shadow: none;
+}
+
+.btn.reject-outline:hover:not(:disabled) {
+  background: #fff5f5;
+  filter: none;
+  box-shadow: none;
+}
+
+.btn.accept-order {
+  background: linear-gradient(135deg, #12b76a, #039855);
+  flex: 1.4;
+}
+
+.prep-accept-panel {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--card) 92%, var(--primary-soft));
+}
+
+.prep-accept-label {
+  margin: 0 0 8px;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.prep-time-stepper {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card);
+  max-width: 280px;
+}
+
+.prep-time-stepper__btn {
+  width: 52px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.35rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+  padding: 10px 0;
+}
+
+.prep-time-stepper__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.prep-time-stepper__value {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  font-weight: 750;
+  font-size: 0.95rem;
+  color: var(--text);
+  padding: 10px 8px;
+}
+
+.prep-accept-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.prep-accept-actions .btn {
+  flex: 1;
+  min-width: 110px;
+}
+
 .field {
   display: flex;
   flex-direction: column;

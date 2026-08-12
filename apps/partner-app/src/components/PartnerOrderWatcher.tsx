@@ -23,18 +23,38 @@ type Props = {
 };
 
 const POLL_INTERVAL_MS = 10000;
+const DEFAULT_PREP_TIME_MINUTES = 10;
 const PARTNER_ORDER_ROUTES = new Set(["Dashboard", "Orders", "OrderDetails", "Menu", "Profile", "Settings", "WelcomeApproved"]);
 
 const isAwaitingPartnerAction = (status: string) => status === "CONFIRMED";
 
 export default function PartnerOrderWatcher({ navigationRef }: Props) {
   const [newOrderAlert, setNewOrderAlert] = useState<PartnerOrder | null>(null);
+  const [defaultPrepTimeMinutes, setDefaultPrepTimeMinutes] = useState(DEFAULT_PREP_TIME_MINUTES);
   const knownOrderIds = useRef<Set<string>>(new Set());
   const latestAlertId = useRef<string | null>(null);
 
   useEffect(() => {
     latestAlertId.current = newOrderAlert?._id || null;
   }, [newOrderAlert]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get("/partners/profile");
+        const estimated = Number(res.data?.data?.settings?.estimatedPrepTime);
+        if (!cancelled && Number.isFinite(estimated) && estimated > 0) {
+          setDefaultPrepTimeMinutes(Math.round(estimated));
+        }
+      } catch {
+        // Keep default.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isPartnerOrderRouteActive = useCallback(() => {
     if (!navigationRef?.isReady?.()) return false;
@@ -103,13 +123,18 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
   }, [navigationRef, newOrderAlert]);
 
   const updateOrderStatus = useCallback(
-    async (status: QuickOrderStatus) => {
+    async (status: QuickOrderStatus, prepTimeMinutes?: number) => {
       if (!newOrderAlert) return;
 
       const orderId = newOrderAlert._id;
 
       try {
-        const res = await api.post(`/orders/partner/${orderId}/status`, { status });
+        const payload: { status: QuickOrderStatus; prepTimeMinutes?: number } = { status };
+        if (status === "ACCEPTED" && typeof prepTimeMinutes === "number") {
+          payload.prepTimeMinutes = prepTimeMinutes;
+        }
+
+        const res = await api.post(`/orders/partner/${orderId}/status`, payload);
         const response = res.data as { success: boolean; message?: string; data?: PartnerOrder };
         if (!response.success) {
           Alert.alert("Order update failed", response.message || "Please try again.");
@@ -166,8 +191,9 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
       itemCount={itemCount}
       items={summaryItems}
       grandTotal={newOrderAlert?.grandTotal || 0}
+      defaultPrepTimeMinutes={defaultPrepTimeMinutes}
       onOpen={openOrder}
-      onAccept={() => updateOrderStatus("ACCEPTED")}
+      onAccept={(prepTimeMinutes) => updateOrderStatus("ACCEPTED", prepTimeMinutes)}
       onReject={() => {
         Alert.alert(
           "Reject order?",

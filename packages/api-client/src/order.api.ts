@@ -62,5 +62,10 @@ export const getPartnerOrderDetails = (orderId: string): Promise<ApiResponse<Ord
 
 export const updatePartnerOrderStatus = (
   orderId: string,
-  status: string
-): Promise<ApiResponse<Order>> => apiPost<Order>(`/orders/partner/${orderId}/status`, { status });
+  status: string,
+  options?: { prepTimeMinutes?: number }
+): Promise<ApiResponse<Order>> =>
+  apiPost<Order>(`/orders/partner/${orderId}/status`, {
+    status,
+    ...(typeof options?.prepTimeMinutes === "number" ? { prepTimeMinutes: options.prepTimeMinutes } : {})
+  });

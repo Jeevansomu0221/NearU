@@ -74,6 +74,13 @@ const ORDER_STATUS_RANK: Record<string, number> = {
 };
 
 const TERMINAL_ORDER_STATUSES = new Set(["CANCELLED", "REJECTED", "DELIVERED"]);
+const MIN_PREP_TIME_MINUTES = 5;
+const MAX_PREP_TIME_MINUTES = 90;
+const PREP_TIME_STEP_MINUTES = 5;
+const DEFAULT_PREP_TIME_MINUTES = 10;
+
+const clampPrepTimeMinutes = (value: number) =>
+  Math.min(MAX_PREP_TIME_MINUTES, Math.max(MIN_PREP_TIME_MINUTES, value));
 
 const applyStatusOverride = (nextOrder: Order, statusOverride: OrderStatusOverride | undefined, orderId: string) => {
   if (!statusOverride || nextOrder._id !== orderId) return nextOrder;
@@ -218,6 +225,25 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<OrderStatusUpdate | null>(null);
   const [localStatusOverride, setLocalStatusOverride] = useState<OrderStatusOverride | null>(null);
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState(DEFAULT_PREP_TIME_MINUTES);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get("/partners/profile");
+        const estimated = Number(res.data?.data?.settings?.estimatedPrepTime);
+        if (!cancelled && Number.isFinite(estimated) && estimated > 0) {
+          setPrepTimeMinutes(clampPrepTimeMinutes(Math.round(estimated)));
+        }
+      } catch {
+        // Keep default prep time if profile load fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadOrderDetails = useCallback(async (statusOverride?: OrderStatusOverride) => {
     try {
@@ -259,7 +285,11 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const performStatusUpdate = async (status: OrderStatusUpdate) => {
     try {
       setUpdating(true);
-      const res = await api.post(`/orders/partner/${orderId}/status`, { status });
+      const payload: { status: OrderStatusUpdate; prepTimeMinutes?: number } = { status };
+      if (status === "ACCEPTED") {
+        payload.prepTimeMinutes = prepTimeMinutes;
+      }
+      const res = await api.post(`/orders/partner/${orderId}/status`, payload);
       const response = res.data as ApiResponse<Order>;
 
       if (response.success) {
@@ -430,7 +460,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const getPendingStatusText = () => {
     switch (pendingStatus) {
       case "ACCEPTED":
-        return "The customer will see that your restaurant accepted the order.";
+        return `Food preparation time will be set to ${prepTimeMinutes} mins. The customer will see that your restaurant accepted the order.`;
       case "REJECTED":
         return "The order will be marked as cancelled. The customer will see that any online payment refund will be completed within today.";
       default:
@@ -482,25 +512,52 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       </View>
 
       <View style={[styles.actionsContainer, isDarkMode && styles.cardDark]}>
-        {showRejectButton && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.rejectButton]}
-            onPress={() => setPendingStatus("REJECTED")}
-            disabled={updating}
-          >
-            <Text style={styles.actionButtonText}>Reject Order</Text>
-          </TouchableOpacity>
-        )}
+        {showAcceptButton ? (
+          <View style={styles.prepTimeBlock}>
+            <Text style={[styles.prepTimeLabel, isDarkMode && styles.mutedTextDark]}>Set food preparation time</Text>
+            <View style={[styles.prepTimeStepper, isDarkMode && styles.prepTimeStepperDark]}>
+              <TouchableOpacity
+                style={styles.prepTimeStepButton}
+                onPress={() => setPrepTimeMinutes((value) => clampPrepTimeMinutes(value - PREP_TIME_STEP_MINUTES))}
+                disabled={updating || prepTimeMinutes <= MIN_PREP_TIME_MINUTES}
+                accessibilityLabel="Decrease preparation time"
+              >
+                <Text style={[styles.prepTimeStepText, isDarkMode && styles.textDark]}>−</Text>
+              </TouchableOpacity>
+              <Text style={[styles.prepTimeValue, isDarkMode && styles.textDark]}>{prepTimeMinutes} mins</Text>
+              <TouchableOpacity
+                style={styles.prepTimeStepButton}
+                onPress={() => setPrepTimeMinutes((value) => clampPrepTimeMinutes(value + PREP_TIME_STEP_MINUTES))}
+                disabled={updating || prepTimeMinutes >= MAX_PREP_TIME_MINUTES}
+                accessibilityLabel="Increase preparation time"
+              >
+                <Text style={[styles.prepTimeStepText, isDarkMode && styles.textDark]}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
-        {showAcceptButton && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.acceptButton]}
-            onPress={() => setPendingStatus("ACCEPTED")}
-            disabled={updating}
-          >
-            <Text style={styles.actionButtonText}>Accept Order</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.actionsRow}>
+          {showRejectButton && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.rejectButtonOutline, isDarkMode && styles.rejectButtonOutlineDark]}
+              onPress={() => setPendingStatus("REJECTED")}
+              disabled={updating}
+            >
+              <Text style={styles.rejectButtonOutlineText}>Reject</Text>
+            </TouchableOpacity>
+          )}
+
+          {showAcceptButton && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.acceptButton]}
+              onPress={() => setPendingStatus("ACCEPTED")}
+              disabled={updating}
+            >
+              <Text style={styles.actionButtonText}>Accept order</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {showPreparingSwipe ? (
@@ -738,11 +795,58 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   actionsContainer: {
-    flexDirection: "row",
     padding: 16,
     backgroundColor: partnerTheme.colors.card,
     borderBottomWidth: 1,
     borderBottomColor: partnerTheme.colors.borderSoft,
+    gap: 12
+  },
+  prepTimeBlock: {
+    gap: 8
+  },
+  prepTimeLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: partnerTheme.colors.muted
+  },
+  prepTimeStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: partnerTheme.colors.card
+  },
+  prepTimeStepperDark: {
+    borderColor: "#263449",
+    backgroundColor: "#111827"
+  },
+  prepTimeStepButton: {
+    width: 52,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  prepTimeStepText: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: partnerTheme.colors.primaryDark,
+    lineHeight: 26
+  },
+  prepTimeValue: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "700",
+    color: partnerTheme.colors.primaryDark,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    paddingVertical: 12
+  },
+  actionsRow: {
+    flexDirection: "row",
     gap: 8
   },
   actionButton: {
@@ -757,6 +861,19 @@ const styles = StyleSheet.create({
   },
   rejectButton: {
     backgroundColor: partnerTheme.colors.danger
+  },
+  rejectButtonOutline: {
+    backgroundColor: partnerTheme.colors.card,
+    borderWidth: 1.5,
+    borderColor: partnerTheme.colors.danger
+  },
+  rejectButtonOutlineDark: {
+    backgroundColor: "#111827"
+  },
+  rejectButtonOutlineText: {
+    color: partnerTheme.colors.danger,
+    fontSize: 14,
+    fontWeight: "700"
   },
   actionButtonText: {
     color: partnerTheme.colors.card,
