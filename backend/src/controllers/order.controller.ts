@@ -2502,30 +2502,33 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
       return successResponse(res, partnerOrder, "Order details retrieved");
     }
 
-    // Backfill verification code for in-transit orders created before this feature.
-    if (
-      isCustomer &&
-      ["ASSIGNED", "PICKED_UP"].includes(String(orderObj.status || "")) &&
-      !String(orderObj.deliveryVerificationCode || "").trim()
-    ) {
-      const code = generateDeliveryVerificationCode();
-      if (isBundledDeliveryOrder(order)) {
-        await Order.updateMany(
-          { deliveryBundleId: order.deliveryBundleId, status: { $in: ["ASSIGNED", "PICKED_UP"] } },
-          { $set: { deliveryVerificationCode: code } }
-        );
-      } else {
-        order.deliveryVerificationCode = code;
-        await order.save();
+    // Ensure customers always get a handoff code while the order is with a rider.
+    let customerVerificationCode = "";
+    if (isCustomer && ["ASSIGNED", "PICKED_UP"].includes(String(orderObj.status || ""))) {
+      customerVerificationCode = String(orderObj.deliveryVerificationCode || "").trim();
+      if (!customerVerificationCode) {
+        customerVerificationCode = generateDeliveryVerificationCode();
+        if (isBundledDeliveryOrder(order)) {
+          await Order.updateMany(
+            { deliveryBundleId: order.deliveryBundleId, status: { $in: ["ASSIGNED", "PICKED_UP"] } },
+            { $set: { deliveryVerificationCode: customerVerificationCode } }
+          );
+        } else {
+          await Order.updateOne(
+            { _id: order._id },
+            { $set: { deliveryVerificationCode: customerVerificationCode } }
+          );
+        }
       }
-      orderObj.deliveryVerificationCode = code;
+      orderObj.deliveryVerificationCode = customerVerificationCode;
     }
 
-    // Only the customer should see the handoff code (not riders/partners).
+    // Only the customer/admin should see the handoff code (not riders/partners).
     if (!isCustomer && !isAdmin) {
       delete orderObj.deliveryVerificationCode;
     } else if (orderObj.status === "DELIVERED" || orderObj.status === "CANCELLED" || orderObj.status === "REJECTED") {
       delete orderObj.deliveryVerificationCode;
+      customerVerificationCode = "";
     }
 
     // OTP bypass proof is for Vyaha support review (and rider confirmation), not customers/partners.
@@ -2534,12 +2537,16 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
     }
 
     const responseOrder = await ensureDeliveryLocationForResponse(orderObj);
-    // Keep verification code for customers; strip only for delivery-facing responses.
-    if (isCustomer && orderObj.deliveryVerificationCode) {
-      responseOrder.deliveryVerificationCode = orderObj.deliveryVerificationCode;
-    }
     const deliverySafeOrder =
       isDelivery || isDeliveryDetailsRoute ? sanitizeOrderForDelivery(responseOrder) : responseOrder;
+
+    // Force-attach after all transforms so nothing can strip it for customers.
+    if (customerVerificationCode) {
+      deliverySafeOrder.deliveryVerificationCode = customerVerificationCode;
+    } else {
+      delete deliverySafeOrder.deliveryVerificationCode;
+    }
+
     return successResponse(res, deliverySafeOrder, "Order details retrieved");
   } catch (err: any) {
     console.error("getOrderDetails error:", err);
