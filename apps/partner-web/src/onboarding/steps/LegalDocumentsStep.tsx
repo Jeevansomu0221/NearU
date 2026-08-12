@@ -1,8 +1,6 @@
 import { useState } from "react";
 import {
   skipPartnerPan,
-  verifyPartnerFssai,
-  verifyPartnerGst,
   verifyPartnerPan,
   type PartnerKycState
 } from "@vyaha/api-client";
@@ -99,7 +97,7 @@ export default function LegalDocumentsStep({
   uploadingKey,
   onUploadDocument
 }: Props) {
-  const [busy, setBusy] = useState<"" | "pan" | "fssai" | "gst">("");
+  const [busy, setBusy] = useState<"" | "pan">("");
   const [panConsent, setPanConsent] = useState(false);
   const [error, setError] = useState("");
 
@@ -139,49 +137,10 @@ export default function LegalDocumentsStep({
     }
   };
 
-  const handleVerifyFssai = async () => {
-    const fssai = fssaiNumber.replace(/\D/g, "");
-    if (!/^\d{14}$/.test(fssai)) {
-      setError("FSSAI number must be 14 digits.");
-      return;
-    }
-    setError("");
-    setBusy("fssai");
-    try {
-      const result = await verifyPartnerFssai({ fssaiNumber: fssai });
-      onKycChange(result.kyc);
-      onFssaiNumberChange(result.kyc.fssaiNumber || fssai);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "FSSAI could not be verified.");
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const handleVerifyGst = async () => {
-    const gstin = gstNumber.trim().toUpperCase();
-    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) {
-      setError("Enter a valid 15-character GSTIN.");
-      return;
-    }
-    setError("");
-    setBusy("gst");
-    try {
-      const result = await verifyPartnerGst({ gstNumber: gstin, businessName: restaurantName || ownerName });
-      onKycChange(result.kyc);
-      onGstNumberChange(result.kyc.gstNumber || gstin);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "GSTIN could not be verified.");
-    } finally {
-      setBusy("");
-    }
-  };
-
   return (
     <div className="onb-step">
       <p className="onb-hint">
-        We verify PAN, FSSAI and GST with Eko against government records. Only active licenses show a green badge.
-        Also upload the FSSAI and GST certificates for admin review.
+        PAN is verified instantly with Eko. Submit your FSSAI and GST details with certificates — Vyaha verifies them in the admin panel.
       </p>
       {error ? <p className="onb-error">{error}</p> : null}
 
@@ -222,7 +181,6 @@ export default function LegalDocumentsStep({
           onChange={(e) => onFssaiNumberChange(e.target.value.replace(/\D/g, "").slice(0, 14))}
           placeholder="14-digit FSSAI number"
           inputMode="numeric"
-          disabled={Boolean(kyc.fssaiVerified)}
         />
       </label>
       {kyc.fssaiVerified ? (
@@ -231,9 +189,7 @@ export default function LegalDocumentsStep({
           subtitle={[kyc.fssaiBusinessName, kyc.fssaiLicenseStatus].filter(Boolean).join(" · ") || undefined}
         />
       ) : (
-        <button type="button" className="btn" onClick={handleVerifyFssai} disabled={busy !== ""}>
-          {busy === "fssai" ? "Verifying…" : "Verify FSSAI"}
-        </button>
+        <p className="onb-hint">Submit your FSSAI license — Vyaha will verify it during admin review.</p>
       )}
       <DocUpload
         label="FSSAI certificate (image or PDF)"
@@ -264,7 +220,6 @@ export default function LegalDocumentsStep({
               value={gstNumber}
               onChange={(e) => onGstNumberChange(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15))}
               placeholder="15-character GSTIN"
-              disabled={Boolean(kyc.gstVerified)}
             />
           </label>
           {kyc.gstVerified ? (
@@ -273,9 +228,7 @@ export default function LegalDocumentsStep({
               subtitle={[kyc.gstLegalName, kyc.gstStatus].filter(Boolean).join(" · ") || undefined}
             />
           ) : (
-            <button type="button" className="btn" onClick={handleVerifyGst} disabled={busy !== ""}>
-              {busy === "gst" ? "Verifying…" : "Verify GSTIN"}
-            </button>
+            <p className="onb-hint">Submit your GSTIN — Vyaha will verify it during admin review.</p>
           )}
           <DocUpload
             label="GST certificate (image or PDF)"

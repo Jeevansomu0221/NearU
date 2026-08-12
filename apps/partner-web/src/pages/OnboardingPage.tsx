@@ -323,15 +323,12 @@ export default function OnboardingPage() {
         documents: {
           ...documents,
           panNumber: (kyc.panNumber || documents.panNumber).trim().toUpperCase(),
-          fssaiNumber: (kyc.fssaiNumber || documents.fssaiNumber).trim(),
+          fssaiNumber: documents.fssaiNumber.trim(),
           gstRegistered: documents.gstRegistered === "yes",
-          gstNumber: documents.gstRegistered === "yes" ? (kyc.gstNumber || documents.gstNumber).trim().toUpperCase() : "",
+          gstNumber: documents.gstRegistered === "yes" ? documents.gstNumber.trim().toUpperCase() : "",
           ownerPanUrl: kyc.panVerified ? "eko-pan-verified" : documents.panFrontUrl,
-          fssaiUrl: documents.fssaiUrl || (kyc.fssaiVerified ? "eko-fssai-verified" : ""),
-          gstUrl:
-            documents.gstRegistered === "yes"
-              ? documents.gstUrl || (kyc.gstVerified ? "eko-gst-verified" : "")
-              : "",
+          fssaiUrl: documents.fssaiUrl,
+          gstUrl: documents.gstRegistered === "yes" ? documents.gstUrl : "",
           bankAccountHolderName: shouldSubmitBankDetails ? (kyc.bankAccountHolderName || "").trim() : "",
           bankAccountNumber: shouldSubmitBankDetails ? (kyc.bankAccountNumber || "").trim() : "",
           bankIfsc: shouldSubmitBankDetails ? (kyc.bankIfsc || "").trim().toUpperCase() : "",

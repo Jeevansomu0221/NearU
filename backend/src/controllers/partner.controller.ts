@@ -59,10 +59,11 @@ const isGstRegisteredValue = (value: any) => value === true || value === "true" 
 const hasCompleteProfileDocuments = (documents: Record<string, any>) =>
   Boolean(
     firstString(documents?.fssaiNumber) &&
-      documents?.fssaiVerified &&
+      firstString(documents?.fssaiUrl) &&
       (documents?.panVerified || documents?.panSkipped) &&
       firstString(documents?.panNumber) &&
-      (!isGstRegisteredValue(documents?.gstRegistered) || (firstString(documents?.gstNumber) && documents?.gstVerified))
+      (!isGstRegisteredValue(documents?.gstRegistered) ||
+        (firstString(documents?.gstNumber) && firstString(documents?.gstUrl)))
   );
 
 const selfDeliveryEligibleStatuses = ["VERIFIED", "ACTIVE"];
@@ -580,21 +581,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     if (!fssaiRegex.test(normalizedDocs.fssaiNumber)) {
       return res.status(400).json({ success: false, message: "FSSAI number must be 14 digits" });
     }
-    if (!fssaiVerified) {
-      return res.status(400).json({ success: false, message: "Verify FSSAI license via Eko before submitting" });
-    }
-    const fssaiStatus = String(draftKyc?.fssaiLicenseStatus || "");
-    const fssaiBusinessName = String(draftKyc?.fssaiBusinessName || "");
-    if (
-      /\binactive\b|\bcancel|\bsuspend|\bexpir|\binvalid\b|\bdummy\b|\brevok|\bsurrender/i.test(fssaiStatus) ||
-      (fssaiStatus && !/\bactive\b|\bvalid\b|\blicensed\b/i.test(fssaiStatus)) ||
-      /^dummy$/i.test(fssaiBusinessName)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "FSSAI license must be active. Re-verify a valid FSSAI number before submitting"
-      });
-    }
     if (!String(normalizedDocs.fssaiUrl || "").trim() || normalizedDocs.fssaiUrl === "eko-fssai-verified") {
       return res.status(400).json({ success: false, message: "Upload your FSSAI certificate before submitting" });
     }
@@ -607,19 +593,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     if (normalizedDocs.gstRegistered) {
       if (!gstRegex.test(normalizedDocs.gstNumber)) {
         return res.status(400).json({ success: false, message: "GSTIN must be a valid 15-character GST number" });
-      }
-      if (!gstVerified) {
-        return res.status(400).json({ success: false, message: "Verify GSTIN via Eko before submitting" });
-      }
-      const gstStatus = String(draftKyc?.gstStatus || "");
-      if (
-        /\binactive\b|\bcancel|\binvalid\b|\bsuspend|\bdummy\b|\brevok|\bsurrender/i.test(gstStatus) ||
-        (gstStatus && !/\bactive\b|\bvalid\b/i.test(gstStatus))
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "GSTIN must be active. Re-verify a valid GSTIN before submitting"
-        });
       }
       if (!String(normalizedDocs.gstUrl || "").trim() || normalizedDocs.gstUrl === "eko-gst-verified") {
         return res.status(400).json({ success: false, message: "Upload your GST certificate before submitting" });
@@ -639,15 +612,20 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     }
 
     const hasMandatoryDocuments = Boolean(
-      fssaiVerified &&
+      fssaiRegex.test(normalizedDocs.fssaiNumber) &&
+      String(normalizedDocs.fssaiUrl || "").trim() &&
+      normalizedDocs.fssaiUrl !== "eko-fssai-verified" &&
       (panVerified || panSkipped) &&
-      (!normalizedDocs.gstRegistered || gstVerified)
+      (!normalizedDocs.gstRegistered ||
+        (gstRegex.test(normalizedDocs.gstNumber) &&
+          String(normalizedDocs.gstUrl || "").trim() &&
+          normalizedDocs.gstUrl !== "eko-gst-verified"))
     );
 
     if (!hasMandatoryDocuments) {
       return res.status(400).json({
         success: false,
-        message: "Verify PAN, FSSAI, and GST (if registered) via Eko before submitting"
+        message: "Complete PAN, FSSAI, and GST (if registered) before submitting"
       });
     }
 

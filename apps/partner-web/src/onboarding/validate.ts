@@ -31,11 +31,13 @@ export const validateStep = (
   if (step === 2 && !selectedCategory) return "Please select a business category";
 
   if (step === 3) {
-    if (!kyc.fssaiVerified) return "Verify FSSAI license via Eko";
+    if (!/^\d{14}$/.test(documents.fssaiNumber.replace(/\D/g, ""))) return "Enter a valid 14-digit FSSAI number";
     if (!documents.fssaiUrl.trim()) return "Upload your FSSAI certificate";
     if (!kyc.panVerified && !kyc.panSkipped) return "Verify PAN via Eko or skip for now";
     if (!documents.gstRegistered) return "Please select whether you are GST registered";
-    if (documents.gstRegistered === "yes" && !kyc.gstVerified) return "Verify GSTIN via Eko";
+    if (documents.gstRegistered === "yes" && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(documents.gstNumber.trim())) {
+      return "Enter a valid 15-character GSTIN";
+    }
     if (documents.gstRegistered === "yes" && !documents.gstUrl.trim()) return "Upload your GST certificate";
   }
 

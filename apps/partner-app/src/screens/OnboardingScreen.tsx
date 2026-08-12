@@ -752,11 +752,16 @@ export default function OnboardingScreen({ navigation }: any) {
     }
 
     if (step === 3) {
-      if (!nextKyc.fssaiVerified) return "Verify FSSAI license via Eko";
+      if (!/^\d{14}$/.test(nextDocuments.fssaiNumber.replace(/\D/g, ""))) return "Enter a valid 14-digit FSSAI number";
       if (!String(nextDocuments.fssaiUrl || "").trim()) return "Upload your FSSAI certificate";
       if (!nextKyc.panVerified && !nextKyc.panSkipped) return "Verify PAN via Eko or skip for now";
       if (!nextDocuments.gstRegistered) return "Please select whether you are GST registered";
-      if (nextDocuments.gstRegistered === "yes" && !nextKyc.gstVerified) return "Verify GSTIN via Eko";
+      if (
+        nextDocuments.gstRegistered === "yes" &&
+        !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(nextDocuments.gstNumber.trim().toUpperCase())
+      ) {
+        return "Enter a valid 15-character GSTIN";
+      }
       if (nextDocuments.gstRegistered === "yes" && !String(nextDocuments.gstUrl || "").trim()) {
         return "Upload your GST certificate";
       }
@@ -886,15 +891,12 @@ export default function OnboardingScreen({ navigation }: any) {
         documents: {
           ...docsToSubmit,
           panNumber: (kyc.panNumber || docsToSubmit.panNumber).trim().toUpperCase(),
-          fssaiNumber: (kyc.fssaiNumber || docsToSubmit.fssaiNumber).trim(),
+          fssaiNumber: docsToSubmit.fssaiNumber.trim(),
           gstRegistered: docsToSubmit.gstRegistered === "yes",
-          gstNumber: docsToSubmit.gstRegistered === "yes" ? (kyc.gstNumber || docsToSubmit.gstNumber).trim().toUpperCase() : "",
+          gstNumber: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstNumber.trim().toUpperCase() : "",
           ownerPanUrl: kyc.panVerified ? "eko-pan-verified" : docsToSubmit.panFrontUrl,
-          fssaiUrl: docsToSubmit.fssaiUrl || (kyc.fssaiVerified ? "eko-fssai-verified" : ""),
-          gstUrl:
-            docsToSubmit.gstRegistered === "yes"
-              ? docsToSubmit.gstUrl || (kyc.gstVerified ? "eko-gst-verified" : "")
-              : "",
+          fssaiUrl: docsToSubmit.fssaiUrl,
+          gstUrl: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstUrl : "",
           bankAccountHolderName: shouldSubmitBankDetails ? (kyc.bankAccountHolderName || "").trim() : "",
           bankAccountNumber: shouldSubmitBankDetails ? (kyc.bankAccountNumber || "").trim() : "",
           bankIfsc: shouldSubmitBankDetails ? (kyc.bankIfsc || "").trim().toUpperCase() : "",
@@ -1271,7 +1273,7 @@ export default function OnboardingScreen({ navigation }: any) {
         <View style={styles.hero}>
           <Text style={styles.heroEyebrow}>Vyaha Partner</Text>
           <Text style={styles.heroTitle}>Set up your shop in a few guided steps</Text>
-          <Text style={styles.heroSubtitle}>Verify PAN, FSSAI and GST with Eko, add shop details, then submit for Vyaha review.</Text>
+          <Text style={styles.heroSubtitle}>Verify PAN with Eko, submit FSSAI and GST for review, then send your shop for Vyaha approval.</Text>
         </View>
 
         <View style={styles.stepperCard}>

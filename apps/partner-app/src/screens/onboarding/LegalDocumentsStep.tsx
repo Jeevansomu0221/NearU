@@ -14,8 +14,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { partnerTheme } from "../../theme";
 import {
   skipPartnerPan,
-  verifyPartnerFssai,
-  verifyPartnerGst,
   verifyPartnerPan,
   type PartnerKycState
 } from "../../api/kyc.api";
@@ -59,6 +57,10 @@ const VerifiedBadge = ({ title, subtitle }: { title: string; subtitle?: string }
 
 const InvalidHint = () => (
   <Text style={styles.invalidHint}>Tap Verify — Eko checks government records and shows whether this is legitimate.</Text>
+);
+
+const PendingReviewHint = ({ label }: { label: string }) => (
+  <Text style={styles.pendingHint}>Submit your {label} — Vyaha will verify it during admin review.</Text>
 );
 
 const isPdfUri = (uri?: string) => (uri || "").split("?")[0].toLowerCase().endsWith(".pdf");
@@ -122,7 +124,7 @@ export default function LegalDocumentsStep({
   pickerBusy,
   onPickDocument
 }: Props) {
-  const [busy, setBusy] = useState<"" | "pan" | "fssai" | "gst">("");
+  const [busy, setBusy] = useState<"" | "pan">("");
   const [panConsent, setPanConsent] = useState(false);
 
   const handleVerifyPan = async () => {
@@ -159,47 +161,10 @@ export default function LegalDocumentsStep({
     }
   };
 
-  const handleVerifyFssai = async () => {
-    const fssai = fssaiNumber.replace(/\D/g, "");
-    if (!/^\d{14}$/.test(fssai)) {
-      Alert.alert("Invalid FSSAI", "FSSAI number must be 14 digits.");
-      return;
-    }
-    setBusy("fssai");
-    try {
-      const result = await verifyPartnerFssai({ fssaiNumber: fssai });
-      onKycChange(result.kyc);
-      onFssaiNumberChange(result.kyc.fssaiNumber || fssai);
-    } catch (error: any) {
-      Alert.alert("FSSAI not verified", error?.message || "This FSSAI license could not be verified.");
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const handleVerifyGst = async () => {
-    const gstin = gstNumber.trim().toUpperCase();
-    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) {
-      Alert.alert("Invalid GSTIN", "Enter a valid 15-character GSTIN.");
-      return;
-    }
-    setBusy("gst");
-    try {
-      const result = await verifyPartnerGst({ gstNumber: gstin, businessName: restaurantName || ownerName });
-      onKycChange(result.kyc);
-      onGstNumberChange(result.kyc.gstNumber || gstin);
-    } catch (error: any) {
-      Alert.alert("GSTIN not verified", error?.message || "This GSTIN could not be verified.");
-    } finally {
-      setBusy("");
-    }
-  };
-
   return (
     <View>
       <Text style={styles.hint}>
-        We verify PAN, FSSAI and GST with Eko against government records. Only active licenses get a green badge.
-        Upload FSSAI and GST certificates for admin review.
+        PAN is verified instantly with Eko. Submit your FSSAI and GST details with certificates — Vyaha verifies them in the admin panel.
       </Text>
 
       <Text style={styles.sectionTitle}>PAN</Text>
@@ -238,8 +203,7 @@ export default function LegalDocumentsStep({
         keyboardType="number-pad"
         value={fssaiNumber}
         onChangeText={(v) => onFssaiNumberChange(v.replace(/\D/g, "").slice(0, 14))}
-        style={[styles.input, kyc.fssaiVerified && styles.inputLocked]}
-        editable={!kyc.fssaiVerified}
+        style={styles.input}
       />
       {kyc.fssaiVerified ? (
         <VerifiedBadge
@@ -247,12 +211,7 @@ export default function LegalDocumentsStep({
           subtitle={[kyc.fssaiBusinessName, kyc.fssaiLicenseStatus].filter(Boolean).join(" · ") || undefined}
         />
       ) : (
-        <>
-          <InvalidHint />
-          <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyFssai} disabled={busy !== ""}>
-            {busy === "fssai" ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify FSSAI</Text>}
-          </TouchableOpacity>
-        </>
+        <PendingReviewHint label="FSSAI license" />
       )}
       <DocUpload
         title="FSSAI certificate"
@@ -272,7 +231,6 @@ export default function LegalDocumentsStep({
               key={value}
               style={[styles.chip, selected && styles.chipSelected]}
               onPress={() => onGstRegisteredChange(value)}
-              disabled={kyc.gstVerified && value === "yes"}
             >
               <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
                 {value === "yes" ? "Yes, GST registered" : "No GST registration"}
@@ -290,8 +248,7 @@ export default function LegalDocumentsStep({
             autoCapitalize="characters"
             value={gstNumber}
             onChangeText={(v) => onGstNumberChange(v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15))}
-            style={[styles.input, kyc.gstVerified && styles.inputLocked]}
-            editable={!kyc.gstVerified}
+            style={styles.input}
           />
           {kyc.gstVerified ? (
             <VerifiedBadge
@@ -299,12 +256,7 @@ export default function LegalDocumentsStep({
               subtitle={[kyc.gstLegalName, kyc.gstStatus].filter(Boolean).join(" · ") || undefined}
             />
           ) : (
-            <>
-              <InvalidHint />
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyGst} disabled={busy !== ""}>
-                {busy === "gst" ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify GSTIN</Text>}
-              </TouchableOpacity>
-            </>
+            <PendingReviewHint label="GSTIN" />
           )}
           <DocUpload
             title="GST certificate"
@@ -368,6 +320,7 @@ const styles = StyleSheet.create({
   verifiedTitle: { color: "#216E39", fontWeight: "800", fontSize: 14 },
   verifiedSubtitle: { marginTop: 4, color: "#216E39", fontSize: 12, lineHeight: 17 },
   invalidHint: { marginBottom: 10, fontSize: 12, lineHeight: 17, color: partnerTheme.colors.muted },
+  pendingHint: { marginBottom: 12, fontSize: 12, lineHeight: 17, color: partnerTheme.colors.mutedDark },
   chipRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
   chip: {
     paddingHorizontal: 14,
