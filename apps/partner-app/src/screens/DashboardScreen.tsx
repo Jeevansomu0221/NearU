@@ -220,7 +220,7 @@ export default function DashboardScreen({ navigation }: any) {
             onValueChange={toggleShopStatus}
             disabled={togglingShop}
             trackColor={{ false: "#FDA4AF", true: "#A7F3D0" }}
-            thumbColor={shopOpen ? "#10B981" : "#F43F5E"}
+            thumbColor={shopOpen ? "#34D399" : "#F43F5E"}
             // Banner handles taps; keep Switch visual only to avoid ScrollView eating the first press.
             pointerEvents="none"
           />
@@ -281,7 +281,7 @@ export default function DashboardScreen({ navigation }: any) {
 
             <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Menu")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#FFF6ED" }]}>
-                <Ionicons name="restaurant" size={20} color="#EA580C" />
+                <Ionicons name="restaurant" size={20} color="#FB923C" />
               </View>
               <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Menu</Text>
               <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Items & pricing</Text>
@@ -291,7 +291,7 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={[styles.gridContainer, { marginTop: 10 }]}>
             <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Profile")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#ECFDF5" }]}>
-                <Ionicons name="storefront" size={20} color="#10B981" />
+                <Ionicons name="storefront" size={20} color="#34D399" />
               </View>
               <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Profile</Text>
               <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Business & details</Text>
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#D9E6F7",
-    shadowColor: "#143A66",
+    shadowColor: "#2A5580",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   shopNameText: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#143A66",
+    color: "#2A5580",
     marginTop: 2
   },
   statusBanner: {
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
-    shadowColor: "#143A66",
+    shadowColor: "#2A5580",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 10,
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
     borderRadius: 5
   },
   pulseDotOpen: {
-    backgroundColor: "#10B981"
+    backgroundColor: "#34D399"
   },
   pulseDotClosed: {
     backgroundColor: "#EF4444"
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9E6F7",
     padding: 18,
-    shadowColor: "#143A66",
+    shadowColor: "#2A5580",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
   metricsValue: {
     fontSize: 30,
     fontWeight: "900",
-    color: "#143A66",
+    color: "#2A5580",
     marginTop: 4
   },
   earningsIconContainer: {
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 15,
     fontWeight: "900",
-    color: "#143A66"
+    color: "#2A5580"
   },
   divider: {
     height: 1,
@@ -633,10 +633,10 @@ const styles = StyleSheet.create({
   subStatValue: {
     fontSize: 17,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   subStatPendingHighlight: {
-    color: "#EA580C"
+    color: "#FB923C"
   },
   section: {
     marginHorizontal: 16,
@@ -651,7 +651,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#143A66",
+    color: "#2A5580",
     marginBottom: 10
   },
   linkText: {
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9E6F7",
     padding: 16,
-    shadowColor: "#143A66",
+    shadowColor: "#2A5580",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
   gridCardTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   gridCardDesc: {
     fontSize: 11,
@@ -702,7 +702,7 @@ const styles = StyleSheet.create({
     borderColor: "#D9E6F7",
     paddingHorizontal: 16,
     paddingVertical: 4,
-    shadowColor: "#143A66",
+    shadowColor: "#2A5580",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -731,9 +731,9 @@ const styles = StyleSheet.create({
   snapshotValue: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   statusBadgeText: {
-    color: "#10B981"
+    color: "#34D399"
   }
 });

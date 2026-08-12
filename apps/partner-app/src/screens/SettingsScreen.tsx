@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   loadingText: { marginTop: 10, color: "#5E7897", fontSize: 14 },
-  title: { fontSize: 24, fontWeight: "800", color: "#143A66", marginBottom: 14 },
+  title: { fontSize: 24, fontWeight: "800", color: "#2A5580", marginBottom: 14 },
   heroCard: {
     backgroundColor: "#1D4E89",
     borderRadius: 24,
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   },
   sectionIconCircleDark: { backgroundColor: "#1D2A3D" },
   sectionCopy: { flex: 1 },
-  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#143A66" },
+  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#2A5580" },
   sectionTitleStandalone: { marginBottom: 10 },
   sectionHeaderTitle: { flex: 1, marginRight: 12 },
   sectionSubtitle: { marginTop: 3, fontSize: 12, lineHeight: 16, color: "#5E7897" },
@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0B1220",
     borderColor: "#263449"
   },
-  selfDeliveryTitle: { fontSize: 13, color: "#143A66", fontWeight: "800", marginBottom: 4 },
+  selfDeliveryTitle: { fontSize: 13, color: "#2A5580", fontWeight: "800", marginBottom: 4 },
   riderRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
   riderInputWrap: { flex: 1 },
   riderInput: {
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 11
   },
-  removeRiderText: { color: "#B42318", fontSize: 12, fontWeight: "800" },
+  removeRiderText: { color: "#F87171", fontSize: 12, fontWeight: "800" },
   addRiderButton: {
     borderRadius: 12,
     borderWidth: 1,
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E6EEF9"
   },
   rowDark: { borderBottomColor: "#263449" },
-  rowText: { fontSize: 14, fontWeight: "700", color: "#143A66" },
+  rowText: { fontSize: 14, fontWeight: "700", color: "#2A5580" },
   logoutText: { fontSize: 14, fontWeight: "800", color: "#60A5FA" },
-  deleteText: { fontSize: 14, fontWeight: "800", color: "#B42318" }
+  deleteText: { fontSize: 14, fontWeight: "800", color: "#F87171" }
 });

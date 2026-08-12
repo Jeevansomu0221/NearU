@@ -159,7 +159,7 @@ export default function OrdersScreen({ navigation }: any) {
       case "DELIVERED":
         return { bg: "#EFE8E1", text: "#6B5E55" };
       default:
-        return { bg: "#FDE7E7", text: "#B42318" };
+        return { bg: "#FDE7E7", text: "#F87171" };
     }
   };
 

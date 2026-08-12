@@ -10,7 +10,7 @@ type Props = {
 export default function NotificationButton({ count = 0, onPress }: Props) {
   return (
     <TouchableOpacity style={styles.button} onPress={onPress} activeOpacity={0.8}>
-      <Ionicons name="notifications-outline" size={22} color="#143A66" />
+      <Ionicons name="notifications-outline" size={22} color="#2A5580" />
       {count > 0 ? (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{count > 9 ? "9+" : count}</Text>

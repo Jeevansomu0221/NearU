@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   hero: {
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: "#B42318",
+    backgroundColor: "#F87171",
     borderRadius: 28,
     padding: 22
   },

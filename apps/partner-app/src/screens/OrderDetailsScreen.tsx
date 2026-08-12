@@ -338,25 +338,25 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "PENDING":
-        return "#FF9800";
+        return "#FBBF24";
       case "CONFIRMED":
-        return "#2196F3";
+        return "#60A5FA";
       case "ACCEPTED":
-        return "#00BCD4";
+        return "#22D3EE";
       case "PREPARING":
-        return "#FF5722";
+        return "#FB923C";
       case "READY":
-        return "#9C27B0";
+        return "#C084FC";
       case "ASSIGNED":
-        return "#FF9800";
+        return "#FBBF24";
       case "PICKED_UP":
-        return "#673AB7";
+        return "#A78BFA";
       case "DELIVERED":
-        return "#4CAF50";
+        return "#34D399";
       case "CANCELLED":
-        return "#F44336";
+        return "#F87171";
       case "REJECTED":
-        return "#795548";
+        return "#A8A29E";
       default:
         return partnerTheme.colors.muted;
     }
@@ -642,10 +642,10 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
                 {
                   backgroundColor:
                     order.paymentStatus === "PAID"
-                      ? "#4CAF50"
+                      ? "#34D399"
                       : order.paymentStatus === "PAYMENT_PENDING_DELIVERY" || order.paymentStatus === "PENDING"
-                        ? "#FF9800"
-                        : "#F44336"
+                        ? "#FBBF24"
+                        : "#F87171"
                 }
               ]}
             >

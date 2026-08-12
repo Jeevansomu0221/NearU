@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: partnerTheme.colors.primary },
   chipText: { fontSize: 13, fontWeight: "700", color: partnerTheme.colors.mutedDark },
   chipTextSelected: { color: "#fff" },
-  removeText: { color: "#B42318", fontWeight: "700", fontSize: 13 },
+  removeText: { color: "#F87171", fontWeight: "700", fontSize: 13 },
   addBtn: {
     borderRadius: 16,
     borderWidth: 1,

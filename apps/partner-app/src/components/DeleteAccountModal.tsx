@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   inputDark: { borderColor: "#374151", backgroundColor: "#1F2937", color: "#F9FAFB" },
   footer: { marginTop: 18, paddingTop: 4 },
   submitBtn: {
-    backgroundColor: "#B42318",
+    backgroundColor: "#F87171",
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",

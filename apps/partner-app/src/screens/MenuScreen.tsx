@@ -900,7 +900,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   subtitle: {
     marginTop: 2,
@@ -950,7 +950,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 21,
     fontWeight: "900",
-    color: "#143A66"
+    color: "#2A5580"
   },
   statLabel: {
     marginTop: 2,
@@ -992,8 +992,8 @@ const styles = StyleSheet.create({
     marginRight: 8
   },
   filterChipSelected: {
-    backgroundColor: "#143A66",
-    borderColor: "#143A66"
+    backgroundColor: "#2A5580",
+    borderColor: "#2A5580"
   },
   filterChipText: {
     fontSize: 12,
@@ -1043,7 +1043,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   itemPrice: {
     fontSize: 14,
@@ -1104,7 +1104,7 @@ const styles = StyleSheet.create({
     minWidth: 88
   },
   unavailablePillText: {
-    color: "#B42318"
+    color: "#F87171"
   },
   itemFooter: {
     flexDirection: "row",
@@ -1134,7 +1134,7 @@ const styles = StyleSheet.create({
   deleteText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#B42318"
+    color: "#F87171"
   },
   emptyState: {
     flex: 1,
@@ -1145,7 +1145,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#143A66",
+    color: "#2A5580",
     marginBottom: 8
   },
   emptySubtext: {
@@ -1191,7 +1191,7 @@ const styles = StyleSheet.create({
     borderColor: "#D9E6F7",
     overflow: "hidden",
     flexDirection: "column",
-    shadowColor: "#143A66",
+    shadowColor: "#2A5580",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
@@ -1245,7 +1245,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   modalSubtitle: {
     marginTop: 4,
@@ -1274,7 +1274,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#143A66",
+    color: "#2A5580",
     marginBottom: 6
   },
   imagePicker: {
@@ -1311,7 +1311,7 @@ const styles = StyleSheet.create({
   imagePlaceholderText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   imagePlaceholderSubtext: {
     fontSize: 12,
@@ -1448,7 +1448,7 @@ const styles = StyleSheet.create({
   },
   formSwitchLabel: {
     fontSize: 14,
-    color: "#143A66",
+    color: "#2A5580",
     fontWeight: "700"
   },
   formSwitchHint: {
@@ -1505,7 +1505,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#60A5FA",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#143A66",
+    shadowColor: "#2A5580",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2,
     shadowRadius: 16,

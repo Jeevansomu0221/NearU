@@ -892,7 +892,7 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={[styles.kycFieldLabel, isDarkMode && styles.textDark]}>{label}</Text>
           {showVerified ? (
             <View style={[styles.docBadge, styles.docBadgeVerified]}>
-              <Ionicons name="checkmark-circle" size={12} color="#0E8A4A" style={{ marginRight: 4 }} />
+              <Ionicons name="checkmark-circle" size={12} color="#34D399" style={{ marginRight: 4 }} />
               <Text style={[styles.docBadgeText, styles.docBadgeVerifiedText]}>Verified</Text>
             </View>
           ) : (
@@ -1007,7 +1007,7 @@ export default function ProfileScreen({ navigation }: any) {
             <Text style={[styles.documentTitle, isDarkMode && styles.textDark]}>{doc.title}</Text>
             <View style={[styles.docBadge, badgeStyle]}>
               {badgeLabel === "Verified" ? (
-                <Ionicons name="checkmark-circle" size={12} color="#0E8A4A" style={{ marginRight: 4 }} />
+                <Ionicons name="checkmark-circle" size={12} color="#34D399" style={{ marginRight: 4 }} />
               ) : null}
               <Text style={[styles.docBadgeText, badgeTextStyle]}>{badgeLabel}</Text>
             </View>
@@ -1428,7 +1428,7 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         ) : savedShopLocation ? (
           <View style={[styles.locationPinCard, isDarkMode && styles.surfaceDark]}>
-            <Ionicons name="checkmark-circle" size={18} color="#0E8A4A" />
+            <Ionicons name="checkmark-circle" size={18} color="#34D399" />
             <View style={styles.locationPinCopy}>
               <Text style={[styles.locationPinTitle, isDarkMode && styles.textDark]}>Location saved</Text>
             </View>
@@ -1549,7 +1549,7 @@ export default function ProfileScreen({ navigation }: any) {
                 <Ionicons
                   name={isClosed ? "close-circle" : "checkmark-circle"}
                   size={14}
-                  color={isClosed ? (isDarkMode ? "#FCA5A5" : "#B42318") : (isDarkMode ? "#6EE7A8" : "#0E8A4A")}
+                  color={isClosed ? (isDarkMode ? "#FCA5A5" : "#F87171") : (isDarkMode ? "#6EE7A8" : "#34D399")}
                   style={styles.dayPillIcon}
                 />
                 <Text style={[styles.dayPillText, isDarkMode && !isClosed && styles.dayPillTextDark, isClosed && styles.dayPillTextClosed]}>
@@ -1660,7 +1660,7 @@ export default function ProfileScreen({ navigation }: any) {
             <View style={styles.payoutTitleRow}>
               <Text style={[styles.payoutSummaryTitle, isDarkMode && styles.textDark]}>{bankDetails.accountHolderName || "Payout account"}</Text>
               <View style={styles.currentPayoutBadge}>
-                <Ionicons name="checkmark-circle" size={13} color="#0E8A4A" />
+                <Ionicons name="checkmark-circle" size={13} color="#34D399" />
                 <Text style={styles.currentPayoutBadgeText}>Current payout</Text>
               </View>
             </View>
@@ -2012,7 +2012,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   editActionButton: {
     borderRadius: 999,
@@ -2042,7 +2042,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontSize: 14,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   readOnlyField: {
     backgroundColor: "#F9FCFF",
@@ -2093,7 +2093,7 @@ const styles = StyleSheet.create({
   readOnlyValue: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#143A66"
+    color: "#2A5580"
   },
   label: {
     fontSize: 12,
@@ -2146,7 +2146,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 20,
     fontWeight: "900",
-    color: "#143A66"
+    color: "#2A5580"
   },
   timeCardValueSelected: {
     color: "#1D4E89"
@@ -2177,7 +2177,7 @@ const styles = StyleSheet.create({
   timePickerTitle: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#143A66"
+    color: "#2A5580"
   },
   timePickerValue: {
     fontSize: 13,
@@ -2260,7 +2260,7 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#143A66"
+    color: "#2A5580"
   },
   helperText: {
     marginTop: 2,
@@ -2337,7 +2337,7 @@ const styles = StyleSheet.create({
   locationPinTitle: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   locationPinSubtitle: {
     marginTop: 4,
@@ -2384,7 +2384,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FDECEC"
   },
   dangerText: {
-    color: "#B42318"
+    color: "#F87171"
   },
   detailBlock: {
     backgroundColor: "#F9FCFF",
@@ -2401,7 +2401,7 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     fontSize: 14,
-    color: "#143A66",
+    color: "#2A5580",
     fontWeight: "700"
   },
   lockedNotice: {
@@ -2421,7 +2421,7 @@ const styles = StyleSheet.create({
   lockedNoticeTitle: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   lockedNoticeText: {
     marginTop: 3,
@@ -2441,7 +2441,7 @@ const styles = StyleSheet.create({
   imageSlotLabel: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   linkText: {
     fontSize: 13,
@@ -2509,7 +2509,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4
   },
   removePhotoText: {
-    color: "#B42318",
+    color: "#F87171",
     fontSize: 11,
     fontWeight: "800"
   },
@@ -2535,10 +2535,10 @@ const styles = StyleSheet.create({
     marginRight: 6
   },
   holidayLegendDotOpen: {
-    backgroundColor: "#0E8A4A"
+    backgroundColor: "#34D399"
   },
   holidayLegendDotClosed: {
-    backgroundColor: "#B42318"
+    backgroundColor: "#F87171"
   },
   holidayLegendText: {
     fontSize: 11,
@@ -2584,14 +2584,14 @@ const styles = StyleSheet.create({
   dayPillText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#143A66",
+    color: "#2A5580",
     marginRight: 6
   },
   dayPillTextDark: {
     color: "#CFE0F5"
   },
   dayPillTextClosed: {
-    color: "#B42318"
+    color: "#F87171"
   },
   dayPillStatus: {
     fontSize: 10,
@@ -2600,10 +2600,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3
   },
   dayPillStatusOpen: {
-    color: "#0E8A4A"
+    color: "#34D399"
   },
   dayPillStatusClosed: {
-    color: "#B42318"
+    color: "#F87171"
   },
   choicePill: {
     paddingHorizontal: 14,
@@ -2641,7 +2641,7 @@ const styles = StyleSheet.create({
   documentTitle: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#143A66",
+    color: "#2A5580",
     marginBottom: 3
   },
   documentStatus: {
@@ -2698,7 +2698,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E6F7EE"
   },
   docBadgeVerifiedText: {
-    color: "#0E8A4A"
+    color: "#34D399"
   },
   docBadgeReupload: {
     backgroundColor: "#FCE3DE"
@@ -2779,7 +2779,7 @@ const styles = StyleSheet.create({
   kycFieldLabel: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#143A66",
+    color: "#2A5580",
     textTransform: "uppercase",
     letterSpacing: 0.4
   },
@@ -2854,7 +2854,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   statLabel: {
     marginTop: 2,
@@ -2885,7 +2885,7 @@ const styles = StyleSheet.create({
   linkRowText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#143A66"
+    color: "#2A5580"
   },
   payoutSummaryCard: {
     flexDirection: "row",
@@ -2920,7 +2920,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "800",
-    color: "#143A66",
+    color: "#2A5580",
     marginBottom: 0
   },
   currentPayoutBadge: {
@@ -2933,7 +2933,7 @@ const styles = StyleSheet.create({
   },
   currentPayoutBadgeText: {
     marginLeft: 4,
-    color: "#0E8A4A",
+    color: "#34D399",
     fontSize: 10,
     fontWeight: "900"
   },

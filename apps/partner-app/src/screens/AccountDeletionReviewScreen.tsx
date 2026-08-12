@@ -252,7 +252,7 @@ export default function AccountDeletionReviewScreen({ navigation, route }: Props
   const renderRejected = (item: AccountDeletionRequest) => (
     <View style={styles.stateCard}>
       <View style={[styles.iconCircle, styles.iconRejected]}>
-        <Ionicons name="close-circle" size={30} color="#B42318" />
+        <Ionicons name="close-circle" size={30} color="#F87171" />
       </View>
       <Text style={styles.stateTitle}>Request not approved</Text>
       <Text style={styles.stateText}>
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   rejectLabel: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#B42318",
+    color: "#F87171",
     textTransform: "uppercase",
     letterSpacing: 0.4
   },

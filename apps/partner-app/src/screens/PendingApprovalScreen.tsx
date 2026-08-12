@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 30,
     fontWeight: "800",
-    color: "#143A66"
+    color: "#2A5580"
   },
   heroSubtitle: {
     marginTop: 8,
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
     fontSize: 12,
     fontWeight: "700",
-    color: "#143A66"
+    color: "#2A5580"
   },
   primaryButton: {
     backgroundColor: "#60A5FA",

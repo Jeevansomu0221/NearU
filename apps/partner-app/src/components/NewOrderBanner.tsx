@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   itemChipText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#143A66"
+    color: "#2A5580"
   },
   prepTimeBlock: {
     marginTop: 12,
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     borderColor: "#FFD1D1"
   },
   rejectButtonText: {
-    color: "#B42318",
+    color: "#F87171",
     fontSize: 12,
     fontWeight: "900"
   },

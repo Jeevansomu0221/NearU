@@ -98,7 +98,7 @@ export default function PaymentHistoryScreen({ route }: Props) {
   const renderPayout = (payout: PartnerPayoutHistoryItem) => (
     <View style={styles.historyRow} key={payout._id}>
       <View style={[styles.historyIcon, styles.paidIcon]}>
-        <Ionicons name="checkmark-done-outline" size={18} color="#0E8A4A" />
+        <Ionicons name="checkmark-done-outline" size={18} color="#34D399" />
       </View>
       <View style={styles.historyCopy}>
         <Text style={styles.historyTitle}>Paid to bank</Text>
