@@ -70,7 +70,7 @@ const sanitizeOrderForDelivery = (orderObj: any) => {
 };
 
 const RESTAURANT_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
-const DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
+const DELIVERY_ACCEPT_TIMEOUT_MS = 15 * 60 * 1000;
 const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const DELIVERY_FIRST_KM_FEE = 15;
 const DELIVERY_ADDITIONAL_KM_FEE = 10;
