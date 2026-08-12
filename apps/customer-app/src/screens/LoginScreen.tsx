@@ -118,7 +118,21 @@ export default function LoginScreen({ navigation }: Props) {
         bounces={false}
       >
         <Image source={require('../../assets/vyaha-wordmark.png')} style={styles.logo} resizeMode="contain" />
-        <Text style={[styles.subtitle, keyboardOpen && styles.subtitleKeyboard]}>Good food near you</Text>
+        <View style={[styles.taglineBlock, keyboardOpen && styles.taglineBlockKeyboard]}>
+          <Text
+            style={styles.subtitle}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.72}
+          >
+            <Text style={styles.wordZero}>zero</Text>
+            <Text style={styles.subtitle}> </Text>
+            <Text style={styles.wordPlatform}>platform</Text>
+            <Text style={styles.subtitle}> </Text>
+            <Text style={styles.wordFee}>fee</Text>
+          </Text>
+          <Text style={styles.subCaption}>We care about every single rupee!!</Text>
+        </View>
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Phone Number</Text>
@@ -192,15 +206,41 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 8,
   },
+  taglineBlock: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    width: '100%',
+    marginBottom: 60,
+    paddingHorizontal: 4,
+  },
+  taglineBlockKeyboard: {
+    marginBottom: 28,
+  },
   subtitle: {
-    fontSize: 18,
+    fontSize: 28,
+    textAlign: 'center',
+    fontFamily: 'CaveatBrush_400Regular',
+    letterSpacing: 0.3,
+    marginBottom: 6,
+    width: '100%',
+  },
+  wordZero: {
+    color: '#F81830', // matches "V" in logo
+    fontFamily: 'CaveatBrush_400Regular',
+  },
+  wordPlatform: {
+    color: '#184098', // matches "ya" in logo
+    fontFamily: 'CaveatBrush_400Regular',
+  },
+  wordFee: {
+    color: '#00C040', // matches "ha" in logo
+    fontFamily: 'CaveatBrush_400Regular',
+  },
+  subCaption: {
+    fontSize: 14,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 60,
     fontStyle: 'italic',
-  },
-  subtitleKeyboard: {
-    marginBottom: 28,
   },
   inputContainer: {
     marginBottom: 32,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from "react";
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ import {
 } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import DeliveryJobMap from "../components/DeliveryJobMap";
+import SwipeConfirm from "../components/SwipeConfirm";
 import type { MapPin } from "../utils/mapCoordinates";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
 import {
@@ -113,6 +114,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   /** Local step confirmations before calling pickup/delivery APIs. */
   const [reachedPickup, setReachedPickup] = useState(false);
   const [reachedCustomer, setReachedCustomer] = useState(false);
+  const [receiptVisible, setReceiptVisible] = useState(false);
+  const [mapAreaHeight, setMapAreaHeight] = useState(280);
   const codQrDisplayUri = useMemo(() => getCodQrDisplayUri(codUpiSession), [codUpiSession]);
   const showRazorpayPoster = isRazorpayPosterQr(codUpiSession);
   const qrPulse = useRef(new Animated.Value(0)).current;
@@ -160,6 +163,19 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   useEffect(() => {
     loadJobDetails();
   }, []);
+
+  useLayoutEffect(() => {
+    if (!job) return;
+
+    let title = "Job Details";
+    if (job.status === "ASSIGNED") {
+      title = reachedPickup ? "Mark picked up" : "Go to pickup";
+    } else if (job.status === "PICKED_UP") {
+      title = reachedCustomer ? "Deliver order" : "Go to customer";
+    }
+
+    navigation.setOptions({ title });
+  }, [job?.status, reachedPickup, reachedCustomer, navigation]);
 
   useEffect(() => {
     if (!job?.status) return;
@@ -428,8 +444,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         setJob((current) => response.data || (current ? { ...current, status: "ASSIGNED" } : null));
         setStatusModal({
           title: "Delivery accepted",
-          message: "You can now head to the restaurant and mark the order picked up once collected.",
-          actionLabel: "Start Pickup",
+          message: "Head to the restaurant. Swipe when you reach pickup, then mark the order as picked up.",
+          actionLabel: "Go to pickup",
           onAction: () => {
             setStatusModal(null);
           }
@@ -468,8 +484,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         setReachedCustomer(false);
         setStatusModal({
           title: "Order picked up",
-          message: "Map is now set to the customer drop location. Head there and mark when you arrive.",
-          actionLabel: "Continue to drop",
+          message: "Head to the customer. Swipe when you reach their location to view order details and complete delivery.",
+          actionLabel: "Go to customer",
           onAction: () => {
             setStatusModal(null);
           }
@@ -719,262 +735,484 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     });
   }
 
-  const statusHeadline = isPickupPhase
-    ? reachedPickup
-      ? "At pickup — mark order picked"
-      : "Head to restaurant"
-    : job.status === "PICKED_UP"
-      ? reachedCustomer
-        ? "At customer — complete delivery"
-        : "Out for delivery"
-      : job.status.replace("_", " ");
-  const statusSubtitle = isPickupPhase
+  const stopName = isPickupPhase
     ? activePickupStop?.partnerId?.restaurantName ||
       activePickupStop?.partnerId?.shopName ||
       "Restaurant"
     : job.customerId?.name || "Customer";
-  const statusAddress = isPickupPhase
+  const stopAddress = isPickupPhase
     ? formatAddress(activePickupStop?.partnerId?.address)
     : job.deliveryAddress;
-  const statusPhone = isPickupPhase ? activePickupStop?.partnerId?.phone : job.customerId?.phone;
-  const statusCallLabel = isPickupPhase ? "Call Restaurant" : "Call Customer";
-
+  const stopPhone = isPickupPhase ? activePickupStop?.partnerId?.phone : job.customerId?.phone;
+  const isNavigatingToStop =
+    job.status === "ASSIGNED" || (job.status === "PICKED_UP" && !reachedCustomer);
+  const showDeliveryDetails = job.status === "PICKED_UP" && reachedCustomer;
   const bottomPad = Math.max(insets.bottom, 12);
+  const orderDisplayId = job.isBundledDelivery
+    ? "Bundled"
+    : `#${job._id.slice(-6).toUpperCase()}`;
 
-  return (
-    <View style={styles.screen}>
-      <DeliveryJobMap
-        height={Math.round(Dimensions.get("window").height * 0.38)}
-        riderLocation={riderLocation}
-        destination={activeDestination}
-        pins={mapPins}
-        onOpenExternalMaps={() => {
-          void handleOpenMaps(activeMapsTarget);
-        }}
-      />
-
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]}
+  const renderOrderMetaLink = () => (
+    <View style={styles.orderMetaRight}>
+      <Text style={styles.orderMetaNumber}>{orderDisplayId}</Text>
+      <TouchableOpacity
+        onPress={() => setReceiptVisible(true)}
+        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
       >
-      {/* Live stop summary */}
-      <View style={styles.liveStopCard}>
-        <View style={styles.liveStopHeader}>
-          <View style={styles.liveStopCheck}>
-            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-          </View>
-          <Text style={styles.liveStopTitle}>{statusHeadline}</Text>
-        </View>
-        <Text style={styles.liveStopName}>{statusSubtitle}</Text>
-        <Text style={styles.liveStopAddress}>{statusAddress}</Text>
-        {statusPhone ? (
-          <TouchableOpacity style={styles.liveCallButton} onPress={() => handleCall(statusPhone)}>
-            <Ionicons name="call" size={16} color="#2E7D32" />
-            <Text style={styles.liveCallText}>{statusCallLabel}</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+        <Text style={styles.orderMetaLink}>Order details</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.orderHeader}>
-          <Text style={styles.orderNumber}>
-            {job.isBundledDelivery ? "Bundled Delivery" : `Order #${job._id.slice(-6).toUpperCase()}`}
-          </Text>
-          <View style={[
-            styles.statusBadge,
-            job.status === "ASSIGNED" && styles.statusAssigned,
-            job.status === "PICKED_UP" && styles.statusPickedUp,
-          ]}>
-            <Text style={styles.statusText}>
-              {job.status.replace("_", " ")}
-            </Text>
-          </View>
-        </View>
-        <Text style={styles.orderTime}>
+  const renderReceiptContent = () => (
+    <>
+      <View style={styles.receiptHeader}>
+        <Text style={styles.receiptTitle}>
+          {job.isBundledDelivery ? "Bundled Delivery" : `Order ${orderDisplayId}`}
+        </Text>
+        <Text style={styles.receiptTime}>
           {formatDate(job.createdAt)} • {formatTime(job.createdAt)}
         </Text>
       </View>
 
-      {/* Order Details */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="receipt" size={20} color="#FF9800" />
-          <Text style={styles.sectionTitle}>Order Details</Text>
+      {job.items.map((item, index) => (
+        <View key={index} style={styles.itemRow}>
+          <Text style={styles.itemName}>
+            {(item as any).shopName ? `${(item as any).shopName}: ` : ""}{item.name}
+          </Text>
+          <View style={styles.itemDetails}>
+            <Text style={styles.itemQuantity}>x{item.quantity}</Text>
+            <Text style={styles.itemPrice}>₹{item.price * item.quantity}</Text>
+          </View>
         </View>
-        <View style={styles.orderDetailsCard}>
-          {job.items.map((item, index) => (
-            <View key={index} style={styles.itemRow}>
-              <Text style={styles.itemName}>
+      ))}
+
+      <View style={styles.divider} />
+
+      <View style={styles.totalRow}>
+        <Text style={styles.totalLabel}>Item Total</Text>
+        <Text style={styles.totalValue}>₹{job.itemTotal}</Text>
+      </View>
+      <View style={styles.totalRow}>
+        <Text style={styles.totalLabel}>Delivery Fee</Text>
+        <Text style={styles.totalValue}>₹{job.deliveryFee}</Text>
+      </View>
+      {Number(job.tipAmount || 0) > 0 ? (
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Customer Tip</Text>
+          <Text style={styles.totalValue}>₹{job.tipAmount}</Text>
+        </View>
+      ) : null}
+      <View style={styles.grandTotalRow}>
+        <Text style={styles.grandTotalLabel}>Total Amount</Text>
+        <Text style={styles.grandTotalValue}>₹{job.grandTotal}</Text>
+      </View>
+
+      <View style={styles.paymentRow}>
+        <Text style={styles.paymentLabel}>Payment Method</Text>
+        <Text style={[
+          styles.paymentValue,
+          job.paymentMethod === "CASH_ON_DELIVERY" ? styles.codText : styles.paidText
+        ]}>
+          {job.paymentMethod === "CASH_ON_DELIVERY" ? "Cash on Delivery" : "Online Paid"}
+        </Text>
+      </View>
+
+      {job.paymentMethod === "CASH_ON_DELIVERY" ? (
+        <View style={styles.amountCard}>
+          <Ionicons name="cash" size={20} color="#4CAF50" />
+          <Text style={styles.amountText}>Collect ₹{job.grandTotal} on delivery</Text>
+        </View>
+      ) : null}
+
+      {job.note ? (
+        <>
+          <View style={[styles.divider, { marginTop: 16 }]} />
+          <Text style={styles.receiptNoteLabel}>Delivery instructions</Text>
+          <Text style={styles.receiptNoteText}>{job.note}</Text>
+        </>
+      ) : null}
+    </>
+  );
+
+  const renderSwipeActions = () => {
+    if (job.status === "READY") {
+      return (
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleAcceptDelivery}
+          disabled={updating}
+        >
+          {updating ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>Accept Delivery</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      );
+    }
+
+    if (job.status === "ASSIGNED" && !reachedPickup) {
+      return (
+        <SwipeConfirm
+          actionLabel="Reached pickup location"
+          accentColor="#22C55E"
+          disabled={updating}
+          loading={updating}
+          onConfirm={async () => {
+            setReachedPickup(true);
+          }}
+        />
+      );
+    }
+
+    if (job.status === "ASSIGNED" && reachedPickup) {
+      return (
+        <SwipeConfirm
+          actionLabel={
+            job.isBundledDelivery ? "Mark as picked up (all)" : "Mark as picked up"
+          }
+          accentColor="#16A34A"
+          disabled={updating}
+          loading={updating}
+          onConfirm={handlePickUp}
+        />
+      );
+    }
+
+    if (job.status === "PICKED_UP" && !reachedCustomer) {
+      return (
+        <SwipeConfirm
+          actionLabel="Reached customer location"
+          accentColor="#2563EB"
+          disabled={updating}
+          loading={updating}
+          onConfirm={async () => {
+            setReachedCustomer(true);
+          }}
+        />
+      );
+    }
+
+    if (job.status === "PICKED_UP" && reachedCustomer) {
+      return (
+        <SwipeConfirm
+          actionLabel="Mark as order delivered"
+          accentColor="#2563EB"
+          disabled={updating}
+          loading={updating}
+          onConfirm={handleDeliver}
+        />
+      );
+    }
+
+    return null;
+  };
+
+  const renderStopSheet = () => (
+    <View style={styles.stopSheet}>
+      <View style={styles.stopSheetHandle} />
+      <View style={styles.stopTopRow}>
+        <View style={styles.stopBadge}>
+          <Text style={styles.stopBadgeText}>
+            {isPickupPhase
+              ? reachedPickup
+                ? "AT PICKUP"
+                : "PICK UP"
+              : "DROP OFF"}
+          </Text>
+        </View>
+        {renderOrderMetaLink()}
+      </View>
+      <Text style={styles.stopName} numberOfLines={2}>{stopName}</Text>
+      <Text style={styles.stopAddress} numberOfLines={3}>{stopAddress}</Text>
+      <View style={styles.stopActions}>
+        {stopPhone ? (
+          <TouchableOpacity
+            style={styles.stopActionOutline}
+            onPress={() => handleCall(stopPhone)}
+          >
+            <Ionicons name="call" size={18} color="#2563EB" />
+            <Text style={styles.stopActionOutlineText}>Call</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          style={[
+            styles.stopActionFilled,
+            !stopPhone && styles.stopActionFilledFull
+          ]}
+          onPress={() => {
+            void handleOpenMaps(activeMapsTarget);
+          }}
+        >
+          <Ionicons name="navigate" size={18} color="#FFFFFF" />
+          <Text style={styles.stopActionFilledText}>Map</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderDeliveryDetails = () => (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.deliverScrollContent, { paddingBottom: 88 + bottomPad }]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.deliverCard}>
+        <View style={styles.deliverTopRow}>
+          <View style={styles.stopBadge}>
+            <Text style={styles.stopBadgeText}>DELIVER</Text>
+          </View>
+          {renderOrderMetaLink()}
+        </View>
+
+        <Text style={styles.deliverCustomerName}>{job.customerId?.name || "Customer"}</Text>
+        <Text style={styles.deliverCustomerAddress}>{job.deliveryAddress}</Text>
+
+        <View style={styles.deliverActionRow}>
+          {job.customerId?.phone ? (
+            <TouchableOpacity
+              style={styles.deliverCallButton}
+              onPress={() => handleCall(job.customerId!.phone!)}
+            >
+              <Ionicons name="call" size={16} color="#2563EB" />
+              <Text style={styles.deliverCallText}>Call</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={[
+              styles.deliverMapButton,
+              !job.customerId?.phone && styles.deliverMapButtonFull
+            ]}
+            onPress={() => {
+              void handleOpenMaps(activeMapsTarget);
+            }}
+          >
+            <Ionicons name="navigate" size={16} color="#FFFFFF" />
+            <Text style={styles.deliverMapText}>Map</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.deliverDivider} />
+
+        <View style={styles.deliverOrderMeta}>
+          <Text style={styles.deliverOrderId}>
+            {job.isBundledDelivery ? "Bundled Delivery" : `Order ${orderDisplayId}`}
+          </Text>
+          <Text style={styles.deliverOrderWhen}>
+            {formatDate(job.createdAt)}  ·  {formatTime(job.createdAt)}
+          </Text>
+        </View>
+
+        {job.items.map((item, index) => (
+          <View
+            key={index}
+            style={[
+              styles.deliverItemRow,
+              index === job.items.length - 1 && styles.deliverItemRowLast
+            ]}
+          >
+            <View style={styles.deliverItemLeft}>
+              <Text style={styles.deliverItemName} numberOfLines={2}>
                 {(item as any).shopName ? `${(item as any).shopName}: ` : ""}{item.name}
               </Text>
-              <View style={styles.itemDetails}>
-                <Text style={styles.itemQuantity}>x{item.quantity}</Text>
-                <Text style={styles.itemPrice}>₹{item.price * item.quantity}</Text>
-              </View>
+              <Text style={styles.deliverItemQty}>Qty {item.quantity}</Text>
             </View>
-          ))}
-          
-          <View style={styles.divider} />
-          
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Item Total</Text>
-            <Text style={styles.totalValue}>₹{job.itemTotal}</Text>
+            <Text style={styles.deliverItemPrice}>₹{item.price * item.quantity}</Text>
           </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Delivery Fee</Text>
-            <Text style={styles.totalValue}>₹{job.deliveryFee}</Text>
+        ))}
+
+        <View style={styles.deliverDivider} />
+
+        <View style={styles.deliverTotalRow}>
+          <Text style={styles.deliverTotalLabel}>Item total</Text>
+          <Text style={styles.deliverTotalValue}>₹{job.itemTotal}</Text>
+        </View>
+        <View style={styles.deliverTotalRow}>
+          <Text style={styles.deliverTotalLabel}>Delivery fee</Text>
+          <Text style={styles.deliverTotalValue}>₹{job.deliveryFee}</Text>
+        </View>
+        {Number(job.tipAmount || 0) > 0 ? (
+          <View style={styles.deliverTotalRow}>
+            <Text style={styles.deliverTotalLabel}>Customer tip</Text>
+            <Text style={styles.deliverTotalValue}>₹{job.tipAmount}</Text>
           </View>
-          {Number(job.tipAmount || 0) > 0 ? (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Customer Tip</Text>
-              <Text style={styles.totalValue}>₹{job.tipAmount}</Text>
-            </View>
-          ) : null}
-          <View style={styles.grandTotalRow}>
-            <Text style={styles.grandTotalLabel}>Total Amount</Text>
-            <Text style={styles.grandTotalValue}>₹{job.grandTotal}</Text>
-          </View>
-          
-          <View style={styles.paymentRow}>
-            <Text style={styles.paymentLabel}>Payment Method:</Text>
-            <Text style={[
-              styles.paymentValue,
-              job.paymentMethod === "CASH_ON_DELIVERY" ? styles.codText : styles.paidText
-            ]}>
-              {job.paymentMethod === "CASH_ON_DELIVERY" ? "💰 Cash on Delivery" : "✅ Online Paid"}
+        ) : null}
+        <View style={styles.deliverGrandRow}>
+          <Text style={styles.deliverGrandLabel}>Total</Text>
+          <Text style={styles.deliverGrandValue}>₹{job.grandTotal}</Text>
+        </View>
+
+        <View style={styles.deliverPaymentRow}>
+          <Text style={styles.deliverPaymentLabel}>Payment</Text>
+          <View
+            style={[
+              styles.deliverPaymentPill,
+              job.paymentMethod === "CASH_ON_DELIVERY"
+                ? styles.deliverPaymentPillCod
+                : styles.deliverPaymentPillPaid
+            ]}
+          >
+            <Text
+              style={[
+                styles.deliverPaymentPillText,
+                job.paymentMethod === "CASH_ON_DELIVERY"
+                  ? styles.deliverPaymentPillTextCod
+                  : styles.deliverPaymentPillTextPaid
+              ]}
+            >
+              {job.paymentMethod === "CASH_ON_DELIVERY" ? "Cash on Delivery" : "Online Paid"}
             </Text>
           </View>
-          
-          {job.paymentMethod === "CASH_ON_DELIVERY" && (
-            <View style={styles.amountCard}>
-              <Ionicons name="cash" size={24} color="#4CAF50" />
-              <Text style={styles.amountText}>
-                Collect ₹{job.grandTotal} on delivery
-              </Text>
-            </View>
-          )}
         </View>
+
+        {job.paymentMethod === "CASH_ON_DELIVERY" ? (
+          <View style={styles.deliverCollectBanner}>
+            <Ionicons name="cash-outline" size={18} color="#166534" />
+            <Text style={styles.deliverCollectText}>
+              Collect ₹{job.grandTotal} from customer
+            </Text>
+          </View>
+        ) : null}
+
+        {job.note ? (
+          <View style={styles.deliverNoteBox}>
+            <Text style={styles.deliverNoteLabel}>Delivery instructions</Text>
+            <Text style={styles.deliverNoteText}>{job.note}</Text>
+          </View>
+        ) : null}
       </View>
+    </ScrollView>
+  );
 
-      {/* Customer Note */}
-      {job.note && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="document-text" size={20} color="#9C27B0" />
-            <Text style={styles.sectionTitle}>Delivery instructions</Text>
-          </View>
-          <View style={styles.noteCard}>
-            <Text style={styles.noteText}>{job.note}</Text>
-          </View>
-        </View>
-      )}
-
-      {/* Earnings */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="cash" size={20} color="#4CAF50" />
-          <Text style={styles.sectionTitle}>Your Earnings</Text>
-        </View>
-        <View style={styles.earningsCard}>
-          <View style={styles.earningRow}>
-            <Text style={styles.earningLabel}>Delivery Fee</Text>
-            <Text style={styles.earningValue}>₹{job.deliveryFee}</Text>
-          </View>
-          {Number(job.tipAmount || 0) > 0 ? (
-            <View style={styles.earningRow}>
-              <Text style={styles.earningLabel}>Customer Tip</Text>
-              <Text style={styles.earningValue}>₹{job.tipAmount}</Text>
-            </View>
-          ) : null}
-          <View style={styles.divider} />
-          <View style={styles.totalEarningRow}>
-            <Text style={styles.totalEarningLabel}>You'll Earn</Text>
-            <Text style={styles.totalEarningValue}>₹{getJobRiderEarnings(job)}</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.spacer} />
-      </ScrollView>
-
-      {(job.status === "READY" || job.status === "ASSIGNED" || job.status === "PICKED_UP") && (
-        <View style={[styles.bottomActionBar, { paddingBottom: bottomPad }]}>
-          {job.status === "READY" && (
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleAcceptDelivery}
-              disabled={updating}
-            >
-              {updating ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Accept Delivery</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {job.status === "ASSIGNED" && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.reachedPickupButton]}
-              onPress={() => {
-                if (!reachedPickup) {
-                  setReachedPickup(true);
-                  return;
-                }
-                void handlePickUp();
+  return (
+    <View style={styles.screen}>
+      {isNavigatingToStop ? (
+        <View style={styles.navigationBody}>
+          <View
+            style={styles.mapArea}
+            onLayout={(event) => {
+              const nextHeight = Math.floor(event.nativeEvent.layout.height);
+              if (nextHeight > 0 && nextHeight !== mapAreaHeight) {
+                setMapAreaHeight(nextHeight);
+              }
+            }}
+          >
+            <DeliveryJobMap
+              height={mapAreaHeight}
+              riderLocation={riderLocation}
+              destination={activeDestination}
+              pins={mapPins}
+              onOpenExternalMaps={() => {
+                void handleOpenMaps(activeMapsTarget);
               }}
-              disabled={updating}
-            >
-              {updating ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.actionButtonText}>
-                  {!reachedPickup
-                    ? "Reached pickup location"
-                    : job.isBundledDelivery
-                      ? "Order picked (all pickups)"
-                      : "Order picked"}
+            />
+          </View>
+          <View style={[styles.bottomDock, { paddingBottom: bottomPad }]}>
+            {renderStopSheet()}
+            <View style={styles.dockSwipeWrap}>{renderSwipeActions()}</View>
+          </View>
+        </View>
+      ) : null}
+
+      {showDeliveryDetails ? renderDeliveryDetails() : null}
+
+      {job.status === "READY" ? (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]}
+        >
+          <View style={styles.header}>
+            <View style={styles.orderHeader}>
+              <View>
+                <Text style={styles.orderNumber}>
+                  {job.isBundledDelivery ? "Bundled Delivery" : `Order ${orderDisplayId}`}
                 </Text>
-              )}
-            </TouchableOpacity>
-          )}
+                <Text style={styles.orderTime}>
+                  {formatDate(job.createdAt)} • {formatTime(job.createdAt)}
+                </Text>
+              </View>
+              <View style={styles.headerRight}>
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusText}>READY</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setReceiptVisible(true)}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                >
+                  <Text style={styles.orderMetaLink}>Order details</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
 
-          {job.status === "PICKED_UP" && (
-            <TouchableOpacity
-              style={[styles.actionButton, reachedCustomer ? styles.deliverButton : styles.reachedCustomerButton]}
-              onPress={() => {
-                if (!reachedCustomer) {
-                  setReachedCustomer(true);
-                  return;
-                }
-                void handleDeliver();
-              }}
-              disabled={updating}
-            >
-              {updating ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  {reachedCustomer ? (
-                    <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
-                  ) : null}
-                  <Text style={styles.actionButtonText}>
-                    {!reachedCustomer
-                      ? "Reached customer location"
-                      : job.paymentMethod === "CASH_ON_DELIVERY"
-                        ? "Order delivered (cash / scanner)"
-                        : "Order delivered"}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="cash" size={20} color="#4CAF50" />
+              <Text style={styles.sectionTitle}>Your Earnings</Text>
+            </View>
+            <View style={styles.earningsCard}>
+              <View style={styles.earningRow}>
+                <Text style={styles.earningLabel}>Delivery Fee</Text>
+                <Text style={styles.earningValue}>₹{job.deliveryFee}</Text>
+              </View>
+              {Number(job.tipAmount || 0) > 0 ? (
+                <View style={styles.earningRow}>
+                  <Text style={styles.earningLabel}>Customer Tip</Text>
+                  <Text style={styles.earningValue}>₹{job.tipAmount}</Text>
+                </View>
+              ) : null}
+              <View style={styles.divider} />
+              <View style={styles.totalEarningRow}>
+                <Text style={styles.totalEarningLabel}>You'll Earn</Text>
+                <Text style={styles.totalEarningValue}>₹{getJobRiderEarnings(job)}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.spacer} />
+        </ScrollView>
+      ) : null}
+
+      {(job.status === "READY" || showDeliveryDetails) && (
+        <View style={[styles.bottomActionBar, { paddingBottom: bottomPad }]}>
+          {renderSwipeActions()}
         </View>
       )}
+
+      <Modal
+        visible={receiptVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReceiptVisible(false)}
+      >
+        <View style={styles.receiptOverlay}>
+          <View style={[styles.receiptSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.receiptTopBar}>
+              <Text style={styles.receiptSheetTitle}>Order Receipt</Text>
+              <TouchableOpacity
+                style={styles.receiptCloseButton}
+                onPress={() => setReceiptVisible(false)}
+                hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+              >
+                <Ionicons name="close" size={22} color="#475467" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.receiptScroll}
+              contentContainerStyle={styles.receiptScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.orderDetailsCard}>
+                {renderReceiptContent()}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={codPaymentChoiceVisible} transparent animationType="fade" onRequestClose={() => setCodPaymentChoiceVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -1237,6 +1475,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  navigationBody: {
+    flex: 1,
+  },
+  mapArea: {
+    flex: 1,
+    minHeight: 180,
+    backgroundColor: '#E8EEF5',
+  },
+  bottomDock: {
+    flexShrink: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  dockSwipeWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -1244,7 +1506,421 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 12,
   },
-  liveStopCard: {
+  stopSheet: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  stopSheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    marginBottom: 12,
+  },
+  stopTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  deliveryMetaRow: {
+    marginHorizontal: 16,
+    marginTop: 14,
+  },
+  deliverScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  deliverCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 18,
+  },
+  deliverTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  deliverCustomerName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  deliverCustomerAddress: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#667085',
+  },
+  deliverActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  deliverCallButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#2563EB',
+    backgroundColor: '#FFFFFF',
+  },
+  deliverCallText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  deliverMapButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: '#2563EB',
+  },
+  deliverMapButtonFull: {
+    flex: 1,
+  },
+  deliverMapText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  deliverDivider: {
+    height: 1,
+    backgroundColor: '#EEF2F6',
+    marginVertical: 16,
+  },
+  deliverOrderMeta: {
+    marginBottom: 14,
+  },
+  deliverOrderId: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  deliverOrderWhen: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#667085',
+  },
+  deliverItemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  deliverItemRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  deliverItemLeft: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  deliverItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  deliverItemQty: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#98A2B3',
+  },
+  deliverItemPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  deliverTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  deliverTotalLabel: {
+    fontSize: 13,
+    color: '#667085',
+  },
+  deliverTotalValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#344054',
+  },
+  deliverGrandRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  deliverGrandLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  deliverGrandValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#16A34A',
+  },
+  deliverPaymentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  deliverPaymentLabel: {
+    fontSize: 13,
+    color: '#667085',
+  },
+  deliverPaymentPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  deliverPaymentPillCod: {
+    backgroundColor: '#FFF7ED',
+  },
+  deliverPaymentPillPaid: {
+    backgroundColor: '#ECFDF3',
+  },
+  deliverPaymentPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  deliverPaymentPillTextCod: {
+    color: '#C2410C',
+  },
+  deliverPaymentPillTextPaid: {
+    color: '#15803D',
+  },
+  deliverCollectBanner: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#ECFDF3',
+  },
+  deliverCollectText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  deliverNoteBox: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#EEF2F6',
+  },
+  deliverNoteLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#667085',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  deliverNoteText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#374151',
+  },
+  orderMetaRight: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  orderMetaNumber: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  orderMetaLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
+    textDecorationLine: 'underline',
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  receiptOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  receiptSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    paddingTop: 16,
+    paddingHorizontal: 16,
+  },
+  receiptTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  receiptSheetTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  receiptCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  receiptScroll: {
+    flexGrow: 0,
+  },
+  receiptScrollContent: {
+    paddingBottom: 8,
+  },
+  receiptHeader: {
+    marginBottom: 12,
+  },
+  receiptTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  receiptTime: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#667085',
+  },
+  receiptNoteLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#667085',
+    marginBottom: 4,
+  },
+  receiptNoteText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#374151',
+    fontStyle: 'italic',
+  },
+  stopBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#111827',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  stopBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  stopName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  stopAddress: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#667085',
+    marginBottom: 12,
+  },
+  stopActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  stopActionOutline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#2563EB',
+    backgroundColor: '#FFFFFF',
+  },
+  stopActionOutlineText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  stopActionFilled: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#2563EB',
+  },
+  stopActionFilledFull: {
+    flex: 1,
+  },
+  stopActionFilledText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  codHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#ECFDF5',
+  },
+  codHintText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#15803D',
+  },
+  noteInline: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+  },
+  noteInlineText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#667085',
+    fontStyle: 'italic',
+  },
+  customerCard: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
     marginTop: 14,
@@ -1253,60 +1929,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  liveStopHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  liveStopCheck: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#22C55E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  liveStopTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#166534',
-  },
-  liveStopName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 6,
-  },
-  liveStopAddress: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#667085',
-  },
   liveCallButton: {
-    marginTop: 14,
+    marginTop: 12,
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  liveCallText: {
+  customerCallText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2E7D32',
+    color: '#2563EB',
   },
   bottomActionBar: {
+    flexShrink: 0,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     paddingHorizontal: 16,
     paddingTop: 12,
-  },
-  reachedPickupButton: {
-    backgroundColor: '#FF6B00',
-  },
-  reachedCustomerButton: {
-    backgroundColor: '#FF6B00',
   },
   loadingContainer: {
     flex: 1,

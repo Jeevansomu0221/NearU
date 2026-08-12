@@ -62,14 +62,10 @@ export default function NewOrderBanner({
 
   useEffect(() => {
     if (!visible) {
-      Animated.timing(translateY, {
-        toValue: -220,
-        duration: 220,
-        useNativeDriver: true
-      }).start();
       return;
     }
 
+    translateY.setValue(-220);
     Animated.spring(translateY, {
       toValue: 0,
       tension: 60,
@@ -108,9 +104,12 @@ export default function NewOrderBanner({
   const clampPrep = (value: number) =>
     Math.min(MAX_PREP_TIME_MINUTES, Math.max(MIN_PREP_TIME_MINUTES, value));
 
+  if (!visible) {
+    return null;
+  }
+
   return (
     <Animated.View
-      pointerEvents={visible ? "auto" : "none"}
       style={[
         styles.wrapper,
         { paddingTop: insets.top + 8, transform: [{ translateY }] }

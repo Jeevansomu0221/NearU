@@ -1,6 +1,6 @@
 {
   "name": "delivery-app",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "main": "index.ts",
   "scripts": {
     "postinstall": "node ../../scripts/patch-expo-vscode-cors.js",
