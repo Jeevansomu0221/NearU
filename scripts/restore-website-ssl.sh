@@ -78,34 +78,14 @@ server {
     listen [::]:80;
     server_name ${DOMAIN} ${WWW_DOMAIN};
     root ${WEB_ROOT};
-    index index.html;
-    client_max_body_size 10m;
 
     location ^~ /.well-known/acme-challenge/ {
         default_type text/plain;
         root ${WEB_ROOT};
     }
 
-    location = /business { return 301 /business/; }
-    location = /order { return 301 /order/; }
-
-    location /business/ {
-        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
-        try_files \$uri \$uri/ /business/index.html;
-    }
-
-    location /order/ {
-        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
-        try_files \$uri \$uri/ /order/index.html;
-    }
-
-    location = /index.html {
-        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
-    }
-
     location / {
-        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
-        try_files \$uri \$uri/ /index.html;
+        return 301 https://\$host\$request_uri;
     }
 }
 
