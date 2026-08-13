@@ -84,36 +84,82 @@ const parseGoogleAddress = (result: any): GeocodedAddress | null => {
 
 const googleGet = async (url: string, params: Record<string, string>) => {
   const apiKey = config.googleMapsApiKey.trim();
-  if (!apiKey) {
-    throw Object.assign(new Error("Google Maps API key is not configured"), { statusCode: 503 });
-  }
+  if (!apiKey) return null;
 
   const search = new URLSearchParams({ ...params, key: apiKey });
   const response = await fetch(`${url}?${search.toString()}`);
-  if (!response.ok) {
-    throw Object.assign(new Error("Address lookup is temporarily unavailable"), { statusCode: 502 });
-  }
+  if (!response.ok) return null;
   return response.json();
 };
 
-export const geocodeTypedAddress = async (query: string): Promise<GeocodedAddress[]> => {
-  const payload = await googleGet(GOOGLE_GEOCODE_URL, {
-    address: query,
-    components: "country:IN",
-    region: "in",
-    language: "en"
-  });
+const parseNominatimAddress = (result: any): GeocodedAddress | null => {
+  const latitude = Number(result?.lat);
+  const longitude = Number(result?.lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
 
-  if (payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
-    throw Object.assign(new Error(payload.error_message || "Could not look up that address"), {
-      statusCode: 400
+  const details = result?.address || {};
+  const pincodeDigits = String(details.postcode || "").replace(/\D/g, "").slice(0, 6);
+
+  return {
+    formattedAddress: String(result?.display_name || "").trim(),
+    placeId: String(result?.place_id || "").trim(),
+    houseFlatDoorNo: String(details.house_number || "").trim(),
+    buildingApartmentName: String(details.building || details.amenity || "").trim(),
+    streetRoadName: String(details.road || details.residential || details.pedestrian || "").trim(),
+    area: String(details.suburb || details.neighbourhood || details.quarter || details.village || "").trim(),
+    city: String(details.city || details.town || details.county || "").trim(),
+    district: String(details.state_district || details.county || "").trim(),
+    state: String(details.state || "").trim(),
+    pincode: pincodeDigits,
+    country: String(details.country || "India").trim(),
+    latitude,
+    longitude
+  };
+};
+
+const geocodeWithNominatim = async (query: string): Promise<GeocodedAddress[]> => {
+  const search = new URLSearchParams({
+    format: "jsonv2",
+    q: query,
+    countrycodes: "in",
+    addressdetails: "1",
+    limit: "6"
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${search.toString()}`, {
+    headers: {
+      "User-Agent": "Vyaha/1.0 (support@vyaha.com)",
+      Accept: "application/json"
+    }
+  });
+  if (!response.ok) {
+    throw Object.assign(new Error("Address lookup is temporarily unavailable"), { statusCode: 502 });
+  }
+  const payload = await response.json();
+  return (Array.isArray(payload) ? payload : [])
+    .map(parseNominatimAddress)
+    .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+};
+
+export const geocodeTypedAddress = async (query: string): Promise<GeocodedAddress[]> => {
+  try {
+    const payload = await googleGet(GOOGLE_GEOCODE_URL, {
+      address: query,
+      components: "country:IN",
+      region: "in",
+      language: "en"
     });
+
+    if (payload?.status === "OK" || payload?.status === "ZERO_RESULTS") {
+      return (Array.isArray(payload.results) ? payload.results : [])
+        .map(parseGoogleAddress)
+        .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry))
+        .slice(0, 6);
+    }
+  } catch {
+    // Fall through to OpenStreetMap if Google is unavailable.
   }
 
-  return (Array.isArray(payload.results) ? payload.results : [])
-    .map(parseGoogleAddress)
-    .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry))
-    .slice(0, 6);
+  return geocodeWithNominatim(query);
 };
 
 export const suggestTypedAddresses = async (query: string): Promise<AddressSuggestion[]> => {
@@ -125,7 +171,7 @@ export const suggestTypedAddresses = async (query: string): Promise<AddressSugge
       types: "geocode"
     });
 
-    if (payload.status === "OK") {
+    if (payload?.status === "OK") {
       return (Array.isArray(payload.predictions) ? payload.predictions : [])
         .map((prediction: any) => ({
           description: String(prediction?.description || "").trim(),
@@ -222,12 +268,12 @@ export const getPlaceAddress = async (placeId: string): Promise<GeocodedAddress>
     language: "en"
   });
 
-  if (payload.status === "OK") {
+  if (payload?.status === "OK") {
     const parsed = parseGoogleAddress(payload.result);
     if (parsed) return parsed;
   }
 
-  const geocoded = await geocodeTypedAddress(`place_id:${placeId}`);
+  const geocoded = await geocodeTypedAddress(placeId);
   if (!geocoded[0]) {
     throw Object.assign(new Error("Could not resolve that address"), { statusCode: 404 });
   }

@@ -14,7 +14,6 @@ import {
   Linking
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Location from "expo-location";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -38,8 +37,8 @@ import {
 import { buildLegalUrl } from "../constants/legal";
 import { getPublicShopName } from "../utils/display";
 import { unregisterPushNotifications } from "../services/notifications";
-import AddressSearchField from "../components/AddressSearchField";
-import { geocodeAddressQuery, type GeocodedAddress } from "../api/geocode.api";
+import AddressFormFields from "../components/AddressFormFields";
+import { geocodeAddressQuery } from "../api/geocode.api";
 
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha Support." },
@@ -190,7 +189,6 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [country, setCountry] = useState("India");
   const [addressLatitude, setAddressLatitude] = useState<number | undefined>(undefined);
   const [addressLongitude, setAddressLongitude] = useState<number | undefined>(undefined);
-  const [capturingAddressPin, setCapturingAddressPin] = useState(false);
 
   const hydrateAddressForm = (address?: SavedAddress | null, fallbackName = "") => {
     setAddressLabel(address?.label || "Home");
@@ -457,64 +455,33 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
-  const applyGeocodedAddress = (result: GeocodedAddress) => {
-    if (result.houseFlatDoorNo && !houseFlatDoorNo.trim()) {
-      setHouseFlatDoorNo(result.houseFlatDoorNo);
-    }
-    if (result.buildingApartmentName) {
-      setBuildingApartmentName(result.buildingApartmentName);
-    }
-    if (result.streetRoadName) {
-      setStreetRoadName(result.streetRoadName);
-    }
-    if (result.area) {
-      setArea(result.area);
-    }
-    if (result.city) {
-      setCity(result.city);
-    }
-    if (result.state) {
-      setState(result.state);
-    }
-    if (result.district) {
-      setDistrict(result.district);
-    }
-    if (result.pincode && /^\d{6}$/.test(result.pincode)) {
-      setPincode(result.pincode);
-    }
-    if (result.country) {
-      setCountry(result.country);
-    }
-    setStreet(
-      [result.houseFlatDoorNo || houseFlatDoorNo, result.buildingApartmentName || buildingApartmentName, result.streetRoadName]
-        .filter(Boolean)
-        .join(", ")
-    );
-    setAddressLatitude(result.latitude);
-    setAddressLongitude(result.longitude);
-  };
-
-  const handleCaptureAddressPin = async () => {
-    try {
-      setCapturingAddressPin(true);
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status !== "granted") {
-        Alert.alert("Location Permission", "Please allow location access while you are at this delivery address.");
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High
-      });
-
-      setAddressLatitude(location.coords.latitude);
-      setAddressLongitude(location.coords.longitude);
-      Alert.alert("Location Pin Saved", "This saved address now has an exact GPS pin for delivery directions.");
-    } catch (error: any) {
-      Alert.alert("Location Error", error.message || "Could not capture your current location.");
-    } finally {
-      setCapturingAddressPin(false);
-    }
+  const addressFormProps = {
+    focusedField,
+    onFocusField: setFocusedField,
+    addressLabel,
+    setAddressLabel,
+    recipientName,
+    setRecipientName,
+    houseFlatDoorNo,
+    setHouseFlatDoorNo,
+    buildingApartmentName,
+    setBuildingApartmentName,
+    streetRoadName,
+    setStreetRoadName,
+    area,
+    setArea,
+    landmark,
+    setLandmark,
+    city,
+    setCity,
+    state,
+    setState,
+    district,
+    setDistrict,
+    pincode,
+    setPincode,
+    country,
+    setCountry
   };
 
   const handleLogout = () => {
@@ -856,114 +823,9 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
             <Text style={styles.sectionHint}>
-              Enter your delivery address. We save the exact map pin from that address so the rider can navigate there.
+              Fill these details. We automatically save the map pin from this address for the rider.
             </Text>
-            <AddressSearchField onSelect={applyGeocodedAddress} />
-
-            <TextInput
-              style={[styles.input, focusedField === "addressLabel" && styles.inputFocused]}
-              value={addressLabel}
-              onChangeText={setAddressLabel}
-              placeholder="Address label (Home, Work, Home 2)"
-              placeholderTextColor="#98A2B3"
-              onFocus={() => setFocusedField("addressLabel")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "recipientName" && styles.inputFocused]}
-              value={recipientName}
-              onChangeText={setRecipientName}
-              placeholder="Recipient name"
-              placeholderTextColor="#98A2B3"
-              onFocus={() => setFocusedField("recipientName")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "houseFlatDoorNo" && styles.inputFocused]}
-              value={houseFlatDoorNo}
-              onChangeText={setHouseFlatDoorNo}
-              placeholder="House / flat / door number"
-              placeholderTextColor="#98A2B3"
-              onFocus={() => setFocusedField("houseFlatDoorNo")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "buildingApartmentName" && styles.inputFocused]}
-              value={buildingApartmentName}
-              onChangeText={setBuildingApartmentName}
-              placeholder="Building / apartment name (optional)"
-              placeholderTextColor="#98A2B3"
-              onFocus={() => setFocusedField("buildingApartmentName")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "streetRoadName" && styles.inputFocused]}
-              value={streetRoadName}
-              onChangeText={setStreetRoadName}
-              placeholder="Street / colony"
-              placeholderTextColor="#98A2B3"
-              onFocus={() => setFocusedField("streetRoadName")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "area" && styles.inputFocused]}
-              value={area}
-              onChangeText={setArea}
-              placeholder="Area / locality"
-              placeholderTextColor="#98A2B3"
-              onFocus={() => setFocusedField("area")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[styles.input, focusedField === "landmark" && styles.inputFocused]}
-              value={landmark}
-              onChangeText={setLandmark}
-              placeholder="Landmark (optional)"
-              placeholderTextColor="#98A2B3"
-              onFocus={() => setFocusedField("landmark")}
-              onBlur={() => setFocusedField(null)}
-            />
-            <View style={styles.row}>
-              <TextInput
-                style={[styles.input, styles.halfInput, focusedField === "city" && styles.inputFocused]}
-                value={city}
-                onChangeText={setCity}
-                placeholder="City"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("city")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TextInput
-                style={[styles.input, styles.halfInput, focusedField === "state" && styles.inputFocused]}
-                value={state}
-                onChangeText={setState}
-                placeholder="State"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("state")}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
-            <View style={styles.row}>
-              <TextInput
-                style={[styles.input, styles.halfInput, focusedField === "pincode" && styles.inputFocused]}
-                value={pincode}
-                onChangeText={(value) => setPincode(value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="Pincode"
-                placeholderTextColor="#98A2B3"
-                keyboardType="number-pad"
-                onFocus={() => setFocusedField("pincode")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TextInput
-                style={[styles.input, styles.halfInput, focusedField === "country" && styles.inputFocused]}
-                value={country}
-                onChangeText={setCountry}
-                placeholder="Country"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("country")}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
+            <AddressFormFields {...addressFormProps} />
           </View>
         </ScrollView>
 
@@ -1194,142 +1056,11 @@ export default function ProfileScreen({ navigation, route }: any) {
               </TouchableOpacity>
             ) : null}
           </View>
-          <Text style={styles.sectionHint}>Enter the delivery address. We geocode it and save that map pin for the rider.</Text>
+          <Text style={styles.sectionHint}>Fill the address below. We automatically save the map pin for the rider.</Text>
 
           {editing ? (
             <>
-              <AddressSearchField onSelect={applyGeocodedAddress} />
-              <TextInput
-                style={[styles.input, focusedField === "addressLabel" && styles.inputFocused]}
-                value={addressLabel}
-                onChangeText={setAddressLabel}
-                placeholder="Address label (Home, Work, Home 2)"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("addressLabel")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TextInput
-                style={[styles.input, focusedField === "recipientName" && styles.inputFocused]}
-                value={recipientName}
-                onChangeText={setRecipientName}
-                placeholder="Recipient name"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("recipientName")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TextInput
-                style={[styles.input, focusedField === "houseFlatDoorNo" && styles.inputFocused]}
-                value={houseFlatDoorNo}
-                onChangeText={setHouseFlatDoorNo}
-                placeholder="House / flat / door number"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("houseFlatDoorNo")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TextInput
-                style={[styles.input, focusedField === "buildingApartmentName" && styles.inputFocused]}
-                value={buildingApartmentName}
-                onChangeText={setBuildingApartmentName}
-                placeholder="Building / apartment name"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("buildingApartmentName")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TextInput
-                style={[styles.input, focusedField === "streetRoadName" && styles.inputFocused]}
-                value={streetRoadName}
-                onChangeText={setStreetRoadName}
-                placeholder="Street / colony"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("streetRoadName")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TextInput
-                style={[styles.input, focusedField === "area" && styles.inputFocused]}
-                value={area}
-                onChangeText={setArea}
-                placeholder="Area / locality"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("area")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <TextInput
-                style={[styles.input, focusedField === "landmark" && styles.inputFocused]}
-                value={landmark}
-                onChangeText={setLandmark}
-                placeholder="Landmark"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("landmark")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, styles.halfInput, focusedField === "city" && styles.inputFocused]}
-                  value={city}
-                  onChangeText={setCity}
-                  placeholder="City / town"
-                  placeholderTextColor="#98A2B3"
-                  onFocus={() => setFocusedField("city")}
-                  onBlur={() => setFocusedField(null)}
-                />
-                <TextInput
-                  style={[styles.input, styles.halfInput, focusedField === "state" && styles.inputFocused]}
-                  value={state}
-                  onChangeText={setState}
-                  placeholder="State"
-                  placeholderTextColor="#98A2B3"
-                  onFocus={() => setFocusedField("state")}
-                  onBlur={() => setFocusedField(null)}
-                />
-              </View>
-              <TextInput
-                style={[styles.input, focusedField === "district" && styles.inputFocused]}
-                value={district}
-                onChangeText={setDistrict}
-                placeholder="District"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("district")}
-                onBlur={() => setFocusedField(null)}
-              />
-              <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, styles.halfInput, focusedField === "pincode" && styles.inputFocused]}
-                  value={pincode}
-                  onChangeText={(value) => setPincode(value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="Pincode"
-                  placeholderTextColor="#98A2B3"
-                  keyboardType="number-pad"
-                  onFocus={() => setFocusedField("pincode")}
-                  onBlur={() => setFocusedField(null)}
-                />
-                <TextInput
-                  style={[styles.input, styles.halfInput, focusedField === "country" && styles.inputFocused]}
-                  value={country}
-                  onChangeText={setCountry}
-                  placeholder="Country"
-                  placeholderTextColor="#98A2B3"
-                  onFocus={() => setFocusedField("country")}
-                  onBlur={() => setFocusedField(null)}
-                />
-              </View>
-
-              <View style={styles.pinCard}>
-                <View style={styles.pinCopy}>
-                  <Text style={styles.pinTitle}>Exact delivery pin</Text>
-                  <Text style={styles.pinText}>
-                    {hasValidAddressPin(addressLatitude, addressLongitude)
-                      ? `Saved map pin: ${Number(addressLatitude).toFixed(5)}, ${Number(addressLongitude).toFixed(5)}`
-                      : "This pin is taken from the address you typed, so the rider can open Google Maps to it."}
-                  </Text>
-                </View>
-                <TouchableOpacity style={styles.pinButton} onPress={handleCaptureAddressPin} disabled={capturingAddressPin}>
-                  {capturingAddressPin ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.pinButtonText}>Use Current Location</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+              <AddressFormFields {...addressFormProps} />
 
               {!forceComplete && (
                 <TouchableOpacity style={styles.fullSaveButton} onPress={handleSaveProfile} disabled={saving}>
