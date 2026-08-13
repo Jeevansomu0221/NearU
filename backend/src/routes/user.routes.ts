@@ -20,7 +20,8 @@ import {
   deleteMyAccount,
   suggestDeliveryAddresses,
   geocodeDeliveryAddress,
-  getDeliveryPlaceAddress
+  getDeliveryPlaceAddress,
+  resolveDeliveryAddressPin
 } from "../controllers/user.controller";
 import {
   cancelMyDeletionRequest,
@@ -143,6 +144,13 @@ router.get(
   authMiddleware,
   roleMiddleware([...CONSUMER_APP_ROLES]),
   getDeliveryPlaceAddress
+);
+
+router.post(
+  "/geocode/resolve",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  resolveDeliveryAddressPin
 );
 
 router.get(

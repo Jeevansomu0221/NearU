@@ -38,6 +38,8 @@ import { buildLegalUrl } from "../constants/legal";
 import { getPublicShopName } from "../utils/display";
 import { unregisterPushNotifications } from "../services/notifications";
 import AddressFormFields from "../components/AddressFormFields";
+import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
+import { resolveAddressPin } from "../api/geocode.api";
 
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha Support." },
@@ -170,6 +172,13 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [deleteReasonCategory, setDeleteReasonCategory] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [accountDeletedVisible, setAccountDeletedVisible] = useState(false);
+  const [pinConfirmVisible, setPinConfirmVisible] = useState(false);
+  const [pendingAddressPayload, setPendingAddressPayload] = useState<SavedAddress | null>(null);
+  const [pendingPin, setPendingPin] = useState<{
+    latitude: number;
+    longitude: number;
+    formattedAddress: string;
+  } | null>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -334,10 +343,31 @@ export default function ProfileScreen({ navigation, route }: any) {
     ]);
   };
 
+  const buildAddressPayload = () => {
+    const legacyStreet = [houseFlatDoorNo.trim(), buildingApartmentName.trim(), streetRoadName.trim()]
+      .filter(Boolean)
+      .join(", ");
+    return {
+      label: addressLabel.trim() || "Home",
+      recipientName: recipientName.trim(),
+      houseFlatDoorNo: houseFlatDoorNo.trim(),
+      buildingApartmentName: buildingApartmentName.trim() || undefined,
+      streetRoadName: streetRoadName.trim(),
+      areaLocality: area.trim(),
+      street: legacyStreet || street.trim(),
+      city: city.trim(),
+      cityTownVillage: city.trim(),
+      state: state.trim(),
+      pincode: pincode.trim(),
+      area: area.trim(),
+      landmark: landmark.trim() || undefined,
+      district: district.trim() || undefined,
+      country: country.trim()
+    };
+  };
+
   const handleSaveProfile = async () => {
     try {
-      setSaving(true);
-
       if (!name.trim()) {
         Alert.alert("Error", "Name is required");
         return;
@@ -362,25 +392,33 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
-      const legacyStreet = [houseFlatDoorNo.trim(), buildingApartmentName.trim(), streetRoadName.trim()]
-        .filter(Boolean)
-        .join(", ");
+      setSaving(true);
+      const addressPayload = buildAddressPayload();
+      const pinResult = await resolveAddressPin({ ...addressPayload });
+      if (!pinResult.success || !pinResult.data) {
+        Alert.alert("Address not found", pinResult.message || "Check the street, area, city, and pincode.");
+        return;
+      }
+
+      setPendingAddressPayload(addressPayload);
+      setPendingPin(pinResult.data);
+      setPinConfirmVisible(true);
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to locate this address");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConfirmAddressPin = async (pin: { latitude: number; longitude: number }) => {
+    if (!pendingAddressPayload) return;
+
+    try {
+      setSaving(true);
       const addressPayload = {
-        label: addressLabel.trim() || "Home",
-        recipientName: recipientName.trim(),
-        houseFlatDoorNo: houseFlatDoorNo.trim(),
-        buildingApartmentName: buildingApartmentName.trim() || undefined,
-        streetRoadName: streetRoadName.trim(),
-        areaLocality: area.trim(),
-        street: legacyStreet || street.trim(),
-        city: city.trim(),
-        cityTownVillage: city.trim(),
-        state: state.trim(),
-        pincode: pincode.trim(),
-        area: area.trim(),
-        landmark: landmark.trim() || undefined,
-        district: district.trim() || undefined,
-        country: country.trim()
+        ...pendingAddressPayload,
+        latitude: pin.latitude,
+        longitude: pin.longitude
       };
 
       const [profileResult, addressResult] = await Promise.all([
@@ -406,13 +444,18 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
+      setPinConfirmVisible(false);
+      setPendingAddressPayload(null);
+      setPendingPin(null);
+      setAddressLatitude(pin.latitude);
+      setAddressLongitude(pin.longitude);
       await loadProfile();
       setEditing(false);
 
       if (forceComplete) {
         setRegistrationSuccessVisible(true);
       } else {
-        Alert.alert("Profile Saved", "Your profile details have been updated.");
+        Alert.alert("Profile Saved", "Your delivery address and map pin have been saved.");
       }
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to update profile");
@@ -543,6 +586,28 @@ export default function ProfileScreen({ navigation, route }: any) {
       routes: [{ name: "Home" }]
     });
   };
+
+  const renderAddressPinConfirmModal = () => (
+    <AddressPinConfirmModal
+      visible={pinConfirmVisible && Boolean(pendingPin)}
+      addressLines={buildAddressLines(
+        {
+          ...(pendingAddressPayload || {}),
+          label: String(pendingAddressPayload?.label || addressLabel)
+        } as SavedAddress,
+        name
+      )}
+      formattedAddress={pendingPin?.formattedAddress}
+      latitude={pendingPin?.latitude || 0}
+      longitude={pendingPin?.longitude || 0}
+      confirming={saving}
+      onConfirm={handleConfirmAddressPin}
+      onEdit={() => {
+        setPinConfirmVisible(false);
+        setPendingPin(null);
+      }}
+    />
+  );
 
   const renderRegistrationSuccessModal = () => (
     <Modal visible={registrationSuccessVisible} transparent animationType="fade" onRequestClose={goHomeAfterRegistration}>
@@ -789,7 +854,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
             <Text style={styles.sectionHint}>
-              Fill these details. We automatically save the map pin from this address for the rider.
+              Fill these details. Next we show the pin on a map so you can confirm it before saving.
             </Text>
             <AddressFormFields {...addressFormProps} />
           </View>
@@ -800,6 +865,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Complete Registration</Text>}
           </TouchableOpacity>
         </View>
+        {renderAddressPinConfirmModal()}
         {renderRegistrationSuccessModal()}
         {renderSupportModal()}
         {renderDeleteAccountModal()}
@@ -1022,7 +1088,9 @@ export default function ProfileScreen({ navigation, route }: any) {
               </TouchableOpacity>
             ) : null}
           </View>
-          <Text style={styles.sectionHint}>Fill the address below. We automatically save the map pin for the rider.</Text>
+          <Text style={styles.sectionHint}>
+            Fill the address below. Next we show the pin on a map so you can confirm it before saving.
+          </Text>
 
           {editing ? (
             <>
@@ -1226,6 +1294,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
       )}
+      {renderAddressPinConfirmModal()}
       {renderRegistrationSuccessModal()}
       {renderSupportModal()}
       {renderDeleteAccountModal()}

@@ -254,9 +254,11 @@ export const updateUserAddress = async (req: AuthRequest, res: Response) => {
     }
 
     const address = normalizeAddressPayload(req.body);
-    const geocodedPin = await resolveAddressCoordinates(address);
-    address.latitude = geocodedPin.latitude;
-    address.longitude = geocodedPin.longitude;
+    if (address.latitude == null || address.longitude == null) {
+      const geocodedPin = await resolveAddressCoordinates(address);
+      address.latitude = geocodedPin.latitude;
+      address.longitude = geocodedPin.longitude;
+    }
     const userDoc = await User.findById(user.id);
 
     if (!userDoc) {
@@ -505,9 +507,11 @@ export const addUserAddress = async (req: AuthRequest, res: Response) => {
       ...req.body,
       isDefault: req.body.isDefault || addresses.length === 0
     });
-    const geocodedPin = await resolveAddressCoordinates(address);
-    address.latitude = geocodedPin.latitude;
-    address.longitude = geocodedPin.longitude;
+    if (address.latitude == null || address.longitude == null) {
+      const geocodedPin = await resolveAddressCoordinates(address);
+      address.latitude = geocodedPin.latitude;
+      address.longitude = geocodedPin.longitude;
+    }
 
     if (address.isDefault) {
       addresses.forEach((entry: any) => {
@@ -712,6 +716,17 @@ export const suggestDeliveryAddresses = async (req: AuthRequest, res: Response) 
   } catch (err: any) {
     console.error("suggestDeliveryAddresses error:", err);
     return errorResponse(res, err.message || "Failed to search addresses", err.statusCode || 500);
+  }
+};
+
+export const resolveDeliveryAddressPin = async (req: AuthRequest, res: Response) => {
+  try {
+    const address = normalizeAddressPayload(req.body || {});
+    const pin = await resolveAddressCoordinates(address);
+    return successResponse(res, pin, "Delivery pin ready");
+  } catch (err: any) {
+    console.error("resolveDeliveryAddressPin error:", err);
+    return errorResponse(res, err.message || "Failed to locate this address", err.statusCode || 500);
   }
 };
 

@@ -1,4 +1,4 @@
-import { apiGet, ApiResponse } from "./client";
+import { apiGet, apiPost, ApiResponse } from "./client";
 
 export type GeocodedAddress = {
   formattedAddress: string;
@@ -32,4 +32,14 @@ export const geocodeAddressQuery = (query: string): Promise<ApiResponse<Geocoded
 
 export const getGeocodedPlace = (placeId: string): Promise<ApiResponse<GeocodedAddress>> => {
   return apiGet<GeocodedAddress>(`/users/geocode/place?placeId=${encodeURIComponent(placeId)}`);
+};
+
+export type ResolvedAddressPin = {
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
+};
+
+export const resolveAddressPin = (address: Record<string, unknown>): Promise<ApiResponse<ResolvedAddressPin>> => {
+  return apiPost<ResolvedAddressPin>("/users/geocode/resolve", address);
 };
