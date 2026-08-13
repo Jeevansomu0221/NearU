@@ -20,6 +20,16 @@ import { Ionicons } from "@expo/vector-icons";
 const isAwaitingPartnerAction = (status: string) =>
   status === "CONFIRMED";
 
+const LIVE_ORDER_STATUSES = new Set([
+  "CONFIRMED",
+  "ACCEPTED",
+  "PREPARING",
+  "READY",
+  "ASSIGNED",
+  "PICKED_UP",
+  "REACHED_CUSTOMER"
+]);
+
 export default function DashboardScreen({ navigation }: any) {
   const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
@@ -36,6 +46,7 @@ export default function DashboardScreen({ navigation }: any) {
     todayEarnings: 0,
     totalEarnings: 0
   });
+  const [liveOrderCount, setLiveOrderCount] = useState(0);
 
   useEffect(() => {
     loadDashboardData();
@@ -47,6 +58,7 @@ export default function DashboardScreen({ navigation }: any) {
   useEffect(() => {
     const unsubscribe = navigation.addListener?.("focus", () => {
       loadDashboardData({ silent: true });
+      loadPendingOrders();
     });
     return unsubscribe;
   }, [navigation]);
@@ -57,7 +69,9 @@ export default function DashboardScreen({ navigation }: any) {
       const response = res.data as { success: boolean; data?: any[] };
       if (!response.success || !Array.isArray(response.data)) return;
 
-      const actionable = response.data.filter((order) => isAwaitingPartnerAction(order.status));
+      const live = response.data.filter((order) => LIVE_ORDER_STATUSES.has(String(order.status || "")));
+      const actionable = live.filter((order) => isAwaitingPartnerAction(order.status));
+      setLiveOrderCount(live.length);
       setStats((current) => ({ ...current, pendingOrders: actionable.length }));
     } catch (error) {
       console.log("Failed to poll partner orders", error);
@@ -90,18 +104,17 @@ export default function DashboardScreen({ navigation }: any) {
         if (walletData.success && walletData.data) {
           setWallet(walletData.data);
         }
-        setStats(
-          statsData.data || {
-            todayOrders: 0,
-            totalOrders: 0,
-            pendingOrders: 0,
-            todayEarnings: 0,
-            totalEarnings: 0
-          }
-        );
+        setStats((current) => ({
+          todayOrders: statsData.data?.todayOrders ?? 0,
+          totalOrders: statsData.data?.totalOrders ?? 0,
+          pendingOrders: current.pendingOrders,
+          todayEarnings: statsData.data?.todayEarnings ?? 0,
+          totalEarnings: statsData.data?.totalEarnings ?? 0
+        }));
       } catch (statsError) {
         console.log("Stats endpoint not available yet, using defaults");
       }
+      await loadPendingOrders();
     } catch (error) {
       console.error("Failed to load dashboard:", error);
     } finally {
@@ -274,9 +287,18 @@ export default function DashboardScreen({ navigation }: any) {
             <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Orders")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#EBF3FE" }]}>
                 <Ionicons name="cart" size={22} color="#60A5FA" />
+                {liveOrderCount > 0 ? (
+                  <View style={[styles.liveOrderBadge, stats.pendingOrders > 0 && styles.liveOrderBadgeUrgent]}>
+                    <Text style={styles.liveOrderBadgeText}>{liveOrderCount > 99 ? "99+" : liveOrderCount}</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Orders</Text>
-              <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Live & past orders</Text>
+              <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>
+                {liveOrderCount > 0
+                  ? `${liveOrderCount} live order${liveOrderCount === 1 ? "" : "s"}`
+                  : "Live & past orders"}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Menu")} activeOpacity={0.7}>
@@ -683,6 +705,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12
+  },
+  liveOrderBadge: {
+    position: "absolute",
+    top: -6,
+    right: -8,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF"
+  },
+  liveOrderBadgeUrgent: {
+    backgroundColor: "#DC2626"
+  },
+  liveOrderBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 13
   },
   gridCardTitle: {
     fontSize: 15,
