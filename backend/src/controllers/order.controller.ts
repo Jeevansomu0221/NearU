@@ -475,14 +475,36 @@ const haversineKm = (from: [number, number], to: [number, number]) => {
 const isBundledDeliveryOrder = (order: any) =>
   Boolean(order?.deliveryBundleId && Number(order?.deliveryBundleSize || 1) > 1);
 
+const CLOSED_ORDER_STATUSES = new Set(["CANCELLED", "REJECTED", "DELIVERED"]);
+const ACTIVE_DELIVERY_STATUSES = new Set(["ASSIGNED", "PICKED_UP", "REACHED_CUSTOMER"]);
+const DELIVERY_STATUS_RANK: Record<string, number> = {
+  PENDING: 0,
+  CONFIRMED: 1,
+  ACCEPTED: 2,
+  PREPARING: 3,
+  READY: 4,
+  ASSIGNED: 5,
+  PICKED_UP: 6,
+  REACHED_CUSTOMER: 7,
+  DELIVERED: 8,
+  CANCELLED: 9,
+  REJECTED: 9
+};
+
+const getActiveDeliveryOrders = (orders: any[]) => {
+  const active = orders.filter((order) => ACTIVE_DELIVERY_STATUSES.has(String(order?.status || "")));
+  return active.length ? active : orders.filter((order) => !CLOSED_ORDER_STATUSES.has(String(order?.status || "")));
+};
+
 const getBundleStatus = (orders: any[]) => {
-  const statuses = new Set(orders.map((order) => order.status));
-  if (statuses.size === 1) return orders[0]?.status || "READY";
-  if (statuses.has("REACHED_CUSTOMER")) return "REACHED_CUSTOMER";
-  if (statuses.has("PICKED_UP")) return "PICKED_UP";
-  if (statuses.has("ASSIGNED")) return "ASSIGNED";
-  if (orders.every((order) => order.status === "READY")) return "READY";
-  return "PREPARING";
+  const target = getActiveDeliveryOrders(orders);
+  if (target.length === 0) return orders[0]?.status || "READY";
+  return target.reduce((earliest: string, order: any) => {
+    const current = String(order?.status || "READY");
+    const currentRank = DELIVERY_STATUS_RANK[current] ?? DELIVERY_STATUS_RANK.READY;
+    const earliestRank = DELIVERY_STATUS_RANK[earliest] ?? DELIVERY_STATUS_RANK.READY;
+    return currentRank < earliestRank ? current : earliest;
+  }, String(target[0]?.status || "READY"));
 };
 
 const sortBundleOrders = (orders: any[]) =>
@@ -1409,6 +1431,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     const user = req.user;
     const { orderId } = req.params;
     const { status, collectedAmount, collectionMethod, verificationCode, otpBypass, proofUrl, bypassReason } = req.body;
+    const normalizedStatus = String(status || "").trim().toUpperCase();
     const normalizedCollectionMethod =
       String(collectionMethod || "CASH").toUpperCase() === "UPI" ? "UPI" : "CASH";
 
@@ -1418,7 +1441,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
     const allowedStatuses = ["PICKED_UP", "REACHED_CUSTOMER", "DELIVERED"];
 
-    if (!allowedStatuses.includes(status)) {
+    if (!allowedStatuses.includes(normalizedStatus)) {
       return errorResponse(res, "Invalid status update", 400);
     }
 
@@ -1429,43 +1452,63 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     }
 
     const userId = new mongoose.Types.ObjectId(user.id);
-    const deliveryOrders = isBundledDeliveryOrder(order)
+    const bundledOrders = isBundledDeliveryOrder(order)
       ? await Order.find({ deliveryBundleId: order.deliveryBundleId }).sort({ deliveryBundleSequence: 1, createdAt: 1 })
       : [order];
+    const deliveryOrders = getActiveDeliveryOrders(bundledOrders);
 
     if (deliveryOrders.length === 0) {
       return errorResponse(res, "Order not found", 404);
     }
 
     const unauthorizedOrder = deliveryOrders.find((deliveryOrder: any) => {
-      return !deliveryOrder.deliveryPartnerId || !deliveryOrder.deliveryPartnerId.equals(userId);
+      return !idsMatch(deliveryOrder.deliveryPartnerId, userId);
     });
     if (unauthorizedOrder) {
       return errorResponse(res, "Unauthorized - Not assigned to this delivery job", 401);
     }
 
-    if (status === "PICKED_UP" && deliveryOrders.some((deliveryOrder: any) => deliveryOrder.status !== "ASSIGNED")) {
-      return errorResponse(res, "All bundled orders must be ASSIGNED before pickup", 400);
-    }
+    const currentStatuses = deliveryOrders.map((deliveryOrder: any) => String(deliveryOrder.status || ""));
 
     if (
-      status === "REACHED_CUSTOMER" &&
-      deliveryOrders.some((deliveryOrder: any) => deliveryOrder.status !== "PICKED_UP")
+      normalizedStatus === "PICKED_UP" &&
+      deliveryOrders.some((deliveryOrder: any) => !["ASSIGNED", "PICKED_UP"].includes(String(deliveryOrder.status)))
     ) {
-      return errorResponse(res, "All bundled orders must be PICKED_UP before marking reached customer location", 400);
+      return errorResponse(
+        res,
+        `Order must be assigned before pickup. Current status: ${currentStatuses.join(", ")}`,
+        400
+      );
     }
 
     if (
-      status === "DELIVERED" &&
+      normalizedStatus === "REACHED_CUSTOMER" &&
+      deliveryOrders.some(
+        (deliveryOrder: any) => !["PICKED_UP", "REACHED_CUSTOMER"].includes(String(deliveryOrder.status))
+      )
+    ) {
+      return errorResponse(
+        res,
+        `Mark the order as picked up first. Current status: ${currentStatuses.join(", ")}`,
+        400
+      );
+    }
+
+    if (
+      normalizedStatus === "DELIVERED" &&
       deliveryOrders.some(
         (deliveryOrder: any) =>
           deliveryOrder.status !== "PICKED_UP" && deliveryOrder.status !== "REACHED_CUSTOMER"
       )
     ) {
-      return errorResponse(res, "All bundled orders must be PICKED_UP or REACHED_CUSTOMER before delivery", 400);
+      return errorResponse(
+        res,
+        `Reach the customer or pick up the order before marking delivered. Current status: ${currentStatuses.join(", ")}`,
+        400
+      );
     }
 
-    if (status === "DELIVERED") {
+    if (normalizedStatus === "DELIVERED") {
       const wantsOtpBypass = otpBypass === true || String(otpBypass || "").toLowerCase() === "true";
       const proofImageUrl = String(proofUrl || "").trim();
 
@@ -1515,8 +1558,8 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
     const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
     const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
-    const codCollectedAmount = status === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
-    if (status === "DELIVERED" && totalCodAmount > 0) {
+    const codCollectedAmount = normalizedStatus === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
+    if (normalizedStatus === "DELIVERED" && totalCodAmount > 0) {
       if (normalizedCollectionMethod === "UPI") {
         const codTargets = getCodCollectionTargets(deliveryOrders);
         const unpaidCodOrders = codTargets.filter((deliveryOrder: any) => deliveryOrder.paymentStatus !== "PAID");
@@ -1531,11 +1574,11 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     let deliveryPartner: any = null;
     let createdCashLedgerAmount = 0;
     const wantsOtpBypass =
-      status === "DELIVERED" && (otpBypass === true || String(otpBypass || "").toLowerCase() === "true");
+      normalizedStatus === "DELIVERED" && (otpBypass === true || String(otpBypass || "").toLowerCase() === "true");
     const proofImageUrl = String(proofUrl || "").trim();
     const otpBypassReason = String(bypassReason || "Customer could not provide verification code").trim().slice(0, 300);
 
-    if (status === "DELIVERED") {
+    if (normalizedStatus === "DELIVERED") {
       deliveryPartner = await DeliveryPartner.findOne({ userId: user.id });
       if (!deliveryPartner) {
         return errorResponse(res, "Delivery profile not found", 404);
@@ -1543,17 +1586,17 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     }
 
     const sharedPickupCode =
-      status === "PICKED_UP"
+      normalizedStatus === "PICKED_UP"
         ? String(deliveryOrders.find((o: any) => String(o.deliveryVerificationCode || "").trim())?.deliveryVerificationCode || "").trim() ||
           generateDeliveryVerificationCode()
         : "";
 
     for (const deliveryOrder of deliveryOrders) {
-      deliveryOrder.status = status;
-      if (status === "PICKED_UP") {
+      deliveryOrder.status = normalizedStatus;
+      if (normalizedStatus === "PICKED_UP") {
         deliveryOrder.deliveryVerificationCode = sharedPickupCode;
       }
-      if (status === "DELIVERED") {
+      if (normalizedStatus === "DELIVERED") {
         deliveryOrder.deliveredAt = new Date();
 
         if (wantsOtpBypass) {
@@ -1623,7 +1666,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       await deliveryOrder.save();
     }
 
-    if (status === "DELIVERED" && deliveryPartner) {
+    if (normalizedStatus === "DELIVERED" && deliveryPartner) {
       const totalDeliveryEarnings = deliveryOrders.reduce(
         (sum: number, deliveryOrder: any) => sum + getRiderOrderEarnings(deliveryOrder),
         0
@@ -1650,8 +1693,8 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
 
     void Promise.all(
       deliveryOrders.flatMap((deliveryOrder: any) => [
-        notifyCustomerOrderStatus(deliveryOrder, status),
-        notifyPartnerDeliveryStatus(deliveryOrder, status)
+        notifyCustomerOrderStatus(deliveryOrder, normalizedStatus),
+        notifyPartnerDeliveryStatus(deliveryOrder, normalizedStatus)
       ])
     ).catch((error) => {
       console.error("Failed to notify delivery status:", error);
@@ -1663,7 +1706,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       )
     );
     const responseOrder = isBundledDeliveryOrder(order) ? buildBundledDeliveryJob(responseOrders) : responseOrders[0];
-    if (status === "DELIVERED") {
+    if (normalizedStatus === "DELIVERED") {
       responseOrder.deliveryEarnings = responseOrders.reduce(
         (sum: number, deliveryOrder: any) => sum + getRiderOrderEarnings(deliveryOrder),
         0
@@ -1672,9 +1715,12 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
       responseOrder.collectionMethod = normalizedCollectionMethod;
     }
 
-    return successResponse(res, responseOrder, `Delivery ${status.toLowerCase()} successfully`);
+    return successResponse(res, responseOrder, `Delivery ${normalizedStatus.toLowerCase().replace("_", " ")} successfully`);
   } catch (err: any) {
     console.error("updateDeliveryStatus error:", err);
+    if (err?.name === "ValidationError") {
+      return errorResponse(res, err.message || "Invalid delivery status update", 400);
+    }
     return errorResponse(res, "Failed to update delivery status");
   }
 };

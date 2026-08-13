@@ -611,11 +611,14 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           }
         });
       } else {
-        Alert.alert("Error", response.message || "Failed to update status");
+        Alert.alert("Could not update status", response.message || "Failed to mark reached customer location");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error marking reached customer:", error);
-      Alert.alert("Error", "Failed to update status");
+      Alert.alert(
+        "Could not update status",
+        error?.message || "Failed to mark reached customer location"
+      );
     } finally {
       setUpdating(false);
     }

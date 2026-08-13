@@ -274,10 +274,16 @@ export const apiPost = async <T = any>(url: string, data?: any, config?: any): P
     const response = await api.post(url, data, config);
     return extractData<T>(response);
   } catch (error: any) {
+    const serverMessage =
+      typeof error?.message === "string" && !String(error.message).startsWith("Request failed with status code")
+        ? error.message
+        : typeof error?.response?.data?.message === "string"
+          ? error.response.data.message
+          : undefined;
     return {
       success: false,
-      message: error.message || "Request failed",
-      ...error
+      ...error,
+      message: serverMessage || "Request failed"
     };
   }
 };
