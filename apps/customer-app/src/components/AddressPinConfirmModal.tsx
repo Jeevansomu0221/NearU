@@ -22,7 +22,7 @@ type AddressPinConfirmModalProps = {
 };
 
 const TILE_SIZE = 256;
-const MAP_ZOOM = 16;
+const MAP_ZOOM = 18;
 const TILE_SPAN = 3;
 
 const latLngToTile = (latitude: number, longitude: number, zoom: number) => {
@@ -171,7 +171,7 @@ export default function AddressPinConfirmModal({
       <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
         <Text style={styles.title}>Confirm delivery pin</Text>
         <Text style={styles.subtitle}>
-          This pin is for the address you entered. Drag the map if it needs a small nudge.
+          Place the pin on your building. Drag the map until the orange pin sits on the gate or tower.
         </Text>
 
         <View style={styles.mapCard}>

@@ -14,6 +14,9 @@ export type GeocodedAddress = {
   country: string;
   latitude: number;
   longitude: number;
+  locationType?: string;
+  osmClass?: string;
+  source?: "google" | "osm";
 };
 
 export type AddressSuggestion = {
@@ -31,6 +34,7 @@ type GoogleAddressComponent = {
 const GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GOOGLE_AUTOCOMPLETE_URL = "https://maps.googleapis.com/maps/api/place/autocomplete/json";
 const GOOGLE_PLACE_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json";
+const GOOGLE_PLACE_TEXT_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json";
 
 const componentValue = (components: GoogleAddressComponent[], type: string, short = false) => {
   const match = components.find((component) => Array.isArray(component.types) && component.types.includes(type));
@@ -78,9 +82,13 @@ const parseGoogleAddress = (result: any): GeocodedAddress | null => {
     pincode: pincodeDigits,
     country,
     latitude,
-    longitude
+    longitude,
+    locationType: String(result?.geometry?.location_type || "").trim(),
+    source: "google"
   };
 };
+
+const hasGoogleMapsKey = () => Boolean(config.googleMapsApiKey.trim());
 
 const googleGet = async (url: string, params: Record<string, string>) => {
   const apiKey = config.googleMapsApiKey.trim();
@@ -90,6 +98,21 @@ const googleGet = async (url: string, params: Record<string, string>) => {
   const response = await fetch(`${url}?${search.toString()}`);
   if (!response.ok) return null;
   return response.json();
+};
+
+const parseGooglePlace = (result: any): GeocodedAddress | null => {
+  const parsed = parseGoogleAddress(result);
+  if (!parsed) return null;
+  const name = String(result?.name || "").trim();
+  if (name && !parsed.buildingApartmentName) {
+    parsed.buildingApartmentName = name;
+  }
+  if (name && parsed.formattedAddress && !parsed.formattedAddress.toLowerCase().includes(name.toLowerCase())) {
+    parsed.formattedAddress = `${name}, ${parsed.formattedAddress}`;
+  }
+  parsed.locationType = parsed.locationType || "PLACE";
+  parsed.source = "google";
+  return parsed;
 };
 
 const parseNominatimAddress = (result: any): GeocodedAddress | null => {
@@ -113,7 +136,10 @@ const parseNominatimAddress = (result: any): GeocodedAddress | null => {
     pincode: pincodeDigits,
     country: String(details.country || "India").trim(),
     latitude,
-    longitude
+    longitude,
+    osmClass: String(result?.class || result?.category || "").trim(),
+    locationType: String(result?.type || result?.addresstype || "").trim(),
+    source: "osm"
   };
 };
 
@@ -154,6 +180,9 @@ export const geocodeTypedAddress = async (query: string): Promise<GeocodedAddres
         .map(parseGoogleAddress)
         .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry))
         .slice(0, 6);
+    }
+    if (payload?.status) {
+      console.warn("Google Geocoding lookup failed:", payload.status, payload.error_message || "");
     }
   } catch {
     // Fall through to OpenStreetMap if Google is unavailable.
@@ -244,35 +273,57 @@ const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   let score = 0;
   const wantedPin = pincodeDigits(address.pincode);
   const haystack = normalizeText(
-    [match.formattedAddress, match.area, match.city, match.district, match.state, match.pincode].join(" ")
+    [
+      match.formattedAddress,
+      match.buildingApartmentName,
+      match.area,
+      match.city,
+      match.district,
+      match.state,
+      match.pincode
+    ].join(" ")
   );
 
-  if (wantedPin && match.pincode === wantedPin) score += 120;
-  if (wantedPin && match.pincode && match.pincode !== wantedPin) score -= 90;
-
   const area = normalizeText(address.area || address.areaLocality);
-  if (area && haystack.includes(area)) score += 70;
-  area
-    .split(" ")
-    .filter((word) => word.length > 3)
-    .forEach((word) => {
-      if (haystack.includes(word)) score += 12;
-    });
+  const areaTokens = area.split(" ").filter((word) => word.length > 3);
+  const areaMatched = Boolean(area && (haystack.includes(area) || areaTokens.some((word) => haystack.includes(word))));
+
+  if (wantedPin && match.pincode === wantedPin) score += 50;
+  // Indian pincodes often disagree with map data for the same colony.
+  if (wantedPin && match.pincode && match.pincode !== wantedPin) {
+    score += areaMatched ? -10 : -80;
+  }
+
+  if (area && haystack.includes(area)) score += 80;
+  areaTokens.forEach((word) => {
+    if (haystack.includes(word)) score += 16;
+  });
+  if (area && !areaMatched) score -= 70;
 
   const street = normalizeText(address.streetRoadName || address.street);
-  if (street && haystack.includes(street)) score += 40;
+  if (street && haystack.includes(street)) score += 50;
   street
     .split(" ")
     .filter((word) => word.length > 3)
     .forEach((word) => {
-      if (haystack.includes(word)) score += 8;
+      if (haystack.includes(word)) score += 10;
     });
 
   const city = normalizeText(address.city || address.cityTownVillage);
-  if (city && (normalizeText(match.city).includes(city) || haystack.includes(city))) score += 25;
+  if (city && (normalizeText(match.city).includes(city) || haystack.includes(city))) score += 15;
 
   const building = normalizeText(address.buildingApartmentName);
-  if (building && haystack.includes(building)) score += 20;
+  if (building && haystack.includes(building)) score += 90;
+
+  if (match.source === "google") score += 25;
+  if (match.locationType === "ROOFTOP" || match.locationType === "PLACE") score += 60;
+  if (match.locationType === "RANGE_INTERPOLATED") score += 25;
+  if (match.osmClass === "highway" || match.locationType === "trunk" || match.locationType === "primary") {
+    score -= 50;
+  }
+  if (match.locationType === "village" || match.locationType === "suburb" || match.locationType === "neighbourhood") {
+    score += 35;
+  }
 
   return score;
 };
@@ -286,77 +337,119 @@ const buildFallbackQueries = (address: AddressLookup) => {
   const street = address.streetRoadName || address.street;
   const area = address.area || address.areaLocality;
   const city = address.city || address.cityTownVillage;
+  const building = address.buildingApartmentName;
   const country = address.country || "India";
 
   return Array.from(
     new Set(
       [
-        buildAddressSearchQuery(address),
-        compactQuery([street, area, city, address.state, address.pincode, country]),
-        compactQuery([area, city, address.pincode, address.state, country]),
+        compactQuery([building, street, area, city, address.state, country]),
+        compactQuery([street, area, city, address.state, country]),
         compactQuery([area, city, address.state, country]),
-        compactQuery([city, address.pincode, address.state, country])
+        compactQuery([area, address.state, country])
       ].filter((query) => query.length >= 3)
     )
   );
 };
 
+const geocodeWithGooglePlaces = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
+  if (!hasGoogleMapsKey()) return [];
+  const query = compactQuery([
+    address.buildingApartmentName,
+    address.streetRoadName || address.street,
+    address.area || address.areaLocality,
+    address.city || address.cityTownVillage,
+    address.pincode,
+    address.state,
+    "India"
+  ]);
+  if (!query) return [];
+
+  const payload = await googleGet(GOOGLE_PLACE_TEXT_URL, {
+    query,
+    region: "in",
+    language: "en"
+  });
+  if (payload?.status && payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
+    console.warn("Google Places text search failed:", payload.status, payload.error_message || "");
+    return [];
+  }
+  return (Array.isArray(payload?.results) ? payload.results : [])
+    .map(parseGooglePlace)
+    .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+};
+
 const geocodeWithGoogleStructured = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
-  const pin = pincodeDigits(address.pincode);
+  if (!hasGoogleMapsKey()) return [];
   const query = compactQuery([
     address.houseFlatDoorNo,
     address.buildingApartmentName,
     address.streetRoadName || address.street,
     address.area || address.areaLocality,
     address.city || address.cityTownVillage,
-    address.state
+    address.state,
+    address.pincode
   ]);
   if (!query) return [];
 
   const payload = await googleGet(GOOGLE_GEOCODE_URL, {
     address: query,
-    components: pin ? `country:IN|postal_code:${pin}` : "country:IN",
+    components: "country:IN",
     region: "in",
     language: "en"
   });
 
-  if (payload?.status !== "OK" && payload?.status !== "ZERO_RESULTS") return [];
+  if (payload?.status && payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
+    console.warn("Google Geocoding failed:", payload.status, payload.error_message || "");
+    return [];
+  }
   return (Array.isArray(payload?.results) ? payload.results : [])
     .map(parseGoogleAddress)
     .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
 };
 
 const geocodeWithNominatimStructured = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
-  const search = new URLSearchParams({
-    format: "jsonv2",
-    addressdetails: "1",
-    countrycodes: "in",
-    limit: "6",
-    country: address.country || "India"
-  });
-  const street = compactQuery([
-    address.houseFlatDoorNo,
-    address.streetRoadName || address.street
-  ]);
-  const city = address.city || address.cityTownVillage;
-  const pin = pincodeDigits(address.pincode);
-  if (street) search.set("street", street);
-  if (city) search.set("city", city);
-  if (address.state) search.set("state", address.state);
-  if (pin) search.set("postalcode", pin);
-  if (!street && !city && !pin) return [];
+  const area = address.area || address.areaLocality;
+  const collected: GeocodedAddress[] = [];
+  const queries = Array.from(
+    new Set(
+      [
+        compactQuery([address.streetRoadName || address.street, area]),
+        compactQuery([area, address.state, "India"]),
+        compactQuery([area])
+      ].filter((query) => query.length >= 3)
+    )
+  );
 
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${search.toString()}`, {
-    headers: {
-      "User-Agent": "Vyaha/1.0 (support@vyaha.com)",
-      Accept: "application/json"
+  for (const query of queries) {
+    const search = new URLSearchParams({
+      format: "jsonv2",
+      addressdetails: "1",
+      countrycodes: "in",
+      limit: "6",
+      q: query
+    });
+    if (query === compactQuery([area]) || query === compactQuery([area, address.state, "India"])) {
+      search.set("featuretype", "settlement");
     }
-  });
-  if (!response.ok) return [];
-  const payload = await response.json();
-  return (Array.isArray(payload) ? payload : [])
-    .map(parseNominatimAddress)
-    .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?${search.toString()}`, {
+      headers: {
+        "User-Agent": "Vyaha/1.0 (support@vyaha.com)",
+        Accept: "application/json"
+      }
+    });
+    if (response.ok) {
+      const payload = await response.json();
+      collected.push(
+        ...(Array.isArray(payload) ? payload : [])
+          .map(parseNominatimAddress)
+          .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry))
+      );
+    }
+    if (collected.length) break;
+    await wait(400);
+  }
+  return collected;
 };
 
 export const resolveAddressCoordinates = async (address: AddressLookup & {
@@ -368,21 +461,28 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
     throw Object.assign(new Error("Enter a complete delivery address"), { statusCode: 400 });
   }
 
+  if (!hasGoogleMapsKey()) {
+    console.warn("GOOGLE_MAPS_API_KEY is not set; apartment lookup will use OpenStreetMap fallback");
+  }
+
   const collected: GeocodedAddress[] = [];
+  collected.push(...(await geocodeWithGooglePlaces(address)));
   collected.push(...(await geocodeWithGoogleStructured(address)));
-  const structuredBest = pickBestMatch(collected, address);
-  if (structuredBest && scoreGeocodedMatch(structuredBest, address) >= 50) {
+  const googleBest = pickBestMatch(collected, address);
+  if (googleBest && scoreGeocodedMatch(googleBest, address) >= 80) {
+    console.info("Address pin source=", googleBest.source, "score=", scoreGeocodedMatch(googleBest, address));
     return {
-      latitude: structuredBest.latitude,
-      longitude: structuredBest.longitude,
-      formattedAddress: structuredBest.formattedAddress
+      latitude: googleBest.latitude,
+      longitude: googleBest.longitude,
+      formattedAddress: googleBest.formattedAddress
     };
   }
 
   await wait(400);
   collected.push(...(await geocodeWithNominatimStructured(address)));
   const nominatimBest = pickBestMatch(collected, address);
-  if (nominatimBest && scoreGeocodedMatch(nominatimBest, address) >= 50) {
+  if (nominatimBest && scoreGeocodedMatch(nominatimBest, address) >= 80) {
+    console.info("Address pin source=", nominatimBest.source, "score=", scoreGeocodedMatch(nominatimBest, address));
     return {
       latitude: nominatimBest.latitude,
       longitude: nominatimBest.longitude,
@@ -391,12 +491,11 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
   }
 
   for (let index = 0; index < queries.length; index += 1) {
-    if (collected.length > 0 || index > 0) {
-      await wait(400);
-    }
+    await wait(400);
     collected.push(...(await geocodeTypedAddress(queries[index])));
     const bestSoFar = pickBestMatch(collected, address);
-    if (bestSoFar && scoreGeocodedMatch(bestSoFar, address) >= 50) {
+    if (bestSoFar && scoreGeocodedMatch(bestSoFar, address) >= 80) {
+      console.info("Address pin source=", bestSoFar.source, "score=", scoreGeocodedMatch(bestSoFar, address));
       return {
         latitude: bestSoFar.latitude,
         longitude: bestSoFar.longitude,
@@ -406,7 +505,8 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
   }
 
   const best = pickBestMatch(collected, address);
-  if (best && scoreGeocodedMatch(best, address) >= 0) {
+  if (best && scoreGeocodedMatch(best, address) >= 20) {
+    console.info("Address pin source=", best.source, "score=", scoreGeocodedMatch(best, address));
     return {
       latitude: best.latitude,
       longitude: best.longitude,
