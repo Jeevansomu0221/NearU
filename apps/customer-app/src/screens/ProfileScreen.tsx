@@ -39,7 +39,7 @@ import { buildLegalUrl } from "../constants/legal";
 import { getPublicShopName } from "../utils/display";
 import { unregisterPushNotifications } from "../services/notifications";
 import AddressSearchField from "../components/AddressSearchField";
-import type { GeocodedAddress } from "../api/geocode.api";
+import { geocodeAddressQuery, type GeocodedAddress } from "../api/geocode.api";
 
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha Support." },
@@ -365,27 +365,36 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
-      let nextAddressLatitude = addressLatitude;
-      let nextAddressLongitude = addressLongitude;
+      const typedAddressQuery = [
+        houseFlatDoorNo.trim(),
+        buildingApartmentName.trim(),
+        streetRoadName.trim(),
+        area.trim(),
+        landmark.trim(),
+        city.trim(),
+        district.trim(),
+        state.trim(),
+        pincode.trim(),
+        country.trim() || "India"
+      ]
+        .filter(Boolean)
+        .join(", ");
 
-      if (!hasValidAddressPin(nextAddressLatitude, nextAddressLongitude)) {
-        const permission = await Location.requestForegroundPermissionsAsync();
-        if (permission.status !== "granted") {
-          Alert.alert(
-            "Location Permission Needed",
-            "Please allow location access so we can save your exact delivery GPS pin. We cannot use only pincode or text address for delivery directions."
-          );
-          return;
-        }
-
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High
-        });
-        nextAddressLatitude = location.coords.latitude;
-        nextAddressLongitude = location.coords.longitude;
-        setAddressLatitude(nextAddressLatitude);
-        setAddressLongitude(nextAddressLongitude);
+      const geocodeResult = await geocodeAddressQuery(typedAddressQuery);
+      const geocodedPin = geocodeResult.success ? geocodeResult.data?.[0] : undefined;
+      if (!geocodedPin) {
+        Alert.alert(
+          "Address not found",
+          geocodeResult.message ||
+            "We could not find this address on the map. Check the street, area, and pincode."
+        );
+        return;
       }
+
+      const nextAddressLatitude = geocodedPin.latitude;
+      const nextAddressLongitude = geocodedPin.longitude;
+      setAddressLatitude(nextAddressLatitude);
+      setAddressLongitude(nextAddressLongitude);
 
       const legacyStreet = [houseFlatDoorNo.trim(), buildingApartmentName.trim(), streetRoadName.trim()]
         .filter(Boolean)
@@ -847,7 +856,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
             <Text style={styles.sectionHint}>
-              Search your address to fill the exact Google location, then add house / flat number if needed.
+              Enter your delivery address. We save the exact map pin from that address so the rider can navigate there.
             </Text>
             <AddressSearchField onSelect={applyGeocodedAddress} />
 
@@ -1185,7 +1194,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               </TouchableOpacity>
             ) : null}
           </View>
-          <Text style={styles.sectionHint}>Search the address to use the exact mapped location, then save Home, Work, or any label as default for checkout.</Text>
+          <Text style={styles.sectionHint}>Enter the delivery address. We geocode it and save that map pin for the rider.</Text>
 
           {editing ? (
             <>
@@ -1309,8 +1318,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Text style={styles.pinTitle}>Exact delivery pin</Text>
                   <Text style={styles.pinText}>
                     {hasValidAddressPin(addressLatitude, addressLongitude)
-                      ? `Saved: ${Number(addressLatitude).toFixed(5)}, ${Number(addressLongitude).toFixed(5)}`
-                      : "Search the address above, or stand there and save the GPS pin for exact delivery directions."}
+                      ? `Saved map pin: ${Number(addressLatitude).toFixed(5)}, ${Number(addressLongitude).toFixed(5)}`
+                      : "This pin is taken from the address you typed, so the rider can open Google Maps to it."}
                   </Text>
                 </View>
                 <TouchableOpacity style={styles.pinButton} onPress={handleCaptureAddressPin} disabled={capturingAddressPin}>

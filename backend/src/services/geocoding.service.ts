@@ -146,6 +146,75 @@ export const suggestTypedAddresses = async (query: string): Promise<AddressSugge
   }));
 };
 
+export const buildAddressSearchQuery = (address: {
+  houseFlatDoorNo?: string;
+  buildingApartmentName?: string;
+  streetRoadName?: string;
+  street?: string;
+  area?: string;
+  areaLocality?: string;
+  landmark?: string;
+  city?: string;
+  cityTownVillage?: string;
+  district?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+}) =>
+  [
+    address.houseFlatDoorNo,
+    address.buildingApartmentName,
+    address.streetRoadName || address.street,
+    address.area || address.areaLocality,
+    address.landmark,
+    address.city || address.cityTownVillage,
+    address.district,
+    address.state,
+    address.pincode,
+    address.country || "India"
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+export const resolveAddressCoordinates = async (address: {
+  houseFlatDoorNo?: string;
+  buildingApartmentName?: string;
+  streetRoadName?: string;
+  street?: string;
+  area?: string;
+  areaLocality?: string;
+  landmark?: string;
+  city?: string;
+  cityTownVillage?: string;
+  district?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+}) => {
+  const query = buildAddressSearchQuery(address);
+  if (!query) {
+    throw Object.assign(new Error("Enter a complete delivery address"), { statusCode: 400 });
+  }
+
+  const matches = await geocodeTypedAddress(query);
+  const best = matches[0];
+  if (!best) {
+    throw Object.assign(
+      new Error("We could not find this address on the map. Check the street, area, and pincode."),
+      { statusCode: 400 }
+    );
+  }
+
+  return {
+    latitude: best.latitude,
+    longitude: best.longitude,
+    formattedAddress: best.formattedAddress
+  };
+};
+
 export const getPlaceAddress = async (placeId: string): Promise<GeocodedAddress> => {
   const payload = await googleGet(GOOGLE_PLACE_DETAILS_URL, {
     place_id: placeId,

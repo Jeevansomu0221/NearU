@@ -11,6 +11,7 @@ import { executeAccountDeletion } from "../services/accountDeletion.service";
 import {
   geocodeTypedAddress,
   getPlaceAddress,
+  resolveAddressCoordinates,
   suggestTypedAddresses
 } from "../services/geocoding.service";
 
@@ -253,6 +254,9 @@ export const updateUserAddress = async (req: AuthRequest, res: Response) => {
     }
 
     const address = normalizeAddressPayload(req.body);
+    const geocodedPin = await resolveAddressCoordinates(address);
+    address.latitude = geocodedPin.latitude;
+    address.longitude = geocodedPin.longitude;
     const userDoc = await User.findById(user.id);
 
     if (!userDoc) {
@@ -300,11 +304,11 @@ export const updateUserAddress = async (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     console.error("updateUserAddress error:", err);
     
-    if (err.name === 'ValidationError') {
+    if (err.name === 'ValidationError' || err.statusCode === 400) {
       return errorResponse(res, err.message, 400);
     }
     
-    return errorResponse(res, "Failed to update address");
+    return errorResponse(res, "Failed to update address", err.statusCode || 500);
   }
 };
 
@@ -501,6 +505,9 @@ export const addUserAddress = async (req: AuthRequest, res: Response) => {
       ...req.body,
       isDefault: req.body.isDefault || addresses.length === 0
     });
+    const geocodedPin = await resolveAddressCoordinates(address);
+    address.latitude = geocodedPin.latitude;
+    address.longitude = geocodedPin.longitude;
 
     if (address.isDefault) {
       addresses.forEach((entry: any) => {
@@ -518,7 +525,10 @@ export const addUserAddress = async (req: AuthRequest, res: Response) => {
     return successResponse(res, updatedUser, "Address added successfully");
   } catch (err: any) {
     console.error("addUserAddress error:", err);
-    return errorResponse(res, "Failed to add address");
+    if (err.name === "ValidationError" || err.statusCode === 400) {
+      return errorResponse(res, err.message, 400);
+    }
+    return errorResponse(res, "Failed to add address", err.statusCode || 500);
   }
 };
 

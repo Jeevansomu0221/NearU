@@ -11,34 +11,15 @@ import {
   KeyboardAvoidingView,
   Platform
 } from "react-native";
-import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart, type CartItem, type CartItemRef } from "../context/CartContext";
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
+import { geocodeAddressQuery } from "../api/geocode.api";
 
 const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
   return `Rs ${rounded || "0"}`;
-};
-
-const MAX_PIN_DRIFT_KM = 5;
-const LOCATION_CACHE_MS = 2 * 60 * 1000;
-const LAST_KNOWN_MAX_AGE_MS = 5 * 60 * 1000;
-
-const haversineKmClient = (
-  a: { latitude: number; longitude: number },
-  b: { latitude: number; longitude: number }
-) => {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLng = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 };
 
 export default function CartScreen({ route, navigation }: any) {
@@ -55,7 +36,6 @@ export default function CartScreen({ route, navigation }: any) {
   const scrollRef = useRef<ScrollView>(null);
   const instructionsOffsetY = useRef(0);
   const hasProfileRef = useRef(false);
-  const locationCacheRef = useRef<{ location: { latitude: number; longitude: number }; at: number } | null>(null);
 
   const loadUserProfile = useCallback(async () => {
     try {
@@ -199,29 +179,41 @@ export default function CartScreen({ route, navigation }: any) {
     [groupedItems]
   );
 
-  const captureAndSaveDeliveryLocation = async () => {
+  const geocodeAndSaveDeliveryLocation = async () => {
     const address = getSelectedAddress();
     if (!address || typeof address === "string") {
       Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.");
       return undefined;
     }
 
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== "granted") {
+    const typedAddressQuery = [
+      address.houseFlatDoorNo,
+      address.buildingApartmentName,
+      address.streetRoadName || address.street,
+      address.areaLocality || address.area,
+      address.landmark,
+      address.cityTownVillage || address.city,
+      address.district,
+      address.state,
+      address.pincode,
+      address.country || "India"
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    const geocodeResult = await geocodeAddressQuery(typedAddressQuery);
+    const geocodedPin = geocodeResult.success ? geocodeResult.data?.[0] : undefined;
+    if (!geocodedPin) {
       Alert.alert(
-        "Location Permission Needed",
-        "Please allow location access so we can save your exact GPS pin. Orders cannot be placed with only pincode or text address."
+        "Address not found",
+        geocodeResult.message || "We could not find this saved address on the map. Please edit it in Profile."
       );
       return undefined;
     }
 
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High
-    });
-
     const deliveryLocation = {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude
+      latitude: geocodedPin.latitude,
+      longitude: geocodedPin.longitude
     };
 
     const payload: SavedAddress = {
@@ -234,7 +226,7 @@ export default function CartScreen({ route, navigation }: any) {
 
     const response = await updateUserAddress(payload);
     if (!response.success || !response.data) {
-      Alert.alert("Location Save Failed", response.message || "Could not save your exact delivery pin.");
+      Alert.alert("Location Save Failed", response.message || "Could not save your delivery map pin.");
       return undefined;
     }
 
@@ -242,86 +234,13 @@ export default function CartScreen({ route, navigation }: any) {
     return deliveryLocation;
   };
 
-  const refreshSavedPinInBackground = async (deviceLocation: { latitude: number; longitude: number }) => {
-    const address = getSelectedAddress();
-    if (!address || typeof address === "string") return;
-
-    try {
-      const payload: SavedAddress = {
-        ...address,
-        addressId: address._id,
-        latitude: deviceLocation.latitude,
-        longitude: deviceLocation.longitude,
-        isDefault: address.isDefault ?? true
-      } as SavedAddress & { addressId?: string };
-
-      const response = await updateUserAddress(payload);
-      if (response.success && response.data) {
-        setUserProfile(response.data);
-      }
-    } catch {
-      // Non-blocking background refresh.
-    }
-  };
-
-  const readDeviceLocationFast = async () => {
-    // Last-known position returns instantly; a fresh GPS fix can take 10+ seconds.
-    try {
-      const lastKnown = await Location.getLastKnownPositionAsync({
-        maxAge: LAST_KNOWN_MAX_AGE_MS
-      });
-      if (lastKnown) {
-        return {
-          latitude: lastKnown.coords.latitude,
-          longitude: lastKnown.coords.longitude
-        };
-      }
-    } catch {
-      // Ignore and fall through to a fresh fix.
-    }
-
-    const device = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced
-    });
-    return {
-      latitude: device.coords.latitude,
-      longitude: device.coords.longitude
-    };
-  };
-
   const resolveDeliveryLocationForPricing = useCallback(async () => {
-    const cached = locationCacheRef.current;
-    if (cached && Date.now() - cached.at < LOCATION_CACHE_MS) {
-      return cached.location;
-    }
-
-    const permission = await Location.requestForegroundPermissionsAsync();
-
-    if (permission.status === "granted") {
-      try {
-        const deviceLocation = await readDeviceLocationFast();
-
-        const saved = getDeliveryLocation();
-        if (saved) {
-          const driftKm = haversineKmClient(saved, deviceLocation);
-          if (driftKm > MAX_PIN_DRIFT_KM) {
-            void refreshSavedPinInBackground(deviceLocation);
-          }
-        }
-
-        locationCacheRef.current = { location: deviceLocation, at: Date.now() };
-        return deviceLocation;
-      } catch {
-        // Fall back to saved pin when GPS read fails.
-      }
-    }
-
     const saved = getDeliveryLocation();
     if (saved) {
       return saved;
     }
 
-    return captureAndSaveDeliveryLocation();
+    return geocodeAndSaveDeliveryLocation();
   }, [userProfile]);
 
   const loadDeliveryPricing = useCallback(async () => {
@@ -338,7 +257,7 @@ export default function CartScreen({ route, navigation }: any) {
       const deliveryLocation = await resolveDeliveryLocationForPricing();
       if (!deliveryLocation) {
         setPricingQuote(null);
-        setPricingError("Allow location access to calculate delivery fee.");
+        setPricingError("Add a complete delivery address so we can calculate the fee.");
         return;
       }
 
@@ -420,7 +339,7 @@ export default function CartScreen({ route, navigation }: any) {
         }
       });
     } catch (error: any) {
-      Alert.alert("Location Error", error.message || "Could not capture your exact delivery location.");
+      Alert.alert("Address Error", error.message || "Could not use your saved delivery address.");
     } finally {
       setLoading(false);
     }
