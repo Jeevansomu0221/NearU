@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import type { LatLng, MapPin } from "../utils/mapCoordinates";
@@ -56,6 +56,8 @@ const buildMapHtml = (pins: MapPin[], routeCoords: LatLng[]) => {
     }).addTo(map);
 
     const bounds = [];
+    window.__markers = {};
+    window.__map = map;
     markers.forEach((m) => {
       const icon = L.divIcon({
         className: '',
@@ -63,9 +65,22 @@ const buildMapHtml = (pins: MapPin[], routeCoords: LatLng[]) => {
         iconSize: [16, 16],
         iconAnchor: [8, 8]
       });
-      L.marker([m.lat, m.lng], { icon }).addTo(map).bindPopup(m.title || '');
+      window.__markers[m.id] = L.marker([m.lat, m.lng], { icon }).addTo(map).bindPopup(m.title || '');
       bounds.push([m.lat, m.lng]);
     });
+    window.__updatePin = function(id, lat, lng, title, color) {
+      if (window.__markers[id]) {
+        window.__markers[id].setLatLng([lat, lng]);
+        return;
+      }
+      const icon = L.divIcon({
+        className: '',
+        html: '<div class="vyaha-pin" style="background:' + (color || '#1976D2') + '"></div>',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      window.__markers[id] = L.marker([lat, lng], { icon }).addTo(map).bindPopup(title || 'You');
+    };
 
     if (route.length > 1) {
       L.polyline(route, { color: '#1A73E8', weight: 4, opacity: 0.9 }).addTo(map);
@@ -88,30 +103,47 @@ const buildMapHtml = (pins: MapPin[], routeCoords: LatLng[]) => {
 };
 
 export default function OsmWebMap({ height, pins, routeCoords, onReady, onError }: Props) {
+  const webRef = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
-  const hasLoadedOnceRef = React.useRef(false);
+  const hasLoadedOnceRef = useRef(false);
+  const riderPin = pins.find((pin) => pin.kind === "rider");
+  const staticPins = pins.filter((pin) => pin.kind !== "rider");
 
-  const html = useMemo(() => buildMapHtml(pins, routeCoords), [pins, routeCoords]);
-  // Force WebView to reload when pins/route change (Android often ignores html source updates).
+  // Remount only when destination/route change. Live rider moves are injected.
   const contentKey = useMemo(
     () =>
       JSON.stringify({
-        pins: pins.map((p) => [
+        pins: staticPins.map((p) => [
           p.id,
-          Number(p.coordinate.latitude.toFixed(4)),
-          Number(p.coordinate.longitude.toFixed(4))
+          Number(p.coordinate.latitude.toFixed(5)),
+          Number(p.coordinate.longitude.toFixed(5))
         ]),
         route: routeCoords.map((p) => [
-          Number(p.latitude.toFixed(4)),
-          Number(p.longitude.toFixed(4))
+          Number(p.latitude.toFixed(5)),
+          Number(p.longitude.toFixed(5))
         ])
       }),
-    [pins, routeCoords]
+    [staticPins, routeCoords]
   );
+  const html = useMemo(() => buildMapHtml(pins, routeCoords), [contentKey]);
+
+  useEffect(() => {
+    if (!ready || !riderPin || !webRef.current) return;
+    const { latitude, longitude } = riderPin.coordinate;
+    webRef.current.injectJavaScript(`
+      (function() {
+        if (window.__updatePin) {
+          window.__updatePin('rider', ${latitude}, ${longitude}, ${JSON.stringify(riderPin.title || "You")}, '#1976D2');
+        }
+        true;
+      })();
+    `);
+  }, [ready, riderPin?.coordinate.latitude, riderPin?.coordinate.longitude, riderPin?.title]);
 
   return (
     <View style={[styles.wrap, { height }]}>
       <WebView
+        ref={webRef}
         key={contentKey}
         originWhitelist={["*"]}
         source={{ html }}

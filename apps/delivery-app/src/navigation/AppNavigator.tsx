@@ -23,7 +23,7 @@ import ReviewStatusScreen from "../screens/ReviewStatusScreen";
 import AccountDeletionReviewScreen from "../screens/AccountDeletionReviewScreen";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
-import { requestRiderLocationPermission } from "../utils/riderLocation";
+import { requestRiderLocationPermission, startRiderLocationWatch } from "../utils/riderLocation";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -33,7 +33,13 @@ function MainTabs() {
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    requestRiderLocationPermission({ showDeniedAlert: true }).catch(() => {});
+    requestRiderLocationPermission({ showDeniedAlert: true })
+      .then((granted) => {
+        if (granted) {
+          void startRiderLocationWatch();
+        }
+      })
+      .catch(() => {});
   }, []);
 
   return (

@@ -42,7 +42,7 @@ import {
   type LatLng,
   type MapLocation
 } from "../utils/mapCoordinates";
-import { getCurrentRiderLocation } from "../utils/riderLocation";
+import { getCurrentRiderLocation, useRiderLiveLocation } from "../utils/riderLocation";
 import { getOrderRiderEarnings } from "../utils/riderEarnings";
 import { getImagePicker } from "../utils/imagePicker";
 import { uploadMultipart } from "../api/client";
@@ -128,7 +128,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     onAction: () => void;
   } | null>(null);
   const [noLocationModal, setNoLocationModal] = useState<NoLocationModalState | null>(null);
-  const [riderLocation, setRiderLocation] = useState<LatLng | null>(null);
+  const riderLocation = useRiderLiveLocation();
   /** Local step confirmations before calling pickup/delivery APIs. */
   const [reachedPickup, setReachedPickup] = useState(false);
   const [receiptVisible, setReceiptVisible] = useState(false);
@@ -136,30 +136,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const codQrDisplayUri = useMemo(() => getCodQrDisplayUri(codUpiSession), [codUpiSession]);
   const showRazorpayPoster = isRazorpayPosterQr(codUpiSession);
   const qrPulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const refreshRiderLocation = async () => {
-      const location = await getCurrentRiderLocation({ showDeniedAlert: false });
-      if (!cancelled && location?.coords) {
-        setRiderLocation({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude
-        });
-      }
-    };
-
-    void refreshRiderLocation();
-    const intervalId = setInterval(() => {
-      void refreshRiderLocation();
-    }, 20000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(intervalId);
-    };
-  }, []);
 
   useEffect(() => {
     if (!upiPaymentVisible) return;
@@ -414,12 +390,27 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     // the pin so the rider knows whose drop this is.
     const safeLabel = trimmedLabel ? trimmedLabel.replace(/[()]/g, "") : undefined;
     const encodedLabel = safeLabel ? encodeURIComponent(safeLabel) : undefined;
-    const nativeUrl = Platform.select({
-      // google.navigation gives instant turn-by-turn directions on Android.
-      android: `google.navigation:q=${coordinateText}&mode=d`,
-      ios: `comgooglemaps://?daddr=${coordinateText}&directionsmode=driving`
+    const liveOrigin = await getCurrentRiderLocation({
+      required: false,
+      showDeniedAlert: false,
+      timeoutMs: 8000
     });
-    const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinateText)}&travelmode=driving${encodedLabel ? `&query=${encodedLabel}` : ""}`;
+    const origin =
+      liveOrigin?.coords
+        ? `${liveOrigin.coords.latitude},${liveOrigin.coords.longitude}`
+        : riderLocation
+          ? `${riderLocation.latitude},${riderLocation.longitude}`
+          : undefined;
+    const originQuery = origin ? `&origin=${encodeURIComponent(origin)}` : "";
+    const nativeUrl = Platform.select({
+      android: origin
+        ? `https://www.google.com/maps/dir/?api=1${originQuery}&destination=${encodeURIComponent(coordinateText)}&travelmode=driving`
+        : `google.navigation:q=${coordinateText}&mode=d`,
+      ios: origin
+        ? `comgooglemaps://?saddr=${origin}&daddr=${coordinateText}&directionsmode=driving`
+        : `comgooglemaps://?daddr=${coordinateText}&directionsmode=driving`
+    });
+    const webUrl = `https://www.google.com/maps/dir/?api=1${originQuery}&destination=${encodeURIComponent(coordinateText)}&travelmode=driving${encodedLabel ? `&query=${encodedLabel}` : ""}`;
 
     if (nativeUrl) {
       try {
@@ -522,6 +513,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const handleAcceptDelivery = async () => {
     try {
       setUpdating(true);
+      await getCurrentRiderLocation({ required: false, showDeniedAlert: true, timeoutMs: 8000 });
       const response = await acceptJob(orderId);
 
       if (response.success) {

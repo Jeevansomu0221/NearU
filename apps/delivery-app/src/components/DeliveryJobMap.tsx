@@ -61,6 +61,7 @@ export default function DeliveryJobMap({
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     const loadRoute = async () => {
       if (!riderLocation || !destination) {
@@ -82,11 +83,20 @@ export default function DeliveryJobMap({
       }
     };
 
-    void loadRoute();
+    timer = setTimeout(() => {
+      void loadRoute();
+    }, 400);
+
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [riderLocation?.latitude, riderLocation?.longitude, destination?.latitude, destination?.longitude]);
+  }, [
+    riderLocation ? Number(riderLocation.latitude.toFixed(3)) : null,
+    riderLocation ? Number(riderLocation.longitude.toFixed(3)) : null,
+    destination?.latitude,
+    destination?.longitude
+  ]);
 
   useEffect(() => {
     if (mapReady || mapFailed) return;

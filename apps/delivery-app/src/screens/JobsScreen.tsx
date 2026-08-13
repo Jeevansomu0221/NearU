@@ -21,7 +21,7 @@ import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, getDeliver
 import { getDeliveryProfile, updateDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { formatAddress } from "../utils/address";
-import { getCurrentRiderLocation } from "../utils/riderLocation";
+import { getCurrentRiderLocation, subscribeRiderLocation } from "../utils/riderLocation";
 import NewJobBanner from "../components/NewJobBanner";
 
 const AVAILABILITY_STORAGE_KEY = "driverAvailability";
@@ -80,7 +80,7 @@ export default function JobsScreen({ navigation }: any) {
   }, [applyAvailabilityPreference, navigation]);
 
   const refreshLocation = useCallback(async (showDeniedAlert = false) => {
-    const location = await getCurrentRiderLocation({ showDeniedAlert });
+    const location = await getCurrentRiderLocation({ showDeniedAlert, timeoutMs: 12000 });
     if (!location) {
       setLocationError("Location permission is off. Turn it on to see nearby jobs.");
       return null;
@@ -190,8 +190,11 @@ export default function JobsScreen({ navigation }: any) {
   }, [calculateJobDetails, ensureAccountCanAccessJobs]);
 
   useEffect(() => {
-    refreshLocation(false).catch(() => {});
-  }, [refreshLocation]);
+    return subscribeRiderLocation((location) => {
+      setUserLocation(location);
+      setLocationError(null);
+    });
+  }, []);
 
   const loadAvailabilityPreference = useCallback(async () => {
     try {
@@ -239,12 +242,21 @@ export default function JobsScreen({ navigation }: any) {
     return () => clearInterval(interval);
   }, [loadAvailableJobs, loadHeaderStats]);
 
+  const lastLocationSyncAt = useRef(0);
+
   useEffect(() => {
     if (!userLocation) return;
-    updateLocation({
-      latitude: userLocation.coords.latitude,
-      longitude: userLocation.coords.longitude
-    }).catch(() => {});
+
+    const waitMs = lastLocationSyncAt.current === 0 ? 0 : Math.max(0, 10000 - (Date.now() - lastLocationSyncAt.current));
+    const timer = setTimeout(() => {
+      lastLocationSyncAt.current = Date.now();
+      updateLocation({
+        latitude: userLocation.coords.latitude,
+        longitude: userLocation.coords.longitude
+      }).catch(() => {});
+    }, waitMs);
+
+    return () => clearTimeout(timer);
   }, [userLocation]);
 
   const onRefresh = async () => {
@@ -298,6 +310,16 @@ export default function JobsScreen({ navigation }: any) {
     const { job, action } = selectedJobAction;
     setAcceptingJobId(job._id);
     try {
+      if (action === "accept") {
+        const liveLocation = await getCurrentRiderLocation({ required: false, showDeniedAlert: true, timeoutMs: 8000 });
+        if (liveLocation) {
+          lastLocationSyncAt.current = Date.now();
+          await updateLocation({
+            latitude: liveLocation.coords.latitude,
+            longitude: liveLocation.coords.longitude
+          }).catch(() => {});
+        }
+      }
       const response = action === "accept" ? await acceptJob(job._id) : await rejectJob(job._id);
       if (response.success) {
         if (action === "reject") {
