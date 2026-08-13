@@ -1,9 +1,11 @@
 import React from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 type AddressFormFieldsProps = {
   focusedField: string | null;
   onFocusField: (key: string | null) => void;
+  locatingCurrentLocation?: boolean;
+  onUseCurrentLocation?: () => void;
   addressLabel: string;
   setAddressLabel: (value: string) => void;
   recipientName: string;
@@ -75,6 +77,20 @@ const Field = ({
 export default function AddressFormFields(props: AddressFormFieldsProps) {
   return (
     <View style={styles.card}>
+      {props.onUseCurrentLocation ? (
+        <TouchableOpacity
+          style={[styles.currentLocationButton, props.locatingCurrentLocation && styles.currentLocationButtonDisabled]}
+          onPress={props.onUseCurrentLocation}
+          disabled={props.locatingCurrentLocation}
+          activeOpacity={0.85}
+        >
+          {props.locatingCurrentLocation ? (
+            <ActivityIndicator color="#FF6B35" />
+          ) : (
+            <Text style={styles.currentLocationText}>Use current location</Text>
+          )}
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.row}>
         <Field
           label="Save as"
@@ -216,6 +232,24 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: "#EDE6DE"
+  },
+  currentLocationButton: {
+    marginBottom: 10,
+    minHeight: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FFD2C2",
+    backgroundColor: "#FFF4EE",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  currentLocationButtonDisabled: {
+    opacity: 0.7
+  },
+  currentLocationText: {
+    color: "#FF6B35",
+    fontSize: 14,
+    fontWeight: "700"
   },
   field: {
     marginBottom: 8

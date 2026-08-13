@@ -51,6 +51,21 @@ export type ResolvedShopPin = {
     formattedAddress: string;
 };
 export declare const resolveShopAddressPin: (address: Record<string, unknown>) => Promise<ApiResponse<ResolvedShopPin>>;
+export type ReverseGeocodedAddress = {
+    formattedAddress: string;
+    houseFlatDoorNo?: string;
+    buildingApartmentName?: string;
+    streetRoadName?: string;
+    area?: string;
+    city?: string;
+    district?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+    latitude: number;
+    longitude: number;
+};
+export declare const reverseGeocodeLocation: (latitude: number, longitude: number) => Promise<ApiResponse<ReverseGeocodedAddress>>;
 export declare const completeSetup: () => Promise<ApiResponse<unknown>>;
 export declare const getPartnerMenuItems: () => Promise<ApiResponse<unknown[]>>;
 export declare const createMenuItem: (data: Record<string, unknown>) => Promise<ApiResponse<unknown>>;

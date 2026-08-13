@@ -20,6 +20,7 @@ import {
   deleteMyAccount,
   suggestDeliveryAddresses,
   geocodeDeliveryAddress,
+  reverseGeocodeDeliveryAddress,
   getDeliveryPlaceAddress,
   resolveDeliveryAddressPin
 } from "../controllers/user.controller";
@@ -151,6 +152,13 @@ router.post(
   authMiddleware,
   roleMiddleware([...CONSUMER_APP_ROLES]),
   resolveDeliveryAddressPin
+);
+
+router.post(
+  "/geocode/reverse",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  reverseGeocodeDeliveryAddress
 );
 
 router.get(

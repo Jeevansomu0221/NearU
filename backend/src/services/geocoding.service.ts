@@ -520,6 +520,63 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
   );
 };
 
+export const reverseGeocodeCoordinates = async (
+  latitude: number,
+  longitude: number
+): Promise<GeocodedAddress | null> => {
+  try {
+    const payload = await googleGet(GOOGLE_GEOCODE_URL, {
+      latlng: `${latitude},${longitude}`,
+      language: "en",
+      region: "in"
+    });
+
+    if (payload?.status === "OK") {
+      const parsed = (Array.isArray(payload.results) ? payload.results : [])
+        .map(parseGoogleAddress)
+        .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+      if (parsed[0]) {
+        return {
+          ...parsed[0],
+          latitude,
+          longitude
+        };
+      }
+    }
+    if (payload?.status) {
+      console.warn("Google reverse geocode failed:", payload.status, payload.error_message || "");
+    }
+  } catch {
+    // Fall through to OpenStreetMap.
+  }
+
+  try {
+    const search = new URLSearchParams({
+      format: "jsonv2",
+      lat: String(latitude),
+      lon: String(longitude),
+      addressdetails: "1",
+      zoom: "18"
+    });
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${search.toString()}`, {
+      headers: {
+        "User-Agent": "Vyaha/1.0 (support@vyaha.com)",
+        Accept: "application/json"
+      }
+    });
+    if (!response.ok) return null;
+    const parsed = parseNominatimAddress(await response.json());
+    if (!parsed) return null;
+    return {
+      ...parsed,
+      latitude,
+      longitude
+    };
+  } catch {
+    return null;
+  }
+};
+
 export const getPlaceAddress = async (placeId: string): Promise<GeocodedAddress> => {
   const payload = await googleGet(GOOGLE_PLACE_DETAILS_URL, {
     place_id: placeId,

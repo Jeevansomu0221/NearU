@@ -39,7 +39,9 @@ import { getPublicShopName } from "../utils/display";
 import { unregisterPushNotifications } from "../services/notifications";
 import AddressFormFields from "../components/AddressFormFields";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { resolveAddressPin } from "../api/geocode.api";
+import { reverseGeocodeLocation, resolveAddressPin } from "../api/geocode.api";
+import { getCurrentPositionWithTimeout, requestForegroundLocationPermission } from "../utils/location";
+import * as Location from "expo-location";
 
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha Support." },
@@ -197,6 +199,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [country, setCountry] = useState("India");
   const [addressLatitude, setAddressLatitude] = useState<number | undefined>(undefined);
   const [addressLongitude, setAddressLongitude] = useState<number | undefined>(undefined);
+  const [locatingCurrentLocation, setLocatingCurrentLocation] = useState(false);
 
   const hydrateAddressForm = (address?: SavedAddress | null, fallbackName = "") => {
     setAddressLabel(address?.label || "Home");
@@ -366,6 +369,86 @@ export default function ProfileScreen({ navigation, route }: any) {
     };
   };
 
+  const handleUseCurrentLocation = async () => {
+    try {
+      const granted = await requestForegroundLocationPermission();
+      if (!granted) {
+        Alert.alert("Allow location access", "Turn on location so we can fill your delivery address from where you are.", [
+          { text: "Not now", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() }
+        ]);
+        return;
+      }
+
+      setLocatingCurrentLocation(true);
+      const position = await getCurrentPositionWithTimeout({ accuracy: Location.Accuracy.High }, 12000);
+      if (!position?.coords) {
+        Alert.alert("Turn on location", "We could not read your current location. Please try again.");
+        return;
+      }
+
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      const result = await reverseGeocodeLocation(latitude, longitude);
+      const geo = result.data;
+      if (!result.success || !geo) {
+        Alert.alert("Address not found", result.message || "We found your pin, but could not read the address. Please fill the fields.");
+        setAddressLatitude(latitude);
+        setAddressLongitude(longitude);
+        return;
+      }
+
+      const nextHouse = geo.houseFlatDoorNo?.trim() || "Near map pin";
+      const nextStreet = geo.streetRoadName?.trim() || geo.formattedAddress || "";
+      const nextArea = geo.area?.trim() || "";
+      const nextCity = geo.city?.trim() || "";
+      const nextState = geo.state?.trim() || "";
+      const nextPincode = geo.pincode?.trim() || "";
+      const nextCountry = geo.country?.trim() || "India";
+
+      setHouseFlatDoorNo(nextHouse);
+      setBuildingApartmentName(geo.buildingApartmentName || "");
+      setStreetRoadName(nextStreet);
+      setStreet([nextHouse, geo.buildingApartmentName, nextStreet].filter(Boolean).join(", "));
+      setArea(nextArea);
+      setCity(nextCity);
+      setState(nextState);
+      setPincode(nextPincode);
+      setDistrict(geo.district || "");
+      setCountry(nextCountry);
+      setAddressLatitude(latitude);
+      setAddressLongitude(longitude);
+
+      const addressPayload = {
+        label: addressLabel.trim() || "Home",
+        recipientName: recipientName.trim() || name.trim(),
+        houseFlatDoorNo: nextHouse,
+        buildingApartmentName: geo.buildingApartmentName?.trim() || undefined,
+        streetRoadName: nextStreet,
+        areaLocality: nextArea,
+        street: [nextHouse, geo.buildingApartmentName, nextStreet].filter(Boolean).join(", "),
+        city: nextCity,
+        cityTownVillage: nextCity,
+        state: nextState,
+        pincode: nextPincode,
+        area: nextArea,
+        landmark: landmark.trim() || undefined,
+        district: geo.district?.trim() || undefined,
+        country: nextCountry,
+        latitude,
+        longitude
+      };
+
+      setPendingAddressPayload(addressPayload);
+      setPendingPin({ latitude, longitude, formattedAddress: geo.formattedAddress });
+      setPinConfirmVisible(true);
+    } catch (error: any) {
+      Alert.alert("Could not use current location", error?.message || "Please try again.");
+    } finally {
+      setLocatingCurrentLocation(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     try {
       if (!name.trim()) {
@@ -490,7 +573,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     pincode,
     setPincode,
     country,
-    setCountry
+    setCountry,
+    locatingCurrentLocation,
+    onUseCurrentLocation: handleUseCurrentLocation
   };
 
   const handleLogout = () => {

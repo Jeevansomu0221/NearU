@@ -33,3 +33,29 @@ export const resolveAddressPin = async (
   const response = await api.post<ApiResponse<ResolvedAddressPin>>("/partners/geocode/resolve", address);
   return response.data;
 };
+
+export type ReverseGeocodedAddress = {
+  formattedAddress: string;
+  houseFlatDoorNo?: string;
+  buildingApartmentName?: string;
+  streetRoadName?: string;
+  area?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+};
+
+export const reverseGeocodeLocation = async (
+  latitude: number,
+  longitude: number
+): Promise<ApiResponse<ReverseGeocodedAddress>> => {
+  const response = await api.post<ApiResponse<ReverseGeocodedAddress>>("/partners/geocode/reverse", {
+    latitude,
+    longitude
+  });
+  return response.data;
+};

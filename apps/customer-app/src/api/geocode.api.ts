@@ -43,3 +43,10 @@ export type ResolvedAddressPin = {
 export const resolveAddressPin = (address: Record<string, unknown>): Promise<ApiResponse<ResolvedAddressPin>> => {
   return apiPost<ResolvedAddressPin>("/users/geocode/resolve", address);
 };
+
+export const reverseGeocodeLocation = (
+  latitude: number,
+  longitude: number
+): Promise<ApiResponse<GeocodedAddress>> => {
+  return apiPost<GeocodedAddress>("/users/geocode/reverse", { latitude, longitude });
+};

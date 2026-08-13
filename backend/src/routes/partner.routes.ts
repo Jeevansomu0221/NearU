@@ -22,6 +22,7 @@ import {
   geocodeDeliveryAddress,
   getDeliveryPlaceAddress,
   resolveDeliveryAddressPin,
+  reverseGeocodeDeliveryAddress,
   suggestDeliveryAddresses
 } from "../controllers/user.controller";
 
@@ -64,6 +65,7 @@ router.get("/geocode/suggest", authMiddleware, suggestDeliveryAddresses);
 router.get("/geocode", authMiddleware, geocodeDeliveryAddress);
 router.get("/geocode/place", authMiddleware, getDeliveryPlaceAddress);
 router.post("/geocode/resolve", authMiddleware, resolveDeliveryAddressPin);
+router.post("/geocode/reverse", authMiddleware, reverseGeocodeDeliveryAddress);
 
 router.get("/kyc/status", authMiddleware, getPartnerKycStatus);
 router.post("/kyc/digilocker/start", authMiddleware, startPartnerDigiLocker);

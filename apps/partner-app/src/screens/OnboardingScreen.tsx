@@ -28,7 +28,7 @@ import OperationsStep, { type OperationsState } from "./onboarding/OperationsSte
 import AgreementStep, { validateAndSaveAgreement } from "./onboarding/AgreementStep";
 import type { PartnerKycState } from "../api/kyc.api";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { partnerAddressToGeocodePayload, resolveAddressPin, type ResolvedAddressPin } from "../api/geocode.api";
+import { partnerAddressToGeocodePayload, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
 
 const INDIAN_CITIES = [
   "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata",
@@ -718,10 +718,26 @@ export default function OnboardingScreen({ navigation }: any) {
       }
 
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      await openAddressPinConfirm({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude
-      });
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      try {
+        const result = await reverseGeocodeLocation(latitude, longitude);
+        const geo = result.data;
+        if (result.success && geo) {
+          setAddress((current) => ({
+            state: geo.state || current.state,
+            city: geo.city || current.city,
+            pincode: geo.pincode || current.pincode,
+            area: geo.area || current.area,
+            colony: geo.buildingApartmentName || current.colony,
+            roadStreet: geo.streetRoadName || geo.formattedAddress || current.roadStreet,
+            nearbyPlaces: current.nearbyPlaces || geo.formattedAddress
+          }));
+        }
+      } catch {
+        // Still confirm the live GPS pin even if address text cannot be read.
+      }
+      await openAddressPinConfirm({ latitude, longitude });
     } catch (error: any) {
       Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
     } finally {
@@ -815,10 +831,12 @@ export default function OnboardingScreen({ navigation }: any) {
     });
 
   const openAddressPinConfirm = async (startingPin?: { latitude: number; longitude: number }) => {
-    const error = validateStep(1);
-    if (error) {
-      Alert.alert("Missing Details", error);
-      return false;
+    if (!startingPin) {
+      const error = validateStep(1);
+      if (error) {
+        Alert.alert("Missing Details", error);
+        return false;
+      }
     }
 
     if (startingPin) {
@@ -1144,9 +1162,9 @@ export default function OnboardingScreen({ navigation }: any) {
             <TextInput placeholder="Metro station, mall, landmark" placeholderTextColor="#98A2B3" value={address.nearbyPlaces} onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })} style={styles.input} />
 
             <Text style={styles.label}>Shop map pin</Text>
-            <Text style={styles.helperText}>Continue to locate this address on the map, then drag the pin onto your shop. You can also start from your current GPS if you are standing there.</Text>
+            <Text style={styles.helperText}>Use current location to auto-fill the address and pin, or continue after typing the address.</Text>
             <TouchableOpacity style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]} onPress={captureShopLocation} disabled={capturingLocation || locatingAddress}>
-              {capturingLocation ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryActionButtonText}>{shopLocation ? "Adjust pin from my GPS" : "Start pin from my GPS"}</Text>}
+              {capturingLocation ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryActionButtonText}>Use current location</Text>}
             </TouchableOpacity>
             {shopLocation ? (
               <View style={styles.locationBadge}>

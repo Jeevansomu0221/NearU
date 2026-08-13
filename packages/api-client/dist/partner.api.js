@@ -6,6 +6,7 @@ export const getOnboardingDraft = () => apiGet("/partners/onboarding-draft");
 export const saveOnboardingDraft = (draft) => apiPut("/partners/onboarding-draft", { draft });
 export const submitOnboarding = (data) => apiPost("/partners/onboard", data);
 export const resolveShopAddressPin = (address) => apiPost("/partners/geocode/resolve", address);
+export const reverseGeocodeLocation = (latitude, longitude) => apiPost("/partners/geocode/reverse", { latitude, longitude });
 export const completeSetup = () => apiPost("/partners/complete-setup");
 export const getPartnerMenuItems = () => apiGet("/partners/menu");
 export const createMenuItem = (data) => apiPost("/partners/menu", data);

@@ -10,6 +10,7 @@ import { ROLES } from "../config/roles";
 import { executeAccountDeletion } from "../services/accountDeletion.service";
 import {
   geocodeTypedAddress,
+  reverseGeocodeCoordinates,
   getPlaceAddress,
   resolveAddressCoordinates,
   suggestTypedAddresses
@@ -743,6 +744,34 @@ export const resolveDeliveryAddressPin = async (req: AuthRequest, res: Response)
   } catch (err: any) {
     console.error("resolveDeliveryAddressPin error:", err);
     return errorResponse(res, err.message || "Failed to locate this address", err.statusCode || 500);
+  }
+};
+
+export const reverseGeocodeDeliveryAddress = async (req: AuthRequest, res: Response) => {
+  try {
+    const latitude = Number(req.body?.latitude ?? req.query.latitude);
+    const longitude = Number(req.body?.longitude ?? req.query.longitude);
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180 ||
+      (latitude === 0 && longitude === 0)
+    ) {
+      return errorResponse(res, "A valid current location is required", 400);
+    }
+
+    const address = await reverseGeocodeCoordinates(latitude, longitude);
+    if (!address) {
+      return errorResponse(res, "Could not read an address for this location", 404);
+    }
+
+    return successResponse(res, address, "Current location address ready");
+  } catch (err: any) {
+    console.error("reverseGeocodeDeliveryAddress error:", err);
+    return errorResponse(res, err.message || "Failed to read address from current location", err.statusCode || 500);
   }
 };
 

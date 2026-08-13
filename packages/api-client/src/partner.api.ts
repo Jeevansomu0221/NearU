@@ -67,6 +67,24 @@ export type ResolvedShopPin = {
 export const resolveShopAddressPin = (address: Record<string, unknown>) =>
   apiPost<ResolvedShopPin>("/partners/geocode/resolve", address);
 
+export type ReverseGeocodedAddress = {
+  formattedAddress: string;
+  houseFlatDoorNo?: string;
+  buildingApartmentName?: string;
+  streetRoadName?: string;
+  area?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+};
+
+export const reverseGeocodeLocation = (latitude: number, longitude: number) =>
+  apiPost<ReverseGeocodedAddress>("/partners/geocode/reverse", { latitude, longitude });
+
 export const completeSetup = () => apiPost("/partners/complete-setup");
 
 export const getPartnerMenuItems = () => apiGet<unknown[]>("/partners/menu");

@@ -9,6 +9,7 @@ import {
   saveOnboardingDraft,
   skipPartnerBank,
   resolveShopAddressPin,
+  reverseGeocodeLocation,
   submitOnboarding,
   uploadImage
 } from "@vyaha/api-client";
@@ -216,10 +217,12 @@ export default function OnboardingPage() {
     ].filter(Boolean);
 
   const openAddressPinConfirm = async (startingPin?: { latitude: number; longitude: number }) => {
-    const validationError = validateStep(1, form, address, selectedCategory, documents, kyc, operations);
-    if (validationError) {
-      setError(validationError);
-      return false;
+    if (!startingPin) {
+      const validationError = validateStep(1, form, address, selectedCategory, documents, kyc, operations);
+      if (validationError) {
+        setError(validationError);
+        return false;
+      }
     }
 
     if (startingPin) {
@@ -270,11 +273,30 @@ export default function OnboardingPage() {
     setError("");
     try {
       const coords = await pickLocationOnMap();
-      if (coords) {
-        await openAddressPinConfirm(coords);
-      } else {
+      if (!coords) {
         setError("Could not capture location. Allow location access or try again inside your shop.");
+        return;
       }
+
+      try {
+        const result = await reverseGeocodeLocation(coords.latitude, coords.longitude);
+        const geo = result.data;
+        if (result.success && geo) {
+          setAddress((current) => ({
+            state: geo.state || current.state,
+            city: geo.city || current.city,
+            pincode: geo.pincode || current.pincode,
+            area: geo.area || current.area,
+            colony: geo.buildingApartmentName || current.colony,
+            roadStreet: geo.streetRoadName || geo.formattedAddress || current.roadStreet,
+            nearbyPlaces: current.nearbyPlaces || geo.formattedAddress
+          }));
+        }
+      } catch {
+        // Keep the live GPS pin even if address text cannot be read.
+      }
+
+      await openAddressPinConfirm(coords);
     } finally {
       setCapturingLocation(false);
     }
@@ -500,9 +522,9 @@ export default function OnboardingPage() {
               <span>Nearby places (comma separated)</span>
               <input value={address.nearbyPlaces} onChange={(e) => setAddress({ ...address, nearbyPlaces: e.target.value })} />
             </label>
-            <p className="onb-hint">Continue to locate this address on the map and confirm the shop pin. You can also start from your current GPS.</p>
+            <p className="onb-hint">Use current location to auto-fill the address and pin, or continue after typing the address.</p>
             <button type="button" className="btn secondary" onClick={captureLocation} disabled={capturingLocation || locatingAddress}>
-              {capturingLocation ? "Capturing…" : shopLocation ? "Adjust pin from my GPS" : "Start pin from my GPS"}
+              {capturingLocation ? "Reading location…" : "Use current location"}
             </button>
             {shopLocation ? <p className="onb-verified"><strong>Shop pin confirmed</strong></p> : null}
           </div>

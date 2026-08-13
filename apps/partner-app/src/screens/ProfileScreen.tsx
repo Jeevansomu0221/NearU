@@ -20,7 +20,7 @@ import api, { uploadMultipart } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { partnerAddressToGeocodePayload, resolveAddressPin, type ResolvedAddressPin } from "../api/geocode.api";
+import { partnerAddressToGeocodePayload, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
 
 type ReuploadFlags = {
   fssaiUrl?: boolean;
@@ -503,11 +503,38 @@ export default function ProfileScreen({ navigation }: any) {
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High
       });
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      setCapturedLocation({ latitude, longitude });
 
-      setCapturedLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude
-      });
+      try {
+        const result = await reverseGeocodeLocation(latitude, longitude);
+        const geo = result.data;
+        if (result.success && geo) {
+          setAddress((current) => ({
+            roadStreet: geo.streetRoadName || current.roadStreet,
+            colony: geo.buildingApartmentName || current.colony,
+            area: geo.area || current.area,
+            city: geo.city || current.city,
+            state: geo.state || current.state,
+            pincode: geo.pincode || current.pincode,
+            landmark: current.landmark || geo.formattedAddress || ""
+          }));
+        }
+      } catch {
+        // Keep the live GPS pin even if address text cannot be read.
+      }
+
+      if (!isProfileVerificationLocked(profile, kyc)) {
+        setPendingPin({
+          latitude,
+          longitude,
+          formattedAddress: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+        });
+        setPinConfirmVisible(true);
+        return;
+      }
+
       Alert.alert("Shop location captured", "Tap Save location to apply this GPS pin.");
     } catch (error: any) {
       Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
@@ -1437,7 +1464,7 @@ export default function ProfileScreen({ navigation }: any) {
 
         <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Shop location</Text>
         <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>
-          Save address to locate it on the map and confirm the shop pin. Riders use this pin for pickup.
+          Use current location to auto-fill the address and pin, or save the typed address to confirm it on the map.
         </Text>
         {capturedLocation ? (
           <View style={[styles.locationPinCard, isDarkMode && styles.surfaceDark]}>
@@ -1466,7 +1493,7 @@ export default function ProfileScreen({ navigation }: any) {
             <ActivityIndicator color="#60A5FA" />
           ) : (
             <Text style={styles.secondaryButtonText}>
-              {savedShopLocation || capturedLocation ? "Re-mark my location" : "Mark my location"}
+              {savedShopLocation || capturedLocation ? "Use current location again" : "Use current location"}
             </Text>
           )}
         </TouchableOpacity>
