@@ -43,3 +43,4 @@ jobs:
             curl -fsS http://127.0.0.1/health/eko || true
             curl -fsSk https://127.0.0.1/health -H 'Host: api.vyaha.com' || true
             ss -lnt | grep -E ':80|:443|:5000' || true
+            bash /opt/vyaha/repo/scripts/vps-check-google-maps.sh "$APP_DIR/.env" || true
