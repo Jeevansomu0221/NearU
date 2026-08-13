@@ -16,6 +16,7 @@ import { useCart, type CartItem, type CartItemRef } from "../context/CartContext
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 import { resolveAddressPin } from "../api/geocode.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
+import { getSelectedAddress as pickSavedAddress, parseAddressCoordinates } from "../utils/address";
 
 const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
@@ -86,30 +87,7 @@ export default function CartScreen({ route, navigation }: any) {
     pricingQuote?.payableTotal ??
     subtotal + deliveryFee + foodGst + platformFee;
 
-  const hasUsableAddress = (address?: SavedAddress | string | null): address is SavedAddress | string => {
-    if (!address) return false;
-    if (typeof address === "string") return address.trim().length > 3;
-    return Boolean(
-      address.houseFlatDoorNo ||
-        address.streetRoadName ||
-        address.street ||
-        address.area ||
-        address.areaLocality ||
-        address.city ||
-        address.cityTownVillage ||
-        address.pincode
-    );
-  };
-
-  const getSelectedAddress = (): SavedAddress | string | undefined => {
-    const saved = Array.isArray(userProfile?.addresses)
-      ? userProfile.addresses.filter((address) => hasUsableAddress(address))
-      : [];
-    const preferred = saved.find((address) => address.isDefault) || saved[0];
-    if (preferred) return preferred;
-    if (hasUsableAddress(userProfile?.address)) return userProfile?.address;
-    return undefined;
-  };
+  const getSelectedAddress = (): SavedAddress | string | undefined => pickSavedAddress(userProfile);
 
   const formatAddress = () => {
     const selectedAddress = getSelectedAddress();
@@ -136,25 +114,7 @@ export default function CartScreen({ route, navigation }: any) {
       .join(", ");
   };
 
-  const getDeliveryLocation = () => {
-    const address = getSelectedAddress();
-    if (!address || typeof address === "string") return undefined;
-
-    if (
-      typeof address.latitude === "number" &&
-      typeof address.longitude === "number" &&
-      Number.isFinite(address.latitude) &&
-      Number.isFinite(address.longitude) &&
-      !(address.latitude === 0 && address.longitude === 0)
-    ) {
-      return {
-        latitude: address.latitude,
-        longitude: address.longitude
-      };
-    }
-
-    return undefined;
-  };
+  const getDeliveryLocation = () => parseAddressCoordinates(getSelectedAddress());
 
   const fetchPricingQuote = useCallback(
     async (
@@ -199,10 +159,15 @@ export default function CartScreen({ route, navigation }: any) {
     [groupedItems]
   );
 
-  const geocodeAndSaveDeliveryLocation = async () => {
+  const geocodeAndSaveDeliveryLocation = async (options?: { alert?: boolean }) => {
     const address = getSelectedAddress();
     if (!address) {
-      Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.");
+      if (options?.alert) {
+        Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Add Address", onPress: () => navigation.navigate("Profile") }
+        ]);
+      }
       return undefined;
     }
 
@@ -247,19 +212,26 @@ export default function CartScreen({ route, navigation }: any) {
     return undefined;
   };
 
-  const resolveDeliveryLocationForPricing = useCallback(async () => {
-    const saved = getDeliveryLocation();
-    if (saved) {
-      return saved;
-    }
+  const resolveDeliveryLocationForPricing = useCallback(
+    async (options?: { alert?: boolean }) => {
+      const saved = parseAddressCoordinates(pickSavedAddress(userProfile));
+      if (saved) {
+        return saved;
+      }
 
-    return geocodeAndSaveDeliveryLocation();
-  }, [userProfile]);
+      return geocodeAndSaveDeliveryLocation(options);
+    },
+    [userProfile]
+  );
 
   const loadDeliveryPricing = useCallback(async () => {
     if (groupedItems.length === 0) {
       setPricingQuote(null);
       setPricingError(null);
+      return;
+    }
+
+    if (loadingProfile) {
       return;
     }
 
@@ -270,7 +242,11 @@ export default function CartScreen({ route, navigation }: any) {
       const deliveryLocation = await resolveDeliveryLocationForPricing();
       if (!deliveryLocation) {
         setPricingQuote(null);
-        setPricingError("Add a complete delivery address so we can calculate the fee.");
+        setPricingError(
+          pickSavedAddress(userProfile)
+            ? "Could not locate this address on the map. Edit it in Profile."
+            : "Add a delivery address in Profile to calculate the fee."
+        );
         return;
       }
 
@@ -278,7 +254,7 @@ export default function CartScreen({ route, navigation }: any) {
     } finally {
       setLocationResolving(false);
     }
-  }, [fetchPricingQuote, groupedItems.length, resolveDeliveryLocationForPricing]);
+  }, [fetchPricingQuote, groupedItems.length, loadingProfile, resolveDeliveryLocationForPricing, userProfile]);
 
   useEffect(() => {
     void loadDeliveryPricing();
@@ -309,7 +285,7 @@ export default function CartScreen({ route, navigation }: any) {
         return;
       }
 
-      const deliveryLocation = await resolveDeliveryLocationForPricing();
+      const deliveryLocation = await resolveDeliveryLocationForPricing({ alert: true });
       if (!deliveryLocation) {
         return;
       }

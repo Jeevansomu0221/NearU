@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useCart } from "../context/CartContext";
 import { getUserProfile } from "../api/user.api";
+import { getSelectedAddress as pickSavedAddress } from "../utils/address";
 
 export default function OrderSummaryScreen({ route, navigation }: any) {
   const { shop } = route.params;
@@ -45,10 +46,7 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
     return subtotal + deliveryFee;
   };
 
-  const getSelectedAddress = () => {
-    const saved = Array.isArray(userProfile?.addresses) ? userProfile.addresses : [];
-    return saved.find((entry: any) => entry?.isDefault) || saved[0] || userProfile?.address;
-  };
+  const getSelectedAddress = () => pickSavedAddress(userProfile);
 
   const formatAddress = () => {
     const selected = getSelectedAddress();

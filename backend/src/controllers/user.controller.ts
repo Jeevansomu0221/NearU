@@ -188,7 +188,7 @@ export const getUserProfile = async (req: AuthRequest, res: Response) => {
       if (defaultAddress && !addresses.some((entry: any) => entry.isDefault)) {
         defaultAddress.isDefault = true;
       }
-      if (!hasAddressContent((userData as any).address) && defaultAddress) {
+      if (defaultAddress) {
         (userData as any).address = legacyAddressFromSaved(defaultAddress);
       }
     }
