@@ -19,4 +19,7 @@ export const cancelOrder = (orderId) => apiPost(`/orders/${orderId}/cancel`);
 export const submitOrderRating = (orderId, payload) => apiPost(`/orders/${orderId}/ratings`, payload);
 export const getPartnerOrders = () => apiGet("/orders/partner/my");
 export const getPartnerOrderDetails = (orderId) => apiGet(`/orders/partner/${orderId}`);
-export const updatePartnerOrderStatus = (orderId, status) => apiPost(`/orders/partner/${orderId}/status`, { status });
+export const updatePartnerOrderStatus = (orderId, status, options) => apiPost(`/orders/partner/${orderId}/status`, {
+    status,
+    ...(typeof options?.prepTimeMinutes === "number" ? { prepTimeMinutes: options.prepTimeMinutes } : {})
+});

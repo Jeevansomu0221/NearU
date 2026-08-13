@@ -19,6 +19,8 @@ import { Ionicons } from "@expo/vector-icons";
 import api, { uploadMultipart } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
+import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
+import { partnerAddressToGeocodePayload, resolveAddressPin, type ResolvedAddressPin } from "../api/geocode.api";
 
 type ReuploadFlags = {
   fssaiUrl?: boolean;
@@ -297,6 +299,8 @@ export default function ProfileScreen({ navigation }: any) {
   });
   const [capturedLocation, setCapturedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [capturingLocation, setCapturingLocation] = useState(false);
+  const [pinConfirmVisible, setPinConfirmVisible] = useState(false);
+  const [pendingPin, setPendingPin] = useState<ResolvedAddressPin | null>(null);
 
   const [images, setImages] = useState({
     shopImageUrl: "",
@@ -538,6 +542,24 @@ export default function ProfileScreen({ navigation }: any) {
       Alert.alert("Pincode", "Pincode must be exactly 6 digits.");
       return;
     }
+
+    try {
+      setSaving(true);
+      const result = await resolveAddressPin(partnerAddressToGeocodePayload(address));
+      if (!result.success || !result.data) {
+        Alert.alert("Address not found", result.message || "Check the street, area, city, and pincode.");
+        return;
+      }
+      setPendingPin(result.data);
+      setPinConfirmVisible(true);
+    } catch (error: any) {
+      Alert.alert("Address not found", error?.message || "Could not locate this shop address.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConfirmAddressPin = async (pin: { latitude: number; longitude: number }) => {
     const landmarks = address.landmark
       .split(",")
       .map((item) => item.trim())
@@ -553,15 +575,14 @@ export default function ProfileScreen({ navigation }: any) {
         state: address.state.trim(),
         pincode: address.pincode.trim(),
         nearbyPlaces: landmarks
-      }
+      },
+      location: pin
     };
-
-    if (capturedLocation) {
-      payload.location = capturedLocation;
-    }
 
     await saveUpdate(payload, "Address & location updated");
     setCapturedLocation(null);
+    setPendingPin(null);
+    setPinConfirmVisible(false);
     setActiveEditSection(null);
   };
 
@@ -1416,7 +1437,7 @@ export default function ProfileScreen({ navigation }: any) {
 
         <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Shop location</Text>
         <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>
-          Stand inside your shop and tap Mark my location. Riders use this pin for pickup and delivery.
+          Save address to locate it on the map and confirm the shop pin. Riders use this pin for pickup.
         </Text>
         {capturedLocation ? (
           <View style={[styles.locationPinCard, isDarkMode && styles.surfaceDark]}>
@@ -1816,6 +1837,23 @@ export default function ProfileScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
       </ScrollView>
+      <AddressPinConfirmModal
+        visible={pinConfirmVisible && Boolean(pendingPin)}
+        addressLines={[
+          address.roadStreet,
+          address.colony,
+          address.area,
+          [address.city, address.state, address.pincode].filter(Boolean).join(", ")
+        ].filter(Boolean)}
+        latitude={pendingPin?.latitude || 0}
+        longitude={pendingPin?.longitude || 0}
+        confirming={saving}
+        onConfirm={handleConfirmAddressPin}
+        onEdit={() => {
+          setPinConfirmVisible(false);
+          setPendingPin(null);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

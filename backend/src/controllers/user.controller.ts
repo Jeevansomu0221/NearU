@@ -82,6 +82,8 @@ const normalizeAddressPayload = (body: any) => {
     houseFlatDoorNo,
     buildingApartmentName,
     streetRoadName,
+    roadStreet,
+    colony,
     street,
     city,
     cityTownVillage,
@@ -90,6 +92,7 @@ const normalizeAddressPayload = (body: any) => {
     area,
     areaLocality,
     landmark,
+    nearbyPlaces,
     district,
     country,
     latitude,
@@ -97,9 +100,14 @@ const normalizeAddressPayload = (body: any) => {
     isDefault
   } = body;
 
+  const normalizedStreetRoad = streetRoadName || roadStreet || "";
+  const normalizedBuilding = buildingApartmentName || colony || "";
+  const normalizedLandmark = landmark ||
+    (Array.isArray(nearbyPlaces) ? nearbyPlaces.filter(Boolean).join(", ") : nearbyPlaces) ||
+    "";
   const normalizedStreet =
     street ||
-    [houseFlatDoorNo, buildingApartmentName, streetRoadName]
+    [houseFlatDoorNo, normalizedBuilding, normalizedStreetRoad]
       .filter(Boolean)
       .join(", ");
   const normalizedArea = area || areaLocality || "";
@@ -119,8 +127,8 @@ const normalizeAddressPayload = (body: any) => {
     label: (label || "Home").trim(),
     recipientName: recipientName || "",
     houseFlatDoorNo: houseFlatDoorNo || "",
-    buildingApartmentName: buildingApartmentName || "",
-    streetRoadName: streetRoadName || "",
+    buildingApartmentName: normalizedBuilding,
+    streetRoadName: normalizedStreetRoad,
     street: normalizedStreet,
     city: normalizedCity,
     cityTownVillage: normalizedCity,
@@ -128,7 +136,7 @@ const normalizeAddressPayload = (body: any) => {
     pincode: pincode || "",
     area: normalizedArea,
     areaLocality: normalizedArea,
-    landmark: landmark || "",
+    landmark: String(normalizedLandmark || ""),
     district: district || "",
     country: country || "India",
     latitude: hasValidCoordinates ? normalizedLatitude : undefined,

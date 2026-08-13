@@ -10,6 +10,7 @@ import { notifyPartnerApplicationStatus } from "../services/notification.service
 import { applyPartnerSuspensionLift } from "../utils/suspension.util";
 import MenuItem from "../models/MenuItem.model";
 import { readPartnerKycFromUser } from "./partnerKyc.controller";
+import { resolveAddressCoordinates } from "../services/geocoding.service";
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
@@ -503,6 +504,25 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       const parsed = parseGoogleMapsLink(trimmedMapsLink);
       if (parsed) {
         resolvedCoordinates = [parsed.longitude, parsed.latitude];
+      }
+    }
+
+    if (!resolvedCoordinates) {
+      try {
+        const geocodedPin = await resolveAddressCoordinates({
+          streetRoadName: roadStreet,
+          buildingApartmentName: colony,
+          area,
+          city,
+          state,
+          pincode,
+          landmark: Array.isArray(nearbyPlaces) ? nearbyPlaces.filter(Boolean).join(", ") : String(nearbyPlaces || "")
+        });
+        if (geocodedPin) {
+          resolvedCoordinates = [geocodedPin.longitude, geocodedPin.latitude];
+        }
+      } catch {
+        // Keep the application moving; the partner can confirm the pin later.
       }
     }
 

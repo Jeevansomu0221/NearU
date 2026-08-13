@@ -29,5 +29,7 @@ export declare const submitOrderRating: (orderId: string, payload: {
 }) => Promise<ApiResponse<Order>>;
 export declare const getPartnerOrders: () => Promise<ApiResponse<Order[]>>;
 export declare const getPartnerOrderDetails: (orderId: string) => Promise<ApiResponse<Order>>;
-export declare const updatePartnerOrderStatus: (orderId: string, status: string) => Promise<ApiResponse<Order>>;
+export declare const updatePartnerOrderStatus: (orderId: string, status: string, options?: {
+    prepTimeMinutes?: number;
+}) => Promise<ApiResponse<Order>>;
 //# sourceMappingURL=order.api.d.ts.map

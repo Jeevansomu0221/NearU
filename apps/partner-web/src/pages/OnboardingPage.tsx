@@ -8,6 +8,7 @@ import {
   getStoredUser,
   saveOnboardingDraft,
   skipPartnerBank,
+  resolveShopAddressPin,
   submitOnboarding,
   uploadImage
 } from "@vyaha/api-client";
@@ -29,6 +30,7 @@ import {
   type OnboardingDraft
 } from "../onboarding/types";
 import { validateStep } from "../onboarding/validate";
+import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
 import "../onboarding/onboarding.css";
 
 const STEPS = ONBOARDING_STEPS;
@@ -43,6 +45,10 @@ export default function OnboardingPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [partnerAgreementAccepted, setPartnerAgreementAccepted] = useState(false);
   const [capturingLocation, setCapturingLocation] = useState(false);
+  const [locatingAddress, setLocatingAddress] = useState(false);
+  const [pinConfirmVisible, setPinConfirmVisible] = useState(false);
+  const [pendingPin, setPendingPin] = useState<{ latitude: number; longitude: number; formattedAddress?: string } | null>(null);
+  const [confirmedAddressKey, setConfirmedAddressKey] = useState("");
 
   const [form, setForm] = useState({
     ownerName: "",
@@ -81,6 +87,19 @@ export default function OnboardingPage() {
     setKyc(draft.kyc || {});
     setSelectedCategory(draft.selectedCategory);
     setShopLocation(draft.shopLocation);
+    if (draft.shopLocation) {
+      setConfirmedAddressKey(
+        JSON.stringify({
+          state: draft.address.state.trim(),
+          city: draft.address.city.trim(),
+          pincode: draft.address.pincode.trim(),
+          area: draft.address.area.trim(),
+          colony: draft.address.colony.trim(),
+          roadStreet: draft.address.roadStreet.trim(),
+          nearbyPlaces: draft.address.nearbyPlaces
+        })
+      );
+    }
   }, []);
 
   const currentDraft = (): OnboardingDraft =>
@@ -177,13 +196,82 @@ export default function OnboardingPage() {
     };
   }, [hydrating, persistDraft, activeStep, form, address, documents, media, operations, menuDraft, kyc, selectedCategory, shopLocation]);
 
+  const addressFingerprint = () =>
+    JSON.stringify({
+      state: address.state.trim(),
+      city: address.city.trim(),
+      pincode: address.pincode.trim(),
+      area: address.area.trim(),
+      colony: address.colony.trim(),
+      roadStreet: address.roadStreet.trim(),
+      nearbyPlaces: address.nearbyPlaces
+    });
+
+  const addressLines = () =>
+    [
+      address.roadStreet,
+      address.colony,
+      address.area,
+      [address.city, address.state, address.pincode].filter(Boolean).join(", ")
+    ].filter(Boolean);
+
+  const openAddressPinConfirm = async (startingPin?: { latitude: number; longitude: number }) => {
+    const validationError = validateStep(1, form, address, selectedCategory, documents, kyc, operations);
+    if (validationError) {
+      setError(validationError);
+      return false;
+    }
+
+    if (startingPin) {
+      setPendingPin(startingPin);
+      setPinConfirmVisible(true);
+      return true;
+    }
+
+    setLocatingAddress(true);
+    setError("");
+    try {
+      const result = await resolveShopAddressPin({
+        streetRoadName: address.roadStreet.trim(),
+        buildingApartmentName: address.colony.trim(),
+        area: address.area.trim(),
+        city: address.city.trim(),
+        state: address.state.trim(),
+        pincode: address.pincode.trim(),
+        landmark: address.nearbyPlaces
+      });
+      if (!result.success || !result.data) {
+        setError(result.message || "Check the street, area, city, and pincode.");
+        return false;
+      }
+      setPendingPin(result.data);
+      setPinConfirmVisible(true);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not locate this shop address.");
+      return false;
+    } finally {
+      setLocatingAddress(false);
+    }
+  };
+
+  const handleConfirmShopPin = (pin: { latitude: number; longitude: number }) => {
+    setShopLocation(pin);
+    setConfirmedAddressKey(addressFingerprint());
+    setPinConfirmVisible(false);
+    setPendingPin(null);
+    if (activeStep === 1) {
+      setActiveStep((s) => Math.min(s + 1, STEPS.length - 1));
+    }
+  };
+
   const captureLocation = async () => {
     setCapturingLocation(true);
     setError("");
     try {
       const coords = await pickLocationOnMap();
       if (coords) {
-        setShopLocation(coords);
+        await openAddressPinConfirm(coords);
       } else {
         setError("Could not capture location. Allow location access or try again inside your shop.");
       }
@@ -227,13 +315,21 @@ export default function OnboardingPage() {
     }
   };
 
-  const goNext = () => {
+  const goNext = async () => {
     const validationError = validateStep(activeStep, form, address, selectedCategory, documents, kyc, operations);
     if (validationError) {
       setError(validationError);
       return;
     }
     setError("");
+    if (activeStep === 1) {
+      if (shopLocation && confirmedAddressKey === addressFingerprint()) {
+        setActiveStep((s) => Math.min(s + 1, STEPS.length - 1));
+        return;
+      }
+      await openAddressPinConfirm();
+      return;
+    }
     setActiveStep((s) => Math.min(s + 1, STEPS.length - 1));
   };
 
@@ -404,9 +500,11 @@ export default function OnboardingPage() {
               <span>Nearby places (comma separated)</span>
               <input value={address.nearbyPlaces} onChange={(e) => setAddress({ ...address, nearbyPlaces: e.target.value })} />
             </label>
-            <button type="button" className="btn secondary" onClick={captureLocation} disabled={capturingLocation}>
-              {capturingLocation ? "Capturing…" : shopLocation ? "Location captured ✓" : "Capture shop GPS pin"}
+            <p className="onb-hint">Continue to locate this address on the map and confirm the shop pin. You can also start from your current GPS.</p>
+            <button type="button" className="btn secondary" onClick={captureLocation} disabled={capturingLocation || locatingAddress}>
+              {capturingLocation ? "Capturing…" : shopLocation ? "Adjust pin from my GPS" : "Start pin from my GPS"}
             </button>
+            {shopLocation ? <p className="onb-verified"><strong>Shop pin confirmed</strong></p> : null}
           </div>
         );
       case 2:
@@ -568,8 +666,8 @@ export default function OnboardingPage() {
                 </button>
               ) : null}
               {activeStep < STEPS.length - 1 ? (
-                <button type="button" className="btn" onClick={goNext} disabled={submitting}>
-                  Save & continue →
+                <button type="button" className="btn" onClick={goNext} disabled={submitting || locatingAddress}>
+                  {locatingAddress ? "Locating address…" : "Save & continue →"}
                 </button>
               ) : (
                 <button type="button" className="btn" onClick={submit} disabled={submitting}>
@@ -580,6 +678,18 @@ export default function OnboardingPage() {
           </div>
         </section>
       </main>
+      <AddressPinConfirmModal
+        visible={pinConfirmVisible && Boolean(pendingPin)}
+        addressLines={addressLines()}
+        latitude={pendingPin?.latitude || 0}
+        longitude={pendingPin?.longitude || 0}
+        confirming={locatingAddress || submitting}
+        onConfirm={handleConfirmShopPin}
+        onEdit={() => {
+          setPinConfirmVisible(false);
+          setPendingPin(null);
+        }}
+      />
     </div>
   );
 }

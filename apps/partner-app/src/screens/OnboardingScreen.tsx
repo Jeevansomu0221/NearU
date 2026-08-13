@@ -27,6 +27,8 @@ import MenuDraftStep, { type MenuDraftItem } from "./onboarding/MenuDraftStep";
 import OperationsStep, { type OperationsState } from "./onboarding/OperationsStep";
 import AgreementStep, { validateAndSaveAgreement } from "./onboarding/AgreementStep";
 import type { PartnerKycState } from "../api/kyc.api";
+import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
+import { partnerAddressToGeocodePayload, resolveAddressPin, type ResolvedAddressPin } from "../api/geocode.api";
 
 const INDIAN_CITIES = [
   "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata",
@@ -390,6 +392,10 @@ export default function OnboardingScreen({ navigation }: any) {
   const [autoFilledPhone, setAutoFilledPhone] = useState("");
   const [shopLocation, setShopLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [capturingLocation, setCapturingLocation] = useState(false);
+  const [locatingAddress, setLocatingAddress] = useState(false);
+  const [pinConfirmVisible, setPinConfirmVisible] = useState(false);
+  const [pendingPin, setPendingPin] = useState<ResolvedAddressPin | null>(null);
+  const [confirmedAddressKey, setConfirmedAddressKey] = useState("");
   const [hydratingDraft, setHydratingDraft] = useState(true);
   const [savingDraft, setSavingDraft] = useState(false);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -509,6 +515,19 @@ export default function OnboardingScreen({ navigation }: any) {
         setPartnerAgreementAccepted(Boolean(draft.kyc?.partnerAgreementAcceptedAt));
         setSelectedCategory(draft.selectedCategory);
         setShopLocation(draft.shopLocation);
+        if (draft.shopLocation) {
+          setConfirmedAddressKey(
+            JSON.stringify({
+              state: String(draft.address.state || "").trim(),
+              city: String(draft.address.city || "").trim(),
+              pincode: String(draft.address.pincode || "").trim(),
+              area: String(draft.address.area || "").trim(),
+              colony: String(draft.address.colony || "").trim(),
+              roadStreet: String(draft.address.roadStreet || "").trim(),
+              nearbyPlaces: draft.address.nearbyPlaces
+            })
+          );
+        }
         latestDraftRef.current = draft;
         if (draft.form.phone) {
           setAutoFilledPhone(draft.form.phone);
@@ -699,8 +718,10 @@ export default function OnboardingScreen({ navigation }: any) {
       }
 
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setShopLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-      Alert.alert("Shop location captured", "Your shop pin is saved. You can update it later from Profile.");
+      await openAddressPinConfirm({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      });
     } catch (error: any) {
       Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
     } finally {
@@ -782,10 +803,74 @@ export default function OnboardingScreen({ navigation }: any) {
     return null;
   };
 
-  const goNext = () => {
+  const addressFingerprint = () =>
+    JSON.stringify({
+      state: address.state.trim(),
+      city: address.city.trim(),
+      pincode: address.pincode.trim(),
+      area: address.area.trim(),
+      colony: address.colony.trim(),
+      roadStreet: address.roadStreet.trim(),
+      nearbyPlaces: address.nearbyPlaces
+    });
+
+  const openAddressPinConfirm = async (startingPin?: { latitude: number; longitude: number }) => {
+    const error = validateStep(1);
+    if (error) {
+      Alert.alert("Missing Details", error);
+      return false;
+    }
+
+    if (startingPin) {
+      setPendingPin({
+        ...startingPin,
+        formattedAddress: [address.roadStreet, address.colony, address.area, address.city, address.pincode]
+          .filter(Boolean)
+          .join(", ")
+      });
+      setPinConfirmVisible(true);
+      return true;
+    }
+
+    try {
+      setLocatingAddress(true);
+      const result = await resolveAddressPin(partnerAddressToGeocodePayload(address));
+      if (!result.success || !result.data) {
+        Alert.alert("Address not found", result.message || "Check the street, area, city, and pincode.");
+        return false;
+      }
+      setPendingPin(result.data);
+      setPinConfirmVisible(true);
+      return true;
+    } catch (error: any) {
+      Alert.alert("Address not found", error?.message || "Could not locate this shop address.");
+      return false;
+    } finally {
+      setLocatingAddress(false);
+    }
+  };
+
+  const handleConfirmShopPin = (pin: { latitude: number; longitude: number }) => {
+    setShopLocation(pin);
+    setConfirmedAddressKey(addressFingerprint());
+    setPinConfirmVisible(false);
+    setPendingPin(null);
+    setActiveStep((current) => (current === 1 ? Math.min(current + 1, STEPS.length - 1) : current));
+  };
+
+  const goNext = async () => {
     const error = validateStep(activeStep);
     if (error) {
       Alert.alert("Missing Details", error);
+      return;
+    }
+
+    if (activeStep === 1) {
+      if (shopLocation && confirmedAddressKey === addressFingerprint()) {
+        setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
+        return;
+      }
+      await openAddressPinConfirm();
       return;
     }
 
@@ -1058,14 +1143,14 @@ export default function OnboardingScreen({ navigation }: any) {
             <Text style={styles.label}>Nearby places</Text>
             <TextInput placeholder="Metro station, mall, landmark" placeholderTextColor="#98A2B3" value={address.nearbyPlaces} onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })} style={styles.input} />
 
-            <Text style={styles.label}>Pin your shop (optional)</Text>
-            <Text style={styles.helperText}>Tap once while standing inside the shop if you want to add an exact GPS pin.</Text>
-            <TouchableOpacity style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]} onPress={captureShopLocation} disabled={capturingLocation}>
-              {capturingLocation ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryActionButtonText}>{shopLocation ? "Re-capture shop location" : "Use my shop location"}</Text>}
+            <Text style={styles.label}>Shop map pin</Text>
+            <Text style={styles.helperText}>Continue to locate this address on the map, then drag the pin onto your shop. You can also start from your current GPS if you are standing there.</Text>
+            <TouchableOpacity style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]} onPress={captureShopLocation} disabled={capturingLocation || locatingAddress}>
+              {capturingLocation ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryActionButtonText}>{shopLocation ? "Adjust pin from my GPS" : "Start pin from my GPS"}</Text>}
             </TouchableOpacity>
             {shopLocation ? (
               <View style={styles.locationBadge}>
-                <Text style={styles.locationBadgeText}>Location captured</Text>
+                <Text style={styles.locationBadgeText}>Shop pin confirmed</Text>
               </View>
             ) : null}
           </View>
@@ -1326,13 +1411,30 @@ export default function OnboardingScreen({ navigation }: any) {
               {submitting ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryButtonText}>Submit for Approval</Text>}
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.primaryButton} onPress={goNext} disabled={submitting || uploadingKey !== null}>
-              <Text style={styles.primaryButtonText}>Continue</Text>
+            <TouchableOpacity style={styles.primaryButton} onPress={goNext} disabled={submitting || uploadingKey !== null || locatingAddress}>
+              {locatingAddress ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryButtonText}>Continue</Text>}
             </TouchableOpacity>
           )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    <AddressPinConfirmModal
+      visible={pinConfirmVisible && Boolean(pendingPin)}
+      addressLines={[
+        address.roadStreet,
+        address.colony,
+        address.area,
+        [address.city, address.state, address.pincode].filter(Boolean).join(", ")
+      ].filter(Boolean)}
+      latitude={pendingPin?.latitude || 0}
+      longitude={pendingPin?.longitude || 0}
+      confirming={locatingAddress}
+      onConfirm={handleConfirmShopPin}
+      onEdit={() => {
+        setPinConfirmVisible(false);
+        setPendingPin(null);
+      }}
+    />
     </SafeAreaView>
   );
 }

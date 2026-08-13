@@ -18,6 +18,12 @@ import {
 } from "../controllers/partner.controller";
 
 import { getShopsWithImages, getPartnerPublicProfile, getPartnerReviews } from "../controllers/shop.controller";
+import {
+  geocodeDeliveryAddress,
+  getDeliveryPlaceAddress,
+  resolveDeliveryAddressPin,
+  suggestDeliveryAddresses
+} from "../controllers/user.controller";
 
 import menuRoutes from "./menu.routes";
 import { authMiddleware } from "../middlewares/auth.middleware";
@@ -53,6 +59,11 @@ router.post("/complete-setup", authMiddleware, completeSetup);
 router.get("/onboarding-draft", authMiddleware, getPartnerOnboardingDraft);
 router.put("/onboarding-draft", authMiddleware, savePartnerOnboardingDraft);
 router.delete("/onboarding-draft", authMiddleware, clearPartnerOnboardingDraft);
+
+router.get("/geocode/suggest", authMiddleware, suggestDeliveryAddresses);
+router.get("/geocode", authMiddleware, geocodeDeliveryAddress);
+router.get("/geocode/place", authMiddleware, getDeliveryPlaceAddress);
+router.post("/geocode/resolve", authMiddleware, resolveDeliveryAddressPin);
 
 router.get("/kyc/status", authMiddleware, getPartnerKycStatus);
 router.post("/kyc/digilocker/start", authMiddleware, startPartnerDigiLocker);

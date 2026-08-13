@@ -101,6 +101,11 @@ export interface Order {
     taxDiscount?: number;
     paymentStatus?: string;
     paymentMethod?: string;
+    /** Partner-set prep time in minutes when the order was accepted */
+    prepTimeMinutes?: number;
+    estimatedReadyAt?: string;
+    acceptedAt?: string;
+    deliveryReadyAt?: string;
     restaurantRating?: {
         foodQuality?: number;
         packaging?: number;

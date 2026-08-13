@@ -58,6 +58,15 @@ export const saveOnboardingDraft = (draft: Record<string, unknown>) =>
 
 export const submitOnboarding = (data: Record<string, unknown>) => apiPost("/partners/onboard", data);
 
+export type ResolvedShopPin = {
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
+};
+
+export const resolveShopAddressPin = (address: Record<string, unknown>) =>
+  apiPost<ResolvedShopPin>("/partners/geocode/resolve", address);
+
 export const completeSetup = () => apiPost("/partners/complete-setup");
 
 export const getPartnerMenuItems = () => apiGet<unknown[]>("/partners/menu");

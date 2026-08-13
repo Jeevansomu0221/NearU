@@ -45,6 +45,12 @@ export declare const updatePartnerProfile: (payload: Record<string, unknown>) =>
 export declare const getOnboardingDraft: () => Promise<ApiResponse<Record<string, unknown>>>;
 export declare const saveOnboardingDraft: (draft: Record<string, unknown>) => Promise<ApiResponse<unknown>>;
 export declare const submitOnboarding: (data: Record<string, unknown>) => Promise<ApiResponse<unknown>>;
+export type ResolvedShopPin = {
+    latitude: number;
+    longitude: number;
+    formattedAddress: string;
+};
+export declare const resolveShopAddressPin: (address: Record<string, unknown>) => Promise<ApiResponse<ResolvedShopPin>>;
 export declare const completeSetup: () => Promise<ApiResponse<unknown>>;
 export declare const getPartnerMenuItems: () => Promise<ApiResponse<unknown[]>>;
 export declare const createMenuItem: (data: Record<string, unknown>) => Promise<ApiResponse<unknown>>;
