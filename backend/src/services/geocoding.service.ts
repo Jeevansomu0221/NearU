@@ -192,6 +192,15 @@ export const suggestTypedAddresses = async (query: string): Promise<AddressSugge
   }));
 };
 
+const compactQuery = (parts: Array<string | undefined>) =>
+  Array.from(
+    new Set(
+      parts
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  ).join(", ");
+
 export const buildAddressSearchQuery = (address: {
   houseFlatDoorNo?: string;
   buildingApartmentName?: string;
@@ -207,21 +216,36 @@ export const buildAddressSearchQuery = (address: {
   pincode?: string;
   country?: string;
 }) =>
-  [
+  compactQuery([
     address.houseFlatDoorNo,
     address.buildingApartmentName,
     address.streetRoadName || address.street,
     address.area || address.areaLocality,
-    address.landmark,
     address.city || address.cityTownVillage,
     address.district,
     address.state,
     address.pincode,
     address.country || "India"
-  ]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean)
-    .join(", ");
+  ]);
+
+const buildFallbackQueries = (address: Parameters<typeof buildAddressSearchQuery>[0]) => {
+  const street = address.streetRoadName || address.street;
+  const area = address.area || address.areaLocality;
+  const city = address.city || address.cityTownVillage;
+  const country = address.country || "India";
+
+  return Array.from(
+    new Set(
+      [
+        compactQuery([street, area, city, address.state, address.pincode, country]),
+        compactQuery([area, city, address.pincode, address.state, country]),
+        compactQuery([city, address.pincode, address.state, country]),
+        buildAddressSearchQuery(address),
+        compactQuery([city, address.state, country])
+      ].filter((query) => query.length >= 3)
+    )
+  );
+};
 
 export const resolveAddressCoordinates = async (address: {
   houseFlatDoorNo?: string;
@@ -240,25 +264,30 @@ export const resolveAddressCoordinates = async (address: {
   latitude?: number;
   longitude?: number;
 }) => {
-  const query = buildAddressSearchQuery(address);
-  if (!query) {
+  const queries = buildFallbackQueries(address);
+  if (queries.length === 0) {
     throw Object.assign(new Error("Enter a complete delivery address"), { statusCode: 400 });
   }
 
-  const matches = await geocodeTypedAddress(query);
-  const best = matches[0];
-  if (!best) {
-    throw Object.assign(
-      new Error("We could not find this address on the map. Check the street, area, and pincode."),
-      { statusCode: 400 }
-    );
+  for (let index = 0; index < queries.length; index += 1) {
+    if (index > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    const matches = await geocodeTypedAddress(queries[index]);
+    const best = matches[0];
+    if (best) {
+      return {
+        latitude: best.latitude,
+        longitude: best.longitude,
+        formattedAddress: best.formattedAddress
+      };
+    }
   }
 
-  return {
-    latitude: best.latitude,
-    longitude: best.longitude,
-    formattedAddress: best.formattedAddress
-  };
+  throw Object.assign(
+    new Error("We could not find this address on the map. Check the street, area, and pincode."),
+    { statusCode: 400 }
+  );
 };
 
 export const getPlaceAddress = async (placeId: string): Promise<GeocodedAddress> => {

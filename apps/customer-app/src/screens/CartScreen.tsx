@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart, type CartItem, type CartItemRef } from "../context/CartContext";
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
-import { geocodeAddressQuery } from "../api/geocode.api";
 
 const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
@@ -186,41 +185,9 @@ export default function CartScreen({ route, navigation }: any) {
       return undefined;
     }
 
-    const typedAddressQuery = [
-      address.houseFlatDoorNo,
-      address.buildingApartmentName,
-      address.streetRoadName || address.street,
-      address.areaLocality || address.area,
-      address.landmark,
-      address.cityTownVillage || address.city,
-      address.district,
-      address.state,
-      address.pincode,
-      address.country || "India"
-    ]
-      .filter(Boolean)
-      .join(", ");
-
-    const geocodeResult = await geocodeAddressQuery(typedAddressQuery);
-    const geocodedPin = geocodeResult.success ? geocodeResult.data?.[0] : undefined;
-    if (!geocodedPin) {
-      Alert.alert(
-        "Address not found",
-        geocodeResult.message || "We could not find this saved address on the map. Please edit it in Profile."
-      );
-      return undefined;
-    }
-
-    const deliveryLocation = {
-      latitude: geocodedPin.latitude,
-      longitude: geocodedPin.longitude
-    };
-
     const payload: SavedAddress = {
       ...address,
       addressId: address._id,
-      latitude: deliveryLocation.latitude,
-      longitude: deliveryLocation.longitude,
       isDefault: address.isDefault ?? true
     } as SavedAddress & { addressId?: string };
 
@@ -231,7 +198,19 @@ export default function CartScreen({ route, navigation }: any) {
     }
 
     setUserProfile(response.data);
-    return deliveryLocation;
+    const saved = response.data.address || response.data.addresses?.find((entry) => entry.isDefault) || response.data.addresses?.[0];
+    if (
+      saved &&
+      typeof saved.latitude === "number" &&
+      typeof saved.longitude === "number" &&
+      Number.isFinite(saved.latitude) &&
+      Number.isFinite(saved.longitude)
+    ) {
+      return { latitude: saved.latitude, longitude: saved.longitude };
+    }
+
+    Alert.alert("Address not found", "Please check the street, area, city, and pincode in Profile.");
+    return undefined;
   };
 
   const resolveDeliveryLocationForPricing = useCallback(async () => {

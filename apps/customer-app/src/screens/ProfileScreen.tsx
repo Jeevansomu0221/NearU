@@ -38,7 +38,6 @@ import { buildLegalUrl } from "../constants/legal";
 import { getPublicShopName } from "../utils/display";
 import { unregisterPushNotifications } from "../services/notifications";
 import AddressFormFields from "../components/AddressFormFields";
-import { geocodeAddressQuery } from "../api/geocode.api";
 
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha Support." },
@@ -363,37 +362,6 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
-      const typedAddressQuery = [
-        houseFlatDoorNo.trim(),
-        buildingApartmentName.trim(),
-        streetRoadName.trim(),
-        area.trim(),
-        landmark.trim(),
-        city.trim(),
-        district.trim(),
-        state.trim(),
-        pincode.trim(),
-        country.trim() || "India"
-      ]
-        .filter(Boolean)
-        .join(", ");
-
-      const geocodeResult = await geocodeAddressQuery(typedAddressQuery);
-      const geocodedPin = geocodeResult.success ? geocodeResult.data?.[0] : undefined;
-      if (!geocodedPin) {
-        Alert.alert(
-          "Address not found",
-          geocodeResult.message ||
-            "We could not find this address on the map. Check the street, area, and pincode."
-        );
-        return;
-      }
-
-      const nextAddressLatitude = geocodedPin.latitude;
-      const nextAddressLongitude = geocodedPin.longitude;
-      setAddressLatitude(nextAddressLatitude);
-      setAddressLongitude(nextAddressLongitude);
-
       const legacyStreet = [houseFlatDoorNo.trim(), buildingApartmentName.trim(), streetRoadName.trim()]
         .filter(Boolean)
         .join(", ");
@@ -412,9 +380,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         area: area.trim(),
         landmark: landmark.trim() || undefined,
         district: district.trim() || undefined,
-        country: country.trim(),
-        latitude: nextAddressLatitude,
-        longitude: nextAddressLongitude
+        country: country.trim()
       };
 
       const [profileResult, addressResult] = await Promise.all([
