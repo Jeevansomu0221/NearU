@@ -75,42 +75,50 @@ const Field = ({
 export default function AddressFormFields(props: AddressFormFieldsProps) {
   return (
     <View style={styles.card}>
-      <Field
-        label="Save as"
-        fieldKey="addressLabel"
-        value={props.addressLabel}
-        onChangeText={props.setAddressLabel}
-        placeholder="Home, Work, Other"
-        focusedField={props.focusedField}
-        onFocusField={props.onFocusField}
-      />
-      <Field
-        label="Recipient"
-        fieldKey="recipientName"
-        value={props.recipientName}
-        onChangeText={props.setRecipientName}
-        placeholder="Who receives the order"
-        focusedField={props.focusedField}
-        onFocusField={props.onFocusField}
-      />
-      <Field
-        label="House / flat / door"
-        fieldKey="houseFlatDoorNo"
-        value={props.houseFlatDoorNo}
-        onChangeText={props.setHouseFlatDoorNo}
-        placeholder="e.g. 302"
-        focusedField={props.focusedField}
-        onFocusField={props.onFocusField}
-      />
-      <Field
-        label="Building / apartment"
-        fieldKey="buildingApartmentName"
-        value={props.buildingApartmentName}
-        onChangeText={props.setBuildingApartmentName}
-        placeholder="Optional"
-        focusedField={props.focusedField}
-        onFocusField={props.onFocusField}
-      />
+      <View style={styles.row}>
+        <Field
+          label="Save as"
+          fieldKey="addressLabel"
+          value={props.addressLabel}
+          onChangeText={props.setAddressLabel}
+          placeholder="Home / Work"
+          focusedField={props.focusedField}
+          onFocusField={props.onFocusField}
+          half
+        />
+        <Field
+          label="Recipient"
+          fieldKey="recipientName"
+          value={props.recipientName}
+          onChangeText={props.setRecipientName}
+          placeholder="Receives order"
+          focusedField={props.focusedField}
+          onFocusField={props.onFocusField}
+          half
+        />
+      </View>
+      <View style={styles.row}>
+        <Field
+          label="House / flat"
+          fieldKey="houseFlatDoorNo"
+          value={props.houseFlatDoorNo}
+          onChangeText={props.setHouseFlatDoorNo}
+          placeholder="e.g. 302"
+          focusedField={props.focusedField}
+          onFocusField={props.onFocusField}
+          half
+        />
+        <Field
+          label="Building"
+          fieldKey="buildingApartmentName"
+          value={props.buildingApartmentName}
+          onChangeText={props.setBuildingApartmentName}
+          placeholder="Optional"
+          focusedField={props.focusedField}
+          onFocusField={props.onFocusField}
+          half
+        />
+      </View>
       <Field
         label="Street / colony"
         fieldKey="streetRoadName"
@@ -120,27 +128,31 @@ export default function AddressFormFields(props: AddressFormFieldsProps) {
         focusedField={props.focusedField}
         onFocusField={props.onFocusField}
       />
-      <Field
-        label="Area / locality"
-        fieldKey="area"
-        value={props.area}
-        onChangeText={props.setArea}
-        placeholder="Locality"
-        focusedField={props.focusedField}
-        onFocusField={props.onFocusField}
-      />
-      <Field
-        label="Landmark"
-        fieldKey="landmark"
-        value={props.landmark}
-        onChangeText={props.setLandmark}
-        placeholder="Optional nearby landmark"
-        focusedField={props.focusedField}
-        onFocusField={props.onFocusField}
-      />
       <View style={styles.row}>
         <Field
-          label="City / town"
+          label="Area"
+          fieldKey="area"
+          value={props.area}
+          onChangeText={props.setArea}
+          placeholder="Locality"
+          focusedField={props.focusedField}
+          onFocusField={props.onFocusField}
+          half
+        />
+        <Field
+          label="Landmark"
+          fieldKey="landmark"
+          value={props.landmark}
+          onChangeText={props.setLandmark}
+          placeholder="Optional"
+          focusedField={props.focusedField}
+          onFocusField={props.onFocusField}
+          half
+        />
+      </View>
+      <View style={styles.row}>
+        <Field
+          label="City"
           fieldKey="city"
           value={props.city}
           onChangeText={props.setCity}
@@ -160,15 +172,6 @@ export default function AddressFormFields(props: AddressFormFieldsProps) {
           half
         />
       </View>
-      <Field
-        label="District"
-        fieldKey="district"
-        value={props.district}
-        onChangeText={props.setDistrict}
-        placeholder="Optional"
-        focusedField={props.focusedField}
-        onFocusField={props.onFocusField}
-      />
       <View style={styles.row}>
         <Field
           label="Pincode"
@@ -183,67 +186,66 @@ export default function AddressFormFields(props: AddressFormFieldsProps) {
           half
         />
         <Field
-          label="Country"
-          fieldKey="country"
-          value={props.country}
-          onChangeText={props.setCountry}
-          placeholder="India"
+          label="District"
+          fieldKey="district"
+          value={props.district}
+          onChangeText={props.setDistrict}
+          placeholder="Optional"
           focusedField={props.focusedField}
           onFocusField={props.onFocusField}
           half
         />
       </View>
+      <Field
+        label="Country"
+        fieldKey="country"
+        value={props.country}
+        onChangeText={props.setCountry}
+        placeholder="India"
+        focusedField={props.focusedField}
+        onFocusField={props.onFocusField}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 14,
+    backgroundColor: "#FAF7F3",
+    borderRadius: 12,
+    padding: 10,
     borderWidth: 1,
-    borderColor: "#EEE6DE",
-    shadowColor: "#1A120B",
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2
+    borderColor: "#EDE6DE"
   },
   field: {
-    marginBottom: 12
+    marginBottom: 8
   },
   halfField: {
     flex: 1
   },
   fieldLabel: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     color: "#8A7F75",
-    letterSpacing: 0.2,
-    marginBottom: 6,
-    marginLeft: 2
+    marginBottom: 4
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E7DED4",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
+    borderColor: "#E4DBD2",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
     color: "#1A120B",
-    backgroundColor: "#FBF8F5"
+    backgroundColor: "#FFFFFF",
+    minHeight: 38
   },
   inputFocused: {
     borderColor: "#FF6B35",
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#FF6B35",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 }
+    backgroundColor: "#FFFFFF"
   },
   row: {
     flexDirection: "row",
-    gap: 10
+    gap: 8
   }
 });

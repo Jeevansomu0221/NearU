@@ -615,8 +615,8 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.successIconWrap}>
             <MaterialCommunityIcons name="check" size={30} color="#FFFFFF" />
           </View>
-          <Text style={styles.successTitle}>Registration Complete</Text>
-          <Text style={styles.successText}>Your Vyaha profile is ready. You can now explore nearby food shops and place your first order.</Text>
+          <Text style={styles.successTitle}>Details saved</Text>
+          <Text style={styles.successText}>Your profile is ready. You can now explore nearby shops and place your first order.</Text>
           <TouchableOpacity style={styles.successButton} onPress={goHomeAfterRegistration} activeOpacity={0.85}>
             <Text style={styles.successButtonText}>Start Exploring</Text>
           </TouchableOpacity>
@@ -814,7 +814,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           keyboardDismissMode="on-drag"
         >
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Details</Text>
+            <Text style={styles.sectionTitle}>Basic details</Text>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Name</Text>
@@ -852,16 +852,14 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
-            <Text style={styles.sectionHint}>
-              Fill these details. Next we show the pin on a map so you can confirm it before saving.
-            </Text>
+            <Text style={styles.sectionHint}>We’ll show a map pin next so you can confirm the location.</Text>
             <AddressFormFields {...addressFormProps} />
           </View>
         </ScrollView>
 
         <View style={[styles.footerBar, { paddingBottom: footerPaddingBottom }]}>
           <TouchableOpacity style={styles.footerButton} onPress={handleSaveProfile} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Complete Registration</Text>}
+            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Save details</Text>}
           </TouchableOpacity>
         </View>
         {renderAddressPinConfirmModal()}
@@ -1087,9 +1085,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               </TouchableOpacity>
             ) : null}
           </View>
-          <Text style={styles.sectionHint}>
-            Fill the address below. Next we show the pin on a map so you can confirm it before saving.
-          </Text>
+          <Text style={styles.sectionHint}>We’ll show a map pin next so you can confirm the location.</Text>
 
           {editing ? (
             <>
@@ -1289,7 +1285,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       {forceComplete && editing && (
         <View style={[styles.footerBar, { paddingBottom: footerPaddingBottom }]}>
           <TouchableOpacity style={styles.footerButton} onPress={handleSaveProfile} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Complete Registration</Text>}
+            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Save details</Text>}
           </TouchableOpacity>
         </View>
       )}
@@ -1315,8 +1311,8 @@ const styles = StyleSheet.create({
     paddingBottom: 180
   },
   registrationContent: {
-    paddingTop: 16,
-    paddingBottom: 190
+    paddingTop: 10,
+    paddingBottom: 160
   },
   registrationHeader: {
     marginHorizontal: 16,
@@ -1507,9 +1503,9 @@ const styles = StyleSheet.create({
   },
   section: {
     marginHorizontal: 14,
-    marginTop: 10,
-    padding: 14,
-    borderRadius: 16,
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 12,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#ECE3D9"
@@ -1521,15 +1517,15 @@ const styles = StyleSheet.create({
     gap: 10
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "800",
     color: "#241D17"
   },
   sectionHint: {
-    marginTop: 4,
-    marginBottom: 10,
+    marginTop: 2,
+    marginBottom: 8,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 16,
     color: "#7A6F65"
   },
   inlineActions: {
@@ -1568,28 +1564,30 @@ const styles = StyleSheet.create({
     color: "#FF6B35"
   },
   fieldGroup: {
-    marginBottom: 10
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#7A6F65",
     marginBottom: 8
   },
+  label: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#7A6F65",
+    marginBottom: 4
+  },
   value: {
-    fontSize: 15,
-    color: "#241D17"
+    fontSize: 14,
+    color: "#241D17",
+    paddingVertical: 6
   },
   input: {
     borderWidth: 1,
-    borderColor: "#D9D0C5",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
+    borderColor: "#E4DBD2",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
     color: "#1A120B",
     backgroundColor: "#FFFFFF",
-    marginBottom: 10
+    minHeight: 38,
+    marginBottom: 0
   },
   inputFocused: {
     borderColor: "#FF6B35",
@@ -2154,15 +2152,15 @@ const styles = StyleSheet.create({
   },
   footerButton: {
     backgroundColor: "#FF6B35",
-    borderRadius: 18,
-    minHeight: 56,
+    borderRadius: 12,
+    minHeight: 46,
     alignItems: "center",
     justifyContent: "center"
   },
   footerButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "800"
+    fontSize: 15,
+    fontWeight: "700"
   },
   memberSinceContainer: {
     flexDirection: "row",

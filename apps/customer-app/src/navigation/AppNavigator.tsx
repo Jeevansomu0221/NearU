@@ -278,7 +278,7 @@ export default function AppNavigator() {
         component={ProfileScreen}
         initialParams={{ forceComplete: initialRoute === 'Profile' }}
         options={({ navigation, route }) => ({
-          title: route.params?.forceComplete ? 'Complete Registration' : 'My Profile',
+          title: route.params?.forceComplete ? 'Basic details' : 'My Profile',
           headerLeft: route.params?.forceComplete
             ? () => null
             : () => (
