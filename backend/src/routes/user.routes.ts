@@ -17,7 +17,10 @@ import {
   removeFavoriteRestaurant,
   addFavoriteFoodItem,
   removeFavoriteFoodItem,
-  deleteMyAccount
+  deleteMyAccount,
+  suggestDeliveryAddresses,
+  geocodeDeliveryAddress,
+  getDeliveryPlaceAddress
 } from "../controllers/user.controller";
 import {
   cancelMyDeletionRequest,
@@ -119,6 +122,27 @@ router.delete(
   authMiddleware,
   roleMiddleware([...CONSUMER_APP_ROLES]),
   deleteUserAddress
+);
+
+router.get(
+  "/geocode/suggest",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  suggestDeliveryAddresses
+);
+
+router.get(
+  "/geocode",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  geocodeDeliveryAddress
+);
+
+router.get(
+  "/geocode/place",
+  authMiddleware,
+  roleMiddleware([...CONSUMER_APP_ROLES]),
+  getDeliveryPlaceAddress
 );
 
 router.get(

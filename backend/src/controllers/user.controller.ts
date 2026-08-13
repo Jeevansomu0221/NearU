@@ -8,6 +8,11 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 import { successResponse, errorResponse } from "../utils/response";
 import { ROLES } from "../config/roles";
 import { executeAccountDeletion } from "../services/accountDeletion.service";
+import {
+  geocodeTypedAddress,
+  getPlaceAddress,
+  suggestTypedAddresses
+} from "../services/geocoding.service";
 
 const FAVORITE_RESTAURANT_FIELDS =
   "restaurantName shopName category address isOpen rating shopImageUrl openingTime closingTime";
@@ -680,6 +685,53 @@ export const deleteMyAccount = async (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     console.error("deleteMyAccount error:", err);
     return errorResponse(res, "Failed to delete account");
+  }
+};
+
+const normalizeLookupQuery = (value: unknown) => String(value || "").replace(/\s+/g, " ").trim();
+
+export const suggestDeliveryAddresses = async (req: AuthRequest, res: Response) => {
+  try {
+    const query = normalizeLookupQuery(req.query.q);
+    if (query.length < 3) {
+      return successResponse(res, [], "Type a bit more of the address");
+    }
+
+    const suggestions = await suggestTypedAddresses(query);
+    return successResponse(res, suggestions, "Address suggestions retrieved");
+  } catch (err: any) {
+    console.error("suggestDeliveryAddresses error:", err);
+    return errorResponse(res, err.message || "Failed to search addresses", err.statusCode || 500);
+  }
+};
+
+export const geocodeDeliveryAddress = async (req: AuthRequest, res: Response) => {
+  try {
+    const query = normalizeLookupQuery(req.query.q || req.body?.q);
+    if (query.length < 3) {
+      return errorResponse(res, "Enter at least 3 characters to look up the address", 400);
+    }
+
+    const results = await geocodeTypedAddress(query);
+    return successResponse(res, results, results.length ? "Address found" : "No matching address found");
+  } catch (err: any) {
+    console.error("geocodeDeliveryAddress error:", err);
+    return errorResponse(res, err.message || "Failed to look up address", err.statusCode || 500);
+  }
+};
+
+export const getDeliveryPlaceAddress = async (req: AuthRequest, res: Response) => {
+  try {
+    const placeId = normalizeLookupQuery(req.query.placeId || req.body?.placeId);
+    if (!placeId) {
+      return errorResponse(res, "Select an address from the suggestions", 400);
+    }
+
+    const address = await getPlaceAddress(placeId);
+    return successResponse(res, address, "Address resolved");
+  } catch (err: any) {
+    console.error("getDeliveryPlaceAddress error:", err);
+    return errorResponse(res, err.message || "Failed to resolve address", err.statusCode || 500);
   }
 };
 

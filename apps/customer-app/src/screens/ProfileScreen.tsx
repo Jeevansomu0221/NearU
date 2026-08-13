@@ -38,6 +38,8 @@ import {
 import { buildLegalUrl } from "../constants/legal";
 import { getPublicShopName } from "../utils/display";
 import { unregisterPushNotifications } from "../services/notifications";
+import AddressSearchField from "../components/AddressSearchField";
+import type { GeocodedAddress } from "../api/geocode.api";
 
 const supportItems = [
   { icon: "headset", title: "Customer Support", detail: "Order related chat with Vyaha Support." },
@@ -446,6 +448,43 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
+  const applyGeocodedAddress = (result: GeocodedAddress) => {
+    if (result.houseFlatDoorNo && !houseFlatDoorNo.trim()) {
+      setHouseFlatDoorNo(result.houseFlatDoorNo);
+    }
+    if (result.buildingApartmentName) {
+      setBuildingApartmentName(result.buildingApartmentName);
+    }
+    if (result.streetRoadName) {
+      setStreetRoadName(result.streetRoadName);
+    }
+    if (result.area) {
+      setArea(result.area);
+    }
+    if (result.city) {
+      setCity(result.city);
+    }
+    if (result.state) {
+      setState(result.state);
+    }
+    if (result.district) {
+      setDistrict(result.district);
+    }
+    if (result.pincode && /^\d{6}$/.test(result.pincode)) {
+      setPincode(result.pincode);
+    }
+    if (result.country) {
+      setCountry(result.country);
+    }
+    setStreet(
+      [result.houseFlatDoorNo || houseFlatDoorNo, result.buildingApartmentName || buildingApartmentName, result.streetRoadName]
+        .filter(Boolean)
+        .join(", ")
+    );
+    setAddressLatitude(result.latitude);
+    setAddressLongitude(result.longitude);
+  };
+
   const handleCaptureAddressPin = async () => {
     try {
       setCapturingAddressPin(true);
@@ -808,8 +847,9 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
             <Text style={styles.sectionHint}>
-              This address needs an exact GPS pin. We will ask location permission when you complete registration.
+              Search your address to fill the exact Google location, then add house / flat number if needed.
             </Text>
+            <AddressSearchField onSelect={applyGeocodedAddress} />
 
             <TextInput
               style={[styles.input, focusedField === "addressLabel" && styles.inputFocused]}
@@ -1145,10 +1185,11 @@ export default function ProfileScreen({ navigation, route }: any) {
               </TouchableOpacity>
             ) : null}
           </View>
-          <Text style={styles.sectionHint}>Save Home, Work, Home 2, or any delivery location and mark one as default for checkout.</Text>
+          <Text style={styles.sectionHint}>Search the address to use the exact mapped location, then save Home, Work, or any label as default for checkout.</Text>
 
           {editing ? (
             <>
+              <AddressSearchField onSelect={applyGeocodedAddress} />
               <TextInput
                 style={[styles.input, focusedField === "addressLabel" && styles.inputFocused]}
                 value={addressLabel}
@@ -1269,7 +1310,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Text style={styles.pinText}>
                     {hasValidAddressPin(addressLatitude, addressLongitude)
                       ? `Saved: ${Number(addressLatitude).toFixed(5)}, ${Number(addressLongitude).toFixed(5)}`
-                      : "Stand at this address and save the GPS pin so delivery can use exact Google Maps directions."}
+                      : "Search the address above, or stand there and save the GPS pin for exact delivery directions."}
                   </Text>
                 </View>
                 <TouchableOpacity style={styles.pinButton} onPress={handleCaptureAddressPin} disabled={capturingAddressPin}>
