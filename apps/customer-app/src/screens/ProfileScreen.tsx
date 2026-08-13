@@ -597,7 +597,6 @@ export default function ProfileScreen({ navigation, route }: any) {
         } as SavedAddress,
         name
       )}
-      formattedAddress={pendingPin?.formattedAddress}
       latitude={pendingPin?.latitude || 0}
       longitude={pendingPin?.longitude || 0}
       confirming={saving}
