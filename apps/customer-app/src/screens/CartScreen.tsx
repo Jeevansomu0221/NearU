@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart, type CartItem, type CartItemRef } from "../context/CartContext";
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
+import { resolveAddressPin } from "../api/geocode.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
 
 const formatAmount = (value = 0) => {
@@ -85,9 +86,29 @@ export default function CartScreen({ route, navigation }: any) {
     pricingQuote?.payableTotal ??
     subtotal + deliveryFee + foodGst + platformFee;
 
+  const hasUsableAddress = (address?: SavedAddress | string | null): address is SavedAddress | string => {
+    if (!address) return false;
+    if (typeof address === "string") return address.trim().length > 3;
+    return Boolean(
+      address.houseFlatDoorNo ||
+        address.streetRoadName ||
+        address.street ||
+        address.area ||
+        address.areaLocality ||
+        address.city ||
+        address.cityTownVillage ||
+        address.pincode
+    );
+  };
+
   const getSelectedAddress = (): SavedAddress | string | undefined => {
-    const defaultSavedAddress = userProfile?.addresses?.find((address) => address.isDefault);
-    return (defaultSavedAddress || userProfile?.address) as SavedAddress | string | undefined;
+    const saved = Array.isArray(userProfile?.addresses)
+      ? userProfile.addresses.filter((address) => hasUsableAddress(address))
+      : [];
+    const preferred = saved.find((address) => address.isDefault) || saved[0];
+    if (preferred) return preferred;
+    if (hasUsableAddress(userProfile?.address)) return userProfile?.address;
+    return undefined;
   };
 
   const formatAddress = () => {
@@ -180,9 +201,18 @@ export default function CartScreen({ route, navigation }: any) {
 
   const geocodeAndSaveDeliveryLocation = async () => {
     const address = getSelectedAddress();
-    if (!address || typeof address === "string") {
+    if (!address) {
       Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.");
       return undefined;
+    }
+
+    if (typeof address === "string") {
+      const pinResult = await resolveAddressPin({ street: address, country: "India" });
+      if (!pinResult.success || !pinResult.data) {
+        Alert.alert("Address not found", pinResult.message || "Please check the street, area, city, and pincode in Profile.");
+        return undefined;
+      }
+      return { latitude: pinResult.data.latitude, longitude: pinResult.data.longitude };
     }
 
     const payload: SavedAddress = {
@@ -198,7 +228,11 @@ export default function CartScreen({ route, navigation }: any) {
     }
 
     setUserProfile(response.data);
-    const saved = response.data.address || response.data.addresses?.find((entry) => entry.isDefault) || response.data.addresses?.[0];
+    const saved =
+      response.data.addresses?.find((entry) => entry._id && entry._id === address._id) ||
+      response.data.addresses?.find((entry) => entry.isDefault) ||
+      response.data.address ||
+      response.data.addresses?.[0];
     if (
       saved &&
       typeof saved.latitude === "number" &&

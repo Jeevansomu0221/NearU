@@ -45,18 +45,22 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
     return subtotal + deliveryFee;
   };
 
+  const getSelectedAddress = () => {
+    const saved = Array.isArray(userProfile?.addresses) ? userProfile.addresses : [];
+    return saved.find((entry: any) => entry?.isDefault) || saved[0] || userProfile?.address;
+  };
+
   const formatAddress = () => {
-    if (!userProfile?.address) {
+    const selected = getSelectedAddress();
+    if (!selected) {
       return "No address saved";
     }
     
-    // Check if address is a string or object
-    if (typeof userProfile.address === 'string') {
-      return userProfile.address;
+    if (typeof selected === "string") {
+      return selected;
     }
-    
-    // Handle address object
-    const addr = userProfile.address;
+
+    const addr = selected;
     const parts = [
       addr.recipientName,
       [addr.houseFlatDoorNo, addr.buildingApartmentName].filter(Boolean).join(", ") || addr.street || addr.roadStreet,
@@ -72,7 +76,7 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
   };
 
   const handleProceedToPayment = () => {
-    if (!userProfile?.address) {
+    if (!getSelectedAddress()) {
       Alert.alert(
         "Address Required",
         "Please add delivery address before proceeding",
@@ -137,7 +141,7 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
           
-          {userProfile?.address ? (
+          {getSelectedAddress() ? (
             <>
               <Text style={styles.userName}>{userProfile.name}</Text>
               <Text style={styles.userPhone}>📱 {userProfile.phone}</Text>
@@ -210,13 +214,13 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
           <TouchableOpacity
             style={[
               styles.paymentButton,
-              (!userProfile?.address || items.length === 0) && styles.paymentButtonDisabled
+              (!getSelectedAddress() || items.length === 0) && styles.paymentButtonDisabled
             ]}
             onPress={handleProceedToPayment}
-            disabled={!userProfile?.address || items.length === 0}
+            disabled={!getSelectedAddress() || items.length === 0}
           >
             <Text style={styles.paymentButtonText}>
-              {!userProfile?.address ? "Add Address First" : "Proceed to Payment"}
+              {!getSelectedAddress() ? "Add Address First" : "Proceed to Payment"}
             </Text>
           </TouchableOpacity>
         </View>

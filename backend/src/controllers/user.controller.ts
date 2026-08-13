@@ -183,6 +183,14 @@ export const getUserProfile = async (req: AuthRequest, res: Response) => {
         label: "Home",
         isDefault: true
       }];
+    } else if (addresses.length > 0) {
+      const defaultAddress = addresses.find((entry: any) => entry.isDefault) || addresses[0];
+      if (defaultAddress && !addresses.some((entry: any) => entry.isDefault)) {
+        defaultAddress.isDefault = true;
+      }
+      if (!hasAddressContent((userData as any).address) && defaultAddress) {
+        (userData as any).address = legacyAddressFromSaved(defaultAddress);
+      }
     }
 
     return successResponse(res, userData, "Profile retrieved successfully");
