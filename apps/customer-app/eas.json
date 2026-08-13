@@ -8,7 +8,8 @@
       "developmentClient": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.vyaha.com",
-        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
+        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyA494CbJ8h9RERX68Ae4C8JcafF5bPjnY0"
       },
       "android": {
         "buildType": "apk"
@@ -17,7 +18,8 @@
     "preview": {
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.vyaha.com",
-        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
+        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyA494CbJ8h9RERX68Ae4C8JcafF5bPjnY0"
       },
       "android": {
         "buildType": "apk"
@@ -27,7 +29,8 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.vyaha.com",
-        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com"
+        "EXPO_PUBLIC_VYAHA_OFFICIAL_URL": "https://www.vyaha.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyA494CbJ8h9RERX68Ae4C8JcafF5bPjnY0"
       },
       "android": {
         "buildType": "app-bundle"

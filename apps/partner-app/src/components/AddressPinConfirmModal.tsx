@@ -10,6 +10,7 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import GooglePinMap from "./GooglePinMap";
 
 type AddressPinConfirmModalProps = {
   visible: boolean;
@@ -46,6 +47,41 @@ const tileUrl = (x: number, y: number, zoom: number) => {
   const tx = ((x % n) + n) % n;
   return `https://basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${tx}/${y}@2x.png`;
 };
+
+function GoogleMapOrFallback({
+  latitude,
+  longitude,
+  onPinChange
+}: {
+  latitude: number;
+  longitude: number;
+  onPinChange: (pin: { latitude: number; longitude: number }) => void;
+}) {
+  const [mode, setMode] = useState<"google" | "fallback">("google");
+  const readyRef = React.useRef(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!readyRef.current) setMode("fallback");
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (mode === "fallback") {
+    return <PannablePinMap latitude={latitude} longitude={longitude} onPinChange={onPinChange} />;
+  }
+
+  return (
+    <GooglePinMap
+      latitude={latitude}
+      longitude={longitude}
+      onPinChange={onPinChange}
+      onReady={() => {
+        readyRef.current = true;
+      }}
+    />
+  );
+}
 
 function PannablePinMap({
   latitude,
@@ -176,7 +212,7 @@ export default function AddressPinConfirmModal({
 
         <View style={styles.mapCard}>
           {Number.isFinite(latitude) && Number.isFinite(longitude) ? (
-            <PannablePinMap latitude={latitude} longitude={longitude} onPinChange={setPin} />
+            <GoogleMapOrFallback latitude={latitude} longitude={longitude} onPinChange={setPin} />
           ) : (
             <View style={styles.mapFallback}>
               <ActivityIndicator color="#FF6B35" />

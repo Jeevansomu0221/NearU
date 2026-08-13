@@ -1,11 +1,10 @@
 const appJson = require("./app.json");
 
-// Native Google Maps SDK key (Android package + SHA-1). OSM is only a fallback.
 const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
 
 if (!googleMapsApiKey) {
   console.warn(
-    "[vyaha-delivery] EXPO_PUBLIC_GOOGLE_MAPS_API_KEY is empty. In-app map uses OpenStreetMap; external Google Maps navigation still works."
+    "[vyaha-customer] EXPO_PUBLIC_GOOGLE_MAPS_API_KEY is empty. In-app Google Maps will fall back until the key is set."
   );
 }
 

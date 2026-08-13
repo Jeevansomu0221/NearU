@@ -28,6 +28,12 @@
 -keep class com.reactnativecommunity.webview.** { *; }
 -dontwarn com.reactnativecommunity.webview.**
 
+# Google Maps / react-native-maps
+-keep class com.airbnb.android.react.maps.** { *; }
+-keep class com.rnmaps.** { *; }
+-dontwarn com.airbnb.android.react.maps.**
+-dontwarn com.rnmaps.**
+
 # Razorpay
 -keep class com.razorpay.** { *; }
 -dontwarn com.razorpay.**

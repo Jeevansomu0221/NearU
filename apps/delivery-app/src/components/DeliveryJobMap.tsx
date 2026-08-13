@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -8,6 +8,7 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { fetchDrivingRoute } from "../utils/directions";
 import type { LatLng, MapPin } from "../utils/mapCoordinates";
 import OsmWebMap from "./OsmWebMap";
@@ -24,12 +25,15 @@ type Props = {
 
 const MAP_LOAD_TIMEOUT_MS = 12000;
 
+const pinColor = (kind: MapPin["kind"]) => {
+  if (kind === "rider") return "#1976D2";
+  if (kind === "pickup") return "#2E7D32";
+  return "#E65100";
+};
+
 /**
  * In-app map preview for delivery jobs.
- *
- * Uses OpenStreetMap via WebView so the preview works without Google Maps SDK
- * tiles / Android API-key SHA restrictions (those caused infinite loading on
- * react-native-maps). Turn-by-turn still opens in Google Maps via the FAB.
+ * Google Maps SDK first; OSM WebView only if the native map cannot load.
  */
 export default function DeliveryJobMap({
   riderLocation,
@@ -42,6 +46,8 @@ export default function DeliveryJobMap({
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
+  const [useGoogle, setUseGoogle] = useState(Platform.OS !== "web");
+  const mapRef = useRef<MapView>(null);
 
   const markers = useMemo(() => {
     const list = [...pins];
@@ -100,9 +106,43 @@ export default function DeliveryJobMap({
 
   useEffect(() => {
     if (mapReady || mapFailed) return;
-    const timer = setTimeout(() => setMapFailed(true), MAP_LOAD_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      if (useGoogle) {
+        setUseGoogle(false);
+        setMapReady(false);
+        return;
+      }
+      setMapFailed(true);
+    }, MAP_LOAD_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [mapReady, mapFailed]);
+  }, [mapReady, mapFailed, useGoogle]);
+
+  const initialRegion = markers[0]?.coordinate
+    ? {
+        latitude: markers[0].coordinate.latitude,
+        longitude: markers[0].coordinate.longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02
+      }
+    : {
+        latitude: 12.9716,
+        longitude: 77.5946,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08
+      };
+
+  useEffect(() => {
+    if (!useGoogle || !mapReady) return;
+    const coords = [
+      ...markers.map((pin) => pin.coordinate),
+      ...routeCoords
+    ].filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude));
+    if (coords.length < 1) return;
+    mapRef.current?.fitToCoordinates(coords, {
+      edgePadding: { top: 48, right: 36, bottom: 72, left: 36 },
+      animated: true
+    });
+  }, [useGoogle, mapReady, markers, routeCoords]);
 
   if (Platform.OS === "web" || mapFailed) {
     return (
@@ -124,13 +164,38 @@ export default function DeliveryJobMap({
 
   return (
     <View style={[styles.wrap, { height }]}>
-      <OsmWebMap
-        height={height}
-        pins={markers}
-        routeCoords={routeCoords}
-        onReady={() => setMapReady(true)}
-        onError={() => setMapFailed(true)}
-      />
+      {useGoogle ? (
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={{ width: "100%", height }}
+          initialRegion={initialRegion}
+          onMapReady={() => setMapReady(true)}
+          showsUserLocation={false}
+          showsMyLocationButton={false}
+          toolbarEnabled={false}
+        >
+          {markers.map((pin) => (
+            <Marker
+              key={pin.id}
+              coordinate={pin.coordinate}
+              title={pin.title}
+              pinColor={pinColor(pin.kind)}
+            />
+          ))}
+          {routeCoords.length > 1 ? (
+            <Polyline coordinates={routeCoords} strokeColor="#1A73E8" strokeWidth={4} />
+          ) : null}
+        </MapView>
+      ) : (
+        <OsmWebMap
+          height={height}
+          pins={markers}
+          routeCoords={routeCoords}
+          onReady={() => setMapReady(true)}
+          onError={() => setMapFailed(true)}
+        />
+      )}
 
       {loadingRoute ? (
         <View style={styles.routeLoading}>
