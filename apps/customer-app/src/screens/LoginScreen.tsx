@@ -63,9 +63,10 @@ export default function LoginScreen({ navigation }: Props) {
     if (
       message.toLowerCase().includes('network') ||
       message.toLowerCase().includes('server is taking longer') ||
-      message.toLowerCase().includes('cannot connect')
+      message.toLowerCase().includes('cannot connect') ||
+      message.toLowerCase().includes('check your network')
     ) {
-      return message || 'Cannot connect to server. Please check your internet connection.';
+      return 'Please check your network and try again.';
     }
 
     if (message) {

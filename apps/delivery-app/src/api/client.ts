@@ -215,7 +215,7 @@ api.interceptors.response.use(
     }
 
     if (isNetworkError) {
-      return Promise.reject(new Error("The server is taking longer than usual. Please wait a moment and try again."));
+      return Promise.reject(new Error("Please check your network and try again."));
     }
 
     logDebug("API Error:", {
@@ -226,7 +226,7 @@ api.interceptors.response.use(
     });
 
     if (error.message === "Network Error") {
-      return Promise.reject(new Error("Cannot connect to server. Please check your connection."));
+      return Promise.reject(new Error("Please check your network and try again."));
     }
 
     return Promise.reject(

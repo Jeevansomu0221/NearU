@@ -544,7 +544,7 @@ export default function PaymentScreen({ route, navigation }: any) {
     if (error.response?.data?.message) {
       errorMessage = error.response.data.message;
     } else if (typeof error.message === "string" && error.message.includes("Network Error")) {
-      errorMessage = "Cannot connect to server. Please check your internet connection.";
+      errorMessage = "Please check your network and try again.";
     } else if (error.message) {
       errorMessage = error.message;
     }

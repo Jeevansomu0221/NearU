@@ -109,7 +109,8 @@ const isRetryableNetworkError = (error: unknown) => {
   return (
     message.includes("network error") ||
     message.includes("timeout") ||
-    message.includes("taking longer than usual")
+    message.includes("taking longer than usual") ||
+    message.includes("check your network")
   );
 };
 

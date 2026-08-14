@@ -83,7 +83,7 @@ export default function LoginScreen({ navigation }: any) {
       message.includes("taking longer than usual") ||
       message.includes("timeout")
     ) {
-      return "Cannot reach server. Please check your internet and try again.";
+      return "Please check your network and try again.";
     }
 
     if (code.includes("invalid-verification-code") || message.includes("invalid or expired otp")) {

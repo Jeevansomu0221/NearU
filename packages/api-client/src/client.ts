@@ -70,14 +70,14 @@ const formatNetworkError = (error: unknown) => {
     if (isViteDevServer() || (isBrowserLocalhost() && API_BASE_URL.includes("localhost"))) {
       return "Cannot reach the local API server. Start it with `cd backend && npm run dev` and make sure MongoDB is available.";
     }
-    return "Vyaha API is unreachable right now. Please try again in a moment.";
+    return "Please check your network and try again.";
   }
 
   if (code === "ECONNABORTED" || message.includes("timeout")) {
-    return "The server is taking longer than usual. Please wait a moment and try again.";
+    return "Please check your network and try again.";
   }
 
-  return "Network error. Check your internet connection and try again.";
+  return "Please check your network and try again.";
 };
 
 const api = axios.create({

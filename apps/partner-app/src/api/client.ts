@@ -329,7 +329,7 @@ api.interceptors.response.use(
 
     if (isNetworkError) {
       return Promise.reject(
-        new Error("The server is taking longer than usual. Please wait a moment and try again.")
+        new Error("Please check your network and try again.")
       );
     }
 
