@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress, type AddressLike } from "../utils/address";
 import { getOrderRiderEarnings } from "../utils/riderEarnings";
-import { getRiderReadyByMessage } from "../utils/prepTime";
+import { getRiderPickupStatusMessage } from "../utils/prepTime";
 
 type Job = {
   _id: string;
@@ -42,6 +42,7 @@ type Job = {
   }>;
   prepTimeMinutes?: number;
   estimatedReadyAt?: string;
+  deliveryReadyAt?: string;
   customerId?: {
     name?: string;
   };
@@ -127,7 +128,11 @@ export default function NewJobBanner({
     ? "Open details for pickup sequence"
     : formatAddress(job.partnerId?.address, { short: true });
   const paymentLabel = job.paymentMethod === "CASH_ON_DELIVERY" ? "Cash on delivery" : "Pre-paid";
-  const readyByMessage = getRiderReadyByMessage(job.estimatedReadyAt, job.prepTimeMinutes);
+  const readyByMessage = getRiderPickupStatusMessage(
+    job.deliveryReadyAt,
+    job.estimatedReadyAt,
+    job.prepTimeMinutes
+  );
 
   return (
     <Animated.View

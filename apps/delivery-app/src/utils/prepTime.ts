@@ -9,6 +9,8 @@ export const formatReadyByClock = (value?: Date | string | null) => {
   });
 };
 
+export const RIDER_READY_FOR_PICKUP_MESSAGE = "Order is ready for pickup";
+
 export const getRiderReadyByMessage = (estimatedReadyAt?: string | null, prepTimeMinutes?: number | null) => {
   const clock = formatReadyByClock(estimatedReadyAt);
   if (clock) {
@@ -18,4 +20,15 @@ export const getRiderReadyByMessage = (estimatedReadyAt?: string | null, prepTim
     return `Prep time: ${prepTimeMinutes} mins`;
   }
   return "";
+};
+
+export const getRiderPickupStatusMessage = (
+  deliveryReadyAt?: string | null,
+  estimatedReadyAt?: string | null,
+  prepTimeMinutes?: number | null
+) => {
+  if (deliveryReadyAt) {
+    return RIDER_READY_FOR_PICKUP_MESSAGE;
+  }
+  return getRiderReadyByMessage(estimatedReadyAt, prepTimeMinutes);
 };

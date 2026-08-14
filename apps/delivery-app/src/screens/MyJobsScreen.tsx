@@ -13,7 +13,7 @@ import { getMyDeliveryOrders, DeliveryOrder } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "../utils/address";
-import { getRiderReadyByMessage } from "../utils/prepTime";
+import { getRiderPickupStatusMessage } from "../utils/prepTime";
 
 export default function MyJobsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
@@ -104,7 +104,11 @@ export default function MyJobsScreen({ navigation, route }: any) {
     const pickupStops = item.pickupStops?.length
       ? item.pickupStops
       : [{ partnerId: item.partnerId, orderId: item._id, sequence: 1, status: item.status, items: item.items, itemTotal: item.itemTotal, deliveryFee: item.deliveryFee, grandTotal: item.grandTotal }];
-    const readyByMessage = getRiderReadyByMessage(item.estimatedReadyAt, item.prepTimeMinutes);
+    const readyByMessage = getRiderPickupStatusMessage(
+      item.deliveryReadyAt,
+      item.estimatedReadyAt,
+      item.prepTimeMinutes
+    );
 
     return (
       <TouchableOpacity

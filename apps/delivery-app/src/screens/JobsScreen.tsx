@@ -21,7 +21,7 @@ import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, getDeliver
 import { getDeliveryProfile, updateDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { formatAddress } from "../utils/address";
-import { getRiderReadyByMessage } from "../utils/prepTime";
+import { getRiderPickupStatusMessage } from "../utils/prepTime";
 import { getCurrentRiderLocation, subscribeRiderLocation } from "../utils/riderLocation";
 import NewJobBanner from "../components/NewJobBanner";
 
@@ -463,7 +463,11 @@ export default function JobsScreen({ navigation }: any) {
   const renderJobItem = ({ item }: { item: CalculatedJob }) => {
     const earnings = getOrderRiderEarnings(item);
     const accepted = acceptingJobId === item._id;
-    const readyByMessage = getRiderReadyByMessage(item.estimatedReadyAt, item.prepTimeMinutes);
+    const readyByMessage = getRiderPickupStatusMessage(
+      item.deliveryReadyAt,
+      item.estimatedReadyAt,
+      item.prepTimeMinutes
+    );
     const pickupStops = item.pickupStops?.length
       ? item.pickupStops
       : [{ partnerId: item.partnerId, orderId: item._id, sequence: 1, status: item.status, items: item.items, itemTotal: item.itemTotal, deliveryFee: item.deliveryFee, grandTotal: item.grandTotal }];

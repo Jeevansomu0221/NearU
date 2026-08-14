@@ -564,7 +564,10 @@ const buildBundledDeliveryJob = (orders: any[]) => {
       itemTotal: order.itemTotal || 0,
       deliveryFee: order.deliveryFee || 0,
       tipAmount: order.tipAmount || 0,
-      grandTotal: order.grandTotal || 0
+      grandTotal: order.grandTotal || 0,
+      prepTimeMinutes: order.prepTimeMinutes,
+      estimatedReadyAt: order.estimatedReadyAt,
+      deliveryReadyAt: order.deliveryReadyAt
     }))
   };
 };

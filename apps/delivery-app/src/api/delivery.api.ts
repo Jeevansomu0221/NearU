@@ -62,6 +62,7 @@ export interface DeliveryOrder {
   deliveryEarnings?: number;
   prepTimeMinutes?: number;
   estimatedReadyAt?: string;
+  deliveryReadyAt?: string;
   collectedAmount?: number;
   deliveryBundleId?: string;
   deliveryBundleSize?: number;
@@ -75,6 +76,9 @@ export interface DeliveryOrder {
     itemTotal: number;
     deliveryFee: number;
     grandTotal: number;
+    prepTimeMinutes?: number;
+    estimatedReadyAt?: string;
+    deliveryReadyAt?: string;
   }>;
   bundleOrders?: DeliveryOrder[];
 }
