@@ -1603,8 +1603,13 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
     }
 
     const codOrders = deliveryOrders.filter((deliveryOrder: any) => deliveryOrder.paymentMethod === "CASH_ON_DELIVERY");
-    const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
-    const codCollectedAmount = normalizedStatus === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
+    const totalCodAmount = roundMoney(
+      codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0)
+    );
+    // Rider apps sometimes omit collectedAmount after OTP (state loss) or send a float
+    // that is 1e-12 below the stored total — treat missing/invalid cash as full collection.
+    let codCollectedAmount =
+      normalizedStatus === "DELIVERED" && totalCodAmount > 0 ? Number(collectedAmount) : 0;
     if (normalizedStatus === "DELIVERED" && totalCodAmount > 0) {
       if (normalizedCollectionMethod === "UPI") {
         const codTargets = getCodCollectionTargets(deliveryOrders);
@@ -1612,8 +1617,15 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
         if (unpaidCodOrders.length > 0) {
           return errorResponse(res, "Wait for the customer UPI payment to be confirmed before completing delivery", 400);
         }
-      } else if (!Number.isFinite(codCollectedAmount) || codCollectedAmount < totalCodAmount) {
-        return errorResponse(res, `Collect Rs ${totalCodAmount} before marking this delivery as delivered`, 400);
+      } else {
+        if (!Number.isFinite(codCollectedAmount) || codCollectedAmount <= 0) {
+          codCollectedAmount = totalCodAmount;
+        } else {
+          codCollectedAmount = roundMoney(codCollectedAmount);
+        }
+        if (codCollectedAmount < totalCodAmount) {
+          return errorResponse(res, `Collect Rs ${totalCodAmount} before marking this delivery as delivered`, 400);
+        }
       }
     }
 

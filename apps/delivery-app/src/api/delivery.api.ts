@@ -260,12 +260,14 @@ export const markAsDelivered = (
   verificationCode?: string,
   otpBypass?: { proofUrl: string; reason?: string }
 ): Promise<ApiResponse<DeliveryOrder>> => {
-  const data: any = { 
+  const data: any = {
     status: "DELIVERED",
-    collectedAmount,
     collectionMethod,
     verificationCode
   };
+  if (Number.isFinite(Number(collectedAmount)) && Number(collectedAmount) > 0) {
+    data.collectedAmount = Number(Number(collectedAmount).toFixed(2));
+  }
   if (location) {
     data.location = location;
   }

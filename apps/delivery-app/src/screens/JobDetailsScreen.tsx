@@ -679,7 +679,14 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     collectedAmount?: number,
     collectionMethod: "CASH" | "UPI" = "CASH"
   ) => {
-    setPendingDelivery({ collectedAmount, collectionMethod });
+    const resolvedAmount =
+      collectionMethod === "CASH"
+        ? Number(collectedAmount ?? job?.grandTotal ?? 0)
+        : collectedAmount;
+    setPendingDelivery({
+      collectedAmount: Number.isFinite(resolvedAmount as number) ? (resolvedAmount as number) : undefined,
+      collectionMethod
+    });
     setDeliveryOtp("");
     setOtpBypassMode(false);
     setBypassProofUrl("");
@@ -847,13 +854,26 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     requestDeliveryVerification(undefined, "UPI");
   };
 
+  const resolvePendingCollection = () => {
+    const pending = pendingDelivery || { collectionMethod: "CASH" as const };
+    const collectionMethod = pending.collectionMethod || "CASH";
+    if (collectionMethod === "UPI") {
+      return { collectedAmount: pending.collectedAmount, collectionMethod };
+    }
+    const amount = Number(pending.collectedAmount ?? job?.grandTotal ?? 0);
+    return {
+      collectedAmount: Number.isFinite(amount) && amount > 0 ? Number(amount.toFixed(2)) : undefined,
+      collectionMethod: "CASH" as const
+    };
+  };
+
   const submitDeliveryVerification = async () => {
     const code = deliveryOtp.trim();
     if (!/^\d{4}$/.test(code)) {
       Alert.alert("Invalid code", "Enter the 4-digit verification code from the customer.");
       return;
     }
-    const pending = pendingDelivery || { collectionMethod: "CASH" as const };
+    const pending = resolvePendingCollection();
     setOtpConfirmVisible(false);
     await confirmDelivery(pending.collectedAmount, pending.collectionMethod, code);
   };
@@ -863,7 +883,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       Alert.alert("Proof required", "Take or upload a photo showing the order was delivered.");
       return;
     }
-    const pending = pendingDelivery || { collectionMethod: "CASH" as const };
+    const pending = resolvePendingCollection();
     setOtpConfirmVisible(false);
     await confirmDelivery(pending.collectedAmount, pending.collectionMethod, undefined, {
       proofUrl: bypassProofUrl.trim(),
@@ -923,9 +943,19 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           }
         });
       } else {
-        Alert.alert("Verification failed", response.message || "Failed to complete delivery");
+        const message = response.message || "Failed to complete delivery";
+        const title = /verification code|incorrect verification/i.test(message)
+          ? "Verification failed"
+          : "Could not complete delivery";
+        Alert.alert(title, message);
         setDeliveryOtp("");
-        setPendingDelivery({ collectedAmount, collectionMethod });
+        setPendingDelivery({
+          collectedAmount:
+            collectionMethod === "CASH"
+              ? Number(collectedAmount ?? job?.grandTotal ?? 0)
+              : collectedAmount,
+          collectionMethod
+        });
         if (otpBypass?.proofUrl) {
           setOtpBypassMode(true);
           setBypassProofUrl(otpBypass.proofUrl);
@@ -1856,7 +1886,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
                 style={styles.confirmPrimary}
                 onPress={() => {
                   setCashConfirmVisible(false);
-                  requestDeliveryVerification(job.grandTotal, "CASH");
+                  requestDeliveryVerification(Number(Number(job.grandTotal || 0).toFixed(2)), "CASH");
                 }}
                 disabled={updating}
               >
