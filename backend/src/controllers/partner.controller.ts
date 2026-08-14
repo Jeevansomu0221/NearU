@@ -1654,9 +1654,6 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
     }
 
     if (address && typeof address === "object") {
-      if (verificationLocked) {
-        throw lockedProfileError();
-      }
       updates.address = {
         ...partner.address,
         ...address
@@ -1673,7 +1670,7 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
       }
     }
 
-    // Direct GPS pin (from "Mark my location") — allowed even when verified address text is locked.
+    // Direct GPS pin (from "Mark my location").
     if (incomingLocation && typeof incomingLocation === "object") {
       const lat = Number(incomingLocation.latitude);
       const lng = Number(incomingLocation.longitude);

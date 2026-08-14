@@ -525,17 +525,12 @@ export default function ProfileScreen({ navigation }: any) {
         // Keep the live GPS pin even if address text cannot be read.
       }
 
-      if (!isProfileVerificationLocked(profile, kyc)) {
-        setPendingPin({
-          latitude,
-          longitude,
-          formattedAddress: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
-        });
-        setPinConfirmVisible(true);
-        return;
-      }
-
-      Alert.alert("Shop location captured", "Tap Save location to apply this GPS pin.");
+      setPendingPin({
+        latitude,
+        longitude,
+        formattedAddress: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+      });
+      setPinConfirmVisible(true);
     } catch (error: any) {
       Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
     } finally {
@@ -553,14 +548,6 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const handleSaveAddress = async () => {
-    if (isProfileVerificationLocked(profile, kyc)) {
-      Alert.alert(
-        "Verified address locked",
-        "Your verified shop address can only be changed by sending a support request with the reason for change."
-      );
-      return;
-    }
-
     if (!address.roadStreet || !address.colony || !address.area || !address.city || !address.state) {
       Alert.alert("Missing details", "Fill all address fields before saving.");
       return;
@@ -845,11 +832,11 @@ export default function ProfileScreen({ navigation }: any) {
 
   const verificationDetailsLocked = isProfileVerificationLocked(profile, kyc);
   const basicsEditing = activeEditSection === "basics";
-  const addressEditing = activeEditSection === "address" && !verificationDetailsLocked;
+  const addressEditing = activeEditSection === "address";
   const hoursEditing = activeEditSection === "hours";
   const bankEditing = activeEditSection === "bank" && !verificationDetailsLocked;
   const lockedDetailsCopy =
-    "Verified registration, document, address, phone, and payout details are locked for account safety. Send a support request with the reason if anything must change.";
+    "Verified registration, document, phone, and payout details are locked for account safety. Send a support request with the reason if anything must change.";
   const savedShopLocation = (() => {
     const coords = profile.location?.coordinates;
     if (!coords || coords.length < 2) return null;
@@ -1368,22 +1355,9 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader(
           "Address & Location",
-          verificationDetailsLocked
-            ? "Address text is locked after verification. You can still update your shop GPS pin for riders."
-            : "Keep the address and GPS pin accurate for customer deliveries.",
-          verificationDetailsLocked ? null : renderEditAction("address", addressEditing)
+          "Keep the address and GPS pin accurate for customer deliveries.",
+          renderEditAction("address", addressEditing)
         )}
-        {verificationDetailsLocked ? (
-          <View style={[styles.lockedNotice, isDarkMode && styles.lockedNoticeDark]}>
-            <Ionicons name="shield-checkmark-outline" size={18} color="#1D4E89" />
-            <View style={styles.lockedNoticeCopy}>
-              <Text style={[styles.lockedNoticeTitle, isDarkMode && styles.textDark]}>Address locked after verification</Text>
-              <Text style={[styles.lockedNoticeText, isDarkMode && styles.mutedTextDark]}>
-                This protects customer trust, tax records, and payout review. Contact support with your reason to move the shop location.
-              </Text>
-            </View>
-          </View>
-        ) : null}
 
         <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Road / street</Text>
         <TextInput
