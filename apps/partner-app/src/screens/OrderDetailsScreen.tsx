@@ -468,7 +468,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const getPendingStatusText = () => {
     switch (pendingStatus) {
       case "ACCEPTED":
-        return `Food will be ready by ${formatReadyByLabelFromMinutes(prepTimeMinutes).replace("Ready by ", "")}. The customer and rider will see this time.`;
+        return `Food will be ready by ${getReadyByLabelFromMinutes(prepTimeMinutes).replace("Ready by ", "")}. The customer and rider will see this time.`;
       case "REJECTED":
         return "The order will be marked as cancelled. The customer will see that any online payment refund will be completed within today.";
       default:
