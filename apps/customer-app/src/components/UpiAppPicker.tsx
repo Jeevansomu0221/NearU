@@ -16,6 +16,7 @@ type Props = {
   apps: UpiApp[];
   selectedAppId?: string;
   totalLabel: string;
+  choosingForPayment?: boolean;
   onClose: () => void;
   onSelect: (app: UpiApp) => void;
 };
@@ -34,6 +35,7 @@ export default function UpiAppPicker({
   apps,
   selectedAppId,
   totalLabel,
+  choosingForPayment = false,
   onClose,
   onSelect
 }: Props) {
@@ -47,7 +49,12 @@ export default function UpiAppPicker({
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>Bill total: {totalLabel}</Text>
+            <View style={styles.headerCopy}>
+              <Text style={styles.title}>
+                {choosingForPayment ? "Choose UPI app to pay" : "Choose UPI app"}
+              </Text>
+              <Text style={styles.subtitle}>Bill total: {totalLabel}</Text>
+            </View>
             <TouchableOpacity onPress={onClose}>
               <Text style={styles.closeText}>Close</Text>
             </TouchableOpacity>
@@ -132,16 +139,26 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 12
   },
+  headerCopy: {
+    flex: 1,
+    paddingRight: 12
+  },
   title: {
     fontSize: 18,
     fontWeight: "800",
     color: "#2C2018"
+  },
+  subtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#7B6D63"
   },
   closeText: {
     fontSize: 13,

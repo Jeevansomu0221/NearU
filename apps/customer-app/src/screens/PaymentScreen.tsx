@@ -148,6 +148,8 @@ export default function PaymentScreen({ route, navigation }: any) {
   const [showCustomTip, setShowCustomTip] = useState(false);
   const [customTipText, setCustomTipText] = useState("");
   const [retryPaymentAfterUpiPick, setRetryPaymentAfterUpiPick] = useState(false);
+  const [resumePaymentAfterUpiPick, setResumePaymentAfterUpiPick] = useState(false);
+  const [preferredUpiAppId, setPreferredUpiAppId] = useState<string | undefined>();
 
   const paymentMethods = [
     { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
@@ -165,7 +167,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         const { apps, selected } = await prepareCheckoutUpiSelection();
         if (cancelled) return;
         setUpiApps(apps);
-        setSelectedUpiApp(selected);
+        setPreferredUpiAppId(selected?.id);
       } finally {
         if (!cancelled) {
           setLoadingUpiApps(false);
@@ -185,7 +187,7 @@ export default function PaymentScreen({ route, navigation }: any) {
     try {
       const { apps, selected } = await prepareCheckoutUpiSelection();
       setUpiApps(apps);
-      setSelectedUpiApp((current) => current || selected);
+      setPreferredUpiAppId(selected?.id);
       return { apps, selected };
     } finally {
       setLoadingUpiApps(false);
@@ -511,10 +513,12 @@ export default function PaymentScreen({ route, navigation }: any) {
 
   const handleUpiAppSelection = async (app: UpiApp) => {
     setSelectedUpiApp(app);
+    setPreferredUpiAppId(app.id);
     await savePreferredUpiApp(app);
     setShowUpiPicker(false);
 
-    if (retryPaymentAfterUpiPick) {
+    if (resumePaymentAfterUpiPick || retryPaymentAfterUpiPick) {
+      setResumePaymentAfterUpiPick(false);
       setRetryPaymentAfterUpiPick(false);
       void startOnlinePayment(app);
     }
@@ -566,8 +570,6 @@ export default function PaymentScreen({ route, navigation }: any) {
   };
 
   const handlePayment = async () => {
-    let checkoutUpiApp: UpiApp | null = null;
-
     try {
       if (paymentMethod === "RAZORPAY") {
         if (loadingUpiApps) {
@@ -575,43 +577,27 @@ export default function PaymentScreen({ route, navigation }: any) {
           return;
         }
 
-        let upiApp = selectedUpiApp;
-        if (!upiApp) {
-          const refreshed = await refreshUpiApps();
-          upiApp = selectedUpiApp || refreshed.selected;
-        }
-
-        if (!upiApp) {
-          if (upiApps.length === 0) {
-            Alert.alert(
-              "Could not detect UPI apps",
-              "Tap Pay using to choose Google Pay, PhonePe, Paytm, or super.money manually, or switch to Cash on Delivery.",
-              [
-                { text: "Choose UPI app", onPress: () => void openUpiPicker() },
-                { text: "Switch to COD", onPress: () => setPaymentMethod("CASH_ON_DELIVERY") }
-              ]
-            );
-            return;
-          }
-
-          await openUpiPicker();
+        const refreshed = await refreshUpiApps();
+        if (refreshed.apps.length === 0) {
+          Alert.alert(
+            "Could not detect UPI apps",
+            "Install Google Pay, PhonePe, or Paytm to pay online, or switch to Cash on Delivery.",
+            [
+              { text: "Switch to COD", onPress: () => setPaymentMethod("CASH_ON_DELIVERY") }
+            ]
+          );
           return;
         }
 
-        checkoutUpiApp = upiApp;
-        setSelectedUpiApp(upiApp);
+        setResumePaymentAfterUpiPick(true);
+        setShowUpiPicker(true);
+        return;
       }
 
       setLoading(true);
-      setLoadingStage(paymentMethod === "RAZORPAY" ? "Preparing payment..." : "Placing order...");
-
-      if (paymentMethod === "RAZORPAY") {
-        const paidOrders = await placeOnlineOrders(checkoutUpiApp!, setLoadingStage);
-        handleSuccessfulCheckout(paidOrders);
-      } else {
-        const createdOrders = await placeOrders("CASH_ON_DELIVERY");
-        handleSuccessfulCheckout(createdOrders);
-      }
+      setLoadingStage("Placing order...");
+      const createdOrders = await placeOrders("CASH_ON_DELIVERY");
+      handleSuccessfulCheckout(createdOrders);
     } catch (error: any) {
       showPaymentFailureAlert(error);
     } finally {
@@ -630,16 +616,16 @@ export default function PaymentScreen({ route, navigation }: any) {
         </View>
         <View style={styles.methodBody}>
           <Text style={styles.methodName}>
-            {paymentMethod === "RAZORPAY" ? selectedUpiApp?.name || "Select UPI app" : method?.name}
+            {paymentMethod === "RAZORPAY" ? "UPI Payment" : method?.name}
           </Text>
           <Text style={styles.methodHint}>
             {paymentMethod === "CASH_ON_DELIVERY"
               ? "Pay when your order arrives"
               : selectedUpiApp
-                ? `Opens ${selectedUpiApp.name} directly for payment`
+                ? `Last paid with ${selectedUpiApp.name}`
                 : loadingUpiApps
                   ? "Detecting UPI apps on your phone..."
-                  : "Choose a UPI app to pay in one tap"}
+                  : "Choose a UPI app when you place the order"}
           </Text>
         </View>
         <TouchableOpacity
@@ -831,7 +817,7 @@ export default function PaymentScreen({ route, navigation }: any) {
           <View style={styles.infoSection}>
             <Text style={styles.infoTitle}>UPI payment</Text>
             <Text style={styles.infoText}>
-              We remember your last UPI app. Razorpay opens UPI directly on your phone; if that fails, you may see a short UPI chooser.
+              When you place the order, choose Google Pay, PhonePe, Paytm, or any UPI app installed on your phone.
             </Text>
           </View>
         )}
@@ -839,15 +825,19 @@ export default function PaymentScreen({ route, navigation }: any) {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
         {paymentMethod === "RAZORPAY" ? (
-          <TouchableOpacity style={styles.payUsingRow} onPress={() => void openUpiPicker()}>
+          <View style={styles.payUsingRow}>
             <View>
-              <Text style={styles.payUsingLabel}>Pay using</Text>
+              <Text style={styles.payUsingLabel}>UPI apps on this phone</Text>
               <Text style={styles.payUsingValue}>
-                {loadingUpiApps ? "Loading UPI apps..." : selectedUpiApp?.name || "Select UPI app"}
+                {loadingUpiApps
+                  ? "Loading UPI apps..."
+                  : upiApps.length > 0
+                    ? `${upiApps.length} app${upiApps.length === 1 ? "" : "s"} available`
+                    : "No UPI apps detected"}
               </Text>
             </View>
             <Text style={styles.payUsingChevron}>⌃</Text>
-          </TouchableOpacity>
+          </View>
         ) : (
           <View style={styles.footerSummary}>
             <Text style={styles.footerEstimate}>Estimated by {getDeliveryTime()}</Text>
@@ -908,11 +898,13 @@ export default function PaymentScreen({ route, navigation }: any) {
         visible={showUpiPicker}
         loading={loadingUpiApps}
         apps={upiApps}
-        selectedAppId={selectedUpiApp?.id}
+        selectedAppId={selectedUpiApp?.id || preferredUpiAppId}
         totalLabel={formatAmount(payableTotal)}
+        choosingForPayment={resumePaymentAfterUpiPick || retryPaymentAfterUpiPick}
         onClose={() => {
           setShowUpiPicker(false);
           setRetryPaymentAfterUpiPick(false);
+          setResumePaymentAfterUpiPick(false);
         }}
         onSelect={handleUpiAppSelection}
       />
@@ -935,7 +927,7 @@ export default function PaymentScreen({ route, navigation }: any) {
                 <View style={styles.methodInfo}>
                   <Text style={styles.methodOptionName}>{method.name}</Text>
                   <Text style={styles.methodDescription}>
-                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "Pay with your preferred UPI app in one tap"}
+                    {method.id === "CASH_ON_DELIVERY" ? "Pay cash when the order arrives" : "Choose your UPI app each time you pay"}
                   </Text>
                 </View>
                 {paymentMethod === method.id ? <Text style={styles.selectedIndicator}>Selected</Text> : null}
