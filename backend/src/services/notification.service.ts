@@ -74,7 +74,7 @@ const INVALID_TOKEN_CODES = new Set([
 
 const ANDROID_NOTIFICATION_CHANNEL_ID = "vyaha_alerts";
 const ANDROID_NOTIFICATION_COLORS: Record<NotificationApp, string> = {
-  customer: "#0F9D58",
+  customer: "#FFFFFF",
   delivery: "#0F9D58",
   partner: "#174EA6"
 };
