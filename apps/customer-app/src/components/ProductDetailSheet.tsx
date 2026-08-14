@@ -18,6 +18,7 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SelectedExtra } from "../context/CartContext";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
+import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
 export interface ExtraChoice {
   name: string;
@@ -56,6 +57,7 @@ export default function ProductDetailSheet({
   onAdd
 }: ProductDetailSheetProps) {
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
   const keyboardHeight = useKeyboardBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   const [quantity, setQuantity] = useState(1);
@@ -151,7 +153,14 @@ export default function ProductDetailSheet({
 
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.sheetWrapper}
+          style={[
+            styles.sheetWrapper,
+            {
+              maxHeight: layout.isLandscape ? "94%" : "92%",
+              width: layout.isTablet ? Math.min(520, layout.width) : "100%",
+              alignSelf: "center"
+            }
+          ]}
         >
           <TouchableOpacity
             style={styles.closeButtonOutside}
@@ -182,7 +191,11 @@ export default function ProductDetailSheet({
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
             >
-              <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
+              <Image
+                source={{ uri: imageUri }}
+                style={[styles.heroImage, { height: layout.isCompact ? 160 : layout.isTablet ? 260 : 220 }]}
+                resizeMode="cover"
+              />
 
               <View style={styles.body}>
                 <View style={styles.titleRow}>
@@ -201,7 +214,7 @@ export default function ProductDetailSheet({
                       />
                     </View>
                   </View>
-                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemName} numberOfLines={3}>{item.name}</Text>
                 </View>
 
                 {item.category ? <Text style={styles.categoryText}>{item.category}</Text> : null}
@@ -390,6 +403,7 @@ const styles = StyleSheet.create({
   },
   itemName: {
     flex: 1,
+    minWidth: 0,
     fontSize: 20,
     lineHeight: 24,
     fontWeight: "900",
@@ -431,9 +445,11 @@ const styles = StyleSheet.create({
   },
   choiceName: {
     flex: 1,
+    minWidth: 0,
     fontSize: 14,
     fontWeight: "600",
-    color: "#201914"
+    color: "#201914",
+    paddingRight: 8
   },
   choiceRight: {
     flexDirection: "row",

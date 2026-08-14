@@ -94,7 +94,7 @@ export default function HomePage() {
       <div className="field">
         <input placeholder="Search local shops" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+      <div className="chip-row">
         {categories.map((c) => (
           <button
             key={c.key}
@@ -120,8 +120,8 @@ export default function HomePage() {
             onClick={() => navigate(`/shop/${shop._id}`, { state: { shop, vegMode } })}
           >
             <img src={shop.shopImageUrl || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"} alt="" />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-              <h3 style={{ margin: 0 }}>{getShopName(shop)}</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8, minWidth: 0 }}>
+              <h3 style={{ margin: 0, minWidth: 0 }}>{getShopName(shop)}</h3>
               <button
                 className="btn ghost"
                 style={{ padding: "4px 8px" }}

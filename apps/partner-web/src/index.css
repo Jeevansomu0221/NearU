@@ -13,6 +13,8 @@ body {
   margin: 0;
   min-width: 320px;
   background: #f4f8ff;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .partner-app {
@@ -1956,5 +1958,36 @@ body {
 
   .status-btn {
     width: 100%;
+  }
+}
+
+@media (max-width: 400px) {
+  .partner-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .partner-header__logo {
+    height: 34px;
+    max-width: 140px;
+  }
+
+  .partner-header__title,
+  .partner-header__cta {
+    display: none;
+  }
+
+  .partner-nav {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .card {
+    padding: 14px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 }

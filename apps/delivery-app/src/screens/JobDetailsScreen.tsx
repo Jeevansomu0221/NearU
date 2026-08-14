@@ -73,7 +73,7 @@ type NoLocationModalState = {
   destinationLabel?: string;
 };
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const SCREEN_WIDTH = Math.min(Math.max(Dimensions.get("window").width, 320), 430);
 const OPEN_AVAILABLE_JOB_STATUSES = new Set(["ACCEPTED", "PREPARING", "READY"]);
 const UPI_FOCUS_SIZE = SCREEN_WIDTH - 40;
 const UPI_NATIVE_QR_SIZE = UPI_FOCUS_SIZE - 12;

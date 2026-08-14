@@ -15,7 +15,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { warmApi } from '../api/client';
 import { sendOtpWithFallback, OtpSessionInfo } from '../services/otpAuthFlow';
 import { buildLegalUrl } from '../constants/legal';
@@ -33,6 +35,8 @@ export default function LoginScreen({ navigation }: Props) {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -111,6 +115,11 @@ export default function LoginScreen({ navigation }: Props) {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top, keyboardOpen ? 32 : 40),
+            paddingBottom: Math.max(insets.bottom, 24),
+            paddingHorizontal: layout.gutter + 10,
+          },
           keyboardOpen && styles.scrollContentKeyboard,
           Platform.OS === 'android' && keyboardOpen && { paddingBottom: keyboardHeight },
         ]}
@@ -118,7 +127,18 @@ export default function LoginScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        <Image source={require('../../assets/vyaha-wordmark.png')} style={styles.logo} resizeMode="contain" />
+        <View style={styles.formWrap}>
+        <Image
+          source={require('../../assets/vyaha-wordmark.png')}
+          style={[
+            styles.logo,
+            {
+              width: Math.min(210, layout.width - 72),
+              height: Math.min(92, Math.round((layout.width - 72) * 0.42)),
+            },
+          ]}
+          resizeMode="contain"
+        />
         <View style={[styles.taglineBlock, keyboardOpen && styles.taglineBlockKeyboard]}>
           <Text
             style={styles.subtitle}
@@ -181,6 +201,7 @@ export default function LoginScreen({ navigation }: Props) {
             <Text style={styles.footerLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
           </Text>
         </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -196,6 +217,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 40,
     justifyContent: 'center',
+  },
+  formWrap: {
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
   },
   scrollContentKeyboard: {
     justifyContent: 'flex-start',
@@ -224,6 +250,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     marginBottom: 6,
     width: '100%',
+    flexShrink: 1,
   },
   wordZero: {
     color: '#F81830', // matches "V" in logo

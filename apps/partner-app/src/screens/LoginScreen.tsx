@@ -24,6 +24,7 @@ import { registerForPushNotifications } from "../services/notifications";
 import { partnerTheme } from "../theme";
 import { buildLegalUrl } from "../constants/legal";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
+import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
 const TERMS_URL = buildLegalUrl("terms");
 const PRIVACY_URL = buildLegalUrl("privacy");
@@ -40,6 +41,7 @@ export default function LoginScreen({ navigation }: any) {
   const [requiresFreshOtp, setRequiresFreshOtp] = useState(false);
   const lastSubmittedOtp = useRef("");
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
   const keyboardHeight = useKeyboardBottomInset();
 
   const extractServerMessage = (error: any): string => {
@@ -312,7 +314,11 @@ export default function LoginScreen({ navigation }: any) {
           styles.content,
           {
             paddingTop: insets.top + 8,
-            paddingBottom: insets.bottom + 40 + androidKeyboardPadding(keyboardHeight)
+            paddingBottom: insets.bottom + 40 + androidKeyboardPadding(keyboardHeight),
+            maxWidth: 480,
+            width: "100%",
+            alignSelf: "center",
+            paddingHorizontal: layout.gutter + 6
           }
         ]}
         keyboardShouldPersistTaps="handled"
@@ -322,7 +328,13 @@ export default function LoginScreen({ navigation }: any) {
         <View style={styles.headerContainer}>
           <Image
             source={require("../../assets/vyaha-partner-text-logo.png")}
-            style={styles.brandImage}
+            style={[
+              styles.brandImage,
+              {
+                width: Math.min(240, layout.width - 64),
+                height: Math.min(120, Math.round((layout.width - 64) * 0.48))
+              }
+            ]}
             resizeMode="contain"
           />
         </View>

@@ -1290,7 +1290,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
-    paddingHorizontal: 4
+    paddingHorizontal: 4,
+    gap: 8
   },
   payUsingLabel: {
     fontSize: 11,

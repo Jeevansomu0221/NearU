@@ -1005,7 +1005,9 @@ export default function ProfileScreen({ navigation, route }: any) {
               <MaterialCommunityIcons name="camera-plus-outline" size={26} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.heroMeta}>
-              <Text style={styles.heroName}>{isGeneratedCustomerName(profile?.name) ? "Your Profile" : profile?.name || "Your Profile"}</Text>
+              <Text style={styles.heroName} numberOfLines={1}>
+                {isGeneratedCustomerName(profile?.name) ? "Your Profile" : profile?.name || "Your Profile"}
+              </Text>
               <Text style={styles.heroSubtext}>{profile?.phone}</Text>
               <Text style={styles.heroSubtext}>{profile?.email || "Add your email for invoices and offers"}</Text>
               <View style={styles.memberSinceContainer}>
@@ -1481,7 +1483,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF"
   },
   heroMeta: {
-    flex: 1
+    flex: 1,
+    minWidth: 0
   },
   heroName: {
     fontSize: 19,
@@ -1499,7 +1502,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 12,
-    gap: 8
+    gap: 8,
+    flexWrap: "wrap"
   },
   heroPill: {
     flexDirection: "row",

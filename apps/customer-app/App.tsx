@@ -4,6 +4,7 @@ import { NavigationContainer, createNavigationContainerRef } from "@react-naviga
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useFonts, CaveatBrush_400Regular } from "@expo-google-fonts/caveat-brush";
 import AppNavigator from "./src/navigation/AppNavigator";
+import ResponsiveFrame from "./src/components/ResponsiveFrame";
 import { CartProvider } from "./src/context/CartContext";
 import CustomAlert, { initCustomAlert } from "./src/components/CustomAlert";
 import { registerForPushNotifications, setupNotificationHandlers, subscribePushRegistrationRefresh } from "./src/services/notifications";
@@ -43,7 +44,9 @@ export default function App() {
     <CartProvider>
       <SafeAreaProvider>
         <NavigationContainer ref={navigationRef}>
-          <AppNavigator />
+          <ResponsiveFrame>
+            <AppNavigator />
+          </ResponsiveFrame>
           <CustomAlert />
         </NavigationContainer>
       </SafeAreaProvider>

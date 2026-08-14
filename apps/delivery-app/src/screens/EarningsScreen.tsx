@@ -13,8 +13,8 @@ import {
   Image,
   Keyboard,
   Pressable,
-  Dimensions,
   Platform,
+  useWindowDimensions,
   type LayoutChangeEvent,
   type TextInput as TextInputType
 } from "react-native";
@@ -49,6 +49,7 @@ type EarningHistoryItem = {
 
 export default function EarningsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,7 +74,6 @@ export default function EarningsScreen({ navigation }: any) {
   const depositInputRefs = useRef<Record<string, TextInputType | null>>({});
   const activeDepositField = useRef<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const windowHeight = Dimensions.get("window").height;
   const depositActionsHeight = 72;
 
   const refreshWithdrawalWallet = useCallback(async () => {

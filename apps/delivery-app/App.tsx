@@ -3,6 +3,7 @@ import { NavigationContainer, createNavigationContainerRef } from "@react-naviga
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AppNavigator from "./src/navigation/AppNavigator";
+import ResponsiveFrame from "./src/components/ResponsiveFrame";
 import CustomAlert, { initCustomAlert } from "./src/components/CustomAlert";
 import { registerForPushNotifications, setupNotificationHandlers, subscribePushRegistrationRefresh } from "./src/services/notifications";
 import { initCrashlytics } from "./src/utils/crashlytics";
@@ -27,7 +28,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer ref={navigationRef}>
-        <AppNavigator />
+        <ResponsiveFrame>
+          <AppNavigator />
+        </ResponsiveFrame>
         <CustomAlert />
         <StatusBar style="light" backgroundColor="#16A34A" translucent={false} />
       </NavigationContainer>

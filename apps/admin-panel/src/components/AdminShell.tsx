@@ -1,4 +1,4 @@
-import { Layout, Menu, Space, Typography, Button, Avatar } from "antd";
+import { Layout, Menu, Space, Typography, Button, Avatar, Grid } from "antd";
 import {
   DashboardOutlined,
   ShopOutlined,
@@ -56,6 +56,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const location = useLocation();
   const navigate = useNavigate();
   const user = getAdminUser();
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.md;
   const activeKey = location.pathname.startsWith("/orders/") ? "/orders" : location.pathname;
   const pageTitle =
     activeKey === "/"
@@ -97,6 +99,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         breakpoint="lg"
         collapsedWidth="0"
         width={260}
+        zeroWidthTriggerStyle={{ top: 12 }}
         style={{
           background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)"
         }}
@@ -120,43 +123,52 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
       <Layout>
         <Header
+          className="admin-header"
           style={{
             background: "rgba(255,255,255,0.88)",
             backdropFilter: "blur(12px)",
             borderBottom: "1px solid #eaecf0",
-            padding: "0 24px",
+            padding: isMobile ? "10px 12px" : "0 24px",
+            height: isMobile ? "auto" : undefined,
+            lineHeight: isMobile ? "normal" : undefined,
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between"
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap"
           }}
         >
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <Typography.Title level={4} style={{ margin: 0, color: "#101828" }}>
               {pageTitle}
             </Typography.Title>
-            <Typography.Text type="secondary">{pageSubtitle}</Typography.Text>
+            {isMobile ? null : <Typography.Text type="secondary">{pageSubtitle}</Typography.Text>}
           </div>
 
-          <Space size={16}>
+          <Space size={isMobile ? 8 : 16} wrap>
             <Space size={10}>
               <Avatar style={{ backgroundColor: "#16a34a" }}>
                 {user?.name?.charAt(0)?.toUpperCase() || "A"}
               </Avatar>
-              <div>
-                <Typography.Text strong>{user?.name || "Admin"}</Typography.Text>
+              {isMobile ? null : (
                 <div>
-                  <Typography.Text type="secondary">{user?.phone || "Admin user"}</Typography.Text>
+                  <Typography.Text strong>{user?.name || "Admin"}</Typography.Text>
+                  <div>
+                    <Typography.Text type="secondary">{user?.phone || "Admin user"}</Typography.Text>
+                  </div>
                 </div>
-              </div>
+              )}
             </Space>
 
             <Button icon={<LogoutOutlined />} onClick={handleLogout}>
-              Logout
+              {isMobile ? "" : "Logout"}
             </Button>
           </Space>
         </Header>
 
-        <Content style={{ padding: 24, background: "#f5f7fb" }}>{children}</Content>
+        <Content className="admin-content" style={{ padding: isMobile ? 12 : 24, background: "#f5f7fb" }}>
+          {children}
+        </Content>
       </Layout>
     </Layout>
   );

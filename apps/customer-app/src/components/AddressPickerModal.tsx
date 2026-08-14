@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getUserProfile, setDefaultAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 import { formatSavedAddress, listSavedAddresses } from "../utils/address";
+import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
 type Props = {
   visible: boolean;
@@ -22,6 +23,7 @@ type Props = {
 
 export default function AddressPickerModal({ visible, profile, onClose, onSelected, onAddNew }: Props) {
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -90,12 +92,22 @@ export default function AddressPickerModal({ visible, profile, onClose, onSelect
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, layout.isTablet && styles.overlayCentered]}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <View
+          style={[
+            styles.sheet,
+            {
+              paddingBottom: Math.max(insets.bottom, 16),
+              maxHeight: layout.sheetMaxHeight,
+              width: layout.isTablet ? Math.min(480, layout.width - 48) : "100%"
+            },
+            layout.isTablet && styles.sheetTablet
+          ]}
+        >
           <View style={styles.handle} />
           <View style={styles.header}>
-            <View>
+            <View style={styles.headerCopy}>
               <Text style={styles.title}>Delivery address</Text>
               <Text style={styles.subtitle}>Choose a saved address or add a new one</Text>
             </View>
@@ -122,7 +134,7 @@ export default function AddressPickerModal({ visible, profile, onClose, onSelect
                     activeOpacity={0.85}
                   >
                     <View style={styles.cardTop}>
-                      <Text style={styles.cardLabel}>{address.label || "Address"}</Text>
+                      <Text style={styles.cardLabel} numberOfLines={1}>{address.label || "Address"}</Text>
                       {isSelected ? <Text style={styles.selectedBadge}>Selected</Text> : null}
                     </View>
                     <Text style={styles.cardBody}>{formatSavedAddress(address, liveProfile?.name)}</Text>
@@ -149,8 +161,13 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     backgroundColor: "rgba(28, 20, 16, 0.45)"
   },
+  overlayCentered: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24
+  },
   backdrop: {
-    flex: 1
+    ...StyleSheet.absoluteFillObject
   },
   sheet: {
     backgroundColor: "#FFFFFF",
@@ -158,7 +175,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 10,
-    maxHeight: "78%"
+    maxHeight: "78%",
+    zIndex: 2
+  },
+  sheetTablet: {
+    borderRadius: 24,
+    maxHeight: "80%"
   },
   handle: {
     alignSelf: "center",
@@ -172,7 +194,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    gap: 12,
     marginBottom: 12
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8
   },
   title: {
     fontSize: 20,
@@ -190,7 +218,8 @@ const styles = StyleSheet.create({
     color: "#FF6B35"
   },
   list: {
-    flexGrow: 0
+    flexGrow: 0,
+    minHeight: 0
   },
   listContent: {
     paddingBottom: 8
@@ -217,9 +246,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 8,
     marginBottom: 6
   },
   cardLabel: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 14,
     fontWeight: "800",
     color: "#241D17"

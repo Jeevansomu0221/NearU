@@ -16,6 +16,7 @@ import {
 import { sendOtpWithFallback } from "../services/otpAuthFlow";
 import { buildLegalUrl } from "../constants/legal";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
+import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
 const TERMS_URL = buildLegalUrl("terms");
 const PRIVACY_URL = buildLegalUrl("privacy");
@@ -24,6 +25,7 @@ export default function LoginScreen({ navigation }: any) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const keyboardHeight = useKeyboardBottomInset();
+  const layout = useResponsiveLayout();
 
   const onSend = async () => {
     // Validate phone
@@ -76,7 +78,13 @@ export default function LoginScreen({ navigation }: any) {
           <View style={styles.header}>
             <Image
               source={require("../../assets/vyaha-delivery-text-logo.png")}
-              style={styles.logo}
+              style={[
+                styles.logo,
+                {
+                  width: Math.min(240, layout.width - 64),
+                  height: Math.min(120, Math.round((layout.width - 64) * 0.48))
+                }
+              ]}
               resizeMode="contain"
             />
             <Text style={styles.subtitle}>Delivery Partner Login</Text>
@@ -144,6 +152,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
     paddingTop: 40,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
   },
   header: {
     alignItems: 'center',

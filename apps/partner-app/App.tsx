@@ -6,6 +6,7 @@ import CustomAlert from "./src/components/CustomAlert";
 import PartnerOrderWatcher from "./src/components/PartnerOrderWatcher";
 import { PartnerThemeProvider, usePartnerTheme } from "./src/context/PartnerThemeContext";
 import AppNavigator from "./src/navigation/AppNavigator";
+import ResponsiveFrame from "./src/components/ResponsiveFrame";
 import { registerForPushNotifications, setupNotificationHandlers, subscribePushRegistrationRefresh } from "./src/services/notifications";
 import { initCrashlytics } from "./src/utils/crashlytics";
 
@@ -54,7 +55,9 @@ function PartnerAppContent() {
             }
           }}
         >
-          <AppNavigator />
+          <ResponsiveFrame canvasColor={theme.colors.background}>
+            <AppNavigator />
+          </ResponsiveFrame>
         </NavigationContainer>
         <CustomAlert />
         <PartnerOrderWatcher navigationRef={navigationRef} />

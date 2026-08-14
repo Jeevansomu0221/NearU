@@ -1,8 +1,6 @@
 // apps/customer-app/src/components/SuccessCelebration.tsx
 import React, { useEffect, useRef } from "react";
-import { View, StyleSheet, Animated, Dimensions, Text } from "react-native";
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+import { View, StyleSheet, Animated, Text, useWindowDimensions } from "react-native";
 
 const CONFETTI_COLORS = [
   "#FF6B35",
@@ -16,7 +14,17 @@ const CONFETTI_COLORS = [
   "#FF5722"
 ];
 
-function ConfettiPiece({ delay, color, xPos }: { delay: number; color: string; xPos: number }) {
+function ConfettiPiece({
+  delay,
+  color,
+  xPos,
+  fallTo
+}: {
+  delay: number;
+  color: string;
+  xPos: number;
+  fallTo: number;
+}) {
   const animY = useRef(new Animated.Value(-60)).current;
   const animX = useRef(new Animated.Value(xPos)).current;
   const animRotate = useRef(new Animated.Value(0)).current;
@@ -27,7 +35,7 @@ function ConfettiPiece({ delay, color, xPos }: { delay: number; color: string; x
       Animated.delay(delay),
       Animated.parallel([
         Animated.timing(animY, {
-          toValue: SCREEN_HEIGHT + 60,
+          toValue: fallTo,
           duration: Math.random() * 2000 + 2000,
           useNativeDriver: true
         }),
@@ -76,6 +84,7 @@ function ConfettiPiece({ delay, color, xPos }: { delay: number; color: string; x
 }
 
 export default function SuccessCelebration() {
+  const { width, height } = useWindowDimensions();
   const checkScale = useRef(new Animated.Value(0.3)).current;
   const rippleScale = useRef(new Animated.Value(1)).current;
   const rippleOpacity = useRef(new Animated.Value(0.6)).current;
@@ -85,7 +94,7 @@ export default function SuccessCelebration() {
       id: i,
       delay: Math.random() * 800,
       color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-      xPos: Math.random() * SCREEN_WIDTH
+      xPos: Math.random() * width
     }))
   ).current;
 
@@ -132,7 +141,7 @@ export default function SuccessCelebration() {
   return (
     <View style={styles.root}>
       {confettiArray.map((c) => (
-        <ConfettiPiece key={c.id} delay={c.delay} color={c.color} xPos={c.xPos} />
+        <ConfettiPiece key={c.id} delay={c.delay} color={c.color} xPos={c.xPos} fallTo={height + 60} />
       ))}
       <View style={styles.celebrationWrapper}>
         <View style={styles.checkmarkOuter}>

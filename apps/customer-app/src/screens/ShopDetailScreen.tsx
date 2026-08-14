@@ -29,6 +29,7 @@ import ProductDetailSheet from "../components/ProductDetailSheet";
 import { getPublicShopName } from "../utils/display";
 import { getVegModePreference } from "../utils/vegMode";
 import { getAccessToken } from "../utils/authStorage";
+import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
 type ShopDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, "ShopDetail">;
 
@@ -190,6 +191,7 @@ function MenuCardItem({
 
 export default function ShopDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
   const { shopId, shop: passedShop, vegMode: initialVegMode } = route.params;
   const [shop, setShop] = useState<Shop | null>(passedShop || null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -484,7 +486,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
         <TouchableOpacity style={styles.topBarButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={18} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Restaurant Details</Text>
+        <Text style={styles.topBarTitle} numberOfLines={1}>Restaurant Details</Text>
         <View style={styles.topBarSpacer} pointerEvents="none" />
       </View>
 
@@ -496,7 +498,11 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       >
         <View>
           <View style={styles.headerBackground}>
-            <TouchableOpacity style={styles.bannerCard} activeOpacity={0.9} onPress={() => setPreviewImage(bannerImage)}>
+            <TouchableOpacity
+              style={[styles.bannerCard, { height: layout.isCompact ? 120 : 148 }]}
+              activeOpacity={0.9}
+              onPress={() => setPreviewImage(bannerImage)}
+            >
               <Image source={{ uri: bannerImage }} style={styles.bannerImage} resizeMode="cover" />
             </TouchableOpacity>
           </View>
@@ -508,7 +514,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
             <View style={styles.infoTopRow}>
               <View style={styles.infoTextBlock}>
-                <Text style={styles.shopName}>{getShopName()}</Text>
+                <Text style={styles.shopName} numberOfLines={2}>{getShopName()}</Text>
                 <View style={styles.categoryTimeRow}>
                   <View style={styles.categoryChip}>
                     <MaterialCommunityIcons name={getShopCategoryIcon()} size={13} color="#C96C2F" />
@@ -716,6 +722,9 @@ const styles = StyleSheet.create({
     height: 34
   },
   topBarTitle: {
+    flex: 1,
+    minWidth: 0,
+    textAlign: "center",
     fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF"
@@ -768,6 +777,7 @@ const styles = StyleSheet.create({
   },
   infoTextBlock: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 10
   },
   shopName: {

@@ -18,6 +18,7 @@ import { resolveAddressPin } from "../api/geocode.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
 import { getSelectedAddress as pickSavedAddress, parseAddressCoordinates } from "../utils/address";
 import AddressPickerModal from "../components/AddressPickerModal";
+import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
 const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
@@ -26,6 +27,7 @@ const formatAmount = (value = 0) => {
 
 export default function CartScreen({ route, navigation }: any) {
   const { items, clear, removeItem, updateQuantity } = useCart();
+  const layout = useResponsiveLayout();
   const [loading, setLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -405,7 +407,7 @@ export default function CartScreen({ route, navigation }: any) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Your Cart</Text>
+        <Text style={styles.title} numberOfLines={1}>Your Cart</Text>
         {items.length > 0 ? (
           <TouchableOpacity
             style={styles.clearButton}
@@ -434,7 +436,7 @@ export default function CartScreen({ route, navigation }: any) {
           <ScrollView
             ref={scrollRef}
             style={styles.itemsContainer}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: 128 + insets.bottom }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: 128 + insets.bottom, paddingHorizontal: layout.isTablet ? 8 : 0 }]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
@@ -442,8 +444,8 @@ export default function CartScreen({ route, navigation }: any) {
             {groupedItems.map((group) => (
               <View key={group.shopId} style={styles.shopCard}>
                 <View style={styles.shopCardHeader}>
-                  <View>
-                    <Text style={styles.shopName}>{group.shopName}</Text>
+                  <View style={styles.shopHeaderText}>
+                    <Text style={styles.shopName} numberOfLines={2}>{group.shopName}</Text>
                     <Text style={styles.shopSubtext}>{group.items.length} item{group.items.length === 1 ? "" : "s"}</Text>
                   </View>
                   <Text style={styles.shopSubtotal}>{formatAmount(group.subtotal)}</Text>
@@ -452,7 +454,7 @@ export default function CartScreen({ route, navigation }: any) {
                 {group.items.map((item) => (
                   <View key={`${item.shopId}-${item.lineKey || item.menuItemId || item.name}`} style={styles.itemCard}>
                     <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
                       {item.selectedExtras && item.selectedExtras.length > 0 ? (
                         <Text style={styles.itemMeta}>
                           {item.selectedExtras.map((extra) => extra.name).join(", ")}
@@ -619,16 +621,18 @@ export default function CartScreen({ route, navigation }: any) {
           </ScrollView>
 
           <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
-            <View>
+            <View style={styles.footerTotalBlock}>
               <Text style={styles.footerLabel}>Total</Text>
-              <Text style={styles.footerTotal}>{formatAmount(total)}</Text>
+              <Text style={styles.footerTotal} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                {formatAmount(total)}
+              </Text>
             </View>
             <TouchableOpacity
               style={[styles.checkoutButton, !canCheckout && styles.checkoutButtonDisabled]}
               onPress={proceedToPayment}
               disabled={!canCheckout}
             >
-              <Text style={styles.checkoutButtonText}>
+              <Text style={styles.checkoutButtonText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
                 {isPricingPending ? "Calculating fee..." : "Continue to Payment"}
               </Text>
             </TouchableOpacity>
@@ -667,9 +671,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 12
+    paddingBottom: 12,
+    gap: 12
   },
   title: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 24,
     fontWeight: "800",
     color: "#2C2018"
@@ -732,10 +739,16 @@ const styles = StyleSheet.create({
   shopCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    gap: 10,
     marginBottom: 10
   },
+  shopHeaderText: {
+    flex: 1,
+    minWidth: 0
+  },
   shopName: {
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: "800",
     color: "#2C2018"
@@ -756,10 +769,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "#F4EAE0"
+    borderTopColor: "#F4EAE0",
+    gap: 8
   },
   itemInfo: {
     flex: 1,
+    minWidth: 0,
     marginRight: 12
   },
   itemName: {
@@ -779,7 +794,8 @@ const styles = StyleSheet.create({
     color: "#7B6D63"
   },
   itemActions: {
-    alignItems: "flex-end"
+    alignItems: "flex-end",
+    flexShrink: 0
   },
   quantityControls: {
     flexDirection: "row",
@@ -820,6 +836,8 @@ const styles = StyleSheet.create({
     padding: 14
   },
   sectionTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 16,
     fontWeight: "800",
     color: "#2C2018",
@@ -828,7 +846,8 @@ const styles = StyleSheet.create({
   deliveryHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "center",
+    gap: 8
   },
   linkText: {
     fontSize: 12,
@@ -890,10 +909,13 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    gap: 12,
     marginBottom: 8
   },
   summaryLabel: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 13,
     color: "#7B6D63"
   },
@@ -977,7 +999,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(247,243,238,0.98)",
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "center",
+    gap: 12
+  },
+  footerTotalBlock: {
+    flexShrink: 0,
+    maxWidth: "38%"
   },
   footerLabel: {
     fontSize: 11,
@@ -991,10 +1018,13 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   checkoutButton: {
+    flex: 1,
+    minWidth: 0,
     backgroundColor: "#FF6B35",
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     paddingVertical: 14,
-    borderRadius: 16
+    borderRadius: 16,
+    alignItems: "center"
   },
   checkoutButtonDisabled: {
     backgroundColor: "#FFB08F"

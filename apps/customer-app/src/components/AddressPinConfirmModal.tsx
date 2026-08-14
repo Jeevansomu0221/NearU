@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import GooglePinMap from "./GooglePinMap";
+import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
 type AddressPinConfirmModalProps = {
   visible: boolean;
@@ -196,6 +197,8 @@ export default function AddressPinConfirmModal({
   onEdit
 }: AddressPinConfirmModalProps) {
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
+  const mapHeight = Math.max(180, Math.min(layout.isTablet ? 360 : 280, Math.round(layout.height * 0.36)));
   const [pin, setPin] = useState({ latitude, longitude });
 
   useEffect(() => {
@@ -204,13 +207,24 @@ export default function AddressPinConfirmModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onEdit}>
-      <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
+      <View
+        style={[
+          styles.screen,
+          {
+            paddingTop: insets.top + 8,
+            paddingBottom: insets.bottom + 12,
+            maxWidth: layout.isTablet ? 560 : undefined,
+            alignSelf: layout.isTablet ? "center" : undefined,
+            width: "100%"
+          }
+        ]}
+      >
         <Text style={styles.title}>Confirm delivery pin</Text>
         <Text style={styles.subtitle}>
           Place the pin on your building. Drag the map until the orange pin sits on the gate or tower.
         </Text>
 
-        <View style={styles.mapCard}>
+        <View style={[styles.mapCard, { height: mapHeight }]}>
           {Number.isFinite(latitude) && Number.isFinite(longitude) ? (
             <GoogleMapOrFallback latitude={latitude} longitude={longitude} onPinChange={setPin} />
           ) : (

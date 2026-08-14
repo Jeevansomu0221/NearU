@@ -30,6 +30,7 @@ import {
 import { getPublicAddressText, getPublicShopName } from "../utils/display";
 import { getOrderBadgeCount } from "../utils/orderBadges";
 import { getVegModePreference, setVegModePreference } from "../utils/vegMode";
+import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
@@ -123,6 +124,9 @@ const getDeliveryAddressKey = (profile?: UserProfile | null) => {
 
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const layout = useResponsiveLayout();
+  const compact = layout.isCompact;
+  const shopColumns = layout.columnCount;
   const { clear: clearCart, getItemCount } = useCart();
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
@@ -373,18 +377,18 @@ export default function HomeScreen({ navigation }: Props) {
   );
 
   const renderHeader = () => (
-    <View style={styles.headerWrap}>
-      <View style={styles.heroRow}>
-        <View style={styles.heroTextBlock}>
+    <View style={[styles.headerWrap, { paddingHorizontal: layout.gutter }]}>
+      <View style={[styles.heroRow, compact && styles.heroRowCompact]}>
+        <View style={[styles.heroTextBlock, compact && styles.heroTextBlockCompact]}>
           <TouchableOpacity
             style={styles.deliveryAddressBlock}
             onPress={openAddressPicker}
             activeOpacity={0.85}
           >
-            <Text style={styles.deliveryEyebrow}>Delivering to</Text>
+            <Text style={styles.deliveryEyebrow} maxFontSizeMultiplier={1.25}>Delivering to</Text>
             <View style={styles.deliveryAddressRow}>
               <Feather name="map-pin" size={14} color="#FF6B35" style={styles.deliveryPinIcon} />
-              <Text style={styles.deliveryAddressText} numberOfLines={1}>
+              <Text style={styles.deliveryAddressText} numberOfLines={compact ? 2 : 1} maxFontSizeMultiplier={1.2}>
                 {deliveryAddressLine || "Add your delivery address"}
               </Text>
               <Feather name="chevron-down" size={16} color="#5F534B" style={styles.deliveryChevron} />
@@ -402,13 +406,24 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <View style={styles.heroRight}>
-          <View style={styles.quickActions}>
-            <TouchableOpacity style={styles.quickActionCard} onPress={() => navigation.navigate("Profile")}>
+        <View
+          style={[
+            styles.heroRight,
+            compact ? styles.heroRightCompact : { width: Math.min(148, Math.round(layout.width * 0.38)) }
+          ]}
+        >
+          <View style={[styles.quickActions, compact && styles.quickActionsCompact]}>
+            <TouchableOpacity
+              style={[styles.quickActionCard, compact && styles.quickActionCardCompact]}
+              onPress={() => navigation.navigate("Profile")}
+            >
               <Feather name="user" size={16} color="#FF6B35" />
-              <Text style={styles.quickActionText}>Profile</Text>
+              <Text style={styles.quickActionText} maxFontSizeMultiplier={1.15}>Profile</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionCard} onPress={() => navigation.navigate("Cart")}>
+            <TouchableOpacity
+              style={[styles.quickActionCard, compact && styles.quickActionCardCompact]}
+              onPress={() => navigation.navigate("Cart")}
+            >
               <View style={styles.quickBadgeWrap}>
                 <Feather name="shopping-bag" size={16} color="#FF6B35" />
                 {cartItemCount > 0 ? (
@@ -417,17 +432,20 @@ export default function HomeScreen({ navigation }: Props) {
                   </View>
                 ) : null}
               </View>
-              <Text style={styles.quickActionText}>Cart</Text>
+              <Text style={styles.quickActionText} maxFontSizeMultiplier={1.15}>Cart</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionCard} onPress={() => navigation.navigate("Orders")}>
+            <TouchableOpacity
+              style={[styles.quickActionCard, compact && styles.quickActionCardCompact]}
+              onPress={() => navigation.navigate("Orders")}
+            >
               <View style={styles.quickBadgeWrap}>
                 <Feather name="clipboard" size={16} color="#FF6B35" />
                 {activeOrderCount > 0 ? <View style={styles.quickActiveDot} /> : null}
               </View>
-              <Text style={styles.quickActionText}>Orders</Text>
+              <Text style={styles.quickActionText} maxFontSizeMultiplier={1.15}>Orders</Text>
             </TouchableOpacity>
           </View>
-          {renderHeroArt()}
+          {compact ? null : renderHeroArt()}
         </View>
       </View>
 
@@ -467,7 +485,7 @@ export default function HomeScreen({ navigation }: Props) {
 
     return (
       <TouchableOpacity
-        style={styles.shopCard}
+        style={[styles.shopCard, shopColumns > 1 && styles.shopCardGrid]}
         activeOpacity={0.9}
         onPress={() =>
           navigation.navigate("ShopDetail", {
@@ -477,7 +495,11 @@ export default function HomeScreen({ navigation }: Props) {
           })
         }
       >
-        <Image source={{ uri: imageUrl }} style={styles.shopImage} resizeMode="cover" />
+        <Image
+          source={{ uri: imageUrl }}
+          style={[styles.shopImage, compact && styles.shopImageCompact]}
+          resizeMode="cover"
+        />
 
         <View style={styles.shopContent}>
           <View style={styles.shopTop}>
@@ -566,8 +588,11 @@ export default function HomeScreen({ navigation }: Props) {
       <FlatList
         style={styles.shopList}
         data={filteredShops}
+        key={`shops-${shopColumns}`}
         keyExtractor={(item) => item._id}
         renderItem={renderShopItem}
+        numColumns={shopColumns}
+        columnWrapperStyle={shopColumns > 1 ? styles.shopColumnRow : undefined}
         ListEmptyComponent={loading ? renderLoading : needsDeliveryAddress ? renderAddressRequired : renderEmpty}
         contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom, 14) }]}
         keyboardShouldPersistTaps="always"
@@ -612,10 +637,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start"
   },
+  heroRowCompact: {
+    flexDirection: "column"
+  },
   heroTextBlock: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 10,
     alignItems: "flex-start"
+  },
+  heroTextBlockCompact: {
+    width: "100%",
+    paddingRight: 0,
+    flexGrow: 0,
+    flex: 0
   },
   deliveryAddressBlock: {
     width: "100%",
@@ -639,6 +674,7 @@ const styles = StyleSheet.create({
   },
   deliveryAddressText: {
     flex: 1,
+    minWidth: 0,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: "800",
@@ -706,12 +742,22 @@ const styles = StyleSheet.create({
     color: "#554B43"
   },
   heroRight: {
-    width: 148
+    width: 148,
+    flexShrink: 0
+  },
+  heroRightCompact: {
+    width: "100%",
+    marginTop: 8
   },
   quickActions: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 5
+  },
+  quickActionsCompact: {
+    justifyContent: "flex-start",
+    gap: 8,
+    marginBottom: 0
   },
   quickActionCard: {
     width: 46,
@@ -727,6 +773,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 2
+  },
+  quickActionCardCompact: {
+    flex: 1,
+    width: undefined,
+    maxWidth: 88
   },
   quickActionText: {
     marginTop: 3,
@@ -902,6 +953,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     marginLeft: 10,
     fontSize: 13,
     color: "#2A211B",
@@ -938,6 +990,7 @@ const styles = StyleSheet.create({
   vegSearchToggle: {
     minWidth: 62,
     height: 32,
+    flexShrink: 0,
     borderRadius: 16,
     backgroundColor: "#F5F0EA",
     borderWidth: 1,
@@ -997,14 +1050,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2
   },
+  shopCardGrid: {
+    marginHorizontal: 0,
+    flex: 1
+  },
+  shopColumnRow: {
+    paddingHorizontal: 8,
+    gap: 8
+  },
   shopImage: {
     width: 64,
     height: 64,
     borderRadius: 12,
     backgroundColor: "#F3E7DA"
   },
+  shopImageCompact: {
+    width: 52,
+    height: 52
+  },
   shopContent: {
     flex: 1,
+    minWidth: 0,
     paddingLeft: 9
   },
   shopTop: {
@@ -1014,13 +1080,16 @@ const styles = StyleSheet.create({
   },
   shopMainInfo: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 10
   },
   shopRightMeta: {
     alignItems: "flex-end",
     justifyContent: "flex-start",
     gap: 4,
-    minWidth: 72
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: 88
   },
   favoriteButton: {
     width: 28,
@@ -1067,7 +1136,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8
+    gap: 8,
+    flexWrap: "wrap"
   },
   shopFooterLeft: {
     flexDirection: "row",
