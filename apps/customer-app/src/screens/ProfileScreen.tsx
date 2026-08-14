@@ -992,43 +992,42 @@ export default function ProfileScreen({ navigation, route }: any) {
         keyboardDismissMode="on-drag"
       >
         <View style={[styles.heroCard, forceComplete && styles.heroCardCompact]}>
-          <View style={styles.heroRow}>
-            <TouchableOpacity
-              style={styles.avatarWrap}
-              onPress={() =>
-                handlePlaceholderAction("Profile Photo", "Profile photo updates are currently handled by Vyaha support.")
-              }
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Add profile photo"
-            >
-              <MaterialCommunityIcons name="camera-plus-outline" size={26} color="#FFFFFF" />
-            </TouchableOpacity>
-            <View style={styles.heroMeta}>
-              <Text style={styles.heroName} numberOfLines={1}>
-                {isGeneratedCustomerName(profile?.name) ? "Your Profile" : profile?.name || "Your Profile"}
-              </Text>
-              <Text style={styles.heroSubtext}>{profile?.phone}</Text>
-              <Text style={styles.heroSubtext}>{profile?.email || "Add your email for invoices and offers"}</Text>
-              <View style={styles.memberSinceContainer}>
-                <MaterialCommunityIcons name="calendar-check-outline" size={14} color="#7A6F65" />
-                <Text style={styles.memberSinceText}>Member since {memberSince}</Text>
-              </View>
-            </View>
+          <View style={styles.heroGlow} />
+          <View style={styles.heroGlowRight} />
+          <Text style={styles.heroEyebrow}>Hey there</Text>
+          <Text style={styles.heroName} numberOfLines={1}>
+            {isGeneratedCustomerName(profile?.name) ? "Food lover" : profile?.name || "Your Profile"}
+          </Text>
+
+          <View style={styles.heroContactRow}>
+            <MaterialCommunityIcons name="phone-outline" size={14} color="#C96C2F" />
+            <Text style={styles.heroSubtext}>{profile?.phone || "Phone not set"}</Text>
+          </View>
+          <View style={styles.heroContactRow}>
+            <MaterialCommunityIcons name="email-outline" size={14} color="#C96C2F" />
+            <Text style={styles.heroSubtext} numberOfLines={1}>
+              {profile?.email || "Add email for invoices and offers"}
+            </Text>
+          </View>
+          <View style={styles.memberChip}>
+            <MaterialCommunityIcons name="calendar-check-outline" size={13} color="#C96C2F" />
+            <Text style={styles.memberSinceText}>Member since {memberSince}</Text>
           </View>
 
           {!forceComplete && (
             <View style={styles.quickStats}>
               <View style={styles.quickStatCard}>
-                <Text style={styles.quickStatValue}>{orders.length}</Text>
-                <Text style={styles.quickStatLabel}>Total Orders</Text>
+                <Text style={[styles.quickStatValue, styles.quickStatValueOrders]}>{orders.length}</Text>
+                <Text style={styles.quickStatLabel}>Orders</Text>
               </View>
+              <View style={styles.quickStatDivider} />
               <View style={styles.quickStatCard}>
-                <Text style={styles.quickStatValue}>{ongoingOrders.length}</Text>
-                <Text style={styles.quickStatLabel}>Live Orders</Text>
+                <Text style={[styles.quickStatValue, styles.quickStatValueLive]}>{ongoingOrders.length}</Text>
+                <Text style={styles.quickStatLabel}>Live</Text>
               </View>
+              <View style={styles.quickStatDivider} />
               <View style={styles.quickStatCard}>
-                <Text style={styles.quickStatValue}>{favoriteFoodItems.length}</Text>
+                <Text style={[styles.quickStatValue, styles.quickStatValueFav]}>{favoriteFoodItems.length}</Text>
                 <Text style={styles.quickStatLabel}>Favorites</Text>
               </View>
             </View>
@@ -1036,20 +1035,23 @@ export default function ProfileScreen({ navigation, route }: any) {
         </View>
 
         <View style={styles.shortcutRow}>
-          <TouchableOpacity style={styles.shortcutCard} onPress={() => navigation.navigate("Orders")}>
-            <View style={styles.shortcutIconWrap}>
-              <MaterialCommunityIcons name="file-document-outline" size={20} color="#FF6B35" />
+          <TouchableOpacity style={styles.shortcutCard} onPress={() => navigation.navigate("Orders")} activeOpacity={0.88}>
+            <View style={[styles.shortcutIconWrap, styles.shortcutIconOrders]}>
+              <MaterialCommunityIcons name="receipt-text-outline" size={20} color="#FF6B35" />
             </View>
             <Text style={styles.shortcutTitle}>My Orders</Text>
-            <Text style={styles.shortcutDetail}>{ongoingOrders.length > 0 ? `${ongoingOrders.length} ongoing` : "View history"}</Text>
+            <Text style={styles.shortcutDetail}>
+              {ongoingOrders.length > 0 ? `${ongoingOrders.length} ongoing` : "View history"}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.shortcutCard}
             onPress={() => {
               scrollViewRef.current?.scrollTo({ y: addressesY, animated: true });
             }}
+            activeOpacity={0.88}
           >
-            <View style={styles.shortcutIconWrap}>
+            <View style={[styles.shortcutIconWrap, styles.shortcutIconAddress]}>
               <MaterialCommunityIcons name="map-marker-radius-outline" size={20} color="#2B9C4A" />
             </View>
             <Text style={styles.shortcutTitle}>Addresses</Text>
@@ -1089,8 +1091,11 @@ export default function ProfileScreen({ navigation, route }: any) {
                         shop: item.partner as any
                       });
                     }}
+                    activeOpacity={0.88}
                   >
-                    <MaterialCommunityIcons name="heart" size={16} color="#E11D48" />
+                    <View style={styles.favoriteHeart}>
+                      <MaterialCommunityIcons name="heart" size={14} color="#E11D48" />
+                    </View>
                     <View style={styles.favoriteChipCopy}>
                       <Text style={styles.favoriteChipText} numberOfLines={1}>
                         {item.name}
@@ -1100,14 +1105,21 @@ export default function ProfileScreen({ navigation, route }: any) {
                         {typeof item.price === "number" ? ` · Rs ${item.price}` : ""}
                       </Text>
                     </View>
-                    <Text
+                    <View
                       style={[
-                        styles.favoriteAvailability,
-                        item.isOrderable ? styles.favoriteAvailabilityOpen : styles.favoriteAvailabilityClosed
+                        styles.favoriteStatusPill,
+                        item.isOrderable ? styles.favoriteStatusOpen : styles.favoriteStatusClosed
                       ]}
                     >
-                      {item.availabilityLabel || (item.isOrderable ? "Available" : "Unavailable")}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.favoriteAvailability,
+                          item.isOrderable ? styles.favoriteAvailabilityOpen : styles.favoriteAvailabilityClosed
+                        ]}
+                      >
+                        {item.availabilityLabel || (item.isOrderable ? "Available" : "Unavailable")}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
@@ -1349,16 +1361,18 @@ export default function ProfileScreen({ navigation, route }: any) {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Help & Support</Text>
-              {supportItems.map((item) => (
+              {supportItems.map((item, index) => (
                 <TouchableOpacity
                   key={item.title}
-                  style={styles.listRow}
+                  style={[styles.listRow, index === 0 && styles.listRowFirst]}
                   onPress={() =>
                     openSupport(item.title === "FAQs" ? "faq" : item.title === "Report an Issue" ? "report" : "chat")
                   }
                 >
                   <View style={styles.listRowLeft}>
-                    <MaterialCommunityIcons name={item.icon as any} size={20} color="#FF6B35" />
+                    <View style={styles.listRowIcon}>
+                      <MaterialCommunityIcons name={item.icon as any} size={18} color="#FF6B35" />
+                    </View>
                     <View style={styles.listRowTextWrap}>
                       <Text style={styles.listRowTitle}>{item.title}</Text>
                       <Text style={styles.listRowDetail}>{item.detail}</Text>
@@ -1371,23 +1385,31 @@ export default function ProfileScreen({ navigation, route }: any) {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Account Actions</Text>
-              <TouchableOpacity style={[styles.accountActionRow, styles.logoutRow]} onPress={handleLogout}>
-                <MaterialCommunityIcons name="logout" size={20} color="#C7362E" />
+              <TouchableOpacity style={[styles.accountActionRow, styles.listRowFirst, styles.logoutRow]} onPress={handleLogout}>
+                <View style={[styles.listRowIcon, styles.accountIconDanger]}>
+                  <MaterialCommunityIcons name="logout" size={18} color="#C7362E" />
+                </View>
                 <Text style={styles.logoutRowText}>Logout</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.accountActionRow, styles.deleteRow]}
                 onPress={handleDeleteAccount}
               >
-                <MaterialCommunityIcons name="delete-outline" size={20} color="#B42318" />
+                <View style={[styles.listRowIcon, styles.accountIconDanger]}>
+                  <MaterialCommunityIcons name="delete-outline" size={18} color="#B42318" />
+                </View>
                 <Text style={styles.deleteRowText}>Delete Account</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.accountActionRow} onPress={() => Linking.openURL(PRIVACY_URL)}>
-                <MaterialCommunityIcons name="shield-lock-outline" size={20} color="#475467" />
+                <View style={styles.listRowIcon}>
+                  <MaterialCommunityIcons name="shield-lock-outline" size={18} color="#475467" />
+                </View>
                 <Text style={styles.legalRowText}>Privacy Policy</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.accountActionRow} onPress={() => Linking.openURL(TERMS_URL)}>
-                <MaterialCommunityIcons name="file-document-outline" size={20} color="#475467" />
+                <View style={styles.listRowIcon}>
+                  <MaterialCommunityIcons name="file-document-outline" size={18} color="#475467" />
+                </View>
                 <Text style={styles.legalRowText}>Terms of Service</Text>
               </TouchableOpacity>
             </View>
@@ -1418,7 +1440,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingTop: 10,
-    paddingBottom: 22
+    paddingBottom: 28
   },
   contentWithFooter: {
     paddingBottom: 180
@@ -1455,172 +1477,164 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     marginHorizontal: 14,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: "#FFF7EF",
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: "#FFF4EA",
     borderWidth: 1,
-    borderColor: "#F3D7BF"
+    borderColor: "#F3D7BF",
+    overflow: "hidden"
   },
   heroCardCompact: {
     marginTop: 6
   },
-  heroRow: {
-    flexDirection: "row",
-    alignItems: "center"
+  heroGlow: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "#FFD9C2",
+    opacity: 0.55,
+    top: -48,
+    right: -28
   },
-  avatarWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: "#FF6B35",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12
+  heroGlowRight: {
+    position: "absolute",
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "#FFE7D4",
+    opacity: 0.9,
+    bottom: 48,
+    right: 24
   },
-  avatarText: {
-    fontSize: 23,
-    fontWeight: "800",
-    color: "#FFFFFF"
-  },
-  heroMeta: {
-    flex: 1,
-    minWidth: 0
+  heroEyebrow: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#C96C2F",
+    letterSpacing: 0.2,
+    marginBottom: 2
   },
   heroName: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: "#2C2018",
+    fontSize: 26,
+    lineHeight: 30,
+    fontWeight: "900",
+    color: "#201914",
+    marginBottom: 10
+  },
+  heroContactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
     marginBottom: 4
   },
   heroSubtext: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 13,
-    color: "#7A6F65",
-    marginBottom: 2
+    color: "#6B5E55"
   },
-  heroInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 12,
-    gap: 8,
-    flexWrap: "wrap"
-  },
-  heroPill: {
+  memberChip: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFE8D5",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flex: 1
-  },
-  heroPillText: {
-    fontSize: 12,
-    color: "#7A4B21",
-    fontWeight: "700",
-    marginLeft: 6
-  },
-  photoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
+    marginTop: 8,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#F1D4BF"
-  },
-  photoButtonText: {
-    fontSize: 12,
-    color: "#FF6B35",
-    fontWeight: "700",
-    marginLeft: 6
-  },
-  progressRow: {
-    marginTop: 16
-  },
-  progressTrack: {
-    width: "100%",
-    height: 8,
+    borderColor: "#F1DED0",
     borderRadius: 999,
-    backgroundColor: "#F3E3D5",
-    overflow: "hidden"
+    paddingHorizontal: 10,
+    paddingVertical: 5
   },
-  progressFill: {
-    height: "100%",
-    borderRadius: 999,
-    backgroundColor: "#FF6B35"
-  },
-  progressText: {
-    marginTop: 8,
+  memberSinceText: {
     fontSize: 12,
-    fontWeight: "700",
-    color: "#7A6F65"
+    color: "#8B6A54",
+    marginLeft: 4,
+    fontWeight: "700"
   },
   quickStats: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 12
+    alignItems: "center",
+    marginTop: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F1E1D5",
+    paddingVertical: 10
   },
   quickStatCard: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: "#F1E1D5"
+    alignItems: "center",
+    paddingHorizontal: 6
+  },
+  quickStatDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#F0E0D3"
   },
   quickStatValue: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
     color: "#2C2018"
   },
+  quickStatValueOrders: {
+    color: "#FF6B35"
+  },
+  quickStatValueLive: {
+    color: "#2B9C4A"
+  },
+  quickStatValueFav: {
+    color: "#E11D48"
+  },
   quickStatLabel: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 11,
     fontWeight: "700",
     color: "#8B6A54"
   },
   shortcutRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     marginHorizontal: 14,
-    marginTop: 10
+    marginTop: 12
   },
   shortcutCard: {
     flex: 1,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#ECE3D9",
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 10
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 12
   },
   shortcutIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#FFF4EB",
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center"
   },
+  shortcutIconOrders: {
+    backgroundColor: "#FFF1E6"
+  },
+  shortcutIconAddress: {
+    backgroundColor: "#EAF8EA"
+  },
   shortcutTitle: {
-    marginTop: 8,
-    fontSize: 13,
+    marginTop: 10,
+    fontSize: 14,
     fontWeight: "800",
     color: "#2C2018"
   },
   shortcutDetail: {
-    marginTop: 4,
-    fontSize: 11,
+    marginTop: 3,
+    fontSize: 12,
     color: "#7A6F65"
   },
   section: {
     marginHorizontal: 14,
-    marginTop: 8,
-    padding: 12,
-    borderRadius: 12,
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 18,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#ECE3D9"
@@ -1716,8 +1730,8 @@ const styles = StyleSheet.create({
     flex: 1
   },
   addressCard: {
-    backgroundColor: "#FBF6EF",
-    borderRadius: 14,
+    backgroundColor: "#FFFCF8",
+    borderRadius: 16,
     padding: 12,
     borderWidth: 1,
     borderColor: "#F3E4D4",
@@ -1935,7 +1949,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "#F2ECE5"
   },
@@ -1944,6 +1958,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
     marginRight: 12
+  },
+  listRowFirst: {
+    borderTopWidth: 0,
+    paddingTop: 6
+  },
+  listRowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "#FFF4EB",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  accountIconDanger: {
+    backgroundColor: "#FDECEC"
   },
   listRowTextWrap: {
     marginLeft: 12,
@@ -1979,28 +2008,47 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "stretch",
-    backgroundColor: "#FBF6EF",
+    backgroundColor: "#FFFCF8",
     borderWidth: 1,
     borderColor: "#F0E0D3",
-    borderRadius: 14,
-    paddingHorizontal: 12,
+    borderRadius: 16,
+    paddingHorizontal: 10,
     paddingVertical: 10,
     marginBottom: 8
+  },
+  favoriteHeart: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "#FFE8EE",
+    alignItems: "center",
+    justifyContent: "center"
   },
   favoriteChipCopy: {
     flex: 1,
     minWidth: 0,
-    marginLeft: 8
+    marginLeft: 10
   },
   favoriteChipMeta: {
     marginTop: 2,
     fontSize: 11,
     color: "#8B7E74"
   },
+  favoriteStatusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginLeft: 8
+  },
+  favoriteStatusOpen: {
+    backgroundColor: "#EAF8EA"
+  },
+  favoriteStatusClosed: {
+    backgroundColor: "#FDECEC"
+  },
   favoriteAvailability: {
     fontSize: 10,
-    fontWeight: "700",
-    marginLeft: 8
+    fontWeight: "800"
   },
   favoriteAvailabilityOpen: {
     color: "#15803D"
@@ -2069,7 +2117,7 @@ const styles = StyleSheet.create({
   accountActionRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "#F2ECE5"
   },
@@ -2276,17 +2324,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "700"
-  },
-  memberSinceContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6
-  },
-  memberSinceText: {
-    fontSize: 12,
-    color: "#7A6F65",
-    marginLeft: 4,
-    fontWeight: "600"
   },
   deleteModal: {
     width: "100%",
