@@ -152,6 +152,19 @@ const isGeneratedCustomerName = (value?: string) => {
   );
 };
 
+const digitsOnlyPhone = (value?: string | null) => String(value || "").replace(/\D/g, "").slice(-10);
+
+const readCachedUserPhone = async () => {
+  try {
+    const raw = await AsyncStorage.getItem("user");
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return digitsOnlyPhone(parsed?.phone);
+  } catch {
+    return "";
+  }
+};
+
 export default function ProfileScreen({ navigation, route }: any) {
   const forceComplete = Boolean(route?.params?.forceComplete);
   const manageAddress = route?.params?.manageAddress;
@@ -245,7 +258,10 @@ export default function ProfileScreen({ navigation, route }: any) {
     const cleanName = isGeneratedCustomerName(userData.name) ? "" : userData.name || "";
     const savedAddresses = getSavedAddressesFromProfile(userData);
     const defaultAddress = savedAddresses.find((entry) => entry.isDefault) || savedAddresses[0] || null;
-    setProfile(userData);
+    setProfile({
+      ...userData,
+      phone: digitsOnlyPhone(userData.phone) || userData.phone || ""
+    });
     setName(cleanName);
     setEmail(userData.email || "");
     setAddressFormMode("edit");
@@ -255,14 +271,17 @@ export default function ProfileScreen({ navigation, route }: any) {
   const loadProfile = async () => {
     try {
       setLoading(true);
-      const profileResponse = await getUserProfile();
+      const [profileResponse, cachedPhone] = await Promise.all([getUserProfile(), readCachedUserPhone()]);
 
       if (!profileResponse.success || !profileResponse.data) {
         Alert.alert("Error", profileResponse.message || "Failed to load profile");
         return;
       }
 
-      hydrateForm(profileResponse.data);
+      hydrateForm({
+        ...profileResponse.data,
+        phone: digitsOnlyPhone(profileResponse.data.phone) || cachedPhone
+      });
 
       if (!forceComplete && manageAddress !== "add") {
         const ordersResponse = await getMyOrders();
@@ -314,6 +333,23 @@ export default function ProfileScreen({ navigation, route }: any) {
     setAddressFormMode("edit");
     hydrateAddressForm(address, name);
     setEditing(true);
+  };
+
+  const renderPhoneField = () => {
+    const digits = digitsOnlyPhone(profile?.phone);
+    return (
+      <View style={styles.fieldGroup}>
+        <Text style={styles.label}>Phone Number</Text>
+        <View
+          style={styles.phoneReadonly}
+          accessibilityRole="text"
+          accessibilityLabel={digits ? `Phone number +91 ${digits}` : "Phone number not set"}
+        >
+          <Text style={styles.phoneReadonlyPrefix}>+91</Text>
+          <Text style={styles.phoneReadonlyValue}>{digits || "Not set"}</Text>
+        </View>
+      </View>
+    );
   };
 
   const handleSetDefaultAddress = async (address: SavedAddress) => {
@@ -935,10 +971,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
             </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Phone Number</Text>
-              <Text style={styles.value}>{profile?.phone}</Text>
-            </View>
+            {renderPhoneField()}
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email Address (optional)</Text>
@@ -1001,7 +1034,9 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           <View style={styles.heroContactRow}>
             <MaterialCommunityIcons name="phone-outline" size={14} color="#C96C2F" />
-            <Text style={styles.heroSubtext}>{profile?.phone || "Phone not set"}</Text>
+            <Text style={styles.heroSubtext}>
+              {digitsOnlyPhone(profile?.phone) ? `+91 ${digitsOnlyPhone(profile?.phone)}` : "Phone not set"}
+            </Text>
           </View>
           <View style={styles.heroContactRow}>
             <MaterialCommunityIcons name="email-outline" size={14} color="#C96C2F" />
@@ -1165,10 +1200,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             )}
           </View>
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Phone Number</Text>
-            <Text style={styles.value}>{profile?.phone || "Not set"}</Text>
-          </View>
+          {renderPhoneField()}
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Email Address</Text>
@@ -1717,6 +1749,31 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     minHeight: 38,
     marginBottom: 0
+  },
+  phoneReadonly: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E4DBD2",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    minHeight: 38,
+    backgroundColor: "#F7F2EC"
+  },
+  phoneReadonlyPrefix: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#7A6F65",
+    marginRight: 8,
+    paddingRight: 8,
+    borderRightWidth: 1,
+    borderRightColor: "#E4DBD2"
+  },
+  phoneReadonlyValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1A120B"
   },
   inputFocused: {
     borderColor: "#FF6B35",
