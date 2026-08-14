@@ -504,6 +504,20 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
     order.status === "PREPARING" ||
     (order.status === "ASSIGNED" && !order.deliveryReadyAt);
   const isCancelledOrder = order.status === "CANCELLED" || order.status === "REJECTED";
+  const showReadyByCard =
+    (order.status === "ACCEPTED" || order.status === "PREPARING") && order.estimatedReadyAt;
+  const showActionsContainer = showAcceptButton || showRejectButton;
+
+  const renderReadyByCard = () =>
+    showReadyByCard ? (
+      <View style={[styles.readyByCard, isDarkMode && styles.readyByCardDark]}>
+        <Text style={[styles.readyByLabel, isDarkMode && styles.mutedTextDark]}>Promised ready time</Text>
+        <Text style={[styles.readyByValue, isDarkMode && styles.textDark]}>
+          {getReadyByLabelFromDate(order.estimatedReadyAt)}
+          {order.prepTimeMinutes ? ` · ${order.prepTimeMinutes} mins prep` : ""}
+        </Text>
+      </View>
+    ) : null;
 
   return (
     <ScrollView
@@ -522,6 +536,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
         </View>
       </View>
 
+      {showActionsContainer ? (
       <View style={[styles.actionsContainer, isDarkMode && styles.cardDark]}>
         {showAcceptButton ? (
           <View style={styles.prepTimeBlock}>
@@ -576,20 +591,12 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
           </View>
         ) : null}
 
-        {(order.status === "ACCEPTED" || order.status === "PREPARING") && order.estimatedReadyAt ? (
-          <View style={[styles.readyByCard, isDarkMode && styles.readyByCardDark]}>
-            <Text style={[styles.readyByLabel, isDarkMode && styles.mutedTextDark]}>Promised ready time</Text>
-            <Text style={[styles.readyByValue, isDarkMode && styles.textDark]}>
-              {getReadyByLabelFromDate(order.estimatedReadyAt)}
-              {order.prepTimeMinutes ? ` · ${order.prepTimeMinutes} mins prep` : ""}
-            </Text>
-          </View>
-        ) : null}
-
       </View>
+      ) : null}
 
       {showPreparingSwipe ? (
-        <View style={styles.section}>
+        <View style={styles.actionSection}>
+          {renderReadyByCard()}
           <SwipeAction
             title="Start preparation"
             subtitle="Swipe the handle to move this order into the kitchen queue."
@@ -602,7 +609,8 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       ) : null}
 
       {showReadySwipe ? (
-        <View style={styles.section}>
+        <View style={styles.actionSection}>
+          {renderReadyByCard()}
           <SwipeAction
             title="Mark ready"
             subtitle="Swipe once the order is packed and ready for handoff."
@@ -795,7 +803,8 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: partnerTheme.colors.card,
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -823,7 +832,8 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   actionsContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: partnerTheme.colors.card,
     borderBottomWidth: 1,
     borderBottomColor: partnerTheme.colors.borderSoft
@@ -908,19 +918,48 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   section: {
-    backgroundColor: partnerTheme.colors.background,
-    padding: 16,
-    marginTop: 8
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4
+  },
+  actionSection: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+    gap: 8
+  },
+  readyByCard: {
+    backgroundColor: partnerTheme.colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  readyByCardDark: {
+    backgroundColor: "#111827",
+    borderColor: "#263449"
+  },
+  readyByLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: partnerTheme.colors.muted
+  },
+  readyByValue: {
+    marginTop: 2,
+    fontSize: 14,
+    fontWeight: "700",
+    color: partnerTheme.colors.primaryDark
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: partnerTheme.colors.primaryDark,
-    marginBottom: 12
+    marginBottom: 8
   },
   infoCard: {
     backgroundColor: partnerTheme.colors.card,
-    padding: 16,
+    padding: 12,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: partnerTheme.colors.border
@@ -928,7 +967,7 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 8,
     alignItems: "flex-start"
   },
   infoLabel: {
@@ -1115,25 +1154,25 @@ const styles = StyleSheet.create({
   },
   swipeActionCard: {
     backgroundColor: partnerTheme.colors.card,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: partnerTheme.colors.border,
-    padding: 14
+    padding: 12
   },
   swipeTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
     color: partnerTheme.colors.primaryDark
   },
   swipeSubtitle: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 18,
     color: partnerTheme.colors.muted,
-    marginBottom: 12
+    marginBottom: 8
   },
   swipeTrackWrap: {
-    height: 72,
+    height: 64,
     borderRadius: 20,
     overflow: "hidden",
     backgroundColor: partnerTheme.colors.surface,
@@ -1180,7 +1219,7 @@ const styles = StyleSheet.create({
     fontWeight: "300"
   },
   swipeFooter: {
-    marginTop: 10,
+    marginTop: 6,
     fontSize: 12,
     fontWeight: "700"
   }
