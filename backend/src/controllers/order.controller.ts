@@ -2899,7 +2899,9 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
 
       const bundledOrders = await getPopulatedBundleOrders(String(requestedOrder.deliveryBundleId));
       void Promise.all(
-        bundledOrders.map((bundleOrder: any) => notifyDeliveryAssigned(bundleOrder))
+        bundledOrders.map((bundleOrder: any, index: number) =>
+          notifyDeliveryAssigned(bundleOrder, { notifyCustomer: index === 0 })
+        )
       ).catch((error) => {
         console.error("Failed to notify accepted bundled delivery job:", error);
       });

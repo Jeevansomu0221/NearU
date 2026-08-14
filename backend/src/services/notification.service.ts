@@ -40,8 +40,8 @@ const CUSTOMER_ORDER_COPY: Record<string, { title: string; body: string }> = {
     body: "Your order is packed and ready for pickup."
   },
   ASSIGNED: {
-    title: "Delivery partner assigned",
-    body: "A delivery partner has accepted your order."
+    title: "Rider accepted your order",
+    body: "A rider has accepted your order."
   },
   PICKED_UP: {
     title: "Order on the way",
@@ -409,6 +409,13 @@ export const notifyCustomerOrderStatus = async (order: any, status: string) => {
     body = `The shop is preparing your order. Expected ready by ${readyBy}.`;
   }
 
+  if (status === "ASSIGNED") {
+    const verificationCode = String(order.deliveryVerificationCode || "").trim();
+    if (verificationCode) {
+      body = `Give this OTP ${verificationCode} to the rider after you receive your order.`;
+    }
+  }
+
   await sendNotificationToUsers([order.customerId], {
     app: "customer",
     title: copy.title,
@@ -523,26 +530,29 @@ export const notifyAssignedRiderFoodReady = async (order: any) => {
   });
 };
 
-export const notifyDeliveryAssigned = async (order: any) => {
+export const notifyDeliveryAssigned = async (order: any, options?: { notifyCustomer?: boolean }) => {
   const partner = await Partner.findById(order.partnerId).select("userId").lean();
   const orderId = idString(order._id);
   const verificationCode = String(order.deliveryVerificationCode || "").trim();
+  const notifyCustomer = options?.notifyCustomer !== false;
   const customerBody = verificationCode
-    ? `Your delivery code is ${verificationCode}. After delivery, please share this code with your rider.`
-    : "A delivery partner has accepted your order. Your delivery code will appear in the app shortly.";
+    ? `Give this OTP ${verificationCode} to the rider after you receive your order.`
+    : "A rider has accepted your order. Your delivery OTP will appear in the app shortly.";
 
   await Promise.all([
-    sendNotificationToUsers([order.customerId], {
-      app: "customer",
-      title: "Delivery partner assigned",
-      body: customerBody,
-      data: {
-        type: "ORDER_STATUS",
-        orderId,
-        status: "ASSIGNED",
-        ...(verificationCode ? { deliveryVerificationCode: verificationCode } : {})
-      }
-    }),
+    notifyCustomer
+      ? sendNotificationToUsers([order.customerId], {
+          app: "customer",
+          title: "Rider accepted your order",
+          body: customerBody,
+          data: {
+            type: "ORDER_STATUS",
+            orderId,
+            status: "ASSIGNED",
+            ...(verificationCode ? { deliveryVerificationCode: verificationCode } : {})
+          }
+        })
+      : Promise.resolve(),
     sendNotificationToUsers([(partner as any)?.userId], {
       app: "partner",
       title: "Delivery partner assigned",
