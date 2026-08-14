@@ -5,6 +5,37 @@ import { config } from "../config/env";
 
 const defaultServiceAccountPath = path.resolve(__dirname, "../../config/firebase-service-account.json");
 
+const parseServiceAccountJson = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error("Firebase service account JSON is empty");
+  }
+
+  const candidates = [
+    trimmed,
+    trimmed.replace(/^['"]|['"]$/g, ""),
+    trimmed.replace(/\\n/g, "\n")
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // try next candidate
+    }
+  }
+
+  throw new Error("Firebase service account JSON is invalid");
+};
+
+const loadServiceAccountFromFile = (serviceAccountPath: string) => {
+  const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+  return admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: config.firebaseProjectId || serviceAccount.project_id
+  });
+};
+
 const normalizePhone = (phone?: string) => {
   const digits = (phone || "").replace(/\D/g, "");
   return digits.length > 10 ? digits.slice(-10) : digits;
@@ -15,18 +46,14 @@ export const getFirebaseApp = () => {
     return admin.app();
   }
 
-  if (config.firebaseServiceAccountJson) {
-    const serviceAccount = JSON.parse(config.firebaseServiceAccountJson);
-    return admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      projectId: config.firebaseProjectId || serviceAccount.project_id
-    });
-  }
-
   const serviceAccountPath = config.firebaseServiceAccountPath || defaultServiceAccountPath;
 
   if (fs.existsSync(serviceAccountPath)) {
-    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+    return loadServiceAccountFromFile(serviceAccountPath);
+  }
+
+  if (config.firebaseServiceAccountJson) {
+    const serviceAccount = parseServiceAccountJson(config.firebaseServiceAccountJson);
     return admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId: config.firebaseProjectId || serviceAccount.project_id
