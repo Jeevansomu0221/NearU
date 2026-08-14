@@ -23,7 +23,7 @@ import ReviewStatusScreen from "../screens/ReviewStatusScreen";
 import AccountDeletionReviewScreen from "../screens/AccountDeletionReviewScreen";
 import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
-import { requestRiderLocationPermission, startRiderLocationWatch } from "../utils/riderLocation";
+import AvailableJobsNewJobWatcher from "../components/AvailableJobsNewJobWatcher";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -43,7 +43,8 @@ function MainTabs() {
   }, []);
 
   return (
-    <Tab.Navigator
+    <>
+      <Tab.Navigator
       screenOptions={{
         tabBarActiveTintColor: "#4CAF50",
         tabBarInactiveTintColor: "#666",
@@ -98,6 +99,8 @@ function MainTabs() {
         }}
       />
     </Tab.Navigator>
+    <AvailableJobsNewJobWatcher />
+    </>
   );
 }
 

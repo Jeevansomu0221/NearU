@@ -10,6 +10,8 @@ import {
 import { notifyDeletionRequestRefresh, applyDeletionStatusFromNotification } from "../api/accountDeletion.api";
 import { notifyReviewStatusRefresh } from "./reviewStatusRefresh";
 import { notifyJobDetailsRefresh } from "./jobDetailsRefresh";
+import { notifyNewJobAlertRefresh } from "./newJobAlertRefresh";
+import { isAvailableJobsTabFocused } from "./availableJobsRegistry";
 
 const NOTIFICATION_APP = "delivery";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:delivery";
@@ -219,6 +221,10 @@ const navigateFromData = async (navigationRef: any, data?: Record<string, any> |
 
 const displayDeliveryJobNotification = async (remoteMessage: any) => {
   if (!isDeliveryJobMessage(remoteMessage)) return false;
+
+  if (isAvailableJobsTabFocused()) {
+    return false;
+  }
 
   const prefs = await getNotificationPreferences();
   if (!shouldShowClientNotification(remoteMessage?.data?.type || "DELIVERY_JOB_READY", prefs)) {
@@ -520,8 +526,14 @@ export const setupNotificationHandlers = (navigationRef: any) => {
       notifyJobDetailsRefresh(String(remoteMessage?.data?.orderId || remoteMessage?.data?.jobId || ""));
       return;
     }
-    if (await displayDeliveryJobNotification(remoteMessage)) {
-      return;
+    if (isDeliveryJobMessage(remoteMessage)) {
+      if (isAvailableJobsTabFocused()) {
+        return;
+      }
+      notifyNewJobAlertRefresh();
+      if (await displayDeliveryJobNotification(remoteMessage)) {
+        return;
+      }
     }
     if (isDeletionNotification(remoteMessage?.data)) {
       const updated = await applyDeletionStatusFromNotification(remoteMessage?.data);

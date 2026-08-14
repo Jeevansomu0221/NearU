@@ -23,7 +23,7 @@ import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { formatAddress } from "../utils/address";
 import { getRiderPickupStatusMessage } from "../utils/prepTime";
 import { getCurrentRiderLocation, subscribeRiderLocation } from "../utils/riderLocation";
-import NewJobBanner from "../components/NewJobBanner";
+import { setAvailableJobsTabFocused, syncKnownAvailableJobIds } from "../services/availableJobsRegistry";
 
 const AVAILABILITY_STORAGE_KEY = "driverAvailability";
 const GREEN_PRIMARY = "#16A34A";
@@ -47,15 +47,12 @@ export default function JobsScreen({ navigation }: any) {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isAvailable, setIsAvailable] = useState(false);
   const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
-  const [newJobAlert, setNewJobAlert] = useState<CalculatedJob | null>(null);
   const [selectedJobAction, setSelectedJobAction] = useState<{ job: CalculatedJob; action: "accept" | "reject" } | null>(null);
   const [emptyMessage, setEmptyMessage] = useState("When restaurants mark orders as READY, they will appear here for delivery.");
   const [riderName, setRiderName] = useState("");
   const [walletBalance, setWalletBalance] = useState(0);
   const [todaysDeliveries, setTodaysDeliveries] = useState(0);
-  const knownJobIds = useRef<Set<string>>(new Set());
   const rejectedJobIds = useRef<Set<string>>(new Set());
-  const firstLoadDone = useRef(false);
 
   const applyAvailabilityPreference = useCallback((value: boolean) => {
     setIsAvailable(value);
@@ -169,13 +166,7 @@ export default function JobsScreen({ navigation }: any) {
         setEmptyMessage(response.message || "When restaurants mark orders as READY, they will appear here for delivery.");
         const jobsWithCalculations = await Promise.all(response.data.map((job) => calculateJobDetails(job)));
         const visibleJobs = jobsWithCalculations.filter((job) => !rejectedJobIds.current.has(job._id));
-        const incomingIds = new Set(visibleJobs.map((job) => job._id));
-        const newlyAdded = visibleJobs.filter((job) => !knownJobIds.current.has(job._id));
-        knownJobIds.current = incomingIds;
-        if (firstLoadDone.current && newlyAdded.length > 0) {
-          setNewJobAlert(newlyAdded[0]);
-        }
-        firstLoadDone.current = true;
+        syncKnownAvailableJobIds(visibleJobs.map((job) => job._id));
         setJobs(visibleJobs);
       } else {
         setEmptyMessage(response.message || "When restaurants mark orders as READY, they will appear here for delivery.");
@@ -217,8 +208,10 @@ export default function JobsScreen({ navigation }: any) {
 
   useFocusEffect(
     useCallback(() => {
+      setAvailableJobsTabFocused(true);
       loadAvailabilityPreference().catch(() => {});
       loadHeaderStats().catch(() => {});
+      return () => setAvailableJobsTabFocused(false);
     }, [loadAvailabilityPreference, loadHeaderStats])
   );
 
@@ -327,7 +320,6 @@ export default function JobsScreen({ navigation }: any) {
           rejectedJobIds.current.add(job._id);
         }
         setSelectedJobAction(null);
-        setNewJobAlert(null);
         setJobs((current) => current.filter((entry) => entry._id !== job._id));
         if (action === "accept") {
           navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job: response.data || job });
@@ -344,32 +336,6 @@ export default function JobsScreen({ navigation }: any) {
     } finally {
       setAcceptingJobId(null);
     }
-  };
-
-  const handleBannerAccept = async () => {
-    if (!newJobAlert) return;
-    const job = newJobAlert;
-    setNewJobAlert(null);
-    setAcceptingJobId(job._id);
-    const response = await acceptJob(job._id);
-    setAcceptingJobId(null);
-    if (response.success) {
-      navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job: response.data || job });
-      loadAvailableJobs();
-    } else {
-      if (isActiveDeliveryBlock(response)) {
-        await promptToContinueActiveDelivery(response);
-        return;
-      }
-      Alert.alert("Could not accept job", response.message || "Please try again.");
-    }
-  };
-
-  const handleBannerOpen = () => {
-    if (!newJobAlert) return;
-    const job = newJobAlert;
-    setNewJobAlert(null);
-    navigation.getParent()?.navigate("JobDetails", { orderId: job._id, job });
   };
 
   const renderHeader = () => (
@@ -582,13 +548,6 @@ export default function JobsScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <NewJobBanner
-        visible={Boolean(newJobAlert)}
-        job={newJobAlert}
-        onOpen={handleBannerOpen}
-        onAccept={handleBannerAccept}
-        onDismiss={() => setNewJobAlert(null)}
-      />
       <FlatList
         data={jobs}
         keyExtractor={(item) => item._id}
