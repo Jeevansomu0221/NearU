@@ -1020,15 +1020,19 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const orderDisplayId = job.isBundledDelivery
     ? "Bundled"
     : `#${job._id.slice(-6).toUpperCase()}`;
+  const orderTaken = job.status !== "READY";
   const pickupStatusMessage = getRiderPickupStatusMessage(
     isPickupPhase ? activePickupStop?.deliveryReadyAt ?? job.deliveryReadyAt : job.deliveryReadyAt,
     isPickupPhase ? activePickupStop?.estimatedReadyAt ?? job.estimatedReadyAt : job.estimatedReadyAt,
-    isPickupPhase ? activePickupStop?.prepTimeMinutes ?? job.prepTimeMinutes : job.prepTimeMinutes
+    isPickupPhase ? activePickupStop?.prepTimeMinutes ?? job.prepTimeMinutes : job.prepTimeMinutes,
+    orderTaken
   );
   const isReadyForPickup = pickupStatusMessage === RIDER_READY_FOR_PICKUP_MESSAGE;
+  const showPickupStatusBanner =
+    Boolean(pickupStatusMessage) && (job.status === "READY" || job.status === "ASSIGNED");
 
-  const renderReadyByBanner = (style?: object, forceShow = false) =>
-    pickupStatusMessage && (isPickupPhase || forceShow) ? (
+  const renderReadyByBanner = (style?: object) =>
+    showPickupStatusBanner ? (
       <View style={[styles.readyByBanner, style]}>
         <Ionicons
           name={isReadyForPickup ? "checkmark-circle-outline" : "time-outline"}
@@ -1062,7 +1066,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         </Text>
       </View>
 
-      {renderReadyByBanner({ marginBottom: 12 }, true)}
+      {renderReadyByBanner({ marginBottom: 12 })}
 
       {job.items.map((item, index) => (
         <View key={index} style={styles.itemRow}>

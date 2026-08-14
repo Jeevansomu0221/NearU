@@ -25,10 +25,14 @@ export const getRiderReadyByMessage = (estimatedReadyAt?: string | null, prepTim
 export const getRiderPickupStatusMessage = (
   deliveryReadyAt?: string | null,
   estimatedReadyAt?: string | null,
-  prepTimeMinutes?: number | null
+  prepTimeMinutes?: number | null,
+  orderTaken = false
 ) => {
   if (deliveryReadyAt) {
     return RIDER_READY_FOR_PICKUP_MESSAGE;
+  }
+  if (orderTaken) {
+    return "";
   }
   return getRiderReadyByMessage(estimatedReadyAt, prepTimeMinutes);
 };
