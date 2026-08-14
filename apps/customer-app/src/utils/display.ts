@@ -22,3 +22,11 @@ export const getPublicAddressText = (value?: string) => {
   const normalized = raw.toLowerCase();
   return ADDRESS_ALIASES[normalized] || raw || "Address not available";
 };
+
+export const formatPaymentMethodLabel = (method?: string) => {
+  const normalized = String(method || "").trim().toUpperCase();
+  if (normalized === "CASH_ON_DELIVERY" || normalized === "COD") return "COD";
+  if (normalized === "UPI") return "UPI";
+  if (normalized === "RAZORPAY" || normalized === "ONLINE") return "Online";
+  return method?.trim() || "Online";
+};

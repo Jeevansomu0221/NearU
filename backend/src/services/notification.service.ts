@@ -409,24 +409,31 @@ export const notifyDeliveryJobReady = async (order: any) => {
 
 export const notifyDeliveryAssigned = async (order: any) => {
   const partner = await Partner.findById(order.partnerId).select("userId").lean();
+  const orderId = idString(order._id);
+  const verificationCode = String(order.deliveryVerificationCode || "").trim();
+  const customerBody = verificationCode
+    ? `Your delivery code is ${verificationCode}. After delivery, please share this code with your rider.`
+    : "A delivery partner has accepted your order. Your delivery code will appear in the app shortly.";
+
   await Promise.all([
     sendNotificationToUsers([order.customerId], {
       app: "customer",
       title: "Delivery partner assigned",
-      body: "A delivery partner has accepted your order.",
+      body: customerBody,
       data: {
         type: "ORDER_STATUS",
-        orderId: idString(order._id),
-        status: "ASSIGNED"
+        orderId,
+        status: "ASSIGNED",
+        ...(verificationCode ? { deliveryVerificationCode: verificationCode } : {})
       }
     }),
     sendNotificationToUsers([(partner as any)?.userId], {
       app: "partner",
       title: "Delivery partner assigned",
-      body: `Order #${idString(order._id).slice(-6)} has a delivery partner.`,
+      body: `Order #${orderId.slice(-6)} has a delivery partner.`,
       data: {
         type: "ORDER_STATUS",
-        orderId: idString(order._id),
+        orderId,
         status: "ASSIGNED"
       }
     })

@@ -20,7 +20,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { cancelOrder, getOrderDetails, submitOrderRating } from "../api/order.api";
 import type { Order } from "../api/order.api";
-import { getPublicShopName } from "../utils/display";
+import { getPublicShopName, formatPaymentMethodLabel } from "../utils/display";
 import KeyboardSafeScreen from "../components/KeyboardSafeScreen";
 
 type TimelineStep = {
@@ -270,11 +270,11 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       case "READY":
         return "Everything is packed and waiting for pickup.";
       case "ASSIGNED":
-        return "A delivery partner has been assigned to your order.";
+        return "A delivery partner has been assigned. Share your verification code with them after delivery.";
       case "PICKED_UP":
         return "Your order has been picked up and is on the way to you.";
       case "REACHED_CUSTOMER":
-        return "Your delivery partner has reached your location. Please share the verification code.";
+        return "Your delivery partner has reached your location.";
       case "DELIVERED":
         return "Your order was delivered successfully.";
       case "CANCELLED":
@@ -484,9 +484,9 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       order.status === "REACHED_CUSTOMER" ? (
         <View style={[styles.sectionCard, styles.otpCard, styles.otpCardTop]}>
           <Text style={styles.otpEyebrow}>Delivery verification</Text>
-          <Text style={styles.otpTitle}>Share this code with your rider</Text>
+          <Text style={styles.otpTitle}>Your delivery code</Text>
           <Text style={styles.otpHint}>
-            When your order arrives, tell the delivery partner this code so they can complete the delivery.
+            A rider has been assigned. After delivery, share this code with the rider to complete the order.
           </Text>
           <View style={styles.otpCodeRow}>
             {String(order.deliveryVerificationCode || "----")
@@ -526,13 +526,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
           </View>
           <View style={styles.statPill}>
             <Text style={styles.statLabel}>Payment</Text>
-            <Text style={styles.statValue}>
-              {order.paymentMethod === "CASH_ON_DELIVERY"
-                ? "COD"
-                : order.paymentMethod === "UPI"
-                  ? "UPI"
-                  : order.paymentMethod || "Online"}
-            </Text>
+            <Text style={styles.statValue}>{formatPaymentMethodLabel(order.paymentMethod)}</Text>
           </View>
         </View>
       </View>
