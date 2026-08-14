@@ -280,29 +280,7 @@ export default function AppNavigator() {
         name="Profile" 
         component={ProfileScreen}
         initialParams={{ forceComplete: initialRoute === 'Profile' }}
-        options={({ navigation, route }) => ({
-          title: route.params?.forceComplete
-            ? "Basic details"
-            : route.params?.manageAddress === "add"
-              ? "Add address"
-              : "My Profile",
-          headerLeft: route.params?.forceComplete
-            ? () => null
-            : () => (
-                <TouchableOpacity
-                  onPress={() => {
-                    if (navigation.canGoBack()) {
-                      navigation.goBack();
-                    } else {
-                      navigation.reset({ index: 0, routes: [{ name: "Home" }] });
-                    }
-                  }}
-                  style={{ paddingHorizontal: 12, paddingVertical: 8 }}
-                >
-                  <Feather name="arrow-left" size={20} color="#fff" />
-                </TouchableOpacity>
-              ),
-        })}
+        options={{ headerShown: false }}
       />
       <Stack.Screen 
         name="OrderStatus" 

@@ -11,7 +11,8 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Linking
+  Linking,
+  StatusBar
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -351,6 +352,42 @@ export default function ProfileScreen({ navigation, route }: any) {
       </View>
     );
   };
+
+  const screenTitle = forceComplete
+    ? "Basic details"
+    : manageAddress === "add"
+      ? "Add address"
+      : "My Profile";
+
+  const handleHeaderBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.reset({ index: 0, routes: [{ name: "Home" }] });
+  };
+
+  const renderScreenHeader = () => (
+    <View style={styles.screenHeader}>
+      {forceComplete ? null : (
+        <TouchableOpacity
+          style={styles.screenHeaderBack}
+          onPress={handleHeaderBack}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <MaterialCommunityIcons name="chevron-left" size={28} color="#2C2018" />
+        </TouchableOpacity>
+      )}
+      <Text
+        style={[styles.screenHeaderTitle, forceComplete && styles.screenHeaderTitleSolo]}
+        numberOfLines={1}
+      >
+        {screenTitle}
+      </Text>
+    </View>
+  );
 
   const handleSetDefaultAddress = async (address: SavedAddress) => {
     if (!address._id) return;
@@ -934,9 +971,13 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F6F2EC" />
+        {renderScreenHeader()}
+        <View style={styles.loadingBody}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
       </View>
     );
   }
@@ -944,10 +985,12 @@ export default function ProfileScreen({ navigation, route }: any) {
   if (forceComplete) {
     return (
       <KeyboardAvoidingView
-        style={styles.container}
+        style={[styles.container, { paddingTop: insets.top }]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+        keyboardVerticalOffset={0}
       >
+        <StatusBar barStyle="dark-content" backgroundColor="#F6F2EC" />
+        {renderScreenHeader()}
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.registrationContent}
@@ -1012,10 +1055,12 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+      keyboardVerticalOffset={0}
     >
+      <StatusBar barStyle="dark-content" backgroundColor="#F6F2EC" />
+      {renderScreenHeader()}
       <ScrollView
         ref={scrollViewRef}
         style={styles.container}
@@ -1502,10 +1547,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F6F2EC"
   },
+  loadingBody: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center"
+  },
   loadingText: {
     marginTop: 12,
     fontSize: 15,
     color: "#6B5E55"
+  },
+  screenHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 10,
+    minHeight: 48
+  },
+  screenHeaderBack: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  screenHeaderTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#2C2018"
+  },
+  screenHeaderTitleSolo: {
+    paddingHorizontal: 6
   },
   heroCard: {
     marginHorizontal: 14,
