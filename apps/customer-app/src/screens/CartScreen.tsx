@@ -92,6 +92,13 @@ export default function CartScreen({ route, navigation }: any) {
   const getSelectedAddress = (): SavedAddress | string | undefined => pickSavedAddress(userProfile);
 
   const openAddressPicker = () => {
+    if (items.length > 0) {
+      Alert.alert(
+        "Address locked",
+        "You can't change the delivery address while items are in your cart. Clear the cart, or change the address from Home (that will clear your cart)."
+      );
+      return;
+    }
     setAddressPickerVisible(true);
   };
 
@@ -514,13 +521,22 @@ export default function CartScreen({ route, navigation }: any) {
             <View style={styles.sectionCard}>
               <View style={styles.deliveryHeader}>
                 <Text style={styles.sectionTitle}>Delivery Address</Text>
-                <TouchableOpacity onPress={openAddressPicker}>
-                  <Text style={styles.linkText}>{getSelectedAddress() ? "Change" : "Add Address"}</Text>
-                </TouchableOpacity>
+                {items.length > 0 ? (
+                  <Text style={styles.lockedAddressHint}>Locked</Text>
+                ) : (
+                  <TouchableOpacity onPress={getSelectedAddress() ? openAddressPicker : openAddAddress}>
+                    <Text style={styles.linkText}>{getSelectedAddress() ? "Change" : "Add Address"}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
               <Text style={styles.addressName}>{userProfile?.name || "Customer"}</Text>
               <Text style={styles.addressPhone}>{userProfile?.phone}</Text>
               <Text style={styles.addressText}>{formatAddress()}</Text>
+              {items.length > 0 ? (
+                <Text style={styles.addressLockNote}>
+                  Address can’t be changed with items in cart. Change it from Home to clear the cart and browse nearby shops.
+                </Text>
+              ) : null}
 
               {getSelectedAddress() && hasAddressPin ? (
                 <View style={styles.pinSavedRow}>
@@ -819,6 +835,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FF6B35"
   },
+  lockedAddressHint: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#9A8F85"
+  },
   addressName: {
     fontSize: 14,
     fontWeight: "700",
@@ -834,6 +855,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     color: "#6B5E55"
+  },
+  addressLockNote: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#8B6A54"
   },
   instructionsInput: {
     minHeight: 96,

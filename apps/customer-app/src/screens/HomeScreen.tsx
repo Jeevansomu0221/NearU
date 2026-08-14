@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,7 @@ import { RootStackParamList } from "../navigation/AppNavigator";
 import { getPartners } from "../api/menu.api";
 import { getMyOrders } from "../api/order.api";
 import { getUserProfile, type UserProfile } from "../api/user.api";
+import AddressPickerModal from "../components/AddressPickerModal";
 import { useCart } from "../context/CartContext";
 import {
   formatHomeDeliveryAddressLine,
@@ -108,9 +109,21 @@ const extractShops = (response: any): Shop[] => Array.isArray(response?.data) ? 
 
 const formatBadgeCount = (count: number) => (count > 99 ? "99+" : String(count));
 
+const getDeliveryAddressKey = (profile?: UserProfile | null) => {
+  const selected = getSelectedAddress(profile);
+  if (!selected) return "";
+  if (typeof selected === "string") return `text:${selected.trim().toLowerCase()}`;
+  if (selected._id) return `id:${selected._id}`;
+  const coordinates = parseAddressCoordinates(selected);
+  if (coordinates) {
+    return `pin:${coordinates.latitude.toFixed(5)},${coordinates.longitude.toFixed(5)}`;
+  }
+  return `line:${formatHomeDeliveryAddressLine(selected).toLowerCase()}`;
+};
+
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { getItemCount } = useCart();
+  const { clear: clearCart, getItemCount } = useCart();
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -120,9 +133,14 @@ export default function HomeScreen({ navigation }: Props) {
   );
   const [needsDeliveryAddress, setNeedsDeliveryAddress] = useState(false);
   const [deliveryAddressLine, setDeliveryAddressLine] = useState("");
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [addressPickerVisible, setAddressPickerVisible] = useState(false);
   const [activeOrderCount, setActiveOrderCount] = useState(0);
   const [vegMode, setVegMode] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
+  const deliveryAddressKeyRef = useRef("");
+  const cartApiRef = useRef({ clearCart, getItemCount });
+  cartApiRef.current = { clearCart, getItemCount };
 
   const loadOrderBadgeCount = useCallback(async () => {
     try {
@@ -139,6 +157,7 @@ export default function HomeScreen({ navigation }: Props) {
   }, []);
 
   const openAddDeliveryAddress = () => {
+    setAddressPickerVisible(false);
     navigation.navigate("Profile", { manageAddress: "add", returnAfterSave: true });
   };
 
@@ -147,6 +166,15 @@ export default function HomeScreen({ navigation }: Props) {
     const coordinates = parseAddressCoordinates(selected);
     const addressLine = formatHomeDeliveryAddressLine(selected);
     return { selected, coordinates, addressLine };
+  };
+
+  const clearCartIfAddressChanged = (nextAddressKey: string) => {
+    const previousKey = deliveryAddressKeyRef.current;
+    if (previousKey && nextAddressKey && previousKey !== nextAddressKey && cartApiRef.current.getItemCount() > 0) {
+      cartApiRef.current.clearCart();
+      Alert.alert("Cart cleared", "Your cart was cleared because the delivery address changed.");
+    }
+    deliveryAddressKeyRef.current = nextAddressKey;
   };
 
   const loadNearbyShops = useCallback(async (options?: { showRefresh?: boolean; silent?: boolean }) => {
@@ -165,7 +193,17 @@ export default function HomeScreen({ navigation }: Props) {
         throw new Error(profileResponse.message || "Could not load your delivery address.");
       }
 
-      const { coordinates, addressLine } = resolveDeliveryPin(profileResponse.data);
+      const profile = profileResponse.data;
+      setUserProfile(profile);
+
+      const { coordinates, addressLine } = resolveDeliveryPin(profile);
+      const addressKey = getDeliveryAddressKey(profile);
+      if (!silent) {
+        clearCartIfAddressChanged(addressKey);
+      } else if (addressKey) {
+        // Silent refresh: still clear cart if address changed elsewhere (e.g. Profile).
+        clearCartIfAddressChanged(addressKey);
+      }
       setDeliveryAddressLine(addressLine);
 
       if (!coordinates) {
@@ -174,7 +212,7 @@ export default function HomeScreen({ navigation }: Props) {
         setLocationMessage(
           addressLine
             ? "Your delivery address needs an exact map pin. Update it in Profile to see nearby shops."
-            : `Add a delivery address in Profile to see shops within ${NEARBY_RADIUS_KM} km.`
+            : `Add a delivery address to see shops within ${NEARBY_RADIUS_KM} km.`
         );
         return;
       }
@@ -208,6 +246,34 @@ export default function HomeScreen({ navigation }: Props) {
       setRefreshing(false);
     }
   }, []);
+
+  const openAddressPicker = () => {
+    if (!deliveryAddressLine) {
+      openAddDeliveryAddress();
+      return;
+    }
+    setAddressPickerVisible(true);
+  };
+
+  const handleAddressSelected = (profile: UserProfile) => {
+    setUserProfile(profile);
+    setAddressPickerVisible(false);
+
+    const addressKey = getDeliveryAddressKey(profile);
+    clearCartIfAddressChanged(addressKey);
+
+    const { coordinates, addressLine } = resolveDeliveryPin(profile);
+    setDeliveryAddressLine(addressLine);
+
+    if (!coordinates) {
+      setShops([]);
+      setNeedsDeliveryAddress(true);
+      setLocationMessage("Your delivery address needs an exact map pin. Update it in Profile to see nearby shops.");
+      return;
+    }
+
+    void loadNearbyShops();
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -310,15 +376,20 @@ export default function HomeScreen({ navigation }: Props) {
     <View style={styles.headerWrap}>
       <View style={styles.heroRow}>
         <View style={styles.heroTextBlock}>
-          <View style={styles.deliveryAddressBlock}>
+          <TouchableOpacity
+            style={styles.deliveryAddressBlock}
+            onPress={openAddressPicker}
+            activeOpacity={0.85}
+          >
             <Text style={styles.deliveryEyebrow}>Delivering to</Text>
             <View style={styles.deliveryAddressRow}>
               <Feather name="map-pin" size={14} color="#FF6B35" style={styles.deliveryPinIcon} />
               <Text style={styles.deliveryAddressText} numberOfLines={1}>
                 {deliveryAddressLine || "Add your delivery address"}
               </Text>
+              <Feather name="chevron-down" size={16} color="#5F534B" style={styles.deliveryChevron} />
             </View>
-          </View>
+          </TouchableOpacity>
           <View style={styles.heroStatsRow}>
             <View style={styles.heroStatBox}>
               <Text style={styles.heroStatValue}>{shops.length}</Text>
@@ -506,6 +577,13 @@ export default function HomeScreen({ navigation }: Props) {
         }
         showsVerticalScrollIndicator={false}
       />
+      <AddressPickerModal
+        visible={addressPickerVisible}
+        profile={userProfile}
+        onClose={() => setAddressPickerVisible(false)}
+        onSelected={handleAddressSelected}
+        onAddNew={openAddDeliveryAddress}
+      />
     </View>
   );
 }
@@ -565,6 +643,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: "800",
     color: "#1F1712"
+  },
+  deliveryChevron: {
+    marginLeft: 4
   },
   brandLogo: {
     width: 154,
