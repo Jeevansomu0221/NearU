@@ -15,6 +15,7 @@ import {
 import api from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { partnerTheme } from "../theme";
+import HighlightedOrderId from "../components/HighlightedOrderId";
 import { getReadyByLabelFromDate, getReadyByLabelFromMinutes } from "../utils/prepTime";
 
 interface OrderItem {
@@ -528,7 +529,12 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
     >
       <View style={[styles.header, isDarkMode && styles.cardDark]}>
         <View>
-          <Text style={[styles.orderId, isDarkMode && styles.textDark]}>Order #{order._id.slice(-6)}</Text>
+          <HighlightedOrderId
+            orderId={order._id}
+            prefix="Order #"
+            style={[styles.orderId, isDarkMode && styles.textDark]}
+            highlightStyle={styles.orderIdHighlight}
+          />
           <Text style={[styles.orderDate, isDarkMode && styles.mutedTextDark]}>{formatDate(order.createdAt)}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
@@ -627,7 +633,12 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
         <View style={[styles.infoCard, isDarkMode && styles.cardDark]}>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Order ID:</Text>
-            <Text style={[styles.infoValue, isDarkMode && styles.textDark]}>#{order._id.slice(-6).toUpperCase()}</Text>
+            <HighlightedOrderId
+              orderId={order._id}
+              prefix="#"
+              style={[styles.infoValue, isDarkMode && styles.textDark]}
+              highlightStyle={styles.orderIdHighlight}
+            />
           </View>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, isDarkMode && styles.mutedTextDark]}>Delivery Partner:</Text>
@@ -727,7 +738,12 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
       <Modal visible={Boolean(pendingStatus)} transparent animationType="fade" onRequestClose={() => !updating && setPendingStatus(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.confirmCard}>
-            <Text style={styles.confirmEyebrow}>Order #{order._id.slice(-6).toUpperCase()}</Text>
+            <HighlightedOrderId
+              orderId={order._id}
+              prefix="Order #"
+              style={styles.confirmEyebrow}
+              highlightStyle={styles.orderIdHighlight}
+            />
             <Text style={styles.confirmTitle}>{getPendingStatusTitle()}</Text>
             {getPendingStatusText() ? <Text style={styles.confirmText}>{getPendingStatusText()}</Text> : null}
             <View style={styles.confirmActions}>
@@ -815,6 +831,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: partnerTheme.colors.primaryDark
+  },
+  orderIdHighlight: {
+    color: partnerTheme.colors.primary,
+    fontWeight: "800"
   },
   orderDate: {
     fontSize: 14,

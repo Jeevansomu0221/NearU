@@ -37,6 +37,7 @@ import {
   type PayoutSummaryRow,
   type WithdrawalRequestRecord
 } from "../api/admin.api";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -659,7 +660,7 @@ export default function Payouts() {
               columns={[
                 {
                   title: "Order",
-                  render: (_, order) => `#${order._id.slice(-6)}`
+                  render: (_, order) => formatPublicOrderId(order._id)
                 },
                 {
                   title: "Delivered",

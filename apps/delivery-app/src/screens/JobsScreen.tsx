@@ -24,6 +24,8 @@ import { formatAddress } from "../utils/address";
 import { getRiderPickupStatusMessage } from "../utils/prepTime";
 import { getCurrentRiderLocation, subscribeRiderLocation } from "../utils/riderLocation";
 import { setAvailableJobsTabFocused, syncKnownAvailableJobIds } from "../services/availableJobsRegistry";
+import { formatPublicOrderId } from "../utils/publicOrderId";
+import HighlightedOrderId from "../components/HighlightedOrderId";
 
 const AVAILABILITY_STORAGE_KEY = "driverAvailability";
 const GREEN_PRIMARY = "#16A34A";
@@ -279,7 +281,7 @@ export default function JobsScreen({ navigation }: any) {
       ? myOrdersResponse.data?.find((order) => order._id === activeOrderId) ||
         myOrdersResponse.data?.find((order) => ["ASSIGNED", "PICKED_UP"].includes(order.status))
       : null;
-    const orderLabel = activeOrder?._id ? ` #${activeOrder._id.slice(-6).toUpperCase()}` : "";
+    const orderLabel = activeOrder?._id ? ` ${formatPublicOrderId(activeOrder._id)}` : "";
     Alert.alert(
       "Finish current delivery",
       `You already have an active delivery${orderLabel}. Complete it before accepting another job.`,
@@ -600,7 +602,12 @@ export default function JobsScreen({ navigation }: any) {
               <View style={styles.confirmMeta}>
                 <View style={styles.confirmMetaRow}>
                   <Text style={styles.confirmMetaLabel}>Order</Text>
-                  <Text style={styles.confirmMetaValue}>#{selectedJobAction.job._id.slice(-6).toUpperCase()}</Text>
+                  <HighlightedOrderId
+                    orderId={selectedJobAction.job._id}
+                    prefix="#"
+                    style={styles.confirmMetaValue}
+                    highlightStyle={{ color: GREEN_DARK, fontWeight: "800" }}
+                  />
                 </View>
                 <View style={styles.confirmMetaRow}>
                   <Text style={styles.confirmMetaLabel}>{selectedJobAction.job.isBundledDelivery ? "Pickups" : "Restaurant"}</Text>

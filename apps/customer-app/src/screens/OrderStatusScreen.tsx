@@ -21,6 +21,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { cancelOrder, getOrderDetails, submitOrderRating } from "../api/order.api";
 import type { Order } from "../api/order.api";
 import { getPublicShopName, formatPaymentMethodLabel } from "../utils/display";
+import HighlightedOrderId from "../components/HighlightedOrderId";
 import KeyboardSafeScreen from "../components/KeyboardSafeScreen";
 
 type TimelineStep = {
@@ -508,7 +509,12 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       <View style={styles.heroCard}>
         <View style={styles.heroTopRow}>
           <View>
-            <Text style={styles.orderEyebrow}>Order #{order._id.slice(-6)}</Text>
+            <HighlightedOrderId
+              orderId={order._id}
+              prefix="Order #"
+              style={styles.orderEyebrow}
+              highlightStyle={{ color: "#FF6B35", fontWeight: "800" }}
+            />
             <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusTheme.bg }]}>

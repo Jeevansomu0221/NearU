@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getPartnerOrders, type Order } from "@vyaha/api-client";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 type FilterKey = "all" | "action" | "preparing" | "delivery" | "completed";
 
@@ -160,7 +161,7 @@ export default function OrdersPage() {
             {visibleOrders.map((order) => (
               <Link key={order._id} className="order-card" to={`/orders/${order._id}`}>
                 <div className="order-card__main">
-                  <strong>#{order._id.slice(-8).toUpperCase()}</strong>
+                  <strong>{formatPublicOrderId(order._id)}</strong>
                   <p>{itemSummary(order)}</p>
                   <span>{customerName(order)} · {new Date(order.createdAt).toLocaleString("en-IN", {
                     day: "numeric",

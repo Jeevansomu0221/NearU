@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "../utils/address";
 import { getRiderPickupStatusMessage } from "../utils/prepTime";
+import HighlightedOrderId from "../components/HighlightedOrderId";
 
 export default function MyJobsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
@@ -119,7 +120,16 @@ export default function MyJobsScreen({ navigation, route }: any) {
       <View style={styles.jobHeader}>
         <View>
           <Text style={styles.orderId}>
-            {item.isBundledDelivery ? "Bundled Delivery" : `Order #${item._id?.slice(-6).toUpperCase() || "N/A"}`}
+            {item.isBundledDelivery ? (
+              "Bundled Delivery"
+            ) : (
+              <HighlightedOrderId
+                orderId={item._id}
+                prefix="Order #"
+                style={styles.orderId}
+                highlightStyle={{ color: "#15803D", fontWeight: "800" }}
+              />
+            )}
           </Text>
           <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
         </View>

@@ -36,6 +36,8 @@ import {
 } from "../api/support.api";
 import { buildLegalUrl } from "../constants/legal";
 import { getPublicShopName } from "../utils/display";
+import HighlightedOrderId from "../components/HighlightedOrderId";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 import { unregisterPushNotifications } from "../services/notifications";
 import AddressFormFields from "../components/AddressFormFields";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
@@ -1247,7 +1249,12 @@ export default function ProfileScreen({ navigation, route }: any) {
                       >
                         <View style={styles.orderTopRow}>
                           <View>
-                            <Text style={styles.orderId}>Order #{order._id.slice(-6)}</Text>
+                            <HighlightedOrderId
+                              orderId={order._id}
+                              prefix="Order #"
+                              style={styles.orderId}
+                              highlightStyle={{ color: "#FF6B35", fontWeight: "800" }}
+                            />
                             <Text style={styles.orderPartner}>
                               {getPublicShopName((order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant")}
                             </Text>
@@ -1265,7 +1272,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                             <Text style={styles.orderActionLink}>Live tracking</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
-                            onPress={() => openSupport("report", `Issue with order #${order._id.slice(-6)}`)}
+                            onPress={() => openSupport("report", `Issue with order ${formatPublicOrderId(order._id)}`)}
                           >
                             <Text style={styles.orderActionLink}>Report issue</Text>
                           </TouchableOpacity>

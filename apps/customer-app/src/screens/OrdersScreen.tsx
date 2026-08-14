@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { getMyOrders } from "../api/order.api";
 import type { Order } from "../api/order.api";
+import HighlightedOrderId from "../components/HighlightedOrderId";
 import { getPublicShopName } from "../utils/display";
 
 export default function OrdersScreen({ navigation }: any) {
@@ -115,7 +116,12 @@ export default function OrdersScreen({ navigation }: any) {
     >
       <View style={styles.orderHeader}>
         <View>
-          <Text style={styles.orderId}>Order #{item._id.slice(-6)}</Text>
+          <HighlightedOrderId
+            orderId={item._id}
+            prefix="Order #"
+            style={styles.orderId}
+            highlightStyle={{ color: "#FF6B35", fontWeight: "800" }}
+          />
           <Text style={styles.orderDate}>{formatDate(item.createdAt)}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>

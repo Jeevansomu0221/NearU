@@ -2,6 +2,7 @@ import { Card, Col, Row, Skeleton, Statistic, Table, Tag, Typography } from "ant
 import { DollarOutlined, ShopOutlined, ShoppingCartOutlined, WarningOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { getDashboardStats, getOrders, getPartners, type OrderRecord, type PartnerRecord } from "../api/admin.api";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -121,7 +122,7 @@ export default function Dashboard() {
                 {
                   title: "Order",
                   dataIndex: "_id",
-                  render: (value: string) => `#${value.slice(-6)}`
+                  render: (value: string) => formatPublicOrderId(value)
                 },
                 {
                   title: "Customer",

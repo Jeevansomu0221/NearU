@@ -7,6 +7,7 @@ import {
   updateSupportTicketStatus,
   type SupportTicketRecord
 } from "../api/admin.api";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 const statusColors: Record<SupportTicketRecord["status"], string> = {
   OPEN: "red",
@@ -199,7 +200,7 @@ export default function Support() {
               {selectedTicket.orderId ? (
                 <Card size="small" style={{ background: "#f8fafc" }}>
                   <Typography.Text strong>Linked order: </Typography.Text>
-                  <Typography.Text>#{selectedTicket.orderId._id.slice(-6)}</Typography.Text>
+                  <Typography.Text>{formatPublicOrderId(selectedTicket.orderId._id)}</Typography.Text>
                   <Typography.Text type="secondary">
                     {" "}({selectedTicket.orderId.status || "Unknown"} - Rs {selectedTicket.orderId.grandTotal || 0})
                   </Typography.Text>

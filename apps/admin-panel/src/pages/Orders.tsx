@@ -3,6 +3,7 @@ import { SearchOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getOrders, updateOrderStatus, type OrderRecord } from "../api/admin.api";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 const ORDER_STATUSES = [
   "PENDING",
@@ -83,7 +84,7 @@ export default function Orders() {
               title: "Order",
               render: (_, order) => (
                 <div>
-                  <Typography.Text strong>#{order._id.slice(-6)}</Typography.Text>
+                  <Typography.Text strong>{formatPublicOrderId(order._id)}</Typography.Text>
                   <div>
                     <Typography.Text type="secondary">
                       {new Date(order.createdAt).toLocaleString()}

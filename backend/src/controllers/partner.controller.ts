@@ -11,6 +11,7 @@ import { applyPartnerSuspensionLift } from "../utils/suspension.util";
 import MenuItem from "../models/MenuItem.model";
 import { readPartnerKycFromUser } from "./partnerKyc.controller";
 import { resolveAddressCoordinates } from "../services/geocoding.service";
+import { getPublicOrderId } from "../utils/publicOrderId";
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
@@ -1333,7 +1334,7 @@ export const getMyPartnerReviews = async (req: Request, res: Response) => {
       return {
         _id: order._id,
         orderId: order._id,
-        orderNumber: order._id?.toString().slice(-6).toUpperCase(),
+        orderNumber: getPublicOrderId(order._id),
         rating: overallExperience,
         foodQuality,
         packaging,

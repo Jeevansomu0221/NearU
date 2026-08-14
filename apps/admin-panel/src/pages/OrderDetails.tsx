@@ -3,6 +3,7 @@ import { Button, Card, Col, Descriptions, Row, Skeleton, Space, Table, Tag, Typo
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getOrder, type OrderRecord } from "../api/admin.api";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 export default function OrderDetails() {
   const { orderId } = useParams();
@@ -46,7 +47,7 @@ export default function OrderDetails() {
         <Col xs={24} xl={14}>
           <Card
             bordered={false}
-            title={`Order #${order._id.slice(-6)}`}
+            title={`Order ${formatPublicOrderId(order._id)}`}
             extra={<Tag color={order.status === "DELIVERED" ? "green" : "blue"}>{order.status}</Tag>}
           >
             <Descriptions column={1} size="small">

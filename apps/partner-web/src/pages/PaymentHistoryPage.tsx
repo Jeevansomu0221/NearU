@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getPartnerWallet, type PartnerWallet } from "@vyaha/api-client";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 export default function PaymentHistoryPage() {
   const [wallet, setWallet] = useState<PartnerWallet | null>(null);
@@ -40,7 +41,7 @@ export default function PaymentHistoryPage() {
         <tbody>
           {wallet.recentPendingPayoutOrders.map((o) => (
             <tr key={o._id}>
-              <td>{o._id.slice(-8)}</td>
+              <td>{formatPublicOrderId(o._id)}</td>
               <td>₹{o.grandTotal}</td>
               <td>{new Date(o.deliveredAt).toLocaleDateString()}</td>
             </tr>

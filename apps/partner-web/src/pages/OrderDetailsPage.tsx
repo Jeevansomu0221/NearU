@@ -6,6 +6,7 @@ import {
   updatePartnerOrderStatus,
   type Order
 } from "@vyaha/api-client";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 const MIN_PREP_TIME_MINUTES = 5;
 const MAX_PREP_TIME_MINUTES = 90;
@@ -66,7 +67,7 @@ export default function OrderDetailsPage() {
       <button className="btn secondary" onClick={() => navigate("/orders")}>
         ← Back
       </button>
-      <h2>Order {order._id.slice(-8)}</h2>
+      <h2>Order {formatPublicOrderId(order._id)}</h2>
       <div className="card">
         <p>
           <strong>Status:</strong> {order.status}

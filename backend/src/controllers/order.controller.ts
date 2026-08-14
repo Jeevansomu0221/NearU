@@ -27,6 +27,7 @@ import {
   isRiderNearShop,
   resolveOrderShopCoordinates
 } from "../services/deliveryMatching.service";
+import { getPublicOrderId } from "../utils/publicOrderId";
 
 const isConsumerAppRole = (role?: string) =>
   !!role && CONSUMER_APP_ROLES.some((allowedRole) => allowedRole === role.toLowerCase());
@@ -1677,7 +1678,7 @@ export const updateDeliveryStatus = async (req: AuthRequest, res: Response) => {
             balanceDelta: orderCodAmount,
             status: "POSTED",
             orderId: deliveryOrder._id,
-            note: `COD cash collected for order #${String(deliveryOrder._id).slice(-6)}`
+            note: `COD cash collected for order ${getPublicOrderId(deliveryOrder._id)}`
           });
 
           deliveryOrder.codCollection = {
@@ -2010,7 +2011,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
           paymentUrl: session?.paymentUrl,
           amount: session?.amount,
           manualConfirmRequired: false,
-          orderRef: String(order._id).slice(-6).toUpperCase(),
+          orderRef: getPublicOrderId(order._id),
           payeeName: config.platformUpiPayeeName,
           paid: true
         },
@@ -2038,7 +2039,7 @@ export const createCodUpiCollection = async (req: AuthRequest, res: Response) =>
 
     const totalCodAmount = codOrders.reduce((sum: number, deliveryOrder: any) => sum + Number(deliveryOrder.grandTotal || 0), 0);
     const amountPaise = Math.round(totalCodAmount * 100);
-    const orderRef = String(order._id).slice(-6).toUpperCase();
+    const orderRef = getPublicOrderId(order._id);
 
     // Only reuse native UPI / Razorpay QR sessions. Skip old https payment-link
     // QRs that open the Razorpay webpage instead of PhonePe.

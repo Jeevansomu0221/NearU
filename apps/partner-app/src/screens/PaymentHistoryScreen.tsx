@@ -18,6 +18,7 @@ import {
 } from "../api/partner.api";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import type { PartnerTheme } from "../theme";
+import HighlightedOrderId from "../components/HighlightedOrderId";
 
 type Props = {
   route?: {
@@ -88,7 +89,12 @@ export default function PaymentHistoryScreen({ route }: Props) {
         <Ionicons name="receipt-outline" size={18} color="#60A5FA" />
       </View>
       <View style={styles.historyCopy}>
-        <Text style={styles.historyTitle}>Order #{order._id.slice(-6).toUpperCase()}</Text>
+        <HighlightedOrderId
+          orderId={order._id}
+          prefix="Order #"
+          style={styles.historyTitle}
+          highlightStyle={{ fontWeight: "800", color: "#0F9D58" }}
+        />
         <Text style={styles.historySub}>Delivered {formatDateTime(order.deliveredAt)}</Text>
       </View>
       <Text style={styles.historyAmount}>{formatMoney(order.amount)}</Text>

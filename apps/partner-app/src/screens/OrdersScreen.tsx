@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { partnerTheme, type PartnerTheme } from "../theme";
+import HighlightedOrderId from "../components/HighlightedOrderId";
+import { getPublicOrderId } from "../utils/publicOrderId";
 
 interface Order {
   _id: string;
@@ -230,7 +232,12 @@ export default function OrdersScreen({ navigation }: any) {
       <TouchableOpacity style={styles.orderCard} onPress={() => navigation.navigate("OrderDetails", { orderId: item._id })}>
         <View style={styles.orderHeader}>
           <View>
-            <Text style={styles.orderId}>Order #{item._id.slice(-6)}</Text>
+            <HighlightedOrderId
+              orderId={item._id}
+              prefix="Order #"
+              style={styles.orderId}
+              highlightStyle={styles.orderIdHighlight}
+            />
             <Text style={styles.timeText}>{formatDate(item.createdAt)}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusTheme.bg }]}>
@@ -240,8 +247,15 @@ export default function OrdersScreen({ navigation }: any) {
 
         <View style={styles.handoffCard}>
           <Text style={styles.handoffLabel}>Parcel handoff</Text>
-          <Text style={styles.handoffText}>Order ID #{item._id.slice(-6).toUpperCase()}</Text>
-          <Text style={styles.handoffSubtext}>{getDeliveryPartnerLabel(item.deliveryPartnerId)}</Text>
+          <HighlightedOrderId
+            orderId={item._id}
+            prefix="Order ID #"
+            style={styles.handoffText}
+            highlightStyle={styles.orderIdHighlight}
+          />
+          <Text style={styles.handoffSubtext}>
+            Ask rider for last 4: {getPublicOrderId(item._id).slice(-4)} · {getDeliveryPartnerLabel(item.deliveryPartnerId)}
+          </Text>
         </View>
 
         {item.items?.slice(0, 2).map((orderItem, idx) => (
@@ -562,6 +576,10 @@ const createStyles = (partnerTheme: PartnerTheme) => StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: partnerTheme.colors.primaryDark
+  },
+  orderIdHighlight: {
+    color: partnerTheme.colors.primary,
+    fontWeight: "800"
   },
   timeText: {
     fontSize: 12,

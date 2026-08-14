@@ -10,6 +10,7 @@ import {
   filterNearbyDeliveryUserIds,
   resolveOrderShopCoordinates
 } from "./deliveryMatching.service";
+import { formatPublicOrderId, formatPublicOrderIdWithLastFour } from "../utils/publicOrderId";
 
 export type NotificationApp = "customer" | "partner" | "delivery";
 
@@ -385,7 +386,7 @@ export const notifyPartnerNewOrder = async (order: any) => {
   await sendNotificationToUsers([partnerUserId], {
     app: "partner",
     title: "New order received",
-    body: `Order #${idString(order._id).slice(-6)} is waiting for acceptance at ${shopName}.`,
+    body: `Order ${formatPublicOrderId(order._id)} is waiting for acceptance at ${shopName}.`,
     data: {
       type: "NEW_ORDER",
       orderId: idString(order._id),
@@ -398,7 +399,7 @@ export const notifyCustomerOrderStatus = async (order: any, status: string) => {
   const orderId = idString(order._id);
   const copy = CUSTOMER_ORDER_COPY[status] || {
     title: "Order update",
-    body: `Order #${orderId.slice(-6)} status changed to ${status}.`
+    body: `Order ${formatPublicOrderId(orderId)} status changed to ${status}.`
   };
   let body =
     status === "CANCELLED" || status === "REJECTED"
@@ -514,7 +515,7 @@ export const notifyAssignedRiderFoodReady = async (order: any) => {
   await sendNotificationToUsers(allowedUserIds, {
     app: "delivery",
     title: "Order ready for pickup",
-    body: `Order #${orderId.slice(-6)} is ready for pickup.`,
+    body: `Order ${formatPublicOrderIdWithLastFour(orderId)} is ready for pickup.`,
     data: {
       type: "ORDER_FOOD_READY",
       orderId,
@@ -551,7 +552,7 @@ export const notifyDeliveryAssigned = async (order: any, options?: { notifyCusto
     sendNotificationToUsers([(partner as any)?.userId], {
       app: "partner",
       title: "Delivery partner assigned",
-      body: `Order #${orderId.slice(-6)} has a delivery partner.`,
+      body: `Order ${formatPublicOrderId(orderId)} has a delivery partner.`,
       data: {
         type: "ORDER_STATUS",
         orderId,
@@ -568,8 +569,8 @@ export const notifyAssignedDeliveryPartner = async (order: any) => {
   const orderId = idString(order._id);
   const readyBy = formatReadyByClock(order.estimatedReadyAt);
   const body = readyBy
-    ? `Order #${orderId.slice(-6)} assigned. Order will be ready by ${readyBy}.`
-    : `Order #${orderId.slice(-6)} has been assigned to you.`;
+    ? `Order ${formatPublicOrderIdWithLastFour(orderId)} assigned. Order will be ready by ${readyBy}.`
+    : `Order ${formatPublicOrderIdWithLastFour(orderId)} has been assigned to you.`;
 
   await sendNotificationToUsers(allowedUserIds, {
     app: "delivery",
@@ -596,7 +597,7 @@ export const notifyPartnerDeliveryStatus = async (order: any, status: string) =>
   await sendNotificationToUsers([(partner as any)?.userId], {
     app: "partner",
     title: titles[status] || "Order update",
-    body: `Order #${idString(order._id).slice(-6)} status changed to ${status}.`,
+    body: `Order ${formatPublicOrderId(order._id)} status changed to ${status}.`,
     data: {
       type: "ORDER_STATUS",
       orderId: idString(order._id),

@@ -19,6 +19,7 @@ import {
   type TextInput as TextInputType
 } from "react-native";
 import { getImagePicker } from "../utils/imagePicker";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 import { uploadMultipart } from "../api/client";
 import {
   getCashLedger,
@@ -300,8 +301,8 @@ export default function EarningsScreen({ navigation }: any) {
         const tipAmount = getOrderTipAmount(order);
         const earnings = getOrderRiderEarnings(order);
         const orderLabel = order.isBundledDelivery
-          ? `Bundled #${order._id.slice(-6).toUpperCase()}`
-          : `Order #${order._id.slice(-6).toUpperCase()}`;
+          ? `Bundled ${formatPublicOrderId(order._id)}`
+          : `Order ${formatPublicOrderId(order._id)}`;
 
         return {
           id: order._id,

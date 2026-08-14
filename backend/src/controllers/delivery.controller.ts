@@ -12,6 +12,7 @@ import {
   type SuspensionType
 } from "../utils/suspension.util";
 import { getRiderOrderEarnings, getRiderWalletSummary } from "../services/payout.service";
+import { getPublicOrderId } from "../utils/publicOrderId";
 
 interface AuthRequest extends Request {
   user?: {
@@ -751,7 +752,7 @@ export const getMyDeliveryReviews = async (req: AuthRequest, res: Response) => {
       return {
         _id: order._id,
         orderId: order._id,
-        orderNumber: order._id?.toString().slice(-6).toUpperCase(),
+        orderNumber: getPublicOrderId(order._id),
         rating,
         deliverySpeed,
         partnerBehavior,

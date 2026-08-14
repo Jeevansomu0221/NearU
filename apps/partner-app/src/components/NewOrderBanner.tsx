@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { getReadyByLabelFromMinutes } from "../utils/prepTime";
+import HighlightedOrderId from "./HighlightedOrderId";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const MIN_PREP_TIME_MINUTES = 5;
@@ -124,7 +125,13 @@ export default function NewOrderBanner({
           <View style={styles.body}>
             <Text style={styles.eyebrow}>New order received</Text>
             <Text style={styles.title} numberOfLines={1}>
-              #{orderId.slice(-6).toUpperCase()} - Rs {grandTotal}
+              <HighlightedOrderId
+                orderId={orderId}
+                prefix="#"
+                style={styles.title}
+                highlightStyle={{ color: "#BBF7D0", fontWeight: "800" }}
+              />
+              <Text style={styles.title}> - Rs {grandTotal}</Text>
             </Text>
             <Text style={styles.subtitle}>
               {itemCount} item{itemCount === 1 ? "" : "s"} waiting for accept / reject

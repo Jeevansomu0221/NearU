@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getPartnerOrders, updatePartnerOrderStatus } from "@vyaha/api-client";
+import { formatPublicOrderId } from "../utils/publicOrderId";
 
 export function usePartnerOrderWatcher(enabled: boolean) {
   const seen = useRef<Set<string>>(new Set());
@@ -16,7 +17,7 @@ export function usePartnerOrderWatcher(enabled: boolean) {
             seen.current.add(order._id);
             if ("Notification" in window && Notification.permission === "granted") {
               new Notification("New Vyaha order", {
-                body: `Order ${order._id.slice(-6)} needs your action`
+                body: `Order ${formatPublicOrderId(order._id)} needs your action`
               });
             }
           }

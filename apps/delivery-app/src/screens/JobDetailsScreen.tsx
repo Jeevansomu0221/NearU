@@ -34,8 +34,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import DeliveryJobMap from "../components/DeliveryJobMap";
 import SwipeConfirm from "../components/SwipeConfirm";
+import HighlightedOrderId from "../components/HighlightedOrderId";
 import type { MapPin } from "../utils/mapCoordinates";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
+import { formatPublicOrderId, getPublicOrderId } from "../utils/publicOrderId";
 import {
   getLatLngFromMapsLink,
   getLatLngFromPoint,
@@ -1063,7 +1065,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const bottomPad = Math.max(insets.bottom, 12);
   const orderDisplayId = job.isBundledDelivery
     ? "Bundled"
-    : `#${job._id.slice(-6).toUpperCase()}`;
+    : formatPublicOrderId(job._id);
   const pickupStatusMessage = getRiderPickupStatusMessage(
     isPickupPhase ? activePickupStop?.deliveryReadyAt ?? job.deliveryReadyAt : job.deliveryReadyAt,
     isPickupPhase ? activePickupStop?.estimatedReadyAt ?? job.estimatedReadyAt : job.estimatedReadyAt,
@@ -1088,7 +1090,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const renderOrderMetaLink = () => (
     <View style={styles.orderMetaRight}>
-      <Text style={styles.orderMetaNumber}>{orderDisplayId}</Text>
+      {job.isBundledDelivery ? (
+        <Text style={styles.orderMetaNumber}>Bundled</Text>
+      ) : (
+        <HighlightedOrderId
+          orderId={job._id}
+          prefix="#"
+          style={styles.orderMetaNumber}
+          highlightStyle={styles.orderIdHighlight}
+        />
+      )}
       <TouchableOpacity
         onPress={() => setReceiptVisible(true)}
         hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
@@ -1102,7 +1113,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     <>
       <View style={styles.receiptHeader}>
         <Text style={styles.receiptTitle}>
-          {job.isBundledDelivery ? "Bundled Delivery" : `Order ${orderDisplayId}`}
+          {job.isBundledDelivery ? (
+            "Bundled Delivery"
+          ) : (
+            <HighlightedOrderId
+              orderId={job._id}
+              prefix="Order #"
+              style={styles.receiptTitle}
+              highlightStyle={styles.orderIdHighlight}
+            />
+          )}
         </Text>
         <Text style={styles.receiptTime}>
           {formatDate(job.createdAt)} • {formatTime(job.createdAt)}
@@ -1335,7 +1355,16 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
         <View style={styles.deliverOrderMeta}>
           <Text style={styles.deliverOrderId}>
-            {job.isBundledDelivery ? "Bundled Delivery" : `Order ${orderDisplayId}`}
+            {job.isBundledDelivery ? (
+              "Bundled Delivery"
+            ) : (
+              <HighlightedOrderId
+                orderId={job._id}
+                prefix="Order #"
+                style={styles.deliverOrderId}
+                highlightStyle={styles.orderIdHighlight}
+              />
+            )}
           </Text>
           <Text style={styles.deliverOrderWhen}>
             {formatDate(job.createdAt)}  ·  {formatTime(job.createdAt)}
@@ -1464,8 +1493,22 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             <View style={styles.orderHeader}>
               <View>
                 <Text style={styles.orderNumber}>
-                  {job.isBundledDelivery ? "Bundled Delivery" : `Order ${orderDisplayId}`}
+                  {job.isBundledDelivery ? (
+                    "Bundled Delivery"
+                  ) : (
+                    <HighlightedOrderId
+                      orderId={job._id}
+                      prefix="Order #"
+                      style={styles.orderNumber}
+                      highlightStyle={styles.orderIdHighlight}
+                    />
+                  )}
                 </Text>
+                {!job.isBundledDelivery ? (
+                  <Text style={styles.orderLastFourHint}>
+                    Tell restaurant last 4: {getPublicOrderId(job._id).slice(-4)}
+                  </Text>
+                ) : null}
                 <Text style={styles.orderTime}>
                   {formatDate(job.createdAt)} • {formatTime(job.createdAt)}
                 </Text>
@@ -1694,7 +1737,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               <View style={styles.upiTopBarCopy}>
                 <Text style={styles.upiHeaderTitle}>Scan & pay Vyaha</Text>
                 <Text style={styles.upiMetaLine}>
-                  Rs {codUpiSession?.amount || job?.grandTotal} · Ref {codUpiSession?.orderRef || orderId.slice(-6).toUpperCase()}
+                  Rs {codUpiSession?.amount || job?.grandTotal} · Ref {codUpiSession?.orderRef || getPublicOrderId(orderId)}
                 </Text>
               </View>
               <TouchableOpacity
@@ -2321,6 +2364,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#374151',
   },
+  orderIdHighlight: {
+    color: '#15803D',
+    backgroundColor: '#DCFCE7',
+  },
   orderMetaLink: {
     fontSize: 13,
     fontWeight: '600',
@@ -2562,6 +2609,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#333',
+  },
+  orderLastFourHint: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#15803D',
   },
   statusBadge: {
     paddingHorizontal: 12,
