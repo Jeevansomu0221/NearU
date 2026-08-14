@@ -154,6 +154,9 @@ const isGeneratedCustomerName = (value?: string) => {
 
 export default function ProfileScreen({ navigation, route }: any) {
   const forceComplete = Boolean(route?.params?.forceComplete);
+  const manageAddress = route?.params?.manageAddress;
+  const returnAfterSave = Boolean(route?.params?.returnAfterSave);
+  const returnTo = route?.params?.returnTo as "Cart" | undefined;
   const insets = useSafeAreaInsets();
   const footerPaddingBottom = Math.max(insets.bottom, Platform.OS === "ios" ? 24 : 16);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -202,6 +205,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [addressLatitude, setAddressLatitude] = useState<number | undefined>(undefined);
   const [addressLongitude, setAddressLongitude] = useState<number | undefined>(undefined);
   const [locatingCurrentLocation, setLocatingCurrentLocation] = useState(false);
+  const openedAddAddressRef = useRef(false);
 
   const hydrateAddressForm = (address?: SavedAddress | null, fallbackName = "") => {
     setAddressLabel(address?.label || "Home");
@@ -260,7 +264,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
       hydrateForm(profileResponse.data);
 
-      if (!forceComplete) {
+      if (!forceComplete && manageAddress !== "add") {
         const ordersResponse = await getMyOrders();
         if (ordersResponse.success && ordersResponse.data) {
           setOrders(ordersResponse.data);
@@ -281,6 +285,15 @@ export default function ProfileScreen({ navigation, route }: any) {
   useEffect(() => {
     loadProfile();
   }, []);
+
+  useEffect(() => {
+    if (manageAddress !== "add" || loading || !profile || openedAddAddressRef.current) return;
+    openedAddAddressRef.current = true;
+    startAddAddress();
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, addressesY - 12), animated: true });
+    }, 250);
+  }, [addressesY, loading, manageAddress, profile]);
 
   const resetForm = () => {
     if (profile) {
@@ -539,6 +552,12 @@ export default function ProfileScreen({ navigation, route }: any) {
 
       if (forceComplete) {
         setRegistrationSuccessVisible(true);
+      } else if (returnAfterSave) {
+        if (returnTo) {
+          navigation.navigate(returnTo);
+        } else if (navigation.canGoBack()) {
+          navigation.goBack();
+        }
       } else {
         Alert.alert("Profile Saved", "Your delivery address and map pin have been saved.");
       }

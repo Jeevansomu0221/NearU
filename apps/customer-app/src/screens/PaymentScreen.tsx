@@ -19,6 +19,7 @@ import { cancelOrder, createShopOrder } from "../api/order.api";
 import { checkPaymentStatus, createRazorpayOrder, verifyPayment } from "../api/payment.api";
 import SuccessCelebration from "../components/SuccessCelebration";
 import UpiAppPicker from "../components/UpiAppPicker";
+import AddressPickerModal from "../components/AddressPickerModal";
 import {
   describeRazorpayPaymentError,
   isRazorpayPaymentCancelled,
@@ -150,6 +151,7 @@ export default function PaymentScreen({ route, navigation }: any) {
   const [retryPaymentAfterUpiPick, setRetryPaymentAfterUpiPick] = useState(false);
   const [resumePaymentAfterUpiPick, setResumePaymentAfterUpiPick] = useState(false);
   const [preferredUpiAppId, setPreferredUpiAppId] = useState<string | undefined>();
+  const [addressPickerVisible, setAddressPickerVisible] = useState(false);
 
   const paymentMethods = [
     { id: "CASH_ON_DELIVERY", name: "Pay on Delivery", icon: "Cash" },
@@ -671,7 +673,7 @@ export default function PaymentScreen({ route, navigation }: any) {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeadRow}>
             <Text style={styles.sectionTitle}>Delivery details</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+            <TouchableOpacity onPress={() => setAddressPickerVisible(true)}>
               <Text style={styles.linkText}>Change</Text>
             </TouchableOpacity>
           </View>
@@ -940,6 +942,25 @@ export default function PaymentScreen({ route, navigation }: any) {
           </View>
         </View>
       </Modal>
+      <AddressPickerModal
+        visible={addressPickerVisible}
+        profile={userProfile}
+        onClose={() => setAddressPickerVisible(false)}
+        onSelected={() => {
+          setAddressPickerVisible(false);
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          }
+        }}
+        onAddNew={() => {
+          setAddressPickerVisible(false);
+          navigation.navigate("Profile", {
+            manageAddress: "add",
+            returnAfterSave: true,
+            returnTo: "Cart"
+          });
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

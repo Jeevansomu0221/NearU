@@ -116,7 +116,7 @@ export type RootStackParamList = {
   Cart: {
     shop?: Shop;
   } | undefined;
-  Profile: { forceComplete?: boolean } | undefined;
+  Profile: { forceComplete?: boolean; manageAddress?: "add"; returnAfterSave?: boolean; returnTo?: "Cart" } | undefined;
   OrderStatus: {
     orderId: string;
   };
@@ -281,7 +281,11 @@ export default function AppNavigator() {
         component={ProfileScreen}
         initialParams={{ forceComplete: initialRoute === 'Profile' }}
         options={({ navigation, route }) => ({
-          title: route.params?.forceComplete ? 'Basic details' : 'My Profile',
+          title: route.params?.forceComplete
+            ? "Basic details"
+            : route.params?.manageAddress === "add"
+              ? "Add address"
+              : "My Profile",
           headerLeft: route.params?.forceComplete
             ? () => null
             : () => (

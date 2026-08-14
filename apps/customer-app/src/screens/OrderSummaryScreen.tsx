@@ -12,16 +12,22 @@ import {
 import { useCart } from "../context/CartContext";
 import { getUserProfile } from "../api/user.api";
 import { getSelectedAddress as pickSavedAddress } from "../utils/address";
+import AddressPickerModal from "../components/AddressPickerModal";
 
 export default function OrderSummaryScreen({ route, navigation }: any) {
   const { shop } = route.params;
   const { items, getCartTotal } = useCart();
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [addressPickerVisible, setAddressPickerVisible] = useState(false);
 
   useEffect(() => {
     loadUserProfile();
-  }, []);
+    const unsubscribe = navigation.addListener("focus", () => {
+      loadUserProfile();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const loadUserProfile = async () => {
     try {
@@ -82,7 +88,7 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
           { text: "Cancel", style: "cancel" },
           { 
             text: "Add Address", 
-            onPress: () => navigation.navigate("Profile")
+            onPress: () => navigation.navigate("Profile", { manageAddress: "add", returnAfterSave: true })
           }
         ]
       );
@@ -134,7 +140,7 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+            <TouchableOpacity onPress={() => setAddressPickerVisible(true)}>
               <Text style={styles.changeText}>Change</Text>
             </TouchableOpacity>
           </View>
@@ -150,7 +156,7 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
               <Text style={styles.noAddressText}>No address saved</Text>
               <TouchableOpacity 
                 style={styles.addAddressButton}
-                onPress={() => navigation.navigate("Profile")}
+                onPress={() => setAddressPickerVisible(true)}
               >
                 <Text style={styles.addAddressButtonText}>Add Address</Text>
               </TouchableOpacity>
@@ -223,6 +229,19 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
       </View>
+      <AddressPickerModal
+        visible={addressPickerVisible}
+        profile={userProfile}
+        onClose={() => setAddressPickerVisible(false)}
+        onSelected={(profile) => {
+          setUserProfile(profile);
+          setAddressPickerVisible(false);
+        }}
+        onAddNew={() => {
+          setAddressPickerVisible(false);
+          navigation.navigate("Profile", { manageAddress: "add", returnAfterSave: true });
+        }}
+      />
     </View>
   );
 }

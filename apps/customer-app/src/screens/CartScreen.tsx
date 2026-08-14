@@ -17,6 +17,7 @@ import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile 
 import { resolveAddressPin } from "../api/geocode.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
 import { getSelectedAddress as pickSavedAddress, parseAddressCoordinates } from "../utils/address";
+import AddressPickerModal from "../components/AddressPickerModal";
 
 const formatAmount = (value = 0) => {
   const rounded = Number(value || 0).toFixed(2).replace(/\.?0+$/, "");
@@ -33,6 +34,7 @@ export default function CartScreen({ route, navigation }: any) {
   const [locationResolving, setLocationResolving] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [addressPickerVisible, setAddressPickerVisible] = useState(false);
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const instructionsOffsetY = useRef(0);
@@ -88,6 +90,20 @@ export default function CartScreen({ route, navigation }: any) {
     subtotal + deliveryFee + foodGst + platformFee;
 
   const getSelectedAddress = (): SavedAddress | string | undefined => pickSavedAddress(userProfile);
+
+  const openAddressPicker = () => {
+    setAddressPickerVisible(true);
+  };
+
+  const openAddAddress = () => {
+    setAddressPickerVisible(false);
+    navigation.navigate("Profile", { manageAddress: "add", returnAfterSave: true });
+  };
+
+  const handleAddressSelected = (profile: UserProfile) => {
+    setUserProfile(profile);
+    setAddressPickerVisible(false);
+  };
 
   const formatAddress = () => {
     const selectedAddress = getSelectedAddress();
@@ -163,9 +179,9 @@ export default function CartScreen({ route, navigation }: any) {
     const address = getSelectedAddress();
     if (!address) {
       if (options?.alert) {
-        Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.", [
+        Alert.alert("Address Required", "Please add your delivery address before placing the order.", [
           { text: "Cancel", style: "cancel" },
-          { text: "Add Address", onPress: () => navigation.navigate("Profile") }
+          { text: "Add Address", onPress: openAddAddress }
         ]);
       }
       return undefined;
@@ -278,9 +294,9 @@ export default function CartScreen({ route, navigation }: any) {
       }
 
       if (!getSelectedAddress()) {
-        Alert.alert("Address Required", "Please add your delivery address in Profile before placing order.", [
+        Alert.alert("Address Required", "Please add your delivery address before placing the order.", [
           { text: "Cancel", style: "cancel" },
-          { text: "Add Address", onPress: () => navigation.navigate("Profile") }
+          { text: "Add Address", onPress: openAddAddress }
         ]);
         return;
       }
@@ -498,7 +514,7 @@ export default function CartScreen({ route, navigation }: any) {
             <View style={styles.sectionCard}>
               <View style={styles.deliveryHeader}>
                 <Text style={styles.sectionTitle}>Delivery Address</Text>
-                <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+                <TouchableOpacity onPress={openAddressPicker}>
                   <Text style={styles.linkText}>{getSelectedAddress() ? "Change" : "Add Address"}</Text>
                 </TouchableOpacity>
               </View>
@@ -603,6 +619,13 @@ export default function CartScreen({ route, navigation }: any) {
           </View>
         </>
       )}
+      <AddressPickerModal
+        visible={addressPickerVisible}
+        profile={userProfile}
+        onClose={() => setAddressPickerVisible(false)}
+        onSelected={handleAddressSelected}
+        onAddNew={openAddAddress}
+      />
     </KeyboardAvoidingView>
   );
 }
