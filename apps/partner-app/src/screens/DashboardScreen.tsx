@@ -20,16 +20,6 @@ import { Ionicons } from "@expo/vector-icons";
 const isAwaitingPartnerAction = (status: string) =>
   status === "CONFIRMED";
 
-const LIVE_ORDER_STATUSES = new Set([
-  "CONFIRMED",
-  "ACCEPTED",
-  "PREPARING",
-  "READY",
-  "ASSIGNED",
-  "PICKED_UP",
-  "REACHED_CUSTOMER"
-]);
-
 export default function DashboardScreen({ navigation }: any) {
   const { isDarkMode, theme } = usePartnerTheme();
   const insets = useSafeAreaInsets();
@@ -69,9 +59,10 @@ export default function DashboardScreen({ navigation }: any) {
       const response = res.data as { success: boolean; data?: any[] };
       if (!response.success || !Array.isArray(response.data)) return;
 
-      const live = response.data.filter((order) => LIVE_ORDER_STATUSES.has(String(order.status || "")));
-      const actionable = live.filter((order) => isAwaitingPartnerAction(order.status));
-      setLiveOrderCount(live.length);
+      const actionable = response.data.filter((order) =>
+        isAwaitingPartnerAction(String(order.status || ""))
+      );
+      setLiveOrderCount(actionable.length);
       setStats((current) => ({ ...current, pendingOrders: actionable.length }));
     } catch (error) {
       console.log("Failed to poll partner orders", error);
@@ -296,7 +287,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Orders</Text>
               <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>
                 {liveOrderCount > 0
-                  ? `${liveOrderCount} live order${liveOrderCount === 1 ? "" : "s"}`
+                  ? `${liveOrderCount} need${liveOrderCount === 1 ? "s" : ""} action`
                   : "Live & past orders"}
               </Text>
             </TouchableOpacity>
