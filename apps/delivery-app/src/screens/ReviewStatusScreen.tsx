@@ -15,6 +15,7 @@ import { cacheDeletionRequest } from "../api/accountDeletion.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { unregisterPushNotifications } from "../services/notifications";
 import { subscribeReviewStatusRefresh } from "../services/reviewStatusRefresh";
+import ScreenHeader from "../components/ScreenHeader";
 
 const statusContent: Record<DeliveryProfile["status"], { title: string; body: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
   PENDING: {
@@ -133,9 +134,12 @@ export default function ReviewStatusScreen({ navigation, route }: any) {
 
   if (loading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#FF6B35" />
-        <Text style={styles.loadingText}>Checking your registration status...</Text>
+      <View style={styles.screen}>
+        <ScreenHeader title="Verification Status" showBack={false} backgroundColor="#FFF8F4" />
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color="#16A34A" />
+          <Text style={styles.loadingText}>Checking your registration status...</Text>
+        </View>
       </View>
     );
   }
@@ -143,7 +147,9 @@ export default function ReviewStatusScreen({ navigation, route }: any) {
   const showReupload = profile?.status === "REJECTED" || profile?.status === "INACTIVE";
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.screen}>
+      <ScreenHeader title="Verification Status" showBack={false} backgroundColor="#FFF8F4" />
+      <ScrollView contentContainerStyle={styles.container}>
       <View style={[styles.card, { backgroundColor: content.bg }]}>
         <Ionicons name={content.icon} size={56} color={content.color} />
         <Text style={[styles.title, { color: content.color }]}>{content.title}</Text>
@@ -175,10 +181,15 @@ export default function ReviewStatusScreen({ navigation, route }: any) {
         <Text style={styles.linkButtonText}>Logout</Text>
       </TouchableOpacity>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#FFF8F4"
+  },
   container: {
     flexGrow: 1,
     padding: 20,
@@ -189,7 +200,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFF8F4",
     padding: 24
   },
   loadingText: {

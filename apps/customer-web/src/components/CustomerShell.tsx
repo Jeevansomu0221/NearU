@@ -18,11 +18,17 @@ export default function CustomerShell({
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {backTo ? <Link to={backTo}>←</Link> : null}
+        <div className="app-header-left">
+          {backTo ? (
+            <Link className="app-header-back" to={backTo} aria-label="Go back">
+              ←
+            </Link>
+          ) : null}
           <h1>{title}</h1>
         </div>
-        <Link to="/cart">Cart ({getItemCount()})</Link>
+        <Link className="app-header-cart" to="/cart">
+          Cart ({getItemCount()})
+        </Link>
       </header>
       <main className={`app-main ${showNav ? "page-with-bottom" : ""}`}>{children}</main>
       {showNav ? (

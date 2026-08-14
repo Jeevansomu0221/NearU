@@ -24,6 +24,7 @@ import { sendOtpWithFallback, verifyOtpSession, OtpSessionInfo } from "../servic
 import { registerForPushNotifications } from "../services/notifications";
 import { requestRiderLocationPermission } from "../utils/riderLocation";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
+import ScreenHeader from "../components/ScreenHeader";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone, otpSession: initialOtpSession } = route.params;
@@ -197,8 +198,20 @@ export default function OtpScreen({ route, navigation }: any) {
   };
 
   return (
+    <View style={styles.container}>
+      <ScreenHeader
+        title="Verify OTP"
+        onBack={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+            return;
+          }
+          navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+        }}
+        backgroundColor="#f5f5f5"
+      />
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
@@ -210,7 +223,6 @@ export default function OtpScreen({ route, navigation }: any) {
         keyboardDismissMode="on-drag"
         bounces={false}
       >
-      <Text style={styles.title}>Verify OTP</Text>
       <Text style={styles.subtitle}>
         Enter the 6-digit code sent to{"\n"}
         <Text style={styles.phoneText}>+91 {phone}</Text>
@@ -255,13 +267,14 @@ export default function OtpScreen({ route, navigation }: any) {
       </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  flex: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: "center", padding: 20 },
-  title: { fontSize: 28, fontWeight: "bold", color: "#333", marginBottom: 8, textAlign: "center" },
   subtitle: { fontSize: 16, color: "#666", marginBottom: 40, textAlign: "center", lineHeight: 24 },
   phoneText: { fontWeight: "bold", color: "#333" },
   otpContainer: { marginBottom: 30 },

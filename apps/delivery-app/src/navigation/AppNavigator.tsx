@@ -181,13 +181,7 @@ export default function AppNavigator() {
     <Stack.Navigator
       initialRouteName={startup.route}
       screenOptions={{
-        headerStyle: {
-          backgroundColor: "#4CAF50",
-        },
-        headerTintColor: "#fff",
-        headerTitleStyle: {
-          fontWeight: "600",
-        },
+        headerShown: false,
       }}
     >
       <Stack.Screen
@@ -198,7 +192,7 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Otp"
         component={OtpScreen}
-        options={{ title: "Verify OTP" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="Main"
@@ -208,19 +202,12 @@ export default function AppNavigator() {
       <Stack.Screen
         name="CompleteProfile"
         component={KycRegistrationScreen}
-        options={{
-          title: "Registration",
-          headerShadowVisible: false,
-          headerLeft: () => null
-        }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="ReviewStatus"
         component={ReviewStatusScreen}
-        options={{
-          title: "Verification Status",
-          headerLeft: () => null
-        }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="AccountDeletionReview"
@@ -231,21 +218,19 @@ export default function AppNavigator() {
             : undefined
         }
         options={{
-          title: "Deletion Review",
-          headerLeft: startup.route === "AccountDeletionReview" ? () => null : undefined,
+          headerShown: false,
           gestureEnabled: startup.route !== "AccountDeletionReview"
         }}
       />
-      {/* ADD JobDetailsScreen as a separate screen */}
       <Stack.Screen
         name="JobDetails"
         component={JobDetailsScreen}
-        options={{ title: "Job Details" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="Reviews"
         component={ReviewsScreen}
-        options={{ title: "My Reviews", headerShown: true, headerStyle: { backgroundColor: "#16A34A" }, headerTintColor: "#fff" }}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

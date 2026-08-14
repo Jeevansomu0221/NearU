@@ -22,6 +22,7 @@ import {
   type AccountDeletionRequest
 } from "../api/accountDeletion.api";
 import { unregisterPushNotifications } from "../services/notifications";
+import ScreenHeader from "../components/ScreenHeader";
 
 const GREEN_PRIMARY = "#16A34A";
 const GREEN_DEEP = "#166534";
@@ -137,8 +138,6 @@ export default function AccountDeletionReviewScreen({ navigation, route }: Props
   useEffect(() => {
     const isPending = request?.status === "PENDING";
     navigation.setOptions({
-      title: "Deletion Review",
-      headerLeft: isPending ? () => null : undefined,
       gestureEnabled: !isPending
     });
   }, [navigation, request?.status]);
@@ -288,6 +287,11 @@ export default function AccountDeletionReviewScreen({ navigation, route }: Props
 
   return (
     <View style={[styles.screen, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <ScreenHeader
+        title="Deletion Review"
+        showBack={!loading && (request || initialRequest)?.status !== "PENDING"}
+        backgroundColor="#F5F7FB"
+      />
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={GREEN_PRIMARY} />

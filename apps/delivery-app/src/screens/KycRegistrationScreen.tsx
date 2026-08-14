@@ -32,6 +32,7 @@ import {
   verifyPan,
   type AadhaarVerifyResult
 } from "../api/kyc.api";
+import ScreenHeader from "../components/ScreenHeader";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -552,14 +553,18 @@ export default function KycRegistrationScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={GREEN} />
+      <View style={styles.screen}>
+        <ScreenHeader title="Registration" showBack={false} backgroundColor="#fff" />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={GREEN} />
+        </View>
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScreenHeader title="Registration" showBack={false} backgroundColor="#fff" />
       <View style={styles.topBar}>
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />

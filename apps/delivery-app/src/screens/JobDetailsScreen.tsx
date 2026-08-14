@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
@@ -35,6 +35,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DeliveryJobMap from "../components/DeliveryJobMap";
 import SwipeConfirm from "../components/SwipeConfirm";
 import HighlightedOrderId from "../components/HighlightedOrderId";
+import ScreenHeader from "../components/ScreenHeader";
 import type { MapPin } from "../utils/mapCoordinates";
 import { buildMapsSearchUrl, formatAddress, getAddressGoogleMapsLink, type AddressLike } from "../utils/address";
 import { formatPublicOrderId, getPublicOrderId } from "../utils/publicOrderId";
@@ -158,21 +159,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const qrRingScale = qrPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] });
   const qrRingOpacity = qrPulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.85] });
-
-  useLayoutEffect(() => {
-    if (!job) return;
-
-    let title = "Job Details";
-    if (job.status === "ASSIGNED") {
-      title = reachedPickup ? "Mark picked up" : "Go to pickup";
-    } else if (job.status === "PICKED_UP") {
-      title = "Go to customer";
-    } else if (job.status === "REACHED_CUSTOMER") {
-      title = "Deliver order";
-    }
-
-    navigation.setOptions({ title });
-  }, [job?.status, reachedPickup, navigation]);
 
   useEffect(() => {
     if (!job?.status) return;
@@ -995,9 +981,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading job details...</Text>
+      <View style={styles.screen}>
+        <ScreenHeader title="Job Details" backgroundColor="#f5f5f5" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.loadingText}>Loading job details...</Text>
+        </View>
       </View>
     );
   }
@@ -1482,8 +1471,18 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     </ScrollView>
   );
 
+  let jobHeaderTitle = "Job Details";
+  if (job.status === "ASSIGNED") {
+    jobHeaderTitle = reachedPickup ? "Mark picked up" : "Go to pickup";
+  } else if (job.status === "PICKED_UP") {
+    jobHeaderTitle = "Go to customer";
+  } else if (job.status === "REACHED_CUSTOMER") {
+    jobHeaderTitle = "Deliver order";
+  }
+
   return (
     <View style={styles.screen}>
+      <ScreenHeader title={jobHeaderTitle} backgroundColor="#f5f5f5" />
       {isNavigatingToStop ? (
         <View style={styles.navigationBody}>
           <View

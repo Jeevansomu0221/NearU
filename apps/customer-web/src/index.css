@@ -46,9 +46,10 @@ button {
 }
 
 .app-header {
-  background: var(--primary);
-  color: #fff;
-  padding: 14px 20px;
+  background: var(--bg);
+  color: #2c2018;
+  padding: 10px 16px 12px;
+  padding-top: max(10px, env(safe-area-inset-top));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -58,18 +59,48 @@ button {
   z-index: 10;
 }
 
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .app-header a,
 .app-header button.linkish {
-  color: #fff;
+  color: #2c2018;
   text-decoration: none;
   background: none;
   border: none;
   padding: 0;
 }
 
+.app-header-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.app-header a.app-header-cart {
+  color: #ff6b35;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .app-header h1 {
   margin: 0;
-  font-size: 1.1rem;
+  min-width: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-main {
@@ -232,15 +263,8 @@ body {
 }
 
 .app-header {
-  padding-left: max(20px, env(safe-area-inset-left));
-  padding-right: max(20px, env(safe-area-inset-right));
-}
-
-.app-header h1 {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
 }
 
 .grid-shops {
@@ -283,14 +307,15 @@ textarea {
 
 @media (max-width: 640px) {
   .app-header {
-    padding: 12px 14px;
-    padding-left: max(14px, env(safe-area-inset-left));
-    padding-right: max(14px, env(safe-area-inset-right));
+    padding: 8px 12px 10px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
     gap: 8px;
   }
 
   .app-header h1 {
-    font-size: 1rem;
+    font-size: 1.25rem;
   }
 
   .app-main {

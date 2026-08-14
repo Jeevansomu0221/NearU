@@ -16,6 +16,7 @@ import {
   type DeliveryOrderReview,
   type DeliveryReviewsResponse
 } from "../api/delivery.api";
+import ScreenHeader from "../components/ScreenHeader";
 
 const GREEN_PRIMARY = "#16A34A";
 const GREEN_DEEP = "#14532D";
@@ -134,15 +135,19 @@ export default function ReviewsScreen() {
 
   if (loading && reviews.length === 0) {
     return (
-      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={GREEN_PRIMARY} />
-        <Text style={styles.loadingText}>Loading reviews...</Text>
+      <View style={styles.container}>
+        <ScreenHeader title="My Reviews" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={GREEN_PRIMARY} />
+          <Text style={styles.loadingText}>Loading reviews...</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <ScreenHeader title="My Reviews" />
       <FlatList
         data={reviews}
         keyExtractor={(item) => item._id}
