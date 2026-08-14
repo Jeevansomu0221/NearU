@@ -1,12 +1,39 @@
 const TEN_DIGITS = 10_000_000_000;
 
+const fromHexObjectId = (hex: string): string => {
+  if (hex.length < 8) return "";
+  const value = Number.parseInt(hex.slice(-8), 16);
+  if (!Number.isFinite(value)) return "";
+  return String(value % TEN_DIGITS).padStart(10, "0");
+};
+
 export const getPublicOrderId = (orderId?: unknown): string => {
   if (orderId == null) return "";
+
   if (typeof orderId === "object") {
-    const record = orderId as { publicOrderId?: unknown; _id?: unknown };
+    const record = orderId as {
+      publicOrderId?: unknown;
+      _id?: unknown;
+      toHexString?: () => string;
+    };
+
     const stored = String(record.publicOrderId || "").replace(/\D/g, "");
     if (stored.length === 10) return stored;
-    return getPublicOrderId(record._id);
+
+    // Mongoose/BSON ObjectId: `_id` points at itself — never recurse into that.
+    if (typeof record.toHexString === "function") {
+      return fromHexObjectId(record.toHexString());
+    }
+
+    if (record._id != null && record._id !== orderId) {
+      return getPublicOrderId(record._id);
+    }
+
+    const asString = String(orderId);
+    if (asString && asString !== "[object Object]") {
+      return getPublicOrderId(asString);
+    }
+    return "";
   }
 
   const raw = String(orderId).trim();
@@ -14,10 +41,8 @@ export const getPublicOrderId = (orderId?: unknown): string => {
 
   const hex = raw.replace(/[^a-fA-F0-9]/g, "");
   if (hex.length >= 8) {
-    const value = Number.parseInt(hex.slice(-8), 16);
-    if (Number.isFinite(value)) {
-      return String(value % TEN_DIGITS).padStart(10, "0");
-    }
+    const digits = fromHexObjectId(hex);
+    if (digits) return digits;
   }
 
   const digits = raw.replace(/\D/g, "");
