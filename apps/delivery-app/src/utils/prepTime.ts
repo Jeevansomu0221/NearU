@@ -12,7 +12,7 @@ export const formatReadyByClock = (value?: Date | string | null) => {
 export const getRiderReadyByMessage = (estimatedReadyAt?: string | null, prepTimeMinutes?: number | null) => {
   const clock = formatReadyByClock(estimatedReadyAt);
   if (clock) {
-    return `Order will be ready by ${clock}`;
+    return `Order will be available by ${clock}`;
   }
   if (prepTimeMinutes && prepTimeMinutes > 0) {
     return `Prep time: ${prepTimeMinutes} mins`;

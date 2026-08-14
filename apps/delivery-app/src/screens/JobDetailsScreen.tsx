@@ -1006,6 +1006,14 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     : `#${job._id.slice(-6).toUpperCase()}`;
   const readyByMessage = getRiderReadyByMessage(job.estimatedReadyAt, job.prepTimeMinutes);
 
+  const renderReadyByBanner = (style?: object) =>
+    readyByMessage ? (
+      <View style={[styles.readyByBanner, style]}>
+        <Ionicons name="time-outline" size={16} color="#1D4E89" />
+        <Text style={styles.readyByText}>{readyByMessage}</Text>
+      </View>
+    ) : null;
+
   const renderOrderMetaLink = () => (
     <View style={styles.orderMetaRight}>
       <Text style={styles.orderMetaNumber}>{orderDisplayId}</Text>
@@ -1028,6 +1036,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           {formatDate(job.createdAt)} • {formatTime(job.createdAt)}
         </Text>
       </View>
+
+      {renderReadyByBanner({ marginBottom: 12 })}
 
       {job.items.map((item, index) => (
         <View key={index} style={styles.itemRow}>
@@ -1180,12 +1190,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         {renderOrderMetaLink()}
       </View>
       <Text style={styles.stopName} numberOfLines={2}>{stopName}</Text>
-      {isPickupPhase && readyByMessage ? (
-        <View style={styles.readyByBanner}>
-          <Ionicons name="time-outline" size={16} color="#1D4E89" />
-          <Text style={styles.readyByText}>{readyByMessage}</Text>
-        </View>
-      ) : null}
+      {renderReadyByBanner()}
       <Text style={styles.stopAddress} numberOfLines={3}>{stopAddress}</Text>
       <View style={styles.stopActions}>
         {stopPhone ? (
@@ -1264,6 +1269,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             {formatDate(job.createdAt)}  ·  {formatTime(job.createdAt)}
           </Text>
         </View>
+
+        {renderReadyByBanner({ marginBottom: 12 })}
 
         {job.items.map((item, index) => (
           <View
@@ -1406,6 +1413,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               </View>
             </View>
           </View>
+
+          {renderReadyByBanner({ marginHorizontal: 16, marginBottom: 12 })}
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
