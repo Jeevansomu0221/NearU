@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../utils/authStorage";
+import { registerForPushNotifications } from "../services/notifications";
 import api, { bootstrapSessionRefresh } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { clearAuthData } from "../utils/storage";
@@ -84,6 +85,7 @@ export default function AppNavigator() {
         setLoading(false);
         return;
       }
+      registerForPushNotifications().catch(() => {});
       await bootstrapSessionRefresh();
       // Check partner status
       await checkPartnerStatus();

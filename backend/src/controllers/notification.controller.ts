@@ -41,20 +41,37 @@ export const registerNotificationToken = async (req: AuthRequest, res: Response)
       { $pull: { notificationTokens: { token } } }
     );
 
-    await User.findByIdAndUpdate(req.user.id, {
-      $set: { fcmToken: token },
-      $push: {
-        notificationTokens: {
-          token,
-          app,
-          platform,
-          deviceId,
-          enabled: true,
-          lastSeenAt: new Date(),
-          disabledAt: undefined
+    const tokenUpdate: Record<string, unknown> = {
+      fcmToken: token,
+      "notificationTokens.$.enabled": true,
+      "notificationTokens.$.platform": platform,
+      "notificationTokens.$.lastSeenAt": new Date(),
+      "notificationTokens.$.disabledAt": null
+    };
+    if (deviceId) {
+      tokenUpdate["notificationTokens.$.deviceId"] = deviceId;
+    }
+
+    const updateExisting = await User.updateOne(
+      { _id: req.user.id, notificationTokens: { $elemMatch: { token, app } } },
+      { $set: tokenUpdate }
+    );
+
+    if (updateExisting.matchedCount === 0) {
+      await User.findByIdAndUpdate(req.user.id, {
+        $set: { fcmToken: token },
+        $push: {
+          notificationTokens: {
+            token,
+            app,
+            platform,
+            deviceId,
+            enabled: true,
+            lastSeenAt: new Date()
+          }
         }
-      }
-    });
+      });
+    }
 
     return successResponse(res, { app, platform }, "Notification token registered");
   } catch (error) {

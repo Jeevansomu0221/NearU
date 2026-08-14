@@ -6,7 +6,7 @@ import { useFonts, CaveatBrush_400Regular } from "@expo-google-fonts/caveat-brus
 import AppNavigator from "./src/navigation/AppNavigator";
 import { CartProvider } from "./src/context/CartContext";
 import CustomAlert, { initCustomAlert } from "./src/components/CustomAlert";
-import { registerForPushNotifications, setupNotificationHandlers } from "./src/services/notifications";
+import { registerForPushNotifications, setupNotificationHandlers, subscribePushRegistrationRefresh } from "./src/services/notifications";
 import { initCrashlytics } from "./src/utils/crashlytics";
 
 // Initialize Custom Alert globally to override standard Alert.alert
@@ -23,7 +23,12 @@ export default function App() {
     registerForPushNotifications().catch((error) => {
       console.log("Failed to register push notifications:", error);
     });
-    return setupNotificationHandlers(navigationRef);
+    const unsubscribePushRefresh = subscribePushRegistrationRefresh();
+    const unsubscribeHandlers = setupNotificationHandlers(navigationRef);
+    return () => {
+      unsubscribePushRefresh();
+      unsubscribeHandlers();
+    };
   }, []);
 
   if (!fontsLoaded) {

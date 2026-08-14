@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../utils/authStorage";
-import { Linking, PermissionsAndroid, Platform, Vibration } from "react-native";
+import { AppState, Linking, PermissionsAndroid, Platform, Vibration } from "react-native";
 import api from "../api/client";
 import { acceptJob, rejectJob } from "../api/delivery.api";
 import {
@@ -168,14 +168,26 @@ const hasNotificationPermission = async () => {
 
 const postToken = async (token: string) => {
   const authToken = await getAccessToken();
-  if (!authToken || !token) return;
+  if (!authToken || !token) {
+    console.log("[notifications:delivery] Skipped token upload — missing auth or FCM token");
+    return false;
+  }
 
-  await api.post("/notifications/register-token", {
-    token,
-    app: NOTIFICATION_APP,
-    platform: Platform.OS
-  });
-  await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+  try {
+    await api.post("/notifications/register-token", {
+      token,
+      app: NOTIFICATION_APP,
+      platform: Platform.OS
+    });
+    await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+    return true;
+  } catch (error: any) {
+    console.log(
+      "[notifications:delivery] Failed to register token:",
+      error?.response?.data?.message || error?.message || error
+    );
+    return false;
+  }
 };
 
 const handleDeletionNotification = async (navigationRef: any, data?: Record<string, any> | null) => {
@@ -453,25 +465,50 @@ const showForegroundAlert = async (navigationRef: any, remoteMessage: any) => {
   showAlert(title, body, actions);
 };
 
+export const setupEarlyNotificationHandlers = () => {
+  setupNotificationActionHandlers();
+  setupBackgroundHandler();
+};
+
+export const subscribePushRegistrationRefresh = () => {
+  const subscription = AppState.addEventListener("change", (nextState) => {
+    if (nextState === "active") {
+      registerForPushNotifications().catch((error) => {
+        console.log("[notifications:delivery] Foreground token refresh failed:", error);
+      });
+    }
+  });
+  return () => subscription.remove();
+};
+
 export const registerForPushNotifications = async () => {
   const token = await getAccessToken();
-  if (!token) return;
+  if (!token) {
+    console.log("[notifications:delivery] Skipped registration — user not logged in");
+    return false;
+  }
 
   setupNotificationActionHandlers();
   setupBackgroundHandler();
   const pkg = getMessagingPackage();
   const messaging = getMessagingInstance();
-  if (!pkg || !messaging) return;
+  if (!pkg || !messaging) {
+    console.log("[notifications:delivery] Firebase Messaging native module unavailable — rebuild the app");
+    return false;
+  }
 
   const permitted = await hasNotificationPermission();
-  if (!permitted) return;
+  if (!permitted) {
+    console.log("[notifications:delivery] Notification permission not granted");
+    return false;
+  }
 
   if (!pkg.isDeviceRegisteredForRemoteMessages(messaging)) {
     await pkg.registerDeviceForRemoteMessages(messaging);
   }
 
   const fcmToken = await pkg.getToken(messaging);
-  await postToken(fcmToken);
+  return postToken(fcmToken);
 };
 
 export const unregisterPushNotifications = async () => {
@@ -524,6 +561,7 @@ export const setupNotificationHandlers = (navigationRef: any) => {
   const unsubscribeMessage = pkg.onMessage(messaging, async (remoteMessage: any) => {
     if (remoteMessage?.data?.type === "ORDER_FOOD_READY") {
       notifyJobDetailsRefresh(String(remoteMessage?.data?.orderId || remoteMessage?.data?.jobId || ""));
+      await showForegroundAlert(navigationRef, remoteMessage);
       return;
     }
     if (isDeliveryJobMessage(remoteMessage)) {

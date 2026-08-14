@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Alert, PermissionsAndroid, Platform } from "react-native";
+import { Alert, AppState, PermissionsAndroid, Platform } from "react-native";
 import api from "../api/client";
 import { getAccessToken } from "../utils/authStorage";
 
@@ -87,14 +87,26 @@ const hasNotificationPermission = async () => {
 
 const postToken = async (token: string) => {
   const authToken = await getAccessToken();
-  if (!authToken || !token) return;
+  if (!authToken || !token) {
+    console.log("[notifications:customer] Skipped token upload — missing auth or FCM token");
+    return false;
+  }
 
-  await api.post("/notifications/register-token", {
-    token,
-    app: NOTIFICATION_APP,
-    platform: Platform.OS
-  });
-  await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+  try {
+    await api.post("/notifications/register-token", {
+      token,
+      app: NOTIFICATION_APP,
+      platform: Platform.OS
+    });
+    await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+    return true;
+  } catch (error: any) {
+    console.log(
+      "[notifications:customer] Failed to register token:",
+      error?.response?.data?.message || error?.message || error
+    );
+    return false;
+  }
 };
 
 const navigateFromData = (navigationRef: any, data?: Record<string, any> | null) => {
@@ -123,24 +135,48 @@ const showForegroundAlert = (navigationRef: any, remoteMessage: any) => {
   ]);
 };
 
+export const setupEarlyNotificationHandlers = () => {
+  setupBackgroundHandler();
+};
+
+export const subscribePushRegistrationRefresh = () => {
+  const subscription = AppState.addEventListener("change", (nextState) => {
+    if (nextState === "active") {
+      registerForPushNotifications().catch((error) => {
+        console.log("[notifications:customer] Foreground token refresh failed:", error);
+      });
+    }
+  });
+  return () => subscription.remove();
+};
+
 export const registerForPushNotifications = async () => {
   const token = await getAccessToken();
-  if (!token) return;
+  if (!token) {
+    console.log("[notifications:customer] Skipped registration — user not logged in");
+    return false;
+  }
 
   setupBackgroundHandler();
   const pkg = getMessagingPackage();
   const messaging = getMessagingInstance();
-  if (!pkg || !messaging) return;
+  if (!pkg || !messaging) {
+    console.log("[notifications:customer] Firebase Messaging native module unavailable — rebuild the app");
+    return false;
+  }
 
   const permitted = await hasNotificationPermission();
-  if (!permitted) return;
+  if (!permitted) {
+    console.log("[notifications:customer] Notification permission not granted");
+    return false;
+  }
 
   if (!pkg.isDeviceRegisteredForRemoteMessages(messaging)) {
     await pkg.registerDeviceForRemoteMessages(messaging);
   }
 
   const fcmToken = await pkg.getToken(messaging);
-  await postToken(fcmToken);
+  return postToken(fcmToken);
 };
 
 export const unregisterPushNotifications = async () => {

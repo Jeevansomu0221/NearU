@@ -6,7 +6,7 @@ import CustomAlert from "./src/components/CustomAlert";
 import PartnerOrderWatcher from "./src/components/PartnerOrderWatcher";
 import { PartnerThemeProvider, usePartnerTheme } from "./src/context/PartnerThemeContext";
 import AppNavigator from "./src/navigation/AppNavigator";
-import { registerForPushNotifications, setupNotificationHandlers } from "./src/services/notifications";
+import { registerForPushNotifications, setupNotificationHandlers, subscribePushRegistrationRefresh } from "./src/services/notifications";
 import { initCrashlytics } from "./src/utils/crashlytics";
 
 const navigationRef = createNavigationContainerRef();
@@ -19,7 +19,12 @@ function PartnerAppContent() {
     registerForPushNotifications().catch((error) => {
       console.log("Failed to register push notifications:", error);
     });
-    return setupNotificationHandlers(navigationRef);
+    const unsubscribePushRefresh = subscribePushRegistrationRefresh();
+    const unsubscribeHandlers = setupNotificationHandlers(navigationRef);
+    return () => {
+      unsubscribePushRefresh();
+      unsubscribeHandlers();
+    };
   }, []);
 
   return (

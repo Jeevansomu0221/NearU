@@ -25,6 +25,7 @@ import { getDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { requestRiderLocationPermission, startRiderLocationWatch } from "../utils/riderLocation";
 import AvailableJobsNewJobWatcher from "../components/AvailableJobsNewJobWatcher";
+import { registerForPushNotifications } from "../services/notifications";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -146,15 +147,18 @@ export default function AppNavigator() {
             status: "ready",
             route: resolveDeliveryRoute(profileResponse.data)
           });
+          registerForPushNotifications().catch(() => {});
           return;
         }
 
         if (cachedUser) {
           setStartup({ status: "ready", route: "Main" });
+          registerForPushNotifications().catch(() => {});
           return;
         }
 
         setStartup({ status: "ready", route: "Main" });
+        registerForPushNotifications().catch(() => {});
       } catch {
         setStartup({ status: "ready", route: "Main" });
       }

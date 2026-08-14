@@ -17,6 +17,7 @@ import notificationRoutes from "./routes/notification.routes";
 import { config } from "./config/env";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import { getEkoRuntimeConfig, probeEkoDigiLocker, probeEkoSettlementBalance } from "./services/eko.service";
+import { getFirebaseApp } from "./services/firebaseAuth.service";
 
 const app = express();
 const allowAllOrigins = !config.isProduction && config.corsOrigins.length === 0;
@@ -108,6 +109,31 @@ app.get("/health/razorpay", (_req, res) => {
     expectedKeyId: "rzp_live_TMrGfC1MZ7Pmqy",
     usingExpectedKey: keyId === "rzp_live_TMrGfC1MZ7Pmqy"
   });
+});
+
+app.get("/health/firebase", (_req, res) => {
+  try {
+    const firebaseApp = getFirebaseApp();
+    const credentialSource = config.firebaseServiceAccountJson
+      ? "env_json"
+      : config.firebaseServiceAccountPath
+        ? "env_path"
+        : "file_or_adc";
+
+    res.json({
+      status: "ok",
+      projectId: firebaseApp.options.projectId || config.firebaseProjectId || "",
+      credentialSource
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: "error",
+      message: error?.message || "Firebase Admin is not configured",
+      projectId: config.firebaseProjectId || "",
+      hasServiceAccountJson: Boolean(config.firebaseServiceAccountJson),
+      hasServiceAccountPath: Boolean(config.firebaseServiceAccountPath)
+    });
+  }
 });
 
 app.get("/health/eko", async (_req, res) => {

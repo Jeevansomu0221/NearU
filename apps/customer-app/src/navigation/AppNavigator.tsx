@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAccessToken } from '../utils/authStorage';
+import { registerForPushNotifications } from '../services/notifications';
 import { TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { OtpSessionInfo } from '../services/otpAuthFlow';
@@ -185,6 +186,8 @@ export default function AppNavigator() {
           setInitialRoute('Login');
           return;
         }
+
+        registerForPushNotifications().catch(() => {});
 
         const response = await getUserProfile();
         if (response.success && response.data) {

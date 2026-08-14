@@ -72,7 +72,6 @@ const INVALID_TOKEN_CODES = new Set([
 ]);
 
 const ANDROID_NOTIFICATION_CHANNEL_ID = "vyaha_alerts";
-const ANDROID_NOTIFICATION_ICON = "vyaha_notification_icon";
 const ANDROID_NOTIFICATION_COLORS: Record<NotificationApp, string> = {
   customer: "#0F9D58",
   delivery: "#0F9D58",
@@ -269,14 +268,21 @@ const getEnabledTokensForUsers = async (userIds: string[], app?: NotificationApp
   const users = await User.find({
     _id: { $in: normalizedIds.map((id) => new mongoose.Types.ObjectId(id)) }
   })
-    .select("notificationTokens")
+    .select("notificationTokens fcmToken")
     .lean();
 
-  const tokens = users.flatMap((user: any) =>
-    (Array.isArray(user.notificationTokens) ? user.notificationTokens : [])
+  const tokens = users.flatMap((user: any) => {
+    const fromEntries = (Array.isArray(user.notificationTokens) ? user.notificationTokens : [])
       .filter((entry: any) => entry?.enabled !== false && entry?.token && (!app || entry.app === app))
-      .map((entry: any) => String(entry.token))
-  );
+      .map((entry: any) => String(entry.token));
+
+    const legacyToken = typeof user.fcmToken === "string" ? user.fcmToken.trim() : "";
+    if (legacyToken && fromEntries.length === 0) {
+      fromEntries.push(legacyToken);
+    }
+
+    return fromEntries;
+  });
 
   return Array.from(new Set(tokens));
 };
@@ -298,10 +304,14 @@ const disableInvalidTokens = async (tokens: string[]) => {
 };
 
 export const sendNotificationToUsers = async (userIds: any[], options: SendOptions) => {
+  const normalizedUserIds = compactIds(userIds);
   try {
-    const tokens = await getEnabledTokensForUsers(compactIds(userIds), options.app);
+    const tokens = await getEnabledTokensForUsers(normalizedUserIds, options.app);
     if (!tokens.length) {
-      return { sent: 0, failed: 0 };
+      console.warn(
+        `[notifications] No enabled ${options.app || "any"} tokens for ${normalizedUserIds.length} user(s); title="${options.title}"`
+      );
+      return { sent: 0, failed: 0, skipped: "no_tokens" as const };
     }
 
     getFirebaseApp();
@@ -324,7 +334,6 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
           notification: {
             channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
             color: ANDROID_NOTIFICATION_COLORS[options.app || "customer"],
-            icon: ANDROID_NOTIFICATION_ICON,
             priority: "high",
             sound: "default"
           }
@@ -341,6 +350,11 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
       sent += response.successCount;
       failed += response.failureCount;
       response.responses.forEach((result, index) => {
+        if (result.error) {
+          console.warn(
+            `[notifications] FCM send error for ${options.app || "unknown"} app: ${result.error.code || "unknown"} ${result.error.message || ""}`
+          );
+        }
         const code = result.error?.code;
         if (code && INVALID_TOKEN_CODES.has(code)) {
           invalidTokens.push(tokenBatch[index]);
@@ -349,10 +363,15 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
     }
 
     await disableInvalidTokens(invalidTokens);
+    if (sent === 0 && failed > 0) {
+      console.error(
+        `[notifications] All ${failed} push send(s) failed for "${options.title}" (${options.app || "unknown"} app)`
+      );
+    }
     return { sent, failed };
   } catch (error) {
-    console.error("Notification send failed:", error);
-    return { sent: 0, failed: 0 };
+    console.error("[notifications] Notification send failed:", error);
+    return { sent: 0, failed: 0, skipped: "send_error" as const };
   }
 };
 
@@ -436,20 +455,21 @@ export const notifyDeliveryJobReady = async (order: any) => {
   if (!candidateUserIds.length) return;
 
   const shopCoordinates = await resolveOrderShopCoordinates(order);
-  const targetUserIds = shopCoordinates
+  let targetUserIds = shopCoordinates
     ? await filterNearbyDeliveryUserIds(shopCoordinates, candidateUserIds)
     : [];
 
+  if (!targetUserIds.length && candidateUserIds.length) {
+    targetUserIds = candidateUserIds;
+    console.log(
+      `[notifications] No nearby riders with fresh GPS for order ${idString(order._id)}; notifying ${targetUserIds.length} available rider(s) anyway`
+    );
+  }
+
   if (!targetUserIds.length) {
-    if (shopCoordinates) {
-      console.log(
-        `No nearby delivery riders within radius for order ${idString(order._id)}; skipped job notification`
-      );
-    } else {
-      console.log(
-        `Shop location missing for order ${idString(order._id)}; skipped nearby delivery job notification`
-      );
-    }
+    console.log(
+      `[notifications] No eligible delivery riders to notify for order ${idString(order._id)}`
+    );
     return;
   }
   const details = await getDeliveryJobNotificationDetails(order);
