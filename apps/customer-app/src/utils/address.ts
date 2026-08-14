@@ -69,6 +69,33 @@ export const formatSavedAddress = (address?: SavedAddress | string | null, fallb
     .join(", ");
 };
 
+/** Compact one-line label for Home header (EatClub / Swiggy style). */
+export const formatHomeDeliveryAddressLine = (address?: SavedAddress | string | null) => {
+  if (!address) return "";
+  if (typeof address === "string") return address.trim();
+
+  const label = textValue(address.label);
+  const building = textValue(address.buildingApartmentName);
+  const house = textValue(address.houseFlatDoorNo);
+  const street = textValue(address.streetRoadName) || textValue(address.street);
+  const area = textValue(address.areaLocality) || textValue(address.area);
+  const city = textValue(address.cityTownVillage) || textValue(address.city);
+
+  const parts = [
+    label,
+    [house, building].filter(Boolean).join(", "),
+    street,
+    area,
+    city
+  ].filter(Boolean);
+
+  if (parts.length > 0) {
+    return parts.join(", ");
+  }
+
+  return formatSavedAddress(address);
+};
+
 export const getSelectedAddress = (
   profile?: UserProfile | null
 ): SavedAddress | string | undefined => {

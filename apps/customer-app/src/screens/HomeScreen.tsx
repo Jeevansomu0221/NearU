@@ -4,7 +4,6 @@ import {
   Alert,
   FlatList,
   Image,
-  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -17,11 +16,16 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Location from "expo-location";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import { getPartners } from "../api/menu.api";
 import { getMyOrders } from "../api/order.api";
+import { getUserProfile, type UserProfile } from "../api/user.api";
 import { useCart } from "../context/CartContext";
+import {
+  formatHomeDeliveryAddressLine,
+  getSelectedAddress,
+  parseAddressCoordinates
+} from "../utils/address";
 import { getPublicAddressText, getPublicShopName } from "../utils/display";
 import { getOrderBadgeCount } from "../utils/orderBadges";
 import { getVegModePreference, setVegModePreference } from "../utils/vegMode";
@@ -78,14 +82,6 @@ const categoryOptions = [
 ] as const;
 
 const NEARBY_RADIUS_KM = 20;
-const LOCATION_TIMEOUT_MS = 8000;
-const INITIAL_LOCATION_REQUEST_DELAY_MS = 1200;
-const LOCATION_PERMISSION_MESSAGE = `Allow location to view shops within ${NEARBY_RADIUS_KM} km of you.`;
-
-type LocationPermissionPrompt = {
-  canOpenSettings: boolean;
-  message: string;
-};
 
 const shopPlaceholders: Record<string, string> = {
   bakery:
@@ -110,24 +106,6 @@ const shopPlaceholders: Record<string, string> = {
 
 const extractShops = (response: any): Shop[] => Array.isArray(response?.data) ? response.data : [];
 
-async function resolveWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timeoutId = setTimeout(() => resolve(null), timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  }
-}
-
-const getCurrentPositionWithTimeout = () =>
-  resolveWithTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_TIMEOUT_MS);
-
 const formatBadgeCount = (count: number) => (count > 99 ? "99+" : String(count));
 
 export default function HomeScreen({ navigation }: Props) {
@@ -137,8 +115,11 @@ export default function HomeScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [locationMessage, setLocationMessage] = useState(`Showing shops within ${NEARBY_RADIUS_KM} km`);
-  const [locationPermissionPrompt, setLocationPermissionPrompt] = useState<LocationPermissionPrompt | null>(null);
+  const [locationMessage, setLocationMessage] = useState(
+    `Showing shops within ${NEARBY_RADIUS_KM} km of your delivery address`
+  );
+  const [needsDeliveryAddress, setNeedsDeliveryAddress] = useState(false);
+  const [deliveryAddressLine, setDeliveryAddressLine] = useState("");
   const [activeOrderCount, setActiveOrderCount] = useState(0);
   const [vegMode, setVegMode] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -154,77 +135,18 @@ export default function HomeScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    const locationTimer = setTimeout(() => {
-      promptForLocationPermission();
-    }, INITIAL_LOCATION_REQUEST_DELAY_MS);
     getVegModePreference().then(setVegMode).catch(() => {});
-
-    return () => clearTimeout(locationTimer);
   }, []);
 
-  const openLocationSettings = () => {
-    Linking.openSettings().catch(() => {
-      Alert.alert("Settings unavailable", "Open your phone settings and allow location for Vyaha.");
-    });
+  const openAddDeliveryAddress = () => {
+    navigation.navigate("Profile", { manageAddress: "add", returnAfterSave: true });
   };
 
-  const showLocationPermissionAlert = (prompt: LocationPermissionPrompt) => {
-    Alert.alert(
-      "Location Access Needed",
-      prompt.message,
-      prompt.canOpenSettings
-        ? [
-            { text: "Not Now", style: "cancel" },
-            { text: "Open Settings", onPress: openLocationSettings }
-          ]
-        : [{ text: "OK" }]
-    );
-  };
-
-  const requireLocationPermission = (
-    canOpenSettings: boolean,
-    message = LOCATION_PERMISSION_MESSAGE,
-    showAlert = true
-  ) => {
-    const prompt = { canOpenSettings, message };
-    setShops([]);
-    setLocationMessage(message);
-    setLocationPermissionPrompt(prompt);
-    if (showAlert) {
-      showLocationPermissionAlert(prompt);
-    }
-  };
-
-  const requestHomeLocationPermission = async () => {
-    const existingPermission = await Location.getForegroundPermissionsAsync();
-    if (existingPermission.status === "granted") {
-      return true;
-    }
-
-    if (existingPermission.canAskAgain === false) {
-      requireLocationPermission(true);
-      return false;
-    }
-
-    let permission: Location.LocationPermissionResponse;
-    try {
-      permission = await Location.requestForegroundPermissionsAsync();
-    } catch {
-      requireLocationPermission(true);
-      return false;
-    }
-
-    if (permission.status === "granted") {
-      return true;
-    }
-
-    requireLocationPermission(true);
-    return false;
-  };
-
-  const hasGrantedLocationPermission = async () => {
-    const existingPermission = await Location.getForegroundPermissionsAsync();
-    return existingPermission.status === "granted";
+  const resolveDeliveryPin = (profile?: UserProfile | null) => {
+    const selected = getSelectedAddress(profile);
+    const coordinates = parseAddressCoordinates(selected);
+    const addressLine = formatHomeDeliveryAddressLine(selected);
+    return { selected, coordinates, addressLine };
   };
 
   const loadNearbyShops = useCallback(async (options?: { showRefresh?: boolean; silent?: boolean }) => {
@@ -237,64 +159,43 @@ export default function HomeScreen({ navigation }: Props) {
       } else if (!silent) {
         setLoading(true);
       }
-      if (!silent) {
-        setLocationPermissionPrompt(null);
+
+      const profileResponse = await getUserProfile();
+      if (!profileResponse.success || !profileResponse.data) {
+        throw new Error(profileResponse.message || "Could not load your delivery address.");
       }
 
-      const hasLocationPermission = silent
-        ? await hasGrantedLocationPermission()
-        : await requestHomeLocationPermission();
-      if (!hasLocationPermission) {
+      const { coordinates, addressLine } = resolveDeliveryPin(profileResponse.data);
+      setDeliveryAddressLine(addressLine);
+
+      if (!coordinates) {
+        setShops([]);
+        setNeedsDeliveryAddress(true);
+        setLocationMessage(
+          addressLine
+            ? "Your delivery address needs an exact map pin. Update it in Profile to see nearby shops."
+            : `Add a delivery address in Profile to see shops within ${NEARBY_RADIUS_KM} km.`
+        );
         return;
       }
 
-      const locationServicesEnabled = await resolveWithTimeout(
-        Location.hasServicesEnabledAsync(),
-        LOCATION_TIMEOUT_MS
-      );
-      if (locationServicesEnabled === false) {
-        if (!silent) {
-          setShops([]);
-          setLocationMessage(`Turn on device location to see shops within ${NEARBY_RADIUS_KM} km of you.`);
-        }
-        return;
-      }
-
-      let location: Awaited<ReturnType<typeof getCurrentPositionWithTimeout>>;
-      try {
-        location = await getCurrentPositionWithTimeout();
-      } catch {
-        if (!silent) {
-          setShops([]);
-          setLocationMessage("Could not get your location. Pull to refresh and try again.");
-        }
-        return;
-      }
-
-      if (!location) {
-        if (!silent) {
-          setShops([]);
-          setLocationMessage("Waiting for your location. Pull to refresh to try again.");
-        }
-        return;
-      }
+      setNeedsDeliveryAddress(false);
 
       const response = await getPartners({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
         radiusKm: NEARBY_RADIUS_KM
       });
 
       const nearbyShops = extractShops(response);
 
       setShops(nearbyShops);
-      setLocationPermissionPrompt(null);
       setLocationMessage(
         nearbyShops.length > 0
           ? (response as any)?.locationApplied === false && (response as any)?.message
             ? (response as any).message
-            : `Showing shops within ${NEARBY_RADIUS_KM} km of your current location`
-          : (response as any)?.message || `No shops found within ${NEARBY_RADIUS_KM} km of you.`
+            : `Showing shops within ${NEARBY_RADIUS_KM} km of your delivery address`
+          : (response as any)?.message || `No shops found within ${NEARBY_RADIUS_KM} km of your delivery address.`
       );
     } catch (error: any) {
       if (!silent) {
@@ -303,29 +204,16 @@ export default function HomeScreen({ navigation }: Props) {
         setLocationMessage("Could not load nearby shops. Pull to refresh and try again.");
       }
     } finally {
-      if (!silent) {
-        setLoading(false);
-      }
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  const promptForLocationPermission = async () => {
-    const hasLocationPermission = await requestHomeLocationPermission();
-    if (!hasLocationPermission) {
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    await loadNearbyShops();
-  };
-
   useFocusEffect(
     useCallback(() => {
       loadOrderBadgeCount();
-      // Keep open/closed badges fresh whenever Home becomes visible.
-      void loadNearbyShops({ silent: true });
+      // Refresh shops from the saved delivery address whenever Home is focused.
+      void loadNearbyShops();
       const interval = setInterval(() => {
         void loadNearbyShops({ silent: true });
       }, 30000);
@@ -422,7 +310,15 @@ export default function HomeScreen({ navigation }: Props) {
     <View style={styles.headerWrap}>
       <View style={styles.heroRow}>
         <View style={styles.heroTextBlock}>
-          <Image source={require("../../assets/vyaha-wordmark.png")} style={styles.brandLogo} resizeMode="contain" />
+          <View style={styles.deliveryAddressBlock}>
+            <Text style={styles.deliveryEyebrow}>Delivering to</Text>
+            <View style={styles.deliveryAddressRow}>
+              <Feather name="map-pin" size={14} color="#FF6B35" style={styles.deliveryPinIcon} />
+              <Text style={styles.deliveryAddressText} numberOfLines={1}>
+                {deliveryAddressLine || "Add your delivery address"}
+              </Text>
+            </View>
+          </View>
           <View style={styles.heroStatsRow}>
             <View style={styles.heroStatBox}>
               <Text style={styles.heroStatValue}>{shops.length}</Text>
@@ -570,21 +466,18 @@ export default function HomeScreen({ navigation }: Props) {
     </View>
   );
 
-  const renderLocationRequired = () => (
+  const renderAddressRequired = () => (
     <View style={styles.emptyState}>
       <Feather name="map-pin" size={26} color="#FF6B35" />
-      <Text style={[styles.emptyTitle, styles.permissionTitle]}>Allow location to view shops</Text>
+      <Text style={[styles.emptyTitle, styles.permissionTitle]}>Add a delivery address</Text>
       <Text style={[styles.emptyText, styles.permissionText]}>
-        {locationPermissionPrompt?.message || LOCATION_PERMISSION_MESSAGE}
+        {locationMessage || `Add your delivery address to see shops within ${NEARBY_RADIUS_KM} km.`}
       </Text>
-      <TouchableOpacity
-        style={styles.permissionButton}
-        onPress={openLocationSettings}
-      >
-        <Text style={styles.permissionButtonText}>Open Settings</Text>
+      <TouchableOpacity style={styles.permissionButton} onPress={openAddDeliveryAddress}>
+        <Text style={styles.permissionButtonText}>Add address in Profile</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.permissionRetryButton} onPress={() => loadNearbyShops()}>
-        <Text style={styles.permissionRetryText}>I allowed it, try again</Text>
+        <Text style={styles.permissionRetryText}>I saved it, try again</Text>
       </TouchableOpacity>
     </View>
   );
@@ -592,7 +485,7 @@ export default function HomeScreen({ navigation }: Props) {
   const renderLoading = () => (
     <View style={styles.loadingState}>
       <ActivityIndicator size="large" color="#FF6B35" />
-      <Text style={styles.loadingText}>Finding shops near you...</Text>
+      <Text style={styles.loadingText}>Finding shops near your address...</Text>
     </View>
   );
 
@@ -604,7 +497,7 @@ export default function HomeScreen({ navigation }: Props) {
         data={filteredShops}
         keyExtractor={(item) => item._id}
         renderItem={renderShopItem}
-        ListEmptyComponent={loading ? renderLoading : locationPermissionPrompt ? renderLocationRequired : renderEmpty}
+        ListEmptyComponent={loading ? renderLoading : needsDeliveryAddress ? renderAddressRequired : renderEmpty}
         contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(insets.bottom, 14) }]}
         keyboardShouldPersistTaps="always"
         keyboardDismissMode="none"
@@ -645,6 +538,33 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 10,
     alignItems: "flex-start"
+  },
+  deliveryAddressBlock: {
+    width: "100%",
+    marginBottom: 8,
+    paddingRight: 4
+  },
+  deliveryEyebrow: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "700",
+    color: "#8A7F76",
+    marginBottom: 3
+  },
+  deliveryAddressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    maxWidth: "100%"
+  },
+  deliveryPinIcon: {
+    marginRight: 5
+  },
+  deliveryAddressText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "800",
+    color: "#1F1712"
   },
   brandLogo: {
     width: 154,
