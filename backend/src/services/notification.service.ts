@@ -91,7 +91,8 @@ const formatReadyByClock = (value: unknown) => {
   return date.toLocaleTimeString("en-IN", {
     hour: "numeric",
     minute: "2-digit",
-    hour12: true
+    hour12: true,
+    timeZone: "Asia/Kolkata"
   });
 };
 
@@ -399,15 +400,10 @@ export const notifyCustomerOrderStatus = async (order: any, status: string) => {
     title: "Order update",
     body: `Order #${orderId.slice(-6)} status changed to ${status}.`
   };
-  const readyBy = formatReadyByClock(order.estimatedReadyAt);
   let body =
     status === "CANCELLED" || status === "REJECTED"
       ? order.customerCancellationMessage || copy.body
       : copy.body;
-
-  if (status === "ACCEPTED" && readyBy) {
-    body = `The shop is preparing your order. Expected ready by ${readyBy}.`;
-  }
 
   if (status === "ASSIGNED") {
     const verificationCode = String(order.deliveryVerificationCode || "").trim();
@@ -423,8 +419,7 @@ export const notifyCustomerOrderStatus = async (order: any, status: string) => {
     data: {
       type: "ORDER_STATUS",
       orderId,
-      status,
-      ...(readyBy ? { estimatedReadyAt: String(order.estimatedReadyAt) } : {})
+      status
     }
   });
 };
