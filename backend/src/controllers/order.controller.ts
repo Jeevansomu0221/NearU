@@ -16,7 +16,8 @@ import {
   notifyDeliveryAssigned,
   notifyDeliveryJobReady,
   notifyPartnerDeliveryStatus,
-  notifyPartnerNewOrder
+  notifyPartnerNewOrder,
+  notifySelfDeliveryPrepScheduled
 } from "../services/notification.service";
 import { PaymentService } from "../services/payment.service";
 import { getRiderOrderEarnings } from "../services/payout.service";
@@ -1317,6 +1318,12 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     void notifyCustomerOrderStatus(order, status === "REJECTED" ? "REJECTED" : order.status).catch((error) => {
       console.error("Failed to notify customer about order status:", error);
     });
+
+    if (isAcceptingOrder && partner) {
+      void notifySelfDeliveryPrepScheduled(order, partner).catch((error) => {
+        console.error("Failed to notify self-delivery riders about prep schedule:", error);
+      });
+    }
 
     if (status === "READY" && previousStatus !== "READY") {
       let shouldNotifyDeliveryReady = true;

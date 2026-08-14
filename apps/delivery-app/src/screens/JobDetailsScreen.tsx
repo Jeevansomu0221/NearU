@@ -43,6 +43,7 @@ import {
   type MapLocation
 } from "../utils/mapCoordinates";
 import { getCurrentRiderLocation, useRiderLiveLocation } from "../utils/riderLocation";
+import { getRiderReadyByMessage } from "../utils/prepTime";
 import { getOrderRiderEarnings } from "../utils/riderEarnings";
 import { getImagePicker } from "../utils/imagePicker";
 import { uploadMultipart } from "../api/client";
@@ -1003,6 +1004,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const orderDisplayId = job.isBundledDelivery
     ? "Bundled"
     : `#${job._id.slice(-6).toUpperCase()}`;
+  const readyByMessage = getRiderReadyByMessage(job.estimatedReadyAt, job.prepTimeMinutes);
 
   const renderOrderMetaLink = () => (
     <View style={styles.orderMetaRight}>
@@ -1178,6 +1180,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         {renderOrderMetaLink()}
       </View>
       <Text style={styles.stopName} numberOfLines={2}>{stopName}</Text>
+      {isPickupPhase && readyByMessage ? (
+        <View style={styles.readyByBanner}>
+          <Ionicons name="time-outline" size={16} color="#1D4E89" />
+          <Text style={styles.readyByText}>{readyByMessage}</Text>
+        </View>
+      ) : null}
       <Text style={styles.stopAddress} numberOfLines={3}>{stopAddress}</Text>
       <View style={styles.stopActions}>
         {stopPhone ? (
@@ -2323,6 +2331,25 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#111827',
     marginBottom: 6,
+  },
+  readyByBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#EAF3FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  readyByText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1D4E89',
   },
   stopAddress: {
     fontSize: 14,

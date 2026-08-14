@@ -21,6 +21,7 @@ import { acceptJob, calculateDistance, DeliveryJob, getAvailableJobs, getDeliver
 import { getDeliveryProfile, updateDeliveryProfile } from "../api/profile.api";
 import { resolveDeliveryRoute } from "../utils/deliveryStatus";
 import { formatAddress } from "../utils/address";
+import { getRiderReadyByMessage } from "../utils/prepTime";
 import { getCurrentRiderLocation, subscribeRiderLocation } from "../utils/riderLocation";
 import NewJobBanner from "../components/NewJobBanner";
 
@@ -462,6 +463,7 @@ export default function JobsScreen({ navigation }: any) {
   const renderJobItem = ({ item }: { item: CalculatedJob }) => {
     const earnings = getOrderRiderEarnings(item);
     const accepted = acceptingJobId === item._id;
+    const readyByMessage = getRiderReadyByMessage(item.estimatedReadyAt, item.prepTimeMinutes);
     const pickupStops = item.pickupStops?.length
       ? item.pickupStops
       : [{ partnerId: item.partnerId, orderId: item._id, sequence: 1, status: item.status, items: item.items, itemTotal: item.itemTotal, deliveryFee: item.deliveryFee, grandTotal: item.grandTotal }];
@@ -487,6 +489,7 @@ export default function JobsScreen({ navigation }: any) {
         activeOpacity={0.9}
       >
         <Text style={styles.jobPayout}>₹{earnings}</Text>
+        {readyByMessage ? <Text style={styles.jobReadyBy}>{readyByMessage}</Text> : null}
 
         <View style={styles.routeSection}>
           <View style={styles.routeTimeline}>
@@ -874,8 +877,14 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     color: "#101828",
-    marginBottom: 14,
+    marginBottom: 6,
     letterSpacing: -0.4
+  },
+  jobReadyBy: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1D4E89",
+    marginBottom: 12
   },
   routeSection: {
     flexDirection: "row",

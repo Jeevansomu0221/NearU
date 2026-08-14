@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress, type AddressLike } from "../utils/address";
 import { getOrderRiderEarnings } from "../utils/riderEarnings";
+import { getRiderReadyByMessage } from "../utils/prepTime";
 
 type Job = {
   _id: string;
@@ -39,6 +40,8 @@ type Job = {
       address?: AddressLike;
     };
   }>;
+  prepTimeMinutes?: number;
+  estimatedReadyAt?: string;
   customerId?: {
     name?: string;
   };
@@ -124,6 +127,7 @@ export default function NewJobBanner({
     ? "Open details for pickup sequence"
     : formatAddress(job.partnerId?.address, { short: true });
   const paymentLabel = job.paymentMethod === "CASH_ON_DELIVERY" ? "Cash on delivery" : "Pre-paid";
+  const readyByMessage = getRiderReadyByMessage(job.estimatedReadyAt, job.prepTimeMinutes);
 
   return (
     <Animated.View
@@ -167,6 +171,13 @@ export default function NewJobBanner({
             </Text>
           </View>
         </View>
+
+        {readyByMessage ? (
+          <View style={styles.readyByBanner}>
+            <Ionicons name="time-outline" size={15} color="#1D4E89" />
+            <Text style={styles.readyByText}>{readyByMessage}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.metricsRow}>
           <Metric icon="speedometer-outline" label={distanceText} />
@@ -290,6 +301,24 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 2,
     lineHeight: 18
+  },
+  readyByBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    backgroundColor: "#EAF3FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  readyByText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1D4E89"
   },
   metricsRow: {
     flexDirection: "row",

@@ -85,6 +85,49 @@ const idString = (value: any) => {
   return typeof rawId.toString === "function" ? rawId.toString() : String(rawId);
 };
 
+const formatReadyByClock = (value: unknown) => {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  });
+};
+
+const getActiveSelfDeliveryUserIds = (partner: any): string[] => {
+  const settings = partner?.settings || {};
+  if (settings.deliveryMode !== "self") return [];
+
+  return (Array.isArray(settings.selfDeliveryPartners) ? settings.selfDeliveryPartners : [])
+    .filter((entry: any) => entry?.isActive !== false && entry?.userId)
+    .map((entry: any) => idString(entry.userId))
+    .filter(Boolean)
+    .slice(0, 5);
+};
+
+const getOnlineSelfDeliveryUserIds = async (partner: any) => {
+  const selfDeliveryUserIds = getActiveSelfDeliveryUserIds(partner);
+  if (!selfDeliveryUserIds.length) return [];
+
+  const activeUserObjectIds = selfDeliveryUserIds
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  if (!activeUserObjectIds.length) return [];
+
+  const onlineRiders = await DeliveryPartner.find({
+    userId: { $in: activeUserObjectIds },
+    status: { $in: ["ACTIVE", "VERIFIED"] },
+    isAvailable: { $ne: false }
+  })
+    .select("userId")
+    .lean();
+
+  const onlineUserIds = new Set(onlineRiders.map((rider: any) => idString(rider.userId)));
+  return selfDeliveryUserIds.filter((id) => onlineUserIds.has(id));
+};
+
 const compactIds = (values: any[]) =>
   Array.from(new Set(values.map((value) => idString(value)).filter(Boolean)));
 
@@ -337,18 +380,48 @@ export const notifyCustomerOrderStatus = async (order: any, status: string) => {
     title: "Order update",
     body: `Order #${orderId.slice(-6)} status changed to ${status}.`
   };
+  const readyBy = formatReadyByClock(order.estimatedReadyAt);
+  let body =
+    status === "CANCELLED" || status === "REJECTED"
+      ? order.customerCancellationMessage || copy.body
+      : copy.body;
+
+  if (status === "ACCEPTED" && readyBy) {
+    body = `The shop is preparing your order. Expected ready by ${readyBy}.`;
+  }
 
   await sendNotificationToUsers([order.customerId], {
     app: "customer",
     title: copy.title,
-    body:
-      status === "CANCELLED" || status === "REJECTED"
-        ? order.customerCancellationMessage || copy.body
-        : copy.body,
+    body,
     data: {
       type: "ORDER_STATUS",
       orderId,
-      status
+      status,
+      ...(readyBy ? { estimatedReadyAt: String(order.estimatedReadyAt) } : {})
+    }
+  });
+};
+
+export const notifySelfDeliveryPrepScheduled = async (order: any, partner: any) => {
+  const orderId = idString(order._id);
+  const readyBy = formatReadyByClock(order.estimatedReadyAt);
+  if (!readyBy) return;
+
+  const shopName = partner?.restaurantName || partner?.shopName || "Restaurant";
+  const selfDeliveryUserIds = await getOnlineSelfDeliveryUserIds(partner);
+  const allowedUserIds = await filterDeliveryUsersByPreference(selfDeliveryUserIds, "jobs");
+  if (!allowedUserIds.length) return;
+
+  await sendNotificationToUsers(allowedUserIds, {
+    app: "delivery",
+    title: `${shopName} is preparing an order`,
+    body: `Order will be ready by ${readyBy}. You'll get a pickup alert when the shop marks it ready.`,
+    data: {
+      type: "ORDER_PREP_SCHEDULED",
+      orderId,
+      status: "ACCEPTED",
+      estimatedReadyAt: String(order.estimatedReadyAt)
     }
   });
 };
@@ -380,7 +453,9 @@ export const notifyDeliveryJobReady = async (order: any) => {
     return;
   }
   const details = await getDeliveryJobNotificationDetails(order);
+  const readyBy = formatReadyByClock(order.estimatedReadyAt);
   const bodyParts = [
+    readyBy ? `Ready by ${readyBy}` : "Ready for pickup",
     `Pickup: ${details.restaurantName}${details.pickupAddress ? ` - ${details.pickupAddress}` : ""}`,
     `Drop: ${details.customerName}${details.dropAddress ? ` - ${details.dropAddress}` : ""}`,
     `Earn Rs ${details.earnings} | Order Rs ${details.orderTotal} | ${details.paymentLabel}`
@@ -444,14 +519,21 @@ export const notifyAssignedDeliveryPartner = async (order: any) => {
   const allowedUserIds = await filterDeliveryUsersByPreference([idString(order.deliveryPartnerId)], "jobs");
   if (!allowedUserIds.length) return;
 
+  const orderId = idString(order._id);
+  const readyBy = formatReadyByClock(order.estimatedReadyAt);
+  const body = readyBy
+    ? `Order #${orderId.slice(-6)} assigned. Order will be ready by ${readyBy}.`
+    : `Order #${orderId.slice(-6)} has been assigned to you.`;
+
   await sendNotificationToUsers(allowedUserIds, {
     app: "delivery",
     title: "Delivery assigned",
-    body: `Order #${idString(order._id).slice(-6)} has been assigned to you.`,
+    body,
     data: {
       type: "DELIVERY_ASSIGNED",
-      orderId: idString(order._id),
-      jobId: idString(order._id)
+      orderId,
+      jobId: orderId,
+      ...(readyBy ? { estimatedReadyAt: String(order.estimatedReadyAt) } : {})
     }
   });
 };

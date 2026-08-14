@@ -10,6 +10,7 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { getReadyByLabelFromMinutes } from "../utils/prepTime";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const MIN_PREP_TIME_MINUTES = 5;
@@ -166,6 +167,7 @@ export default function NewOrderBanner({
                 <Text style={styles.prepTimeStepText}>+</Text>
               </TouchableOpacity>
             </View>
+            <Text style={styles.prepReadyByText}>{getReadyByLabelFromMinutes(prepTimeMinutes)}</Text>
           </View>
         ) : null}
 
@@ -310,6 +312,13 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderColor: "#E5E7EB",
     paddingVertical: 10
+  },
+  prepReadyByText: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1D4E89",
+    textAlign: "center"
   },
   actionButtonsRow: {
     flexDirection: "row",

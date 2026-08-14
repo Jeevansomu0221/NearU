@@ -15,6 +15,7 @@ import {
 import api from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { partnerTheme } from "../theme";
+import { getReadyByLabelFromDate, getReadyByLabelFromMinutes } from "../utils/prepTime";
 
 interface OrderItem {
   name: string;
@@ -44,6 +45,8 @@ interface Order {
   itemTotal: number;
   paymentMethod: string;
   paymentStatus: string;
+  prepTimeMinutes?: number;
+  estimatedReadyAt?: string;
   cancellationReason?: string;
   customerCancellationMessage?: string;
 }
@@ -465,7 +468,7 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const getPendingStatusText = () => {
     switch (pendingStatus) {
       case "ACCEPTED":
-        return `Food preparation time will be set to ${prepTimeMinutes} mins. The customer will see that your restaurant accepted the order.`;
+        return `Food will be ready by ${formatReadyByLabelFromMinutes(prepTimeMinutes).replace("Ready by ", "")}. The customer and rider will see this time.`;
       case "REJECTED":
         return "The order will be marked as cancelled. The customer will see that any online payment refund will be completed within today.";
       default:
@@ -539,6 +542,22 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
                 <Text style={[styles.prepTimeStepText, isDarkMode && styles.textDark]}>+</Text>
               </TouchableOpacity>
             </View>
+            <Text style={[styles.prepReadyByText, isDarkMode && styles.prepReadyByTextDark]}>
+              {getReadyByLabelFromMinutes(prepTimeMinutes)}
+            </Text>
+            <Text style={[styles.prepReadyByHint, isDarkMode && styles.mutedTextDark]}>
+              Rider will be told the order will be ready by this time.
+            </Text>
+          </View>
+        ) : null}
+
+        {(order.status === "ACCEPTED" || order.status === "PREPARING") && order.estimatedReadyAt ? (
+          <View style={[styles.readyByCard, isDarkMode && styles.readyByCardDark]}>
+            <Text style={[styles.readyByLabel, isDarkMode && styles.mutedTextDark]}>Promised ready time</Text>
+            <Text style={[styles.readyByValue, isDarkMode && styles.textDark]}>
+              {getReadyByLabelFromDate(order.estimatedReadyAt)}
+              {order.prepTimeMinutes ? ` · ${order.prepTimeMinutes} mins prep` : ""}
+            </Text>
           </View>
         ) : null}
 

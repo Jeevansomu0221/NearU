@@ -60,6 +60,8 @@ export interface DeliveryOrder {
   estimatedDistance?: number;
   estimatedEarnings?: number;
   deliveryEarnings?: number;
+  prepTimeMinutes?: number;
+  estimatedReadyAt?: string;
   collectedAmount?: number;
   deliveryBundleId?: string;
   deliveryBundleSize?: number;

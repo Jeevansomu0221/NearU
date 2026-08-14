@@ -13,6 +13,7 @@ import { getMyDeliveryOrders, DeliveryOrder } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "../utils/address";
+import { getRiderReadyByMessage } from "../utils/prepTime";
 
 export default function MyJobsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
@@ -103,6 +104,7 @@ export default function MyJobsScreen({ navigation, route }: any) {
     const pickupStops = item.pickupStops?.length
       ? item.pickupStops
       : [{ partnerId: item.partnerId, orderId: item._id, sequence: 1, status: item.status, items: item.items, itemTotal: item.itemTotal, deliveryFee: item.deliveryFee, grandTotal: item.grandTotal }];
+    const readyByMessage = getRiderReadyByMessage(item.estimatedReadyAt, item.prepTimeMinutes);
 
     return (
       <TouchableOpacity
@@ -122,6 +124,13 @@ export default function MyJobsScreen({ navigation, route }: any) {
           <Text style={styles.statusText}>{item.status.replace("_", " ")}</Text>
         </View>
       </View>
+
+      {readyByMessage && (item.status === "ASSIGNED" || item.status === "READY") ? (
+        <View style={styles.readyByBanner}>
+          <Ionicons name="time-outline" size={14} color="#1D4E89" />
+          <Text style={styles.readyByText}>{readyByMessage}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.restaurantInfo}>
         {pickupStops.map((stop, index) => (
@@ -269,6 +278,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
+  },
+  readyByBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#EAF3FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  readyByText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1D4E89',
   },
   orderId: {
     fontSize: 16,
