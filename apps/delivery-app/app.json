@@ -3,7 +3,7 @@
     "name": "Vyaha Delivery",
     "slug": "vyaha-delivery",
     "scheme": "vyaha-delivery",
-    "version": "1.0.23",
+    "version": "1.0.24",
     "orientation": "portrait",
     "icon": "./assets/vyaha-delivery-app-icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.vyaha.delivery",
-      "versionCode": 39,
+      "versionCode": 40,
       "softwareKeyboardLayoutMode": "resize",
       "googleServicesFile": "./google-services.json",
       "permissions": [
@@ -58,7 +58,8 @@
       [
         "../../plugins/with-vyaha-android-notifications",
         {
-          "iconSource": "./assets/vyaha-delivery-app-icon.png",
+          "iconSource": "./assets/notification-icon.png",
+          "largeIconSource": "./assets/notification-large-icon.png",
           "color": "#0F9D58",
           "channelName": "Vyaha Delivery alerts",
           "channelDescription": "Important delivery job and profile alerts."

@@ -14,10 +14,13 @@ const {
 const CHANNEL_ID = "vyaha_alerts";
 const DEFAULT_COLOR = "#0F9D58";
 const ICON_RESOURCE = "vyaha_notification_icon";
+const LARGE_ICON_RESOURCE = "vyaha_notification_large_icon";
 const COLOR_RESOURCE = "vyaha_notification_color";
 const FIREBASE_JSON_FILE = "firebase.json";
 const REACT_NATIVE_FIREBASE_ROOT = "react-native";
 
+// Android small icons are alpha-only. A full-color square PNG becomes a dark
+// square inside the notification's colored circle. Keep this a white silhouette.
 const NOTIFICATION_ICON_XML = `<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
@@ -41,62 +44,55 @@ const addOrUpdateMetaData = (application, name, attrs) => {
   application["meta-data"] = metaData;
 };
 
-const removeMetaData = (application, names) => {
-  const metaData = application["meta-data"] || [];
-  application["meta-data"] = metaData.filter((item) => !names.includes(item.$?.["android:name"]));
-};
-
-const removeExistingIconResources = (resPath) => {
+const removeExistingIconResources = (resPath, resourceName) => {
   if (!fs.existsSync(resPath)) return;
 
   for (const entry of fs.readdirSync(resPath, { withFileTypes: true })) {
     if (!entry.isDirectory() || !entry.name.startsWith("drawable")) continue;
     const resourcePath = path.join(resPath, entry.name);
     for (const file of fs.readdirSync(resourcePath)) {
-      if (file.startsWith(`${ICON_RESOURCE}.`)) {
+      if (file.startsWith(`${resourceName}.`)) {
         fs.rmSync(path.join(resourcePath, file), { force: true });
       }
     }
   }
 };
 
-const ensureResources = (projectRoot, iconSource) => {
+const copyPngToDrawable = (resPath, sourcePath, resourceName, folder = "drawable-xxxhdpi") => {
+  const destDir = path.join(resPath, folder);
+  fs.mkdirSync(destDir, { recursive: true });
+  fs.copyFileSync(sourcePath, path.join(destDir, `${resourceName}.png`));
+};
+
+const resolveIconPath = (projectRoot, iconSource) => {
+  if (!iconSource) return null;
+  const iconPath = path.resolve(projectRoot, iconSource);
+  if (!fs.existsSync(iconPath)) {
+    throw new Error(`Notification icon source not found: ${iconPath}`);
+  }
+  return iconPath;
+};
+
+const ensureResources = (projectRoot, iconSource, largeIconSource) => {
   const resPath = path.join(projectRoot, "android", "app", "src", "main", "res");
-  removeExistingIconResources(resPath);
+  removeExistingIconResources(resPath, ICON_RESOURCE);
+  removeExistingIconResources(resPath, LARGE_ICON_RESOURCE);
 
-  if (iconSource) {
-    const iconPath = path.resolve(projectRoot, iconSource);
-    if (!fs.existsSync(iconPath)) {
-      throw new Error(`Notification icon source not found: ${iconPath}`);
-    }
-
-    const ext = path.extname(iconPath) || ".png";
-    const iconFileName = `${ICON_RESOURCE}${ext}`;
-
-    // Copy PNG to both drawable/ and drawable-nodpi/ so the app logo
-    // always takes priority over any stale vector XML across all density buckets.
+  const smallIconPath = resolveIconPath(projectRoot, iconSource);
+  if (smallIconPath) {
+    // xxxhdpi 24dp = 96px. Lower densities scale this down, which keeps the
+    // silhouette sharp. Do not copy opaque launcher icons into drawable/.
+    copyPngToDrawable(resPath, smallIconPath, ICON_RESOURCE);
+  } else {
     const drawablePath = path.join(resPath, "drawable");
     fs.mkdirSync(drawablePath, { recursive: true });
-    fs.copyFileSync(iconPath, path.join(drawablePath, iconFileName));
-
-    const drawableNoDpiPath = path.join(resPath, "drawable-nodpi");
-    fs.mkdirSync(drawableNoDpiPath, { recursive: true });
-    fs.copyFileSync(iconPath, path.join(drawableNoDpiPath, iconFileName));
-
-    // Also copy into every standard density bucket so the PNG is
-    // preferred regardless of the device's screen density.
-    for (const density of ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]) {
-      const densityDir = path.join(resPath, `drawable-${density}`);
-      fs.mkdirSync(densityDir, { recursive: true });
-      fs.copyFileSync(iconPath, path.join(densityDir, iconFileName));
-    }
-
-    return;
+    fs.writeFileSync(path.join(drawablePath, `${ICON_RESOURCE}.xml`), NOTIFICATION_ICON_XML);
   }
 
-  const drawablePath = path.join(resPath, "drawable");
-  fs.mkdirSync(drawablePath, { recursive: true });
-  fs.writeFileSync(path.join(drawablePath, `${ICON_RESOURCE}.xml`), NOTIFICATION_ICON_XML);
+  const largeIconPath = resolveIconPath(projectRoot, largeIconSource);
+  if (largeIconPath) {
+    copyPngToDrawable(resPath, largeIconPath, LARGE_ICON_RESOURCE);
+  }
 };
 
 const ensureFirebaseJson = (projectRoot) => {
@@ -221,6 +217,7 @@ const withVyahaAndroidNotifications = (config, props = {}) => {
   const channelName = props.channelName || "Vyaha alerts";
   const channelDescription = props.channelDescription || "Important order, job, and account alerts.";
   const iconSource = props.iconSource;
+  const largeIconSource = props.largeIconSource;
 
   config = withAndroidColors(config, (androidConfig) => {
     androidConfig.modResults = AndroidConfig.Colors.setColorItem(
@@ -235,12 +232,14 @@ const withVyahaAndroidNotifications = (config, props = {}) => {
 
   config = withAndroidManifest(config, (androidConfig) => {
     const application = AndroidConfig.Manifest.getMainApplicationOrThrow(androidConfig.modResults);
-    removeMetaData(application, [
-      "com.google.firebase.messaging.default_notification_color",
-      "com.google.firebase.messaging.default_notification_channel_id"
-    ]);
     addOrUpdateMetaData(application, "com.google.firebase.messaging.default_notification_icon", {
       "android:resource": `@drawable/${ICON_RESOURCE}`
+    });
+    addOrUpdateMetaData(application, "com.google.firebase.messaging.default_notification_color", {
+      "android:resource": `@color/${COLOR_RESOURCE}`
+    });
+    addOrUpdateMetaData(application, "com.google.firebase.messaging.default_notification_channel_id", {
+      "android:value": CHANNEL_ID
     });
     return androidConfig;
   });
@@ -248,7 +247,7 @@ const withVyahaAndroidNotifications = (config, props = {}) => {
   config = withDangerousMod(config, [
     "android",
     (androidConfig) => {
-      ensureResources(androidConfig.modRequest.projectRoot, iconSource);
+      ensureResources(androidConfig.modRequest.projectRoot, iconSource, largeIconSource);
       ensureFirebaseJson(androidConfig.modRequest.projectRoot);
       return androidConfig;
     }
@@ -276,3 +275,5 @@ const withVyahaAndroidNotifications = (config, props = {}) => {
 
 module.exports = withVyahaAndroidNotifications;
 module.exports.CHANNEL_ID = CHANNEL_ID;
+module.exports.ICON_RESOURCE = ICON_RESOURCE;
+module.exports.LARGE_ICON_RESOURCE = LARGE_ICON_RESOURCE;

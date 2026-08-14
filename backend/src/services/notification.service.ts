@@ -335,6 +335,7 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
           priority: "high",
           notification: {
             channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+            icon: "vyaha_notification_icon",
             color: ANDROID_NOTIFICATION_COLORS[options.app || "customer"],
             priority: "high",
             sound: "default"

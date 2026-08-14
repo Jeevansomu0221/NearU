@@ -16,6 +16,8 @@ import { isAvailableJobsTabFocused } from "./availableJobsRegistry";
 const NOTIFICATION_APP = "delivery";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:delivery";
 const ANDROID_NOTIFICATION_CHANNEL_ID = "vyaha_alerts";
+const ANDROID_NOTIFICATION_SMALL_ICON = "vyaha_notification_icon";
+const ANDROID_NOTIFICATION_LARGE_ICON = "vyaha_notification_large_icon";
 const DELIVERY_ACCEPT_ACTION = "delivery_accept";
 const DELIVERY_REJECT_ACTION = "delivery_reject";
 const DELIVERY_VIEW_ACTION = "delivery_view";
@@ -274,7 +276,8 @@ const displayDeliveryJobNotification = async (remoteMessage: any) => {
     data,
     android: {
       channelId,
-      smallIcon: "vyaha_notification_icon",
+      smallIcon: ANDROID_NOTIFICATION_SMALL_ICON,
+      largeIcon: ANDROID_NOTIFICATION_LARGE_ICON,
       color: "#0F9D58",
       pressAction: { id: "default" },
       actions: [
@@ -308,7 +311,8 @@ const displayActionResultNotification = async (title: string, body: string, data
     }, {}),
     android: {
       channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
-      smallIcon: "vyaha_notification_icon",
+      smallIcon: ANDROID_NOTIFICATION_SMALL_ICON,
+      largeIcon: ANDROID_NOTIFICATION_LARGE_ICON,
       color: "#0F9D58",
       pressAction: { id: "default" }
     }
