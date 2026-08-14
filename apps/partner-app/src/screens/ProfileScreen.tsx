@@ -377,6 +377,9 @@ export default function ProfileScreen({ navigation }: any) {
     if (profile) {
       hydrateFromProfile(profile);
     }
+    setCapturedLocation(null);
+    setPendingPin(null);
+    setPinConfirmVisible(false);
     setActiveEditSection(null);
   };
 
@@ -536,15 +539,6 @@ export default function ProfileScreen({ navigation }: any) {
     } finally {
       setCapturingLocation(false);
     }
-  };
-
-  const handleSaveLocation = async () => {
-    if (!capturedLocation) {
-      Alert.alert("No location", "Tap Mark my location while standing at your shop first.");
-      return;
-    }
-    await saveUpdate({ location: capturedLocation }, "Shop location updated");
-    setCapturedLocation(null);
   };
 
   const handleSaveAddress = async () => {
@@ -1355,13 +1349,20 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={[styles.card, isDarkMode && styles.cardDark]}>
         {renderSectionHeader(
           "Address & Location",
-          "Keep the address and GPS pin accurate for customer deliveries.",
+          addressEditing
+            ? "Edit the address, then use current location or confirm on the map."
+            : "Tap Edit to change address or update the shop pin.",
           renderEditAction("address", addressEditing)
         )}
 
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Road / street</Text>
+        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Road / street</Text>
         <TextInput
-          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
+          style={[
+            styles.addressInput,
+            isDarkMode && styles.inputDark,
+            !addressEditing && styles.addressInputDisabled,
+            !addressEditing && isDarkMode && styles.inputDisabledDark
+          ]}
           placeholder="Road / street"
           placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.roadStreet}
@@ -1369,9 +1370,14 @@ export default function ProfileScreen({ navigation }: any) {
           editable={addressEditing}
         />
 
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Colony / society</Text>
+        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Colony / society</Text>
         <TextInput
-          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
+          style={[
+            styles.addressInput,
+            isDarkMode && styles.inputDark,
+            !addressEditing && styles.addressInputDisabled,
+            !addressEditing && isDarkMode && styles.inputDisabledDark
+          ]}
           placeholder="Colony or society"
           placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.colony}
@@ -1379,9 +1385,14 @@ export default function ProfileScreen({ navigation }: any) {
           editable={addressEditing}
         />
 
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Area / locality</Text>
+        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Area / locality</Text>
         <TextInput
-          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
+          style={[
+            styles.addressInput,
+            isDarkMode && styles.inputDark,
+            !addressEditing && styles.addressInputDisabled,
+            !addressEditing && isDarkMode && styles.inputDisabledDark
+          ]}
           placeholder="Area or locality"
           placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.area}
@@ -1391,9 +1402,14 @@ export default function ProfileScreen({ navigation }: any) {
 
         <View style={styles.row}>
           <View style={styles.half}>
-            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>City</Text>
+            <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>City</Text>
             <TextInput
-              style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
+              style={[
+                styles.addressInput,
+                isDarkMode && styles.inputDark,
+                !addressEditing && styles.addressInputDisabled,
+                !addressEditing && isDarkMode && styles.inputDisabledDark
+              ]}
               placeholder="City"
               placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={address.city}
@@ -1402,9 +1418,14 @@ export default function ProfileScreen({ navigation }: any) {
             />
           </View>
           <View style={styles.half}>
-            <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>State</Text>
+            <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>State</Text>
             <TextInput
-              style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
+              style={[
+                styles.addressInput,
+                isDarkMode && styles.inputDark,
+                !addressEditing && styles.addressInputDisabled,
+                !addressEditing && isDarkMode && styles.inputDisabledDark
+              ]}
               placeholder="State"
               placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
               value={address.state}
@@ -1414,9 +1435,14 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </View>
 
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Pincode</Text>
+        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Pincode</Text>
         <TextInput
-          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
+          style={[
+            styles.addressInput,
+            isDarkMode && styles.inputDark,
+            !addressEditing && styles.addressInputDisabled,
+            !addressEditing && isDarkMode && styles.inputDisabledDark
+          ]}
           placeholder="6-digit pincode"
           placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.pincode}
@@ -1426,9 +1452,14 @@ export default function ProfileScreen({ navigation }: any) {
           editable={addressEditing}
         />
 
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Landmark / nearby places</Text>
+        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Landmark / nearby places</Text>
         <TextInput
-          style={[styles.input, isDarkMode && styles.inputDark, !addressEditing && styles.inputDisabled, !addressEditing && isDarkMode && styles.inputDisabledDark]}
+          style={[
+            styles.addressInput,
+            isDarkMode && styles.inputDark,
+            !addressEditing && styles.addressInputDisabled,
+            !addressEditing && isDarkMode && styles.inputDisabledDark
+          ]}
           placeholder="Eg. Beside SBI ATM, opposite KFC"
           placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.landmark}
@@ -1436,51 +1467,42 @@ export default function ProfileScreen({ navigation }: any) {
           editable={addressEditing}
         />
 
-        <Text style={[styles.label, isDarkMode && styles.mutedTextDark]}>Shop location</Text>
-        <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>
-          Use current location to auto-fill the address and pin, or save the typed address to confirm it on the map.
-        </Text>
-        {capturedLocation ? (
-          <View style={[styles.locationPinCard, isDarkMode && styles.surfaceDark]}>
-            <Ionicons name="location" size={18} color="#1D4E89" />
-            <View style={styles.locationPinCopy}>
-              <Text style={[styles.locationPinTitle, isDarkMode && styles.textDark]}>New location captured</Text>
-              <Text style={[styles.locationPinSubtitle, isDarkMode && styles.mutedTextDark]}>Tap Save location to apply.</Text>
-            </View>
-          </View>
-        ) : savedShopLocation ? (
-          <View style={[styles.locationPinCard, isDarkMode && styles.surfaceDark]}>
-            <Ionicons name="checkmark-circle" size={18} color="#34D399" />
-            <View style={styles.locationPinCopy}>
-              <Text style={[styles.locationPinTitle, isDarkMode && styles.textDark]}>Location saved</Text>
-            </View>
+        {savedShopLocation ? (
+          <View style={[styles.locationStatusCompact, isDarkMode && styles.surfaceDark]}>
+            <Ionicons name="checkmark-circle" size={14} color="#34D399" />
+            <Text style={[styles.locationStatusCompactText, isDarkMode && styles.mutedTextDark]}>
+              Shop pin saved
+            </Text>
           </View>
         ) : (
-          <Text style={[styles.helperText, isDarkMode && styles.mutedTextDark]}>No location saved yet.</Text>
+          <Text style={[styles.addressHelperText, isDarkMode && styles.mutedTextDark]}>No shop pin saved yet.</Text>
         )}
-        <TouchableOpacity
-          style={[styles.secondaryButton, isDarkMode && styles.secondaryButtonDark]}
-          onPress={captureShopLocation}
-          disabled={saving || capturingLocation}
-        >
-          {capturingLocation ? (
-            <ActivityIndicator color="#60A5FA" />
-          ) : (
-            <Text style={styles.secondaryButtonText}>
-              {savedShopLocation || capturedLocation ? "Use current location again" : "Use current location"}
-            </Text>
-          )}
-        </TouchableOpacity>
-        {capturedLocation ? (
-          <TouchableOpacity style={styles.primaryButton} onPress={handleSaveLocation} disabled={saving}>
-            {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save location</Text>}
-          </TouchableOpacity>
-        ) : null}
 
         {addressEditing ? (
-          <TouchableOpacity style={styles.primaryButton} onPress={handleSaveAddress} disabled={saving}>
-            {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save address</Text>}
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.addressActionButton, isDarkMode && styles.secondaryButtonDark]}
+              onPress={captureShopLocation}
+              disabled={saving || capturingLocation}
+            >
+              {capturingLocation ? (
+                <ActivityIndicator color="#60A5FA" />
+              ) : (
+                <Text style={styles.secondaryButtonText}>Use current location</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.primaryButton, styles.addressActionButton]}
+              onPress={handleSaveAddress}
+              disabled={saving || capturingLocation}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Confirm location on map</Text>
+              )}
+            </TouchableOpacity>
+          </>
         ) : null}
       </View>
 
@@ -2140,6 +2162,13 @@ const styles = StyleSheet.create({
     color: "#486887",
     marginBottom: 6
   },
+  addressLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#486887",
+    marginBottom: 4,
+    marginTop: 2
+  },
   input: {
     borderWidth: 1,
     borderColor: "#CFE0F5",
@@ -2150,6 +2179,51 @@ const styles = StyleSheet.create({
     color: "#123456",
     backgroundColor: "#F9FCFF",
     marginBottom: 12
+  },
+  addressInput: {
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 13,
+    color: "#123456",
+    backgroundColor: "#F9FCFF",
+    marginBottom: 6,
+    minHeight: 36
+  },
+  addressInputDisabled: {
+    backgroundColor: "#F1F5F9",
+    color: "#64748B"
+  },
+  addressHelperText: {
+    marginTop: 4,
+    fontSize: 11,
+    color: "#5E7897"
+  },
+  locationStatusCompact: {
+    marginTop: 6,
+    marginBottom: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#BBF7D0"
+  },
+  locationStatusCompactText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#047857"
+  },
+  addressActionButton: {
+    marginTop: 8,
+    paddingVertical: 11,
+    borderRadius: 12
   },
   inputDisabled: {
     backgroundColor: "#EEF4FB",
