@@ -545,12 +545,34 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
                 <Text style={[styles.prepTimeStepText, isDarkMode && styles.textDark]}>+</Text>
               </TouchableOpacity>
             </View>
-            <Text style={[styles.prepReadyByText, isDarkMode && styles.prepReadyByTextDark]}>
-              {getReadyByLabelFromMinutes(prepTimeMinutes)}
-            </Text>
-            <Text style={[styles.prepReadyByHint, isDarkMode && styles.mutedTextDark]}>
-              Rider will be told the order will be ready by this time.
-            </Text>
+            <View style={styles.actionsRow}>
+              {showRejectButton ? (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.rejectButtonOutline, isDarkMode && styles.rejectButtonOutlineDark]}
+                  onPress={() => setPendingStatus("REJECTED")}
+                  disabled={updating}
+                >
+                  <Text style={styles.rejectButtonOutlineText}>Reject</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.actionButton, styles.acceptButton]}
+                onPress={() => setPendingStatus("ACCEPTED")}
+                disabled={updating}
+              >
+                <Text style={styles.actionButtonText}>Accept order</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : showRejectButton ? (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.rejectButtonOutline, isDarkMode && styles.rejectButtonOutlineDark]}
+              onPress={() => setPendingStatus("REJECTED")}
+              disabled={updating}
+            >
+              <Text style={styles.rejectButtonOutlineText}>Reject</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -564,27 +586,6 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
           </View>
         ) : null}
 
-        <View style={styles.actionsRow}>
-          {showRejectButton && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButtonOutline, isDarkMode && styles.rejectButtonOutlineDark]}
-              onPress={() => setPendingStatus("REJECTED")}
-              disabled={updating}
-            >
-              <Text style={styles.rejectButtonOutlineText}>Reject</Text>
-            </TouchableOpacity>
-          )}
-
-          {showAcceptButton && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.acceptButton]}
-              onPress={() => setPendingStatus("ACCEPTED")}
-              disabled={updating}
-            >
-              <Text style={styles.actionButtonText}>Accept order</Text>
-            </TouchableOpacity>
-          )}
-        </View>
       </View>
 
       {showPreparingSwipe ? (
@@ -825,11 +826,10 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: partnerTheme.colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: partnerTheme.colors.borderSoft,
-    gap: 12
+    borderBottomColor: partnerTheme.colors.borderSoft
   },
   prepTimeBlock: {
-    gap: 8
+    gap: 10
   },
   prepTimeLabel: {
     fontSize: 13,
