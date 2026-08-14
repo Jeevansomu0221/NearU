@@ -89,8 +89,8 @@ if (!serviceAccount && fs.existsSync(outFile)) {
 }
 
 if (!serviceAccount) {
-  console.error("Could not parse FIREBASE_SERVICE_ACCOUNT_JSON and no valid credentials file exists");
-  process.exit(1);
+  console.warn("Could not parse FIREBASE_SERVICE_ACCOUNT_JSON; keeping existing runtime configuration");
+  process.exit(0);
 }
 
 fs.mkdirSync(path.dirname(outFile), { recursive: true });

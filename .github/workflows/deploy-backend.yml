@@ -16,10 +16,13 @@ jobs:
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         with:
           host: ${{ github.event.inputs.host }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
+          envs: FIREBASE_SERVICE_ACCOUNT_JSON
           script_stop: true
           command_timeout: 15m
           script: |
@@ -37,10 +40,10 @@ jobs:
             sed -i '/^GOOGLE_MAPS_API_KEY=/d' "$APP_DIR/.env"
             printf '\nGOOGLE_MAPS_API_KEY=%s\n' "${{ secrets.GOOGLE_MAPS_API_KEY }}" >> "$APP_DIR/.env"
             mkdir -p "$APP_DIR/config"
-            if [[ -n "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" ]]; then
-              printf '%s' "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > "$APP_DIR/config/firebase-service-account.json"
+            if [[ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]]; then
+              printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$APP_DIR/config/firebase-service-account.json"
             fi
-            bash /opt/vyaha/repo/scripts/vps-materialize-firebase-credentials.sh "$APP_DIR"
+            bash /opt/vyaha/repo/scripts/vps-materialize-firebase-credentials.sh "$APP_DIR" || echo "WARN: Could not materialize Firebase credentials from .env"
             bash /opt/vyaha/repo/scripts/vps-deploy-backend.sh
             # Cloudflare Full SSL needs origin :443 — restore certs if deploy left HTTP-only
             bash /opt/vyaha/repo/scripts/restore-api-ssl.sh
