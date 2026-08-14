@@ -72,6 +72,7 @@ type NoLocationModalState = {
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const OPEN_AVAILABLE_JOB_STATUSES = new Set(["ACCEPTED", "PREPARING", "READY"]);
 const UPI_FOCUS_SIZE = SCREEN_WIDTH - 40;
 const UPI_NATIVE_QR_SIZE = UPI_FOCUS_SIZE - 12;
 // Razorpay poster proportions: width ≈ 63% of height (630×1008 px)
@@ -989,7 +990,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         deliveryReadyAt: job.deliveryReadyAt
       }];
 
-  const isPickupPhase = job.status === "READY" || job.status === "ASSIGNED";
+  const isPickupPhase = OPEN_AVAILABLE_JOB_STATUSES.has(job.status) || job.status === "ASSIGNED";
   const activePickupStop = pickupStops.find((stop) => stop.status !== "PICKED_UP" && stop.status !== "DELIVERED") || pickupStops[0];
   const activePickupCoords = resolveLatLng({
     location: activePickupStop?.partnerId?.location,
@@ -1070,7 +1071,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   );
   const isReadyForPickup = pickupStatusMessage === RIDER_READY_FOR_PICKUP_MESSAGE;
   const showPickupStatusBanner =
-    Boolean(pickupStatusMessage) && (job.status === "READY" || job.status === "ASSIGNED");
+    Boolean(pickupStatusMessage) &&
+    (OPEN_AVAILABLE_JOB_STATUSES.has(job.status) || job.status === "ASSIGNED");
 
   const renderReadyByBanner = (style?: object) =>
     showPickupStatusBanner ? (
@@ -1170,7 +1172,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   );
 
   const renderSwipeActions = () => {
-    if (job.status === "READY") {
+    if (OPEN_AVAILABLE_JOB_STATUSES.has(job.status)) {
       return (
         <TouchableOpacity
           style={styles.actionButton}
@@ -1453,7 +1455,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
       {showDeliveryDetails ? renderDeliveryDetails() : null}
 
-      {job.status === "READY" ? (
+      {OPEN_AVAILABLE_JOB_STATUSES.has(job.status) ? (
         <ScrollView
           style={styles.container}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]}
@@ -1470,7 +1472,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               </View>
               <View style={styles.headerRight}>
                 <View style={styles.statusBadge}>
-                  <Text style={styles.statusText}>READY</Text>
+                  <Text style={styles.statusText}>
+                    {job.status === "READY" ? "READY" : "PREPARING"}
+                  </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setReceiptVisible(true)}
@@ -1609,7 +1613,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         </ScrollView>
       ) : null}
 
-      {(job.status === "READY" || showDeliveryDetails) && (
+      {(OPEN_AVAILABLE_JOB_STATUSES.has(job.status) || showDeliveryDetails) && (
         <View style={[styles.bottomActionBar, { paddingBottom: bottomPad }]}>
           {renderSwipeActions()}
         </View>

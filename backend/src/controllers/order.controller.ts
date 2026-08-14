@@ -17,8 +17,7 @@ import {
   notifyDeliveryAssigned,
   notifyDeliveryJobReady,
   notifyPartnerDeliveryStatus,
-  notifyPartnerNewOrder,
-  notifySelfDeliveryPrepScheduled
+  notifyPartnerNewOrder
 } from "../services/notification.service";
 import { PaymentService } from "../services/payment.service";
 import { getRiderOrderEarnings } from "../services/payout.service";
@@ -248,19 +247,21 @@ const buildUnassignedDeliveryFilter = () => ({
   $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
 });
 
-const buildStaleDeliveryReadyFilter = (deadline: Date) => ({
+const OPEN_DELIVERY_JOB_STATUSES = ["ACCEPTED", "PREPARING", "READY"];
+
+const buildStaleOpenDeliveryJobFilter = (deadline: Date) => ({
   $or: [
-    { deliveryReadyAt: { $lte: deadline } },
-    { deliveryReadyAt: { $exists: false }, updatedAt: { $lte: deadline } },
-    { deliveryReadyAt: null, updatedAt: { $lte: deadline } }
+    { acceptedAt: { $lte: deadline } },
+    { acceptedAt: { $exists: false }, updatedAt: { $lte: deadline } },
+    { acceptedAt: null, updatedAt: { $lte: deadline } }
   ]
 });
 
-const buildFreshDeliveryReadyFilter = (deadline: Date) => ({
+const buildFreshOpenDeliveryJobFilter = (deadline: Date) => ({
   $or: [
-    { deliveryReadyAt: { $gt: deadline } },
-    { deliveryReadyAt: { $exists: false }, updatedAt: { $gt: deadline } },
-    { deliveryReadyAt: null, updatedAt: { $gt: deadline } }
+    { acceptedAt: { $gt: deadline } },
+    { acceptedAt: { $exists: false }, updatedAt: { $gt: deadline } },
+    { acceptedAt: null, updatedAt: { $gt: deadline } }
   ]
 });
 
@@ -848,9 +849,9 @@ export const cancelStaleUnacceptedOrders = async () => {
 
     const deliveryTimedOutFilter = {
       $and: [
-        { status: "READY" },
+        { status: { $in: OPEN_DELIVERY_JOB_STATUSES } },
         buildUnassignedDeliveryFilter(),
-        buildStaleDeliveryReadyFilter(deliveryDeadline)
+        buildStaleOpenDeliveryJobFilter(deliveryDeadline)
       ]
     };
 
@@ -1313,12 +1314,12 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
         order.prepTimeMinutes = minutes;
         order.acceptedAt = new Date();
         order.estimatedReadyAt = new Date(Date.now() + minutes * 60 * 1000);
+        const orderPartner = partner || await Partner.findById(order.partnerId);
+        await configureSelfDeliveryForReadyOrder(order, orderPartner);
       }
 
       if (isMarkingReady) {
-        const orderPartner = partner || await Partner.findById(order.partnerId);
         order.deliveryReadyAt = new Date();
-        await configureSelfDeliveryForReadyOrder(order, orderPartner);
       }
     }
 
@@ -1332,9 +1333,24 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     });
 
     if (isAcceptingOrder && partner) {
-      void notifySelfDeliveryPrepScheduled(order, partner).catch((error) => {
-        console.error("Failed to notify self-delivery riders about prep schedule:", error);
-      });
+      let shouldNotifyDeliveryJob = true;
+      if (isBundledDeliveryOrder(order)) {
+        const bundleOrders = await Order.find({ deliveryBundleId: order.deliveryBundleId })
+          .select("status deliveryBundleSize")
+          .lean();
+        const expectedBundleSize = Number(order.deliveryBundleSize || bundleOrders.length);
+        shouldNotifyDeliveryJob =
+          bundleOrders.length >= expectedBundleSize &&
+          bundleOrders.every((bundleOrder: any) =>
+            OPEN_DELIVERY_JOB_STATUSES.includes(bundleOrder.status)
+          );
+      }
+
+      if (shouldNotifyDeliveryJob) {
+        void notifyDeliveryJobReady(order).catch((error) => {
+          console.error("Failed to notify delivery partners about accepted order:", error);
+        });
+      }
     }
 
     if (isMarkingReady) {
@@ -2548,20 +2564,20 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
           ["ACTIVE", "VERIFIED"].includes(deliveryPartner.status) &&
           deliveryPartner.isAvailable !== false
       );
-      const isUnassignedReadyOrder =
-        orderObj.status === "READY" &&
+      const isUnassignedOpenOrder =
+        OPEN_DELIVERY_JOB_STATUSES.includes(orderObj.status) &&
         (!orderObj.deliveryPartnerId || idString(orderObj.deliveryPartnerId) === "");
 
-      if (isEligibleDeliveryViewer && isUnassignedReadyOrder && isDeliveryJobVisibleToUser(orderObj, deliveryUserId)) {
+      if (isEligibleDeliveryViewer && isUnassignedOpenOrder && isDeliveryJobVisibleToUser(orderObj, deliveryUserId)) {
         if (isBundledDeliveryOrder(orderObj)) {
           const bundledOrders = await getPopulatedBundleOrders(String(orderObj.deliveryBundleId));
           const expectedBundleSize = Number(orderObj.deliveryBundleSize || bundledOrders.length);
           const canViewBundle =
             bundledOrders.length >= expectedBundleSize &&
             bundledOrders.every((bundleOrder: any) => {
-              const isReady = bundleOrder.status === "READY";
+              const isOpen = OPEN_DELIVERY_JOB_STATUSES.includes(bundleOrder.status);
               const isUnassigned = !bundleOrder.deliveryPartnerId || idString(bundleOrder.deliveryPartnerId) === "";
-              return isReady && isUnassigned && isDeliveryJobVisibleToUser(bundleOrder, deliveryUserId);
+              return isOpen && isUnassigned && isDeliveryJobVisibleToUser(bundleOrder, deliveryUserId);
             });
 
           if (canViewBundle) {
@@ -2661,7 +2677,7 @@ export const getOrderDetails = async (req: AuthRequest, res: Response) => {
 
 /**
  * ================================
- * DELIVERY - GET AVAILABLE JOBS (READY orders not assigned)
+ * DELIVERY - GET AVAILABLE JOBS (accepted/preparing/ready orders not assigned)
  * ================================
  */
 export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) => {
@@ -2704,13 +2720,13 @@ export const getAvailableDeliveryJobs = async (req: AuthRequest, res: Response) 
 
     const deliveryDeadline = new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS);
 
-    // Find non-expired READY orders that are not assigned to any delivery partner.
+    // Find non-expired accepted/preparing/ready orders that are not assigned to any delivery partner.
     const availableJobs = await Order.find({
       $and: [
-        { status: "READY" },
+        { status: { $in: OPEN_DELIVERY_JOB_STATUSES } },
         buildUnassignedDeliveryFilter(),
         { deliveryRejectedBy: { $ne: deliveryUserObjectId } },
-        buildFreshDeliveryReadyFilter(deliveryDeadline)
+        buildFreshOpenDeliveryJobFilter(deliveryDeadline)
       ]
     })
     .populate("customerId", "name phone")
@@ -2819,10 +2835,10 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
 
     const acceptFilter: any = {
       $and: [
-        { _id: orderId, status: "READY" },
+        { _id: orderId, status: { $in: OPEN_DELIVERY_JOB_STATUSES } },
         buildUnassignedDeliveryFilter(),
         { deliveryRejectedBy: { $ne: new mongoose.Types.ObjectId(deliveryUserId) } },
-        buildFreshDeliveryReadyFilter(new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS)),
+        buildFreshOpenDeliveryJobFilter(new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS)),
         buildDeliveryAcceptVisibilityFilter(deliveryUserId)
       ]
     };
@@ -2847,17 +2863,17 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       const expectedBundleSize = Number(requestedOrder.deliveryBundleSize || 1);
       const bundleAcceptFilter: any = {
         $and: [
-          { deliveryBundleId: requestedOrder.deliveryBundleId, status: "READY" },
+          { deliveryBundleId: requestedOrder.deliveryBundleId, status: { $in: OPEN_DELIVERY_JOB_STATUSES } },
           buildUnassignedDeliveryFilter(),
           { deliveryRejectedBy: { $ne: new mongoose.Types.ObjectId(deliveryUserId) } },
-          buildFreshDeliveryReadyFilter(new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS)),
+          buildFreshOpenDeliveryJobFilter(new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS)),
           buildDeliveryAcceptVisibilityFilter(deliveryUserId)
         ]
       };
       const bundleOrders = await Order.find(bundleAcceptFilter).select("_id").lean();
 
       if (bundleOrders.length < expectedBundleSize) {
-        return errorResponse(res, "Bundled delivery is waiting for all restaurants to be ready", 409);
+        return errorResponse(res, "Bundled delivery is waiting for all restaurants to accept", 409);
       }
 
       const bundleOrderIds = bundleOrders.map((bundleOrder: any) => bundleOrder._id);
@@ -2865,7 +2881,7 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
       const updateResult = await Order.updateMany(
         {
           _id: { $in: bundleOrderIds },
-          status: "READY",
+          status: { $in: OPEN_DELIVERY_JOB_STATUSES },
           $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
         },
         {
@@ -2897,16 +2913,18 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
     }
 
     const assignCode = generateDeliveryVerificationCode();
+    const acceptUpdate: Record<string, unknown> = {
+      deliveryPartnerId: new mongoose.Types.ObjectId(deliveryUserId),
+      status: "ASSIGNED",
+      deliveryVerificationCode: assignCode
+    };
+    if (requestedOrder.deliveryReadyAt) {
+      acceptUpdate.deliveryReadyAt = requestedOrder.deliveryReadyAt;
+    }
+
     const order = await Order.findOneAndUpdate(
       acceptFilter,
-      {
-        $set: {
-          deliveryPartnerId: new mongoose.Types.ObjectId(deliveryUserId),
-          status: "ASSIGNED",
-          deliveryVerificationCode: assignCode,
-          deliveryReadyAt: requestedOrder.deliveryReadyAt || new Date()
-        }
-      },
+      { $set: acceptUpdate },
       { new: true }
     );
 
@@ -2960,19 +2978,19 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
     const deliveryUserId = idString(deliveryPartner.userId) || user.id;
     const deliveryUserObjectId = new mongoose.Types.ObjectId(deliveryUserId);
     const order = await Order.findById(orderId).select(
-      "_id status deliveryPartnerId selfDelivery deliveryReadyAt updatedAt deliveryBundleId deliveryBundleSize"
+      "_id status deliveryPartnerId selfDelivery deliveryReadyAt acceptedAt updatedAt deliveryBundleId deliveryBundleSize"
     );
     if (!order) {
       return errorResponse(res, "Order not found", 404);
     }
 
-    if (order.status !== "READY" || order.deliveryPartnerId) {
+    if (!OPEN_DELIVERY_JOB_STATUSES.includes(order.status) || order.deliveryPartnerId) {
       return errorResponse(res, "Job is no longer available", 409);
     }
 
     const deliveryDeadline = new Date(Date.now() - DELIVERY_ACCEPT_TIMEOUT_MS);
-    const readyAt = order.deliveryReadyAt || order.updatedAt;
-    if (readyAt && readyAt.getTime() <= deliveryDeadline.getTime()) {
+    const openSince = order.acceptedAt || order.updatedAt;
+    if (openSince && openSince.getTime() <= deliveryDeadline.getTime()) {
       return errorResponse(res, "Job is no longer available", 409);
     }
 
@@ -2980,7 +2998,7 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
       await Order.updateMany(
         {
           deliveryBundleId: order.deliveryBundleId,
-          status: "READY",
+          status: { $in: OPEN_DELIVERY_JOB_STATUSES },
           $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
         },
         {
@@ -3018,7 +3036,7 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
     await Order.updateOne(
       {
         _id: orderId,
-        status: "READY",
+        status: { $in: OPEN_DELIVERY_JOB_STATUSES },
         $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
       },
       rejectionUpdate

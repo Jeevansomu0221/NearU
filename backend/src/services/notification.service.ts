@@ -453,9 +453,11 @@ export const notifyDeliveryJobReady = async (order: any) => {
     return;
   }
   const details = await getDeliveryJobNotificationDetails(order);
+  const orderStatus = String(order.status || "ACCEPTED");
+  const isReadyForPickup = orderStatus === "READY" || Boolean(order.deliveryReadyAt);
   const readyBy = formatReadyByClock(order.estimatedReadyAt);
   const bodyParts = [
-    readyBy ? `Ready by ${readyBy}` : "Ready for pickup",
+    isReadyForPickup ? "Ready for pickup" : readyBy ? `Ready by ${readyBy}` : "Restaurant is preparing",
     `Pickup: ${details.restaurantName}${details.pickupAddress ? ` - ${details.pickupAddress}` : ""}`,
     `Drop: ${details.customerName}${details.dropAddress ? ` - ${details.dropAddress}` : ""}`,
     `Earn Rs ${details.earnings} | Order Rs ${details.orderTotal} | ${details.paymentLabel}`
@@ -469,7 +471,7 @@ export const notifyDeliveryJobReady = async (order: any) => {
       type: "DELIVERY_JOB_READY",
       orderId: details.orderId,
       jobId: details.orderId,
-      status: "READY",
+      status: orderStatus,
       notificationStyle: "DELIVERY_JOB_ACTIONS",
       restaurantName: details.restaurantName,
       pickupAddress: details.pickupAddress,

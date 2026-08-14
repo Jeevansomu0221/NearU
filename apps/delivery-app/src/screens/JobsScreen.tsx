@@ -48,7 +48,7 @@ export default function JobsScreen({ navigation }: any) {
   const [isAvailable, setIsAvailable] = useState(false);
   const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
   const [selectedJobAction, setSelectedJobAction] = useState<{ job: CalculatedJob; action: "accept" | "reject" } | null>(null);
-  const [emptyMessage, setEmptyMessage] = useState("When restaurants mark orders as READY, they will appear here for delivery.");
+  const [emptyMessage, setEmptyMessage] = useState("When restaurants accept orders, they will appear here for delivery.");
   const [riderName, setRiderName] = useState("");
   const [walletBalance, setWalletBalance] = useState(0);
   const [todaysDeliveries, setTodaysDeliveries] = useState(0);
@@ -163,13 +163,13 @@ export default function JobsScreen({ navigation }: any) {
       }
       const response = await getAvailableJobs();
       if (response.success && response.data) {
-        setEmptyMessage(response.message || "When restaurants mark orders as READY, they will appear here for delivery.");
+        setEmptyMessage(response.message || "When restaurants accept orders, they will appear here for delivery.");
         const jobsWithCalculations = await Promise.all(response.data.map((job) => calculateJobDetails(job)));
         const visibleJobs = jobsWithCalculations.filter((job) => !rejectedJobIds.current.has(job._id));
         syncKnownAvailableJobIds(visibleJobs.map((job) => job._id));
         setJobs(visibleJobs);
       } else {
-        setEmptyMessage(response.message || "When restaurants mark orders as READY, they will appear here for delivery.");
+        setEmptyMessage(response.message || "When restaurants accept orders, they will appear here for delivery.");
         setJobs([]);
       }
     } catch {
