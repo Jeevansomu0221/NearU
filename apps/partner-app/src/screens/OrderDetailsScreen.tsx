@@ -47,6 +47,7 @@ interface Order {
   paymentStatus: string;
   prepTimeMinutes?: number;
   estimatedReadyAt?: string;
+  deliveryReadyAt?: string;
   cancellationReason?: string;
   customerCancellationMessage?: string;
 }
@@ -499,7 +500,9 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
   const showAcceptButton = order.status === "CONFIRMED";
   const showRejectButton = order.status === "CONFIRMED";
   const showPreparingSwipe = order.status === "ACCEPTED";
-  const showReadySwipe = order.status === "PREPARING";
+  const showReadySwipe =
+    order.status === "PREPARING" ||
+    (order.status === "ASSIGNED" && !order.deliveryReadyAt);
   const isCancelledOrder = order.status === "CANCELLED" || order.status === "REJECTED";
 
   return (

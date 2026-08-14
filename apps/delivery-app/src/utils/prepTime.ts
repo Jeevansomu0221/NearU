@@ -11,6 +11,12 @@ export const formatReadyByClock = (value?: Date | string | null) => {
 
 export const RIDER_READY_FOR_PICKUP_MESSAGE = "Order is ready for pickup";
 
+export const hasPartnerMarkedReady = (deliveryReadyAt?: Date | string | null) => {
+  if (!deliveryReadyAt) return false;
+  const date = deliveryReadyAt instanceof Date ? deliveryReadyAt : new Date(deliveryReadyAt);
+  return !Number.isNaN(date.getTime());
+};
+
 export const getRiderReadyByMessage = (estimatedReadyAt?: string | null, prepTimeMinutes?: number | null) => {
   const clock = formatReadyByClock(estimatedReadyAt);
   if (clock) {
@@ -25,14 +31,10 @@ export const getRiderReadyByMessage = (estimatedReadyAt?: string | null, prepTim
 export const getRiderPickupStatusMessage = (
   deliveryReadyAt?: string | null,
   estimatedReadyAt?: string | null,
-  prepTimeMinutes?: number | null,
-  orderTaken = false
+  prepTimeMinutes?: number | null
 ) => {
-  if (deliveryReadyAt) {
+  if (hasPartnerMarkedReady(deliveryReadyAt)) {
     return RIDER_READY_FOR_PICKUP_MESSAGE;
-  }
-  if (orderTaken) {
-    return "";
   }
   return getRiderReadyByMessage(estimatedReadyAt, prepTimeMinutes);
 };

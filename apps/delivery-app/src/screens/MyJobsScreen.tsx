@@ -107,8 +107,7 @@ export default function MyJobsScreen({ navigation, route }: any) {
     const readyByMessage = getRiderPickupStatusMessage(
       item.deliveryReadyAt,
       item.estimatedReadyAt,
-      item.prepTimeMinutes,
-      item.status !== "READY"
+      item.prepTimeMinutes
     );
 
     return (

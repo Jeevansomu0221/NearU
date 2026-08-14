@@ -12,6 +12,7 @@ import { successResponse, errorResponse } from "../utils/response";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import {
   notifyAssignedDeliveryPartner,
+  notifyAssignedRiderFoodReady,
   notifyCustomerOrderStatus,
   notifyDeliveryAssigned,
   notifyDeliveryJobReady,
@@ -1297,22 +1298,30 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     }
 
     const previousStatus = order.status;
-    order.status = status;
+    const activeDeliveryStatuses = new Set(["ASSIGNED", "PICKED_UP", "REACHED_CUSTOMER"]);
+    const isMarkingReady = status === "READY" && previousStatus !== "READY";
 
-    if (isAcceptingOrder) {
-      const defaultPrep =
-        Number((partner as any)?.settings?.estimatedPrepTime) || DEFAULT_PREP_TIME_MINUTES;
-      const minutes = clampPrepTimeMinutes(prepTimeMinutes, defaultPrep);
-      order.prepTimeMinutes = minutes;
-      order.acceptedAt = new Date();
-      order.estimatedReadyAt = new Date(Date.now() + minutes * 60 * 1000);
-    }
-
-    if (status === "READY" && previousStatus !== "READY") {
-      const orderPartner = partner || await Partner.findById(order.partnerId);
+    if (isMarkingReady && activeDeliveryStatuses.has(previousStatus)) {
       order.deliveryReadyAt = new Date();
-      await configureSelfDeliveryForReadyOrder(order, orderPartner);
+    } else {
+      order.status = status;
+
+      if (isAcceptingOrder) {
+        const defaultPrep =
+          Number((partner as any)?.settings?.estimatedPrepTime) || DEFAULT_PREP_TIME_MINUTES;
+        const minutes = clampPrepTimeMinutes(prepTimeMinutes, defaultPrep);
+        order.prepTimeMinutes = minutes;
+        order.acceptedAt = new Date();
+        order.estimatedReadyAt = new Date(Date.now() + minutes * 60 * 1000);
+      }
+
+      if (isMarkingReady) {
+        const orderPartner = partner || await Partner.findById(order.partnerId);
+        order.deliveryReadyAt = new Date();
+        await configureSelfDeliveryForReadyOrder(order, orderPartner);
+      }
     }
+
     if (status === "REJECTED") {
       markAutoCancelled(order, "Restaurant rejected the order", PARTNER_REJECTED_CANCEL_MESSAGE);
     }
@@ -1328,21 +1337,31 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    if (status === "READY" && previousStatus !== "READY") {
-      let shouldNotifyDeliveryReady = true;
-      if (isBundledDeliveryOrder(order)) {
-        const bundleOrders = await Order.find({ deliveryBundleId: order.deliveryBundleId })
-          .select("status deliveryBundleSize")
-          .lean();
-        const expectedBundleSize = Number(order.deliveryBundleSize || bundleOrders.length);
-        shouldNotifyDeliveryReady =
-          bundleOrders.length >= expectedBundleSize &&
-          bundleOrders.every((bundleOrder: any) => bundleOrder.status === "READY");
+    if (isMarkingReady) {
+      if (order.deliveryPartnerId) {
+        void notifyAssignedRiderFoodReady(order).catch((error) => {
+          console.error("Failed to notify assigned rider about ready order:", error);
+        });
       }
 
-      if (shouldNotifyDeliveryReady) void notifyDeliveryJobReady(order).catch((error) => {
-        console.error("Failed to notify delivery partners about ready order:", error);
-      });
+      if (!activeDeliveryStatuses.has(previousStatus)) {
+        let shouldNotifyDeliveryReady = true;
+        if (isBundledDeliveryOrder(order)) {
+          const bundleOrders = await Order.find({ deliveryBundleId: order.deliveryBundleId })
+            .select("status deliveryBundleSize")
+            .lean();
+          const expectedBundleSize = Number(order.deliveryBundleSize || bundleOrders.length);
+          shouldNotifyDeliveryReady =
+            bundleOrders.length >= expectedBundleSize &&
+            bundleOrders.every((bundleOrder: any) => bundleOrder.status === "READY");
+        }
+
+        if (shouldNotifyDeliveryReady) {
+          void notifyDeliveryJobReady(order).catch((error) => {
+            console.error("Failed to notify delivery partners about ready order:", error);
+          });
+        }
+      }
     }
 
     return successResponse(
@@ -2884,7 +2903,8 @@ export const acceptDeliveryJob = async (req: AuthRequest, res: Response) => {
         $set: {
           deliveryPartnerId: new mongoose.Types.ObjectId(deliveryUserId),
           status: "ASSIGNED",
-          deliveryVerificationCode: assignCode
+          deliveryVerificationCode: assignCode,
+          deliveryReadyAt: requestedOrder.deliveryReadyAt || new Date()
         }
       },
       { new: true }

@@ -482,6 +482,25 @@ export const notifyDeliveryJobReady = async (order: any) => {
   });
 };
 
+export const notifyAssignedRiderFoodReady = async (order: any) => {
+  const allowedUserIds = await filterDeliveryUsersByPreference([idString(order.deliveryPartnerId)], "jobs");
+  if (!allowedUserIds.length) return;
+
+  const orderId = idString(order._id);
+  await sendNotificationToUsers(allowedUserIds, {
+    app: "delivery",
+    title: "Order ready for pickup",
+    body: `Order #${orderId.slice(-6)} is ready for pickup.`,
+    data: {
+      type: "ORDER_FOOD_READY",
+      orderId,
+      jobId: orderId,
+      status: String(order.status || "ASSIGNED"),
+      deliveryReadyAt: String(order.deliveryReadyAt || new Date().toISOString())
+    }
+  });
+};
+
 export const notifyDeliveryAssigned = async (order: any) => {
   const partner = await Partner.findById(order.partnerId).select("userId").lean();
   const orderId = idString(order._id);

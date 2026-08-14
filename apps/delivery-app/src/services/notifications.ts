@@ -9,6 +9,7 @@ import {
 } from "./notificationPreferences";
 import { notifyDeletionRequestRefresh, applyDeletionStatusFromNotification } from "../api/accountDeletion.api";
 import { notifyReviewStatusRefresh } from "./reviewStatusRefresh";
+import { notifyJobDetailsRefresh } from "./jobDetailsRefresh";
 
 const NOTIFICATION_APP = "delivery";
 const TOKEN_STORAGE_KEY = "notification:fcmToken:delivery";
@@ -515,6 +516,10 @@ export const setupNotificationHandlers = (navigationRef: any) => {
   if (!pkg || !messaging) return () => {};
 
   const unsubscribeMessage = pkg.onMessage(messaging, async (remoteMessage: any) => {
+    if (remoteMessage?.data?.type === "ORDER_FOOD_READY") {
+      notifyJobDetailsRefresh(String(remoteMessage?.data?.orderId || remoteMessage?.data?.jobId || ""));
+      return;
+    }
     if (await displayDeliveryJobNotification(remoteMessage)) {
       return;
     }

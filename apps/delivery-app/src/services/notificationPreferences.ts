@@ -83,6 +83,7 @@ export const shouldShowClientNotification = (
   }
   if (
     type === "DELIVERY_JOB_READY" ||
+    type === "ORDER_FOOD_READY" ||
     type === "DELIVERY_ASSIGNED" ||
     type === "DELIVERY_STATUS" ||
     type === "DELIVERY_REUPLOAD"

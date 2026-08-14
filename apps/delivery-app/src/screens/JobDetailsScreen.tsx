@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -43,7 +44,8 @@ import {
   type MapLocation
 } from "../utils/mapCoordinates";
 import { getCurrentRiderLocation, useRiderLiveLocation } from "../utils/riderLocation";
-import { getRiderPickupStatusMessage, RIDER_READY_FOR_PICKUP_MESSAGE } from "../utils/prepTime";
+import { getRiderPickupStatusMessage, hasPartnerMarkedReady, RIDER_READY_FOR_PICKUP_MESSAGE } from "../utils/prepTime";
+import { subscribeJobDetailsRefresh } from "../services/jobDetailsRefresh";
 import { getOrderRiderEarnings } from "../utils/riderEarnings";
 import { getImagePicker } from "../utils/imagePicker";
 import { uploadMultipart } from "../api/client";
@@ -153,26 +155,6 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const qrRingScale = qrPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] });
   const qrRingOpacity = qrPulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.85] });
-
-  useEffect(() => {
-    loadJobDetails();
-  }, []);
-
-  useEffect(() => {
-    if (!job || job.status !== "ASSIGNED") return;
-
-    const activeStop = job.pickupStops?.find(
-      (stop) => stop.status !== "PICKED_UP" && stop.status !== "DELIVERED"
-    );
-    const waitingForPartnerReady = !(activeStop?.deliveryReadyAt || job.deliveryReadyAt);
-    if (!waitingForPartnerReady) return;
-
-    const intervalId = setInterval(() => {
-      void loadJobDetails();
-    }, 15000);
-
-    return () => clearInterval(intervalId);
-  }, [job?.status, job?.deliveryReadyAt, job?.pickupStops]);
 
   useLayoutEffect(() => {
     if (!job) return;
@@ -362,9 +344,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     return next;
   };
 
-  const loadJobDetails = async () => {
+  const loadJobDetails = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      if (!initialJob) {
+      if (!initialJob && !options?.silent) {
         setLoading(true);
       }
       const response = await getJobDetails(orderId);
@@ -381,16 +363,65 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         };
         const enriched = await enrichJobWithDistances(merged);
         setJob(enriched);
-      } else {
+      } else if (!options?.silent) {
         handleDetailsLoadFailure(response.message || "Failed to load job details");
       }
     } catch (error) {
       console.error("Error loading job details:", error);
-      handleDetailsLoadFailure("Failed to load job details");
+      if (!options?.silent) {
+        handleDetailsLoadFailure("Failed to load job details");
+      }
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
-  };
+  }, [orderId, initialJob]);
+
+  useEffect(() => {
+    void loadJobDetails();
+  }, [loadJobDetails]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadJobDetails({ silent: true });
+    }, [loadJobDetails])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void loadJobDetails({ silent: true });
+      }
+    });
+    return () => subscription.remove();
+  }, [loadJobDetails]);
+
+  useEffect(() => {
+    return subscribeJobDetailsRefresh((changedOrderId) => {
+      if (!changedOrderId || changedOrderId === orderId) {
+        void loadJobDetails({ silent: true });
+      }
+    });
+  }, [loadJobDetails, orderId]);
+
+  useEffect(() => {
+    if (!job || job.status !== "ASSIGNED") return;
+
+    const activeStop = job.pickupStops?.find(
+      (stop) => stop.status !== "PICKED_UP" && stop.status !== "DELIVERED"
+    );
+    const waitingForPartnerReady = !hasPartnerMarkedReady(
+      activeStop?.deliveryReadyAt ?? job.deliveryReadyAt
+    );
+    if (!waitingForPartnerReady) return;
+
+    const intervalId = setInterval(() => {
+      void loadJobDetails({ silent: true });
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [job?.status, job?.deliveryReadyAt, job?.pickupStops, loadJobDetails]);
 
   const handleCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`);
@@ -944,7 +975,19 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
   const pickupStops = job.pickupStops?.length
     ? job.pickupStops
-    : [{ partnerId: job.partnerId, orderId: job._id, sequence: 1, status: job.status, items: job.items, itemTotal: job.itemTotal, deliveryFee: job.deliveryFee, grandTotal: job.grandTotal }];
+    : [{
+        partnerId: job.partnerId,
+        orderId: job._id,
+        sequence: 1,
+        status: job.status,
+        items: job.items,
+        itemTotal: job.itemTotal,
+        deliveryFee: job.deliveryFee,
+        grandTotal: job.grandTotal,
+        prepTimeMinutes: job.prepTimeMinutes,
+        estimatedReadyAt: job.estimatedReadyAt,
+        deliveryReadyAt: job.deliveryReadyAt
+      }];
 
   const isPickupPhase = job.status === "READY" || job.status === "ASSIGNED";
   const activePickupStop = pickupStops.find((stop) => stop.status !== "PICKED_UP" && stop.status !== "DELIVERED") || pickupStops[0];
@@ -1020,12 +1063,10 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const orderDisplayId = job.isBundledDelivery
     ? "Bundled"
     : `#${job._id.slice(-6).toUpperCase()}`;
-  const orderTaken = job.status !== "READY";
   const pickupStatusMessage = getRiderPickupStatusMessage(
     isPickupPhase ? activePickupStop?.deliveryReadyAt ?? job.deliveryReadyAt : job.deliveryReadyAt,
     isPickupPhase ? activePickupStop?.estimatedReadyAt ?? job.estimatedReadyAt : job.estimatedReadyAt,
-    isPickupPhase ? activePickupStop?.prepTimeMinutes ?? job.prepTimeMinutes : job.prepTimeMinutes,
-    orderTaken
+    isPickupPhase ? activePickupStop?.prepTimeMinutes ?? job.prepTimeMinutes : job.prepTimeMinutes
   );
   const isReadyForPickup = pickupStatusMessage === RIDER_READY_FOR_PICKUP_MESSAGE;
   const showPickupStatusBanner =
