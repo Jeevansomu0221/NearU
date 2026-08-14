@@ -4,8 +4,6 @@ import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAccessToken } from '../utils/authStorage';
 import { registerForPushNotifications } from '../services/notifications';
-import { TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import type { OtpSessionInfo } from '../services/otpAuthFlow';
 
 // Import screens
@@ -236,14 +234,7 @@ export default function AppNavigator() {
     <Stack.Navigator
       initialRouteName={initialRoute}
       screenOptions={{
-        headerShown: true,
-        headerStyle: {
-          backgroundColor: '#FF6B35',
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: '600',
-        },
+        headerShown: false,
       }}
     >
       <Stack.Screen 
@@ -285,29 +276,17 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="OrderStatus" 
         component={OrderStatusScreen}
-        options={({ navigation }) => ({
-          title: 'Order Status',
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
-              style={{ paddingHorizontal: 12, paddingVertical: 8 }}
-            >
-              <Feather name="home" size={20} color="#fff" />
-            </TouchableOpacity>
-          )
-        })}
+        options={{ headerShown: false }}
       />
       <Stack.Screen 
         name="Orders" 
         component={OrdersScreen}
-        options={{ title: 'My Orders' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SupportChat"
         component={SupportChatScreen}
-        options={({ route }) => ({
-          title: route.params?.mode === "report" ? "Report an Issue" : "Customer Support"
-        })}
+        options={{ headerShown: false }}
       />
       {/* Only Payment screen remains */}
       <Stack.Screen 

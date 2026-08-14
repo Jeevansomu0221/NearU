@@ -23,6 +23,7 @@ import type { Order } from "../api/order.api";
 import { getPublicShopName, formatPaymentMethodLabel } from "../utils/display";
 import HighlightedOrderId from "../components/HighlightedOrderId";
 import KeyboardSafeScreen from "../components/KeyboardSafeScreen";
+import ScreenHeader from "../components/ScreenHeader";
 
 type TimelineStep = {
   status: string;
@@ -436,23 +437,38 @@ export default function OrderStatusScreen({ route, navigation }: any) {
     </View>
   );
 
+  const renderStatusHeader = () => (
+    <ScreenHeader
+      title="Order Status"
+      backIcon="home-outline"
+      onBack={() => navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
+      backgroundColor="#F7F3EE"
+    />
+  );
+
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
-        <Text style={styles.loadingText}>Loading order details...</Text>
+      <View style={styles.container}>
+        {renderStatusHeader()}
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+          <Text style={styles.loadingText}>Loading order details...</Text>
+        </View>
       </View>
     );
   }
 
   if (!order) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Order not found</Text>
-        <Text style={styles.errorText}>We could not load this order right now.</Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.primaryButtonText}>Go Back</Text>
-        </TouchableOpacity>
+      <View style={styles.container}>
+        {renderStatusHeader()}
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Order not found</Text>
+          <Text style={styles.errorText}>We could not load this order right now.</Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.primaryButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -471,9 +487,11 @@ export default function OrderStatusScreen({ route, navigation }: any) {
   const canRateOrder = order.status === "DELIVERED";
 
   return (
-    <KeyboardSafeScreen
+    <View style={styles.container}>
+      {renderStatusHeader()}
+      <KeyboardSafeScreen
       ref={scrollRef}
-      style={styles.container}
+      style={styles.flex}
       contentContainerStyle={{ paddingTop: 14 }}
       bottomPadding={canRateOrder && !hasSubmittedRating ? 220 : 40}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#FF6B35"]} />}
@@ -837,6 +855,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
         </TouchableOpacity>
       </View>
     </KeyboardSafeScreen>
+    </View>
   );
 }
 
@@ -844,6 +863,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F7F3EE"
+  },
+  flex: {
+    flex: 1
   },
   loadingContainer: {
     flex: 1,

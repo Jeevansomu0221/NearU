@@ -13,6 +13,7 @@ import {
 import { getMyOrders } from "../api/order.api";
 import type { Order } from "../api/order.api";
 import HighlightedOrderId from "../components/HighlightedOrderId";
+import ScreenHeader from "../components/ScreenHeader";
 import { getPublicShopName } from "../utils/display";
 
 export default function OrdersScreen({ navigation }: any) {
@@ -164,16 +165,19 @@ export default function OrdersScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
-        <Text style={styles.loadingText}>Loading orders...</Text>
+      <View style={styles.container}>
+        <ScreenHeader title="My Orders" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+          <Text style={styles.loadingText}>Loading orders...</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      
+      <ScreenHeader title="My Orders" />
       {orders.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>📦</Text>
@@ -242,8 +246,7 @@ export default function OrdersScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
-    paddingHorizontal: 16,
+    backgroundColor: '#F6F2EC',
   },
   loadingContainer: {
     flex: 1,
@@ -297,6 +300,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listContainer: {
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
   loadingMoreContainer: {

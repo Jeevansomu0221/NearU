@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import ScreenHeader from "../components/ScreenHeader";
 import {
   createSupportTicket,
   getMySupportTickets,
@@ -171,24 +172,31 @@ export default function SupportChatScreen({ route }: any) {
 
   const messages = activeTicket?.messages || [];
 
+  const screenTitle = isReport ? "Report an Issue" : "Customer Support";
+
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
-        <Text style={styles.loadingText}>Loading conversation...</Text>
+      <View style={styles.container}>
+        <ScreenHeader title={screenTitle} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+          <Text style={styles.loadingText}>Loading conversation...</Text>
+        </View>
       </View>
     );
   }
 
-  const headerOffset = insets.top + 44;
+  const headerOffset = insets.top + 52;
 
   return (
-    <SafeAreaView style={styles.container} edges={["left", "right"]}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerOffset : 0}
-      >
+    <View style={styles.container}>
+      <ScreenHeader title={screenTitle} />
+      <SafeAreaView style={styles.flex} edges={["left", "right"]}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? headerOffset : 0}
+        >
         <View
           style={[
             styles.flex,
@@ -254,6 +262,7 @@ export default function SupportChatScreen({ route }: any) {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </View>
   );
 }
 
@@ -268,8 +277,7 @@ const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F6F2EC"
+    justifyContent: "center"
   },
   loadingText: {
     marginTop: 10,
