@@ -1,0 +1,53 @@
+name: Scan circle Places
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload scan script to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 165.101.251.199
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          source: "scripts/scan_circle_places.py"
+          target: "/tmp/vyaha-places-scan/"
+          overwrite: true
+
+      - name: Execute Places grid scan on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: 165.101.251.199
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          command_timeout: 45m
+          script: |
+            set -e
+            python3 /tmp/vyaha-places-scan/scripts/scan_circle_places.py | tee /tmp/vyaha-places-scan/scan.log
+            test -f /tmp/circle_places_google.csv
+            wc -l /tmp/circle_places_google.csv
+            # also copy next to script for simpler download path
+            cp /tmp/circle_places_google.csv /tmp/vyaha-places-scan/circle_places_google.csv
+
+      - name: Download CSV from VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 165.101.251.199
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          source: "/tmp/vyaha-places-scan/circle_places_google.csv"
+          target: "circle_scan_out/"
+          overwrite: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: circle-places-google
+          path: circle_scan_out/**/circle_places_google.csv
+          if-no-files-found: error
