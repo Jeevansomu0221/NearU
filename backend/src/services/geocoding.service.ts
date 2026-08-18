@@ -191,13 +191,16 @@ export const geocodeTypedAddress = async (query: string): Promise<GeocodedAddres
   return geocodeWithNominatim(query);
 };
 
-export const suggestTypedAddresses = async (query: string): Promise<AddressSuggestion[]> => {
+export const suggestTypedAddresses = async (
+  query: string,
+  kind: "shop" | "address" = "address"
+): Promise<AddressSuggestion[]> => {
   try {
     const payload = await googleGet(GOOGLE_AUTOCOMPLETE_URL, {
       input: query,
       components: "country:in",
       language: "en",
-      types: "geocode"
+      types: kind === "shop" ? "establishment" : "geocode"
     });
 
     if (payload?.status === "OK") {
@@ -240,9 +243,20 @@ const pincodeDigits = (value?: string) => String(value || "").replace(/\D/g, "")
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const buildAddressSearchQuery = (address: {
+const GENERIC_STREET_RE = /^(rd|road|st|street|lane|ln|cross|nh|highway)\s*\.?\s*\d*$/i;
+
+const usableStreetName = (value?: string) => {
+  const street = String(value || "").trim();
+  if (!street || GENERIC_STREET_RE.test(street)) return "";
+  return street;
+};
+
+export type AddressLookup = {
   houseFlatDoorNo?: string;
   buildingApartmentName?: string;
+  shopHouseName?: string;
+  shopName?: string;
+  restaurantName?: string;
   streetRoadName?: string;
   street?: string;
   area?: string;
@@ -254,11 +268,20 @@ export const buildAddressSearchQuery = (address: {
   state?: string;
   pincode?: string;
   country?: string;
-}) =>
+};
+
+const shopIdentityName = (address: AddressLookup) =>
+  String(address.shopName || address.restaurantName || "").trim();
+
+const shopBuildingName = (address: AddressLookup) =>
+  String(address.shopHouseName || address.buildingApartmentName || "").trim();
+
+export const buildAddressSearchQuery = (address: AddressLookup) =>
   compactQuery([
+    shopIdentityName(address),
     address.houseFlatDoorNo,
-    address.buildingApartmentName,
-    address.streetRoadName || address.street,
+    shopBuildingName(address),
+    usableStreetName(address.streetRoadName || address.street),
     address.area || address.areaLocality,
     address.city || address.cityTownVillage,
     address.district,
@@ -266,8 +289,6 @@ export const buildAddressSearchQuery = (address: {
     address.pincode,
     address.country || "India"
   ]);
-
-type AddressLookup = Parameters<typeof buildAddressSearchQuery>[0];
 
 const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   let score = 0;
@@ -300,7 +321,7 @@ const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   });
   if (area && !areaMatched) score -= 70;
 
-  const street = normalizeText(address.streetRoadName || address.street);
+  const street = normalizeText(usableStreetName(address.streetRoadName || address.street));
   if (street && haystack.includes(street)) score += 50;
   street
     .split(" ")
@@ -312,7 +333,16 @@ const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   const city = normalizeText(address.city || address.cityTownVillage);
   if (city && (normalizeText(match.city).includes(city) || haystack.includes(city))) score += 15;
 
-  const building = normalizeText(address.buildingApartmentName);
+  const shop = normalizeText(shopIdentityName(address));
+  if (shop && haystack.includes(shop)) score += 120;
+  shop
+    .split(" ")
+    .filter((word) => word.length > 3)
+    .forEach((word) => {
+      if (haystack.includes(word)) score += 18;
+    });
+
+  const building = normalizeText(shopBuildingName(address));
   if (building && haystack.includes(building)) score += 90;
 
   if (match.source === "google") score += 25;
@@ -334,15 +364,18 @@ const pickBestMatch = (matches: GeocodedAddress[], address: AddressLookup) => {
 };
 
 const buildFallbackQueries = (address: AddressLookup) => {
-  const street = address.streetRoadName || address.street;
+  const street = usableStreetName(address.streetRoadName || address.street);
   const area = address.area || address.areaLocality;
   const city = address.city || address.cityTownVillage;
-  const building = address.buildingApartmentName;
+  const building = shopBuildingName(address);
+  const shop = shopIdentityName(address);
   const country = address.country || "India";
 
   return Array.from(
     new Set(
       [
+        compactQuery([shop, building, area, city, address.state, country]),
+        compactQuery([shop, area, city, address.state, country]),
         compactQuery([building, street, area, city, address.state, country]),
         compactQuery([street, area, city, address.state, country]),
         compactQuery([area, city, address.state, country]),
@@ -354,37 +387,54 @@ const buildFallbackQueries = (address: AddressLookup) => {
 
 const geocodeWithGooglePlaces = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
   if (!hasGoogleMapsKey()) return [];
-  const query = compactQuery([
-    address.buildingApartmentName,
-    address.streetRoadName || address.street,
-    address.area || address.areaLocality,
-    address.city || address.cityTownVillage,
-    address.pincode,
-    address.state,
-    "India"
-  ]);
-  if (!query) return [];
+  const shop = shopIdentityName(address);
+  const building = shopBuildingName(address);
+  const street = usableStreetName(address.streetRoadName || address.street);
+  const area = address.area || address.areaLocality;
+  const city = address.city || address.cityTownVillage;
+  const queries = Array.from(
+    new Set(
+      [
+        compactQuery([shop, building, area, city, address.pincode]),
+        compactQuery([shop, area, city]),
+        compactQuery([building, street, area, city, address.pincode]),
+        compactQuery([building, area, city, address.state])
+      ].filter((query) => query.length >= 3)
+    )
+  );
+  if (queries.length === 0) return [];
 
-  const payload = await googleGet(GOOGLE_PLACE_TEXT_URL, {
-    query,
-    region: "in",
-    language: "en"
-  });
-  if (payload?.status && payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
-    console.warn("Google Places text search failed:", payload.status, payload.error_message || "");
-    return [];
+  const collected: GeocodedAddress[] = [];
+  for (const query of queries) {
+    const payload = await googleGet(GOOGLE_PLACE_TEXT_URL, {
+      query,
+      region: "in",
+      language: "en"
+    });
+    if (payload?.status && payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
+      console.warn("Google Places text search failed:", payload.status, payload.error_message || "");
+      continue;
+    }
+    collected.push(
+      ...(Array.isArray(payload?.results) ? payload.results : [])
+        .map(parseGooglePlace)
+        .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry))
+    );
+    const best = pickBestMatch(collected, address);
+    if (best && scoreGeocodedMatch(best, address) >= 80) {
+      return collected;
+    }
   }
-  return (Array.isArray(payload?.results) ? payload.results : [])
-    .map(parseGooglePlace)
-    .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+  return collected;
 };
 
 const geocodeWithGoogleStructured = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
   if (!hasGoogleMapsKey()) return [];
   const query = compactQuery([
+    shopIdentityName(address),
     address.houseFlatDoorNo,
-    address.buildingApartmentName,
-    address.streetRoadName || address.street,
+    shopBuildingName(address),
+    usableStreetName(address.streetRoadName || address.street),
     address.area || address.areaLocality,
     address.city || address.cityTownVillage,
     address.state,
@@ -414,7 +464,8 @@ const geocodeWithNominatimStructured = async (address: AddressLookup): Promise<G
   const queries = Array.from(
     new Set(
       [
-        compactQuery([address.streetRoadName || address.street, area]),
+        compactQuery([shopIdentityName(address), shopBuildingName(address), area]),
+        compactQuery([usableStreetName(address.streetRoadName || address.street), area]),
         compactQuery([area, address.state, "India"]),
         compactQuery([area])
       ].filter((query) => query.length >= 3)
@@ -515,7 +566,7 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
   }
 
   throw Object.assign(
-    new Error("We could not find this address on the map. Check the street, area, and pincode."),
+    new Error("We could not find this shop on the map. Check the shop/house name, area, and pincode."),
     { statusCode: 400 }
   );
 };

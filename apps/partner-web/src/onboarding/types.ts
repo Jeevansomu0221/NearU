@@ -46,6 +46,8 @@ export type OnboardingDraft = {
     email: string;
   };
   address: {
+    shopHouseName: string;
+    floor: string;
     state: string;
     city: string;
     pincode: string;

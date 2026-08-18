@@ -28,7 +28,7 @@ import OperationsStep, { type OperationsState } from "./onboarding/OperationsSte
 import AgreementStep, { validateAndSaveAgreement } from "./onboarding/AgreementStep";
 import type { PartnerKycState } from "../api/kyc.api";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { partnerAddressToGeocodePayload, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
+import { partnerAddressToGeocodePayload, partnerShopAddressLines, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
 
 const INDIAN_CITIES = [
   "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata",
@@ -137,6 +137,8 @@ type OnboardingDraft = {
     email: string;
   };
   address: {
+    shopHouseName: string;
+    floor: string;
     state: string;
     city: string;
     pincode: string;
@@ -258,6 +260,8 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
       email: String(safeForm.email || "")
     },
     address: {
+      shopHouseName: String(safeAddress.shopHouseName || ""),
+      floor: String(safeAddress.floor || ""),
       state: String(safeAddress.state || ""),
       city: String(safeAddress.city || ""),
       pincode: String(safeAddress.pincode || ""),
@@ -349,6 +353,8 @@ export default function OnboardingScreen({ navigation }: any) {
     email: ""
   });
   const [address, setAddress] = useState({
+    shopHouseName: "",
+    floor: "",
     state: "",
     city: "",
     pincode: "",
@@ -518,6 +524,8 @@ export default function OnboardingScreen({ navigation }: any) {
         if (draft.shopLocation) {
           setConfirmedAddressKey(
             JSON.stringify({
+              shopHouseName: String(draft.address.shopHouseName || "").trim(),
+              floor: String(draft.address.floor || "").trim(),
               state: String(draft.address.state || "").trim(),
               city: String(draft.address.city || "").trim(),
               pincode: String(draft.address.pincode || "").trim(),
@@ -725,12 +733,14 @@ export default function OnboardingScreen({ navigation }: any) {
         const geo = result.data;
         if (result.success && geo) {
           setAddress((current) => ({
+            ...current,
+            shopHouseName: current.shopHouseName || geo.buildingApartmentName || "",
             state: geo.state || current.state,
             city: geo.city || current.city,
             pincode: geo.pincode || current.pincode,
             area: geo.area || current.area,
-            colony: geo.buildingApartmentName || current.colony,
-            roadStreet: geo.streetRoadName || geo.formattedAddress || current.roadStreet,
+            colony: current.colony || geo.area || "",
+            roadStreet: geo.streetRoadName || current.roadStreet,
             nearbyPlaces: current.nearbyPlaces || geo.formattedAddress
           }));
         }
@@ -778,8 +788,11 @@ export default function OnboardingScreen({ navigation }: any) {
     }
 
     if (step === 1) {
-      if (!address.state || !address.city || !address.pincode || !address.area || !address.colony || !address.roadStreet) {
-        return "Please fill all address fields";
+      if (!form.restaurantName.trim()) return "Enter the shop name as it appears on Google Maps.";
+      if (!address.shopHouseName.trim()) return "Enter the shop or house name";
+      if (!address.floor.trim()) return "Enter the floor or shop location";
+      if (!address.state || !address.city || !address.pincode || !address.area || !address.colony) {
+        return "Please fill all required address fields";
       }
       if (!/^\d{6}$/.test(address.pincode)) return "Pincode must be exactly 6 digits";
     }
@@ -821,6 +834,8 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const addressFingerprint = () =>
     JSON.stringify({
+      shopHouseName: address.shopHouseName.trim(),
+      floor: address.floor.trim(),
       state: address.state.trim(),
       city: address.city.trim(),
       pincode: address.pincode.trim(),
@@ -842,9 +857,7 @@ export default function OnboardingScreen({ navigation }: any) {
     if (startingPin) {
       setPendingPin({
         ...startingPin,
-        formattedAddress: [address.roadStreet, address.colony, address.area, address.city, address.pincode]
-          .filter(Boolean)
-          .join(", ")
+        formattedAddress: partnerShopAddressLines(address).join(", ")
       });
       setPinConfirmVisible(true);
       return true;
@@ -852,9 +865,9 @@ export default function OnboardingScreen({ navigation }: any) {
 
     try {
       setLocatingAddress(true);
-      const result = await resolveAddressPin(partnerAddressToGeocodePayload(address));
+      const result = await resolveAddressPin(partnerAddressToGeocodePayload(address, form.restaurantName));
       if (!result.success || !result.data) {
-        Alert.alert("Address not found", result.message || "Check the street, area, city, and pincode.");
+        Alert.alert("Address not found", result.message || "Check the shop/house name, area, city, and pincode.");
         return false;
       }
       setPendingPin(result.data);
@@ -973,6 +986,8 @@ export default function OnboardingScreen({ navigation }: any) {
         restaurantPhone: form.restaurantPhone.trim(),
         email: form.email.trim(),
         address: {
+          shopHouseName: address.shopHouseName.trim(),
+          floor: address.floor.trim(),
           state: address.state.trim(),
           city: address.city.trim(),
           pincode: address.pincode.trim(),
@@ -1124,7 +1139,16 @@ export default function OnboardingScreen({ navigation }: any) {
         return (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Shop address</Text>
-            <Text style={styles.sectionHint}>Give us the exact area so delivery partners can reach you without confusion.</Text>
+            <Text style={styles.sectionHint}>Add the shop or house name and floor so we can pin the exact building on Google Maps.</Text>
+
+            <Text style={styles.label}>Shop / house name</Text>
+            <TextInput placeholder="As shown on Google Maps, e.g. Sai Towers" placeholderTextColor="#98A2B3" value={address.shopHouseName} onChangeText={(v) => setAddress({ ...address, shopHouseName: v })} style={styles.input} />
+
+            <Text style={styles.label}>Floor / location</Text>
+            <TextInput placeholder="Ground floor, 1st floor, Shop 12" placeholderTextColor="#98A2B3" value={address.floor} onChangeText={(v) => setAddress({ ...address, floor: v })} style={styles.input} />
+
+            <Text style={styles.label}>Road or street (optional)</Text>
+            <TextInput placeholder="Only if you know the road name" placeholderTextColor="#98A2B3" value={address.roadStreet} onChangeText={(v) => setAddress({ ...address, roadStreet: v })} style={styles.input} />
 
             <Text style={styles.label}>State</Text>
             <TextInput placeholder="State" placeholderTextColor="#98A2B3" value={address.state} onChangeText={(v) => setAddress({ ...address, state: v })} style={styles.input} />
@@ -1155,14 +1179,11 @@ export default function OnboardingScreen({ navigation }: any) {
             <Text style={styles.label}>Colony or society</Text>
             <TextInput placeholder="Colony / society" placeholderTextColor="#98A2B3" value={address.colony} onChangeText={(v) => setAddress({ ...address, colony: v })} style={styles.input} />
 
-            <Text style={styles.label}>Road or street</Text>
-            <TextInput placeholder="Road / street details" placeholderTextColor="#98A2B3" value={address.roadStreet} onChangeText={(v) => setAddress({ ...address, roadStreet: v })} style={styles.input} />
-
             <Text style={styles.label}>Nearby places</Text>
             <TextInput placeholder="Metro station, mall, landmark" placeholderTextColor="#98A2B3" value={address.nearbyPlaces} onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })} style={styles.input} />
 
             <Text style={styles.label}>Shop map pin</Text>
-            <Text style={styles.helperText}>Use current location to auto-fill the address and pin, or continue after typing the address.</Text>
+            <Text style={styles.helperText}>Continue to search Google Maps with your shop/house name, or use current location if you are at the shop.</Text>
             <TouchableOpacity style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]} onPress={captureShopLocation} disabled={capturingLocation || locatingAddress}>
               {capturingLocation ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryActionButtonText}>Use current location</Text>}
             </TouchableOpacity>
@@ -1438,12 +1459,7 @@ export default function OnboardingScreen({ navigation }: any) {
     </KeyboardAvoidingView>
     <AddressPinConfirmModal
       visible={pinConfirmVisible && Boolean(pendingPin)}
-      addressLines={[
-        address.roadStreet,
-        address.colony,
-        address.area,
-        [address.city, address.state, address.pincode].filter(Boolean).join(", ")
-      ].filter(Boolean)}
+      addressLines={partnerShopAddressLines(address)}
       latitude={pendingPin?.latitude || 0}
       longitude={pendingPin?.longitude || 0}
       confirming={locatingAddress}

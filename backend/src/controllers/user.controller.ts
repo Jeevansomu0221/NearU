@@ -82,6 +82,7 @@ const normalizeAddressPayload = (body: any) => {
     recipientName,
     houseFlatDoorNo,
     buildingApartmentName,
+    shopHouseName,
     streetRoadName,
     roadStreet,
     colony,
@@ -96,13 +97,16 @@ const normalizeAddressPayload = (body: any) => {
     nearbyPlaces,
     district,
     country,
+    shopName,
+    restaurantName,
+    placeName,
     latitude,
     longitude,
     isDefault
   } = body;
 
   const normalizedStreetRoad = streetRoadName || roadStreet || "";
-  const normalizedBuilding = buildingApartmentName || colony || "";
+  const normalizedBuilding = buildingApartmentName || shopHouseName || colony || "";
   const normalizedLandmark = landmark ||
     (Array.isArray(nearbyPlaces) ? nearbyPlaces.filter(Boolean).join(", ") : nearbyPlaces) ||
     "";
@@ -129,6 +133,7 @@ const normalizeAddressPayload = (body: any) => {
     recipientName: recipientName || "",
     houseFlatDoorNo: houseFlatDoorNo || "",
     buildingApartmentName: normalizedBuilding,
+    shopHouseName: String(shopHouseName || "").trim(),
     streetRoadName: normalizedStreetRoad,
     street: normalizedStreet,
     city: normalizedCity,
@@ -138,6 +143,8 @@ const normalizeAddressPayload = (body: any) => {
     area: normalizedArea,
     areaLocality: normalizedArea,
     landmark: String(normalizedLandmark || ""),
+    shopName: String(shopName || restaurantName || placeName || "").trim(),
+    restaurantName: String(restaurantName || shopName || "").trim(),
     district: district || "",
     country: country || "India",
     latitude: hasValidCoordinates ? normalizedLatitude : undefined,
@@ -728,7 +735,8 @@ export const suggestDeliveryAddresses = async (req: AuthRequest, res: Response) 
       return successResponse(res, [], "Type a bit more of the address");
     }
 
-    const suggestions = await suggestTypedAddresses(query);
+    const kind = String(req.query.kind || "").toLowerCase() === "shop" ? "shop" : "address";
+    const suggestions = await suggestTypedAddresses(query, kind);
     return successResponse(res, suggestions, "Address suggestions retrieved");
   } catch (err: any) {
     console.error("suggestDeliveryAddresses error:", err);

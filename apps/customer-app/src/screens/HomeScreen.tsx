@@ -35,6 +35,8 @@ import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
 interface AddressObject {
+  shopHouseName?: string;
+  floor?: string;
   state?: string;
   city?: string;
   area?: string;
@@ -294,7 +296,14 @@ export default function HomeScreen({ navigation }: Props) {
   const formatAddress = (address: string | AddressObject): string => {
     if (!address) return "Address not available";
     if (typeof address === "string") return getPublicAddressText(address);
-    return [address.roadStreet, address.colony, address.area, address.city].filter(Boolean).join(", ");
+    return [
+      address.shopHouseName,
+      address.floor,
+      address.roadStreet,
+      address.colony,
+      address.area,
+      address.city
+    ].filter(Boolean).join(", ");
   };
 
   const filteredShops = useMemo(() => {

@@ -28,6 +28,8 @@ export const normalizeDraft = (draft: unknown): OnboardingDraft | null => {
       email: String(safeForm.email || "")
     },
     address: {
+      shopHouseName: String(safeAddress.shopHouseName || ""),
+      floor: String(safeAddress.floor || ""),
       state: String(safeAddress.state || ""),
       city: String(safeAddress.city || ""),
       pincode: String(safeAddress.pincode || ""),

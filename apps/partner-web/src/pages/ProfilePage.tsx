@@ -3,6 +3,8 @@ import { createSupportTicket, getPartnerProfile, resolveShopAddressPin, updatePa
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
 
 type AddressForm = {
+  shopHouseName: string;
+  floor: string;
   roadStreet: string;
   colony: string;
   area: string;
@@ -13,6 +15,8 @@ type AddressForm = {
 };
 
 const emptyAddress = (): AddressForm => ({
+  shopHouseName: "",
+  floor: "",
   roadStreet: "",
   colony: "",
   area: "",
@@ -42,6 +46,8 @@ export default function ProfilePage() {
       email: String(data.email || "")
     });
     setAddress({
+      shopHouseName: String(savedAddress.shopHouseName || ""),
+      floor: String(savedAddress.floor || ""),
       roadStreet: String(savedAddress.roadStreet || ""),
       colony: String(savedAddress.colony || ""),
       area: String(savedAddress.area || ""),
@@ -64,8 +70,8 @@ export default function ProfilePage() {
   };
 
   const saveAddress = async () => {
-    if (!address.roadStreet || !address.colony || !address.area || !address.city || !address.state) {
-      setMessage("Fill all address fields before saving.");
+    if (!address.shopHouseName || !address.floor || !address.colony || !address.area || !address.city || !address.state) {
+      setMessage("Fill shop/house name, floor, area, city, and state before saving.");
       return;
     }
     if (!/^\d{6}$/.test(address.pincode)) {
@@ -77,13 +83,16 @@ export default function ProfilePage() {
     setMessage("");
     try {
       const result = await resolveShopAddressPin({
+        shopName: profile.restaurantName.trim(),
+        restaurantName: profile.restaurantName.trim(),
+        shopHouseName: address.shopHouseName.trim(),
+        buildingApartmentName: address.shopHouseName.trim(),
         streetRoadName: address.roadStreet.trim(),
-        buildingApartmentName: address.colony.trim(),
         area: address.area.trim(),
         city: address.city.trim(),
         state: address.state.trim(),
         pincode: address.pincode.trim(),
-        landmark: address.nearbyPlaces
+        landmark: [address.colony, address.nearbyPlaces].filter(Boolean).join(", ")
       });
       if (!result.success || !result.data) {
         setMessage(result.message || "Could not locate this shop address.");
@@ -165,10 +174,12 @@ export default function ProfilePage() {
 
       <div className="card">
         <h3>Shop address</h3>
-        <p>We locate the typed address on the map, then you confirm the exact shop pin.</p>
+        <p>We search Google Maps with your shop/house name, then you confirm the exact pin on the building.</p>
         {(
           [
-            ["roadStreet", "Road / street"],
+            ["shopHouseName", "Shop / house name"],
+            ["floor", "Floor / location"],
+            ["roadStreet", "Road / street (optional)"],
             ["colony", "Colony / society"],
             ["area", "Area / locality"],
             ["city", "City"],
@@ -210,6 +221,7 @@ export default function ProfilePage() {
       <AddressPinConfirmModal
         visible={pinConfirmVisible && Boolean(pendingPin)}
         addressLines={[
+          [address.shopHouseName, address.floor].filter(Boolean).join(", "),
           address.roadStreet,
           address.colony,
           address.area,

@@ -20,7 +20,7 @@ import api, { uploadMultipart } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { partnerAddressToGeocodePayload, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
+import { partnerAddressToGeocodePayload, partnerShopAddressLines, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
 
 type ReuploadFlags = {
   fssaiUrl?: boolean;
@@ -82,6 +82,8 @@ interface PartnerProfile {
   bannerImageUrl?: string;
   phone: string;
   address: {
+    shopHouseName?: string;
+    floor?: string;
     state: string;
     city: string;
     pincode: string;
@@ -199,7 +201,16 @@ const loadLocationModule = async () => {
 
 const formatAddress = (address?: PartnerProfile["address"]) => {
   if (!address) return "";
-  return [address.roadStreet, address.colony, address.area, address.city, address.state, address.pincode]
+  return [
+    address.shopHouseName,
+    address.floor,
+    address.roadStreet,
+    address.colony,
+    address.area,
+    address.city,
+    address.state,
+    address.pincode
+  ]
     .filter(Boolean)
     .join(", ");
 };
@@ -289,6 +300,8 @@ export default function ProfileScreen({ navigation }: any) {
   });
 
   const [address, setAddress] = useState({
+    shopHouseName: "",
+    floor: "",
     roadStreet: "",
     colony: "",
     area: "",
@@ -344,6 +357,8 @@ export default function ProfileScreen({ navigation }: any) {
       shopDescription: data.shopDescription || ""
     });
     setAddress({
+      shopHouseName: data.address?.shopHouseName || "",
+      floor: data.address?.floor || "",
       roadStreet: data.address?.roadStreet || "",
       colony: data.address?.colony || "",
       area: data.address?.area || "",
@@ -515,8 +530,10 @@ export default function ProfileScreen({ navigation }: any) {
         const geo = result.data;
         if (result.success && geo) {
           setAddress((current) => ({
+            ...current,
+            shopHouseName: current.shopHouseName || geo.buildingApartmentName || "",
             roadStreet: geo.streetRoadName || current.roadStreet,
-            colony: geo.buildingApartmentName || current.colony,
+            colony: current.colony || geo.area || "",
             area: geo.area || current.area,
             city: geo.city || current.city,
             state: geo.state || current.state,
@@ -542,8 +559,8 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const handleSaveAddress = async () => {
-    if (!address.roadStreet || !address.colony || !address.area || !address.city || !address.state) {
-      Alert.alert("Missing details", "Fill all address fields before saving.");
+    if (!address.shopHouseName || !address.floor || !address.colony || !address.area || !address.city || !address.state) {
+      Alert.alert("Missing details", "Fill shop/house name, floor, area, city, and state before saving.");
       return;
     }
     if (!/^\d{6}$/.test(address.pincode)) {
@@ -553,9 +570,9 @@ export default function ProfileScreen({ navigation }: any) {
 
     try {
       setSaving(true);
-      const result = await resolveAddressPin(partnerAddressToGeocodePayload(address));
+      const result = await resolveAddressPin(partnerAddressToGeocodePayload(address, profile?.restaurantName));
       if (!result.success || !result.data) {
-        Alert.alert("Address not found", result.message || "Check the street, area, city, and pincode.");
+        Alert.alert("Address not found", result.message || "Check the shop/house name, area, city, and pincode.");
         return;
       }
       setPendingPin(result.data);
@@ -576,6 +593,8 @@ export default function ProfileScreen({ navigation }: any) {
     const payload: Record<string, any> = {
       address: {
         ...profile?.address,
+        shopHouseName: address.shopHouseName.trim(),
+        floor: address.floor.trim(),
         roadStreet: address.roadStreet.trim(),
         colony: address.colony.trim(),
         area: address.area.trim(),
@@ -1355,7 +1374,7 @@ export default function ProfileScreen({ navigation }: any) {
           renderEditAction("address", addressEditing)
         )}
 
-        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Road / street</Text>
+        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Shop / house name</Text>
         <TextInput
           style={[
             styles.addressInput,
@@ -1363,7 +1382,37 @@ export default function ProfileScreen({ navigation }: any) {
             !addressEditing && styles.addressInputDisabled,
             !addressEditing && isDarkMode && styles.inputDisabledDark
           ]}
-          placeholder="Road / street"
+          placeholder="As shown on Google Maps"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
+          value={address.shopHouseName}
+          onChangeText={(text) => setAddress({ ...address, shopHouseName: text })}
+          editable={addressEditing}
+        />
+
+        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Floor / location</Text>
+        <TextInput
+          style={[
+            styles.addressInput,
+            isDarkMode && styles.inputDark,
+            !addressEditing && styles.addressInputDisabled,
+            !addressEditing && isDarkMode && styles.inputDisabledDark
+          ]}
+          placeholder="Ground floor, 1st floor, Shop 12"
+          placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
+          value={address.floor}
+          onChangeText={(text) => setAddress({ ...address, floor: text })}
+          editable={addressEditing}
+        />
+
+        <Text style={[styles.addressLabel, isDarkMode && styles.mutedTextDark]}>Road / street (optional)</Text>
+        <TextInput
+          style={[
+            styles.addressInput,
+            isDarkMode && styles.inputDark,
+            !addressEditing && styles.addressInputDisabled,
+            !addressEditing && isDarkMode && styles.inputDisabledDark
+          ]}
+          placeholder="Only if you know the road name"
           placeholderTextColor={isDarkMode ? "#9FB0C5" : "#98A2B3"}
           value={address.roadStreet}
           onChangeText={(text) => setAddress({ ...address, roadStreet: text })}
@@ -1862,12 +1911,7 @@ export default function ProfileScreen({ navigation }: any) {
       </ScrollView>
       <AddressPinConfirmModal
         visible={pinConfirmVisible && Boolean(pendingPin)}
-        addressLines={[
-          address.roadStreet,
-          address.colony,
-          address.area,
-          [address.city, address.state, address.pincode].filter(Boolean).join(", ")
-        ].filter(Boolean)}
+        addressLines={partnerShopAddressLines(address)}
         latitude={pendingPin?.latitude || 0}
         longitude={pendingPin?.longitude || 0}
         confirming={saving}

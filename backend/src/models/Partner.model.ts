@@ -84,15 +84,25 @@ const PartnerSchema = new Schema(
         required: true,
         trim: true
       },
+      shopHouseName: {
+        type: String,
+        default: "",
+        trim: true
+      },
       roadStreet: {
         type: String,
-        required: true,
+        default: "",
         trim: true
       },
       nearbyPlaces: [{
         type: String,
         trim: true
       }],
+      floor: {
+        type: String,
+        default: "",
+        trim: true
+      },
       // Google Maps link is optional. Partners can either paste a maps share
       // link (we'll parse lat/lng out of it) or use the in-app "Use my shop
       // location" button which sends coordinates directly.

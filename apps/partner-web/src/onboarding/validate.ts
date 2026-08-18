@@ -4,7 +4,16 @@ import type { DocumentState } from "./types";
 export const validateStep = (
   step: number,
   form: { ownerName: string; restaurantName: string; phone: string; restaurantPhone: string; email: string },
-  address: { state: string; city: string; pincode: string; area: string; colony: string; roadStreet: string },
+  address: {
+    shopHouseName?: string;
+    floor?: string;
+    state: string;
+    city: string;
+    pincode: string;
+    area: string;
+    colony: string;
+    roadStreet?: string;
+  },
   selectedCategory: string,
   documents: DocumentState,
   kyc: PartnerKycState,
@@ -22,8 +31,11 @@ export const validateStep = (
   }
 
   if (step === 1) {
-    if (!address.state || !address.city || !address.pincode || !address.area || !address.colony || !address.roadStreet) {
-      return "Please fill all address fields";
+    if (!form.restaurantName.trim()) return "Enter the shop name as it appears on Google Maps.";
+    if (!address.shopHouseName?.trim()) return "Enter the shop or house name";
+    if (!address.floor?.trim()) return "Enter the floor or shop location";
+    if (!address.state || !address.city || !address.pincode || !address.area || !address.colony) {
+      return "Please fill all required address fields";
     }
     if (!/^\d{6}$/.test(address.pincode)) return "Pincode must be exactly 6 digits";
   }

@@ -4,6 +4,8 @@ export type AddressLike =
       recipientName?: string;
       houseFlatDoorNo?: string;
       buildingApartmentName?: string;
+      shopHouseName?: string;
+      floor?: string;
       streetRoadName?: string;
       street?: string;
       roadStreet?: string;
@@ -37,7 +39,13 @@ export const formatAddress = (address: AddressLike, options: { short?: boolean }
   }
 
   const streetLine =
-    compact([address.houseFlatDoorNo, address.buildingApartmentName, address.streetRoadName]).join(", ") ||
+    compact([
+      address.shopHouseName,
+      address.floor,
+      address.houseFlatDoorNo,
+      address.buildingApartmentName,
+      address.streetRoadName
+    ]).join(", ") ||
     address.street ||
     address.roadStreet;
   const areaLine = address.areaLocality || address.area || address.colony;

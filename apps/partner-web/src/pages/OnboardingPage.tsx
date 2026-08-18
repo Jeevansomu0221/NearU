@@ -59,6 +59,8 @@ export default function OnboardingPage() {
     email: ""
   });
   const [address, setAddress] = useState({
+    shopHouseName: "",
+    floor: "",
     state: "",
     city: "",
     pincode: "",
@@ -91,6 +93,8 @@ export default function OnboardingPage() {
     if (draft.shopLocation) {
       setConfirmedAddressKey(
         JSON.stringify({
+          shopHouseName: draft.address.shopHouseName.trim(),
+          floor: draft.address.floor.trim(),
           state: draft.address.state.trim(),
           city: draft.address.city.trim(),
           pincode: draft.address.pincode.trim(),
@@ -199,6 +203,8 @@ export default function OnboardingPage() {
 
   const addressFingerprint = () =>
     JSON.stringify({
+      shopHouseName: address.shopHouseName.trim(),
+      floor: address.floor.trim(),
       state: address.state.trim(),
       city: address.city.trim(),
       pincode: address.pincode.trim(),
@@ -210,6 +216,7 @@ export default function OnboardingPage() {
 
   const addressLines = () =>
     [
+      [address.shopHouseName, address.floor].filter(Boolean).join(", "),
       address.roadStreet,
       address.colony,
       address.area,
@@ -235,16 +242,19 @@ export default function OnboardingPage() {
     setError("");
     try {
       const result = await resolveShopAddressPin({
+        shopName: form.restaurantName.trim(),
+        restaurantName: form.restaurantName.trim(),
+        shopHouseName: address.shopHouseName.trim(),
+        buildingApartmentName: address.shopHouseName.trim(),
         streetRoadName: address.roadStreet.trim(),
-        buildingApartmentName: address.colony.trim(),
         area: address.area.trim(),
         city: address.city.trim(),
         state: address.state.trim(),
         pincode: address.pincode.trim(),
-        landmark: address.nearbyPlaces
+        landmark: [address.colony, address.nearbyPlaces].filter(Boolean).join(", ")
       });
       if (!result.success || !result.data) {
-        setError(result.message || "Check the street, area, city, and pincode.");
+        setError(result.message || "Check the shop/house name, area, city, and pincode.");
         return false;
       }
       setPendingPin(result.data);
@@ -283,12 +293,14 @@ export default function OnboardingPage() {
         const geo = result.data;
         if (result.success && geo) {
           setAddress((current) => ({
+            ...current,
+            shopHouseName: current.shopHouseName || geo.buildingApartmentName || "",
             state: geo.state || current.state,
             city: geo.city || current.city,
             pincode: geo.pincode || current.pincode,
             area: geo.area || current.area,
-            colony: geo.buildingApartmentName || current.colony,
-            roadStreet: geo.streetRoadName || geo.formattedAddress || current.roadStreet,
+            colony: current.colony || geo.area || "",
+            roadStreet: geo.streetRoadName || current.roadStreet,
             nearbyPlaces: current.nearbyPlaces || geo.formattedAddress
           }));
         }
@@ -420,6 +432,8 @@ export default function OnboardingPage() {
         restaurantPhone: form.restaurantPhone.trim(),
         email: form.email.trim(),
         address: {
+          shopHouseName: address.shopHouseName.trim(),
+          floor: address.floor.trim(),
           state: address.state.trim(),
           city: address.city.trim(),
           pincode: address.pincode.trim(),
@@ -504,25 +518,63 @@ export default function OnboardingPage() {
       case 1:
         return (
           <div className="onb-step">
-            {(["state", "city", "pincode", "area", "colony", "roadStreet"] as const).map((key) => (
-              <label className="field" key={key}>
-                <span>{key === "roadStreet" ? "Road / street *" : `${key.charAt(0).toUpperCase()}${key.slice(1)} *`}</span>
-                <input
-                  value={address[key]}
-                  onChange={(e) =>
-                    setAddress({
-                      ...address,
-                      [key]: key === "pincode" ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value
-                    })
-                  }
-                />
+            <label className="field">
+              <span>Shop / house name *</span>
+              <input
+                value={address.shopHouseName}
+                onChange={(e) => setAddress({ ...address, shopHouseName: e.target.value })}
+                placeholder="As shown on Google Maps, e.g. Sai Towers"
+              />
+            </label>
+            <label className="field">
+              <span>Floor / location *</span>
+              <input
+                value={address.floor}
+                onChange={(e) => setAddress({ ...address, floor: e.target.value })}
+                placeholder="Ground floor, 1st floor, Shop 12"
+              />
+            </label>
+            <label className="field">
+              <span>Road / street (optional)</span>
+              <input
+                value={address.roadStreet}
+                onChange={(e) => setAddress({ ...address, roadStreet: e.target.value })}
+                placeholder="Only if you know the road name"
+              />
+            </label>
+            <label className="field">
+              <span>Colony / society *</span>
+              <input value={address.colony} onChange={(e) => setAddress({ ...address, colony: e.target.value })} />
+            </label>
+            <label className="field">
+              <span>Area *</span>
+              <input value={address.area} onChange={(e) => setAddress({ ...address, area: e.target.value })} />
+            </label>
+            <div className="onb-row">
+              <label className="field">
+                <span>City *</span>
+                <input value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} />
               </label>
-            ))}
+              <label className="field">
+                <span>State *</span>
+                <input value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} />
+              </label>
+            </div>
+            <label className="field">
+              <span>Pincode *</span>
+              <input
+                value={address.pincode}
+                onChange={(e) => setAddress({ ...address, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                inputMode="numeric"
+              />
+            </label>
             <label className="field">
               <span>Nearby places (comma separated)</span>
               <input value={address.nearbyPlaces} onChange={(e) => setAddress({ ...address, nearbyPlaces: e.target.value })} />
             </label>
-            <p className="onb-hint">Use current location to auto-fill the address and pin, or continue after typing the address.</p>
+            <p className="onb-hint">
+              We search Google Maps with your shop/house name so the pin lands on the building. Drag the pin onto the entrance if needed.
+            </p>
             <button type="button" className="btn secondary" onClick={captureLocation} disabled={capturingLocation || locatingAddress}>
               {capturingLocation ? "Reading location…" : "Use current location"}
             </button>
