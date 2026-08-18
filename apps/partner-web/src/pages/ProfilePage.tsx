@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createSupportTicket, getPartnerProfile, resolveShopAddressPin, updatePartnerProfile } from "@vyaha/api-client";
+import { createSupportTicket, getPartnerProfile, resolveExactGoogleShopPin, updatePartnerProfile } from "@vyaha/api-client";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
 
 type AddressForm = {
@@ -76,20 +76,18 @@ export default function ProfilePage() {
     setSaving(true);
     setMessage("");
     try {
-      const result = await resolveShopAddressPin({
-        streetRoadName: address.roadStreet.trim(),
-        buildingApartmentName: address.colony.trim(),
+      const pin = await resolveExactGoogleShopPin({
+        shopName: profile.restaurantName.trim(),
+        restaurantName: profile.restaurantName.trim(),
+        roadStreet: address.roadStreet.trim(),
+        colony: address.colony.trim(),
         area: address.area.trim(),
         city: address.city.trim(),
         state: address.state.trim(),
         pincode: address.pincode.trim(),
-        landmark: address.nearbyPlaces
+        nearbyPlaces: address.nearbyPlaces
       });
-      if (!result.success || !result.data) {
-        setMessage(result.message || "Could not locate this shop address.");
-        return;
-      }
-      setPendingPin(result.data);
+      setPendingPin(pin);
       setPinConfirmVisible(true);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Could not locate this shop address.");

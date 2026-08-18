@@ -3,6 +3,7 @@ import { config } from "../config/env";
 export type GeocodedAddress = {
   formattedAddress: string;
   placeId: string;
+  placeName?: string;
   houseFlatDoorNo: string;
   buildingApartmentName: string;
   streetRoadName: string;
@@ -16,12 +17,17 @@ export type GeocodedAddress = {
   longitude: number;
   locationType?: string;
   osmClass?: string;
+  placeTypes?: string[];
   source?: "google" | "osm";
 };
+
+export type AddressSuggestKind = "address" | "shop";
 
 export type AddressSuggestion = {
   description: string;
   placeId: string;
+  mainText?: string;
+  secondaryText?: string;
   address?: GeocodedAddress;
 };
 
@@ -35,6 +41,7 @@ const GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GOOGLE_AUTOCOMPLETE_URL = "https://maps.googleapis.com/maps/api/place/autocomplete/json";
 const GOOGLE_PLACE_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json";
 const GOOGLE_PLACE_TEXT_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json";
+const GOOGLE_FIND_PLACE_URL = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json";
 
 const componentValue = (components: GoogleAddressComponent[], type: string, short = false) => {
   const match = components.find((component) => Array.isArray(component.types) && component.types.includes(type));
@@ -84,26 +91,37 @@ const parseGoogleAddress = (result: any): GeocodedAddress | null => {
     latitude,
     longitude,
     locationType: String(result?.geometry?.location_type || "").trim(),
+    placeTypes: Array.isArray(result?.types) ? result.types.map((type: unknown) => String(type)) : [],
     source: "google"
   };
 };
 
 const hasGoogleMapsKey = () => Boolean(config.googleMapsApiKey.trim());
 
+let googleMapsHttpBlocked = false;
+
 const googleGet = async (url: string, params: Record<string, string>) => {
   const apiKey = config.googleMapsApiKey.trim();
-  if (!apiKey) return null;
+  if (!apiKey || googleMapsHttpBlocked) return null;
 
   const search = new URLSearchParams({ ...params, key: apiKey });
   const response = await fetch(`${url}?${search.toString()}`);
   if (!response.ok) return null;
-  return response.json();
+  const payload = await response.json();
+  if (payload?.status === "REQUEST_DENIED") {
+    googleMapsHttpBlocked = true;
+    console.warn(
+      "Google Maps HTTP API is blocked for this server key; shop pins will use OpenStreetMap until a server key is set."
+    );
+  }
+  return payload;
 };
 
 const parseGooglePlace = (result: any): GeocodedAddress | null => {
   const parsed = parseGoogleAddress(result);
   if (!parsed) return null;
   const name = String(result?.name || "").trim();
+  if (name) parsed.placeName = name;
   if (name && !parsed.buildingApartmentName) {
     parsed.buildingApartmentName = name;
   }
@@ -191,23 +209,79 @@ export const geocodeTypedAddress = async (query: string): Promise<GeocodedAddres
   return geocodeWithNominatim(query);
 };
 
-export const suggestTypedAddresses = async (query: string): Promise<AddressSuggestion[]> => {
-  try {
-    const payload = await googleGet(GOOGLE_AUTOCOMPLETE_URL, {
-      input: query,
-      components: "country:in",
-      language: "en",
-      types: "geocode"
-    });
+const parseAutocompletePredictions = (payload: any): AddressSuggestion[] =>
+  (Array.isArray(payload?.predictions) ? payload.predictions : [])
+    .map((prediction: any) => {
+      const mainText = String(prediction?.structured_formatting?.main_text || "").trim();
+      const secondaryText = String(prediction?.structured_formatting?.secondary_text || "").trim();
+      const description = String(
+        prediction?.description || [mainText, secondaryText].filter(Boolean).join(", ")
+      ).trim();
+      return {
+        description,
+        placeId: String(prediction?.place_id || "").trim(),
+        mainText: mainText || undefined,
+        secondaryText: secondaryText || undefined
+      };
+    })
+    .filter((entry: AddressSuggestion) => entry.description && entry.placeId)
+    .slice(0, 8);
 
-    if (payload?.status === "OK") {
-      return (Array.isArray(payload.predictions) ? payload.predictions : [])
-        .map((prediction: any) => ({
-          description: String(prediction?.description || "").trim(),
-          placeId: String(prediction?.place_id || "").trim()
-        }))
-        .filter((entry: AddressSuggestion) => entry.description && entry.placeId)
-        .slice(0, 6);
+const autocompleteQuery = async (query: string, types?: string) => {
+  const params: Record<string, string> = {
+    input: query,
+    components: "country:in",
+    language: "en"
+  };
+  if (types) params.types = types;
+  return googleGet(GOOGLE_AUTOCOMPLETE_URL, params);
+};
+
+export const suggestTypedAddresses = async (
+  query: string,
+  kind: AddressSuggestKind = "address"
+): Promise<AddressSuggestion[]> => {
+  try {
+    if (kind === "shop") {
+      const establishment = await autocompleteQuery(query, "establishment");
+      if (establishment?.status === "OK") {
+        const parsed = parseAutocompletePredictions(establishment);
+        if (parsed.length) return parsed;
+      }
+
+      const mixed = await autocompleteQuery(query);
+      if (mixed?.status === "OK") {
+        const parsed = parseAutocompletePredictions(mixed);
+        if (parsed.length) return parsed;
+      }
+
+      const textSearch = await googleGet(GOOGLE_PLACE_TEXT_URL, {
+        query,
+        region: "in",
+        language: "en"
+      });
+      if (textSearch?.status === "OK") {
+        return (Array.isArray(textSearch.results) ? textSearch.results : [])
+          .map((result: any) => {
+            const parsed = parseGooglePlace(result);
+            const name = String(result?.name || parsed?.placeName || "").trim();
+            const formatted = String(result?.formatted_address || parsed?.formattedAddress || "").trim();
+            return {
+              description: [name, formatted].filter(Boolean).join(", "),
+              placeId: String(result?.place_id || parsed?.placeId || "").trim(),
+              mainText: name || undefined,
+              secondaryText: formatted || undefined,
+              address: parsed || undefined
+            };
+          })
+          .filter((entry: AddressSuggestion) => entry.description && entry.placeId)
+          .slice(0, 8);
+      }
+    } else {
+      const payload = await autocompleteQuery(query, "geocode");
+      if (payload?.status === "OK") {
+        return parseAutocompletePredictions(payload);
+      }
     }
   } catch {
     // Fall through to geocoding if Places Autocomplete is not enabled.
@@ -217,6 +291,8 @@ export const suggestTypedAddresses = async (query: string): Promise<AddressSugge
   return geocoded.map((address) => ({
     description: address.formattedAddress,
     placeId: address.placeId,
+    mainText: address.placeName || address.buildingApartmentName || undefined,
+    secondaryText: address.formattedAddress,
     address
   }));
 };
@@ -241,6 +317,8 @@ const pincodeDigits = (value?: string) => String(value || "").replace(/\D/g, "")
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const buildAddressSearchQuery = (address: {
+  shopName?: string;
+  restaurantName?: string;
   houseFlatDoorNo?: string;
   buildingApartmentName?: string;
   streetRoadName?: string;
@@ -256,6 +334,7 @@ export const buildAddressSearchQuery = (address: {
   country?: string;
 }) =>
   compactQuery([
+    address.shopName || address.restaurantName,
     address.houseFlatDoorNo,
     address.buildingApartmentName,
     address.streetRoadName || address.street,
@@ -269,12 +348,21 @@ export const buildAddressSearchQuery = (address: {
 
 type AddressLookup = Parameters<typeof buildAddressSearchQuery>[0];
 
+const shopNameOf = (address: AddressLookup) =>
+  String(address.shopName || address.restaurantName || "").trim();
+
+const isGenericStreetName = (value?: string) => {
+  const text = normalizeText(value);
+  return !text || text.length < 4 || /^(rd|road|st|street|lane|ln|cross)\s*\d*$/.test(text);
+};
+
 const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   let score = 0;
   const wantedPin = pincodeDigits(address.pincode);
   const haystack = normalizeText(
     [
       match.formattedAddress,
+      match.placeName,
       match.buildingApartmentName,
       match.area,
       match.city,
@@ -298,9 +386,11 @@ const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   areaTokens.forEach((word) => {
     if (haystack.includes(word)) score += 16;
   });
-  if (area && !areaMatched) score -= 70;
+  const shop = normalizeText(shopNameOf(address));
+  if (area && !areaMatched && !shop) score -= 70;
 
-  const street = normalizeText(address.streetRoadName || address.street);
+  const streetRaw = address.streetRoadName || address.street;
+  const street = isGenericStreetName(streetRaw) ? "" : normalizeText(streetRaw);
   if (street && haystack.includes(street)) score += 50;
   street
     .split(" ")
@@ -315,14 +405,44 @@ const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   const building = normalizeText(address.buildingApartmentName);
   if (building && haystack.includes(building)) score += 90;
 
+  const shopTokens = shop
+    .replace(/\s+\d+[a-z]?$/i, "")
+    .split(" ")
+    .filter((word) => word.length > 2 && !/^\d+$/.test(word));
+  const matchedShopTokens = shopTokens.filter((word) => haystack.includes(word));
+  if (shop && haystack.includes(shop)) score += 120;
+  matchedShopTokens.forEach(() => {
+    score += 18;
+  });
+  if (shopTokens.length > 0 && matchedShopTokens.length === 0) {
+    score -= 160;
+  }
+
+  const placeTypes = match.placeTypes || [];
+  if (placeTypes.includes("route") || placeTypes.includes("street_address") || placeTypes.includes("plus_code")) {
+    score -= shop ? 90 : 25;
+  }
+  if (placeTypes.includes("premise") || placeTypes.includes("subpremise") || placeTypes.includes("establishment")) {
+    score += 40;
+  }
+
   if (match.source === "google") score += 25;
-  if (match.locationType === "ROOFTOP" || match.locationType === "PLACE") score += 60;
+  if (match.locationType === "PLACE") score += 80;
+  else if (match.locationType === "ROOFTOP") score += shop && matchedShopTokens.length ? 80 : 25;
   if (match.locationType === "RANGE_INTERPOLATED") score += 25;
+  if (match.locationType === "GEOMETRIC_CENTER" || match.locationType === "APPROXIMATE") {
+    score += shop ? -45 : 5;
+  }
   if (match.osmClass === "highway" || match.locationType === "trunk" || match.locationType === "primary") {
     score -= 50;
   }
-  if (match.locationType === "village" || match.locationType === "suburb" || match.locationType === "neighbourhood") {
-    score += 35;
+  if (
+    match.locationType === "village" ||
+    match.locationType === "suburb" ||
+    match.locationType === "neighbourhood" ||
+    match.locationType === "locality"
+  ) {
+    score += shop ? -55 : 20;
   }
 
   return score;
@@ -334,15 +454,21 @@ const pickBestMatch = (matches: GeocodedAddress[], address: AddressLookup) => {
 };
 
 const buildFallbackQueries = (address: AddressLookup) => {
-  const street = address.streetRoadName || address.street;
+  const street = isGenericStreetName(address.streetRoadName || address.street)
+    ? ""
+    : address.streetRoadName || address.street;
   const area = address.area || address.areaLocality;
   const city = address.city || address.cityTownVillage;
   const building = address.buildingApartmentName;
+  const shop = shopNameOf(address);
   const country = address.country || "India";
 
   return Array.from(
     new Set(
       [
+        compactQuery([shop, street, area, city, address.state, country]),
+        compactQuery([shop, area, city, address.state, country]),
+        compactQuery([shop, city, address.state, country]),
         compactQuery([building, street, area, city, address.state, country]),
         compactQuery([street, area, city, address.state, country]),
         compactQuery([area, city, address.state, country]),
@@ -352,39 +478,129 @@ const buildFallbackQueries = (address: AddressLookup) => {
   );
 };
 
-const geocodeWithGooglePlaces = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
-  if (!hasGoogleMapsKey()) return [];
+const geocodeAreaCenter = async (address: AddressLookup): Promise<{ lat: number; lng: number } | null> => {
+  if (!hasGoogleMapsKey()) return null;
   const query = compactQuery([
-    address.buildingApartmentName,
-    address.streetRoadName || address.street,
     address.area || address.areaLocality,
     address.city || address.cityTownVillage,
     address.pincode,
     address.state,
     "India"
   ]);
-  if (!query) return [];
-
-  const payload = await googleGet(GOOGLE_PLACE_TEXT_URL, {
-    query,
+  if (query.length < 3) return null;
+  const payload = await googleGet(GOOGLE_GEOCODE_URL, {
+    address: query,
+    components: "country:IN",
     region: "in",
     language: "en"
   });
-  if (payload?.status && payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
-    console.warn("Google Places text search failed:", payload.status, payload.error_message || "");
-    return [];
+  const location = payload?.results?.[0]?.geometry?.location;
+  const lat = Number(location?.lat);
+  const lng = Number(location?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+};
+
+const geocodeWithGooglePlaces = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
+  if (!hasGoogleMapsKey() || googleMapsHttpBlocked) return [];
+  const shop = shopNameOf(address);
+  const shopWithoutUnit = shop.replace(/\s+\d+[a-z]?$/i, "").trim();
+  const street = isGenericStreetName(address.streetRoadName || address.street)
+    ? ""
+    : address.streetRoadName || address.street;
+  const area = address.area || address.areaLocality;
+  const city = address.city || address.cityTownVillage;
+  const landmark = String(address.landmark || "").trim();
+  const queries = Array.from(
+    new Set(
+      [
+        compactQuery([shop, landmark, area, city, "India"]),
+        compactQuery([shopWithoutUnit, landmark, area, city, "India"]),
+        compactQuery([shopWithoutUnit, area, city, address.pincode, "India"]),
+        compactQuery([shop, area, city, address.pincode, "India"]),
+        compactQuery([shopWithoutUnit, city, "India"]),
+        compactQuery([shop, street, area, city, address.pincode, address.state, "India"])
+      ].filter((query) => query.length >= 3)
+    )
+  );
+  if (queries.length === 0) return [];
+
+  const center = await geocodeAreaCenter(address);
+  const bias = center
+    ? {
+        locationbias: `circle:4000@${center.lat},${center.lng}`,
+        location: `${center.lat},${center.lng}`,
+        radius: "4000"
+      }
+    : {};
+
+  const collected: GeocodedAddress[] = [];
+  for (const query of queries) {
+    const found = await googleGet(GOOGLE_FIND_PLACE_URL, {
+      input: query,
+      inputtype: "textquery",
+      fields: "place_id,name,formatted_address,geometry,types",
+      language: "en",
+      region: "in",
+      ...(bias.locationbias ? { locationbias: bias.locationbias } : {})
+    });
+    if (found?.status === "OK") {
+      collected.push(
+        ...(Array.isArray(found.candidates) ? found.candidates : [])
+          .map(parseGooglePlace)
+          .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry))
+      );
+    } else if (found?.status && found.status !== "ZERO_RESULTS") {
+      console.warn("Google Find Place failed:", found.status, found.error_message || "");
+      if (found.status === "REQUEST_DENIED") return collected;
+    }
+
+    const payload = await googleGet(GOOGLE_PLACE_TEXT_URL, {
+      query,
+      region: "in",
+      language: "en",
+      ...(bias.location && bias.radius ? { location: bias.location, radius: bias.radius } : {})
+    });
+    if (payload?.status && payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
+      console.warn("Google Places text search failed:", payload.status, payload.error_message || "");
+    } else {
+      collected.push(
+        ...(Array.isArray(payload?.results) ? payload.results : [])
+          .map(parseGooglePlace)
+          .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry))
+      );
+    }
+    const shopHit = collected.find((entry) => {
+      const haystack = normalizeText([entry.placeName, entry.formattedAddress, entry.buildingApartmentName].join(" "));
+      const tokens = normalizeText(shopWithoutUnit || shop)
+        .split(" ")
+        .filter((word) => word.length > 2 && !/^\d+$/.test(word));
+      return tokens.length > 0 && tokens.every((word) => haystack.includes(word));
+    });
+    if (shopHit) {
+      if (shopHit.placeId) {
+        try {
+          const detailed = await getPlaceAddress(shopHit.placeId);
+          return [detailed, ...collected.filter((entry) => entry.placeId !== detailed.placeId)];
+        } catch {
+          return collected;
+        }
+      }
+      return collected;
+    }
   }
-  return (Array.isArray(payload?.results) ? payload.results : [])
-    .map(parseGooglePlace)
-    .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+  return collected;
 };
 
 const geocodeWithGoogleStructured = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
-  if (!hasGoogleMapsKey()) return [];
+  if (!hasGoogleMapsKey() || googleMapsHttpBlocked) return [];
+  const street = isGenericStreetName(address.streetRoadName || address.street)
+    ? ""
+    : address.streetRoadName || address.street;
   const query = compactQuery([
-    address.houseFlatDoorNo,
+    shopNameOf(address),
     address.buildingApartmentName,
-    address.streetRoadName || address.street,
+    street,
     address.area || address.areaLocality,
     address.city || address.cityTownVillage,
     address.state,
@@ -410,11 +626,18 @@ const geocodeWithGoogleStructured = async (address: AddressLookup): Promise<Geoc
 
 const geocodeWithNominatimStructured = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
   const area = address.area || address.areaLocality;
+  const shop = shopNameOf(address).replace(/\s+\d+[a-z]?$/i, "").trim();
+  const street = isGenericStreetName(address.streetRoadName || address.street)
+    ? ""
+    : address.streetRoadName || address.street;
   const collected: GeocodedAddress[] = [];
   const queries = Array.from(
     new Set(
       [
-        compactQuery([address.streetRoadName || address.street, area]),
+        compactQuery([shop, address.landmark, area, address.city || address.cityTownVillage]),
+        compactQuery([shop, area, address.city || address.cityTownVillage]),
+        compactQuery([address.landmark, area, address.city || address.cityTownVillage]),
+        compactQuery([street, area]),
         compactQuery([area, address.state, "India"]),
         compactQuery([area])
       ].filter((query) => query.length >= 3)
@@ -465,17 +688,43 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
     console.warn("GOOGLE_MAPS_API_KEY is not set; apartment lookup will use OpenStreetMap fallback");
   }
 
+  const pinFromMatch = async (match: GeocodedAddress) => {
+    if (match.placeId && match.source === "google") {
+      try {
+        const detailed = await getPlaceAddress(match.placeId);
+        return {
+          latitude: detailed.latitude,
+          longitude: detailed.longitude,
+          formattedAddress: detailed.formattedAddress || match.formattedAddress
+        };
+      } catch {
+        // Fall back to the already-scored geometry.
+      }
+    }
+    return {
+      latitude: match.latitude,
+      longitude: match.longitude,
+      formattedAddress: match.formattedAddress
+    };
+  };
+
   const collected: GeocodedAddress[] = [];
   collected.push(...(await geocodeWithGooglePlaces(address)));
+  const placesBest = pickBestMatch(collected, address);
+  if (
+    placesBest &&
+    scoreGeocodedMatch(placesBest, address) >= 80 &&
+    (placesBest.placeName || placesBest.locationType === "PLACE")
+  ) {
+    console.info("Address pin source=", placesBest.source, "score=", scoreGeocodedMatch(placesBest, address));
+    return pinFromMatch(placesBest);
+  }
+
   collected.push(...(await geocodeWithGoogleStructured(address)));
   const googleBest = pickBestMatch(collected, address);
   if (googleBest && scoreGeocodedMatch(googleBest, address) >= 80) {
     console.info("Address pin source=", googleBest.source, "score=", scoreGeocodedMatch(googleBest, address));
-    return {
-      latitude: googleBest.latitude,
-      longitude: googleBest.longitude,
-      formattedAddress: googleBest.formattedAddress
-    };
+    return pinFromMatch(googleBest);
   }
 
   await wait(400);
@@ -483,11 +732,7 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
   const nominatimBest = pickBestMatch(collected, address);
   if (nominatimBest && scoreGeocodedMatch(nominatimBest, address) >= 80) {
     console.info("Address pin source=", nominatimBest.source, "score=", scoreGeocodedMatch(nominatimBest, address));
-    return {
-      latitude: nominatimBest.latitude,
-      longitude: nominatimBest.longitude,
-      formattedAddress: nominatimBest.formattedAddress
-    };
+    return pinFromMatch(nominatimBest);
   }
 
   for (let index = 0; index < queries.length; index += 1) {
@@ -496,26 +741,22 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
     const bestSoFar = pickBestMatch(collected, address);
     if (bestSoFar && scoreGeocodedMatch(bestSoFar, address) >= 80) {
       console.info("Address pin source=", bestSoFar.source, "score=", scoreGeocodedMatch(bestSoFar, address));
-      return {
-        latitude: bestSoFar.latitude,
-        longitude: bestSoFar.longitude,
-        formattedAddress: bestSoFar.formattedAddress
-      };
+      return pinFromMatch(bestSoFar);
     }
   }
 
   const best = pickBestMatch(collected, address);
-  if (best && scoreGeocodedMatch(best, address) >= 20) {
+  if (best) {
     console.info("Address pin source=", best.source, "score=", scoreGeocodedMatch(best, address));
-    return {
-      latitude: best.latitude,
-      longitude: best.longitude,
-      formattedAddress: best.formattedAddress
-    };
+    return pinFromMatch(best);
   }
 
   throw Object.assign(
-    new Error("We could not find this address on the map. Check the street, area, and pincode."),
+    new Error(
+      shopNameOf(address)
+        ? "We could not find this shop on the map. Search it as it appears on Google Maps and pick the listing."
+        : "We could not find this address on the map. Check the street, area, and pincode."
+    ),
     { statusCode: 400 }
   );
 };
@@ -580,18 +821,24 @@ export const reverseGeocodeCoordinates = async (
 export const getPlaceAddress = async (placeId: string): Promise<GeocodedAddress> => {
   const payload = await googleGet(GOOGLE_PLACE_DETAILS_URL, {
     place_id: placeId,
-    fields: "formatted_address,address_component,geometry,place_id",
+    fields: "name,formatted_address,address_component,geometry,place_id",
     language: "en"
   });
 
   if (payload?.status === "OK") {
-    const parsed = parseGoogleAddress(payload.result);
+    const parsed = parseGooglePlace(payload.result) || parseGoogleAddress(payload.result);
     if (parsed) return parsed;
   }
 
-  const geocoded = await geocodeTypedAddress(placeId);
-  if (!geocoded[0]) {
-    throw Object.assign(new Error("Could not resolve that address"), { statusCode: 404 });
+  const geocodedPayload = await googleGet(GOOGLE_GEOCODE_URL, {
+    place_id: placeId,
+    language: "en",
+    region: "in"
+  });
+  if (geocodedPayload?.status === "OK") {
+    const parsed = parseGoogleAddress(geocodedPayload.results?.[0]);
+    if (parsed) return parsed;
   }
-  return geocoded[0];
+
+  throw Object.assign(new Error("Could not resolve that Google Maps listing"), { statusCode: 404 });
 };

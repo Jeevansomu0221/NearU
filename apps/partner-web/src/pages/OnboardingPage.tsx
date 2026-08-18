@@ -8,7 +8,7 @@ import {
   getStoredUser,
   saveOnboardingDraft,
   skipPartnerBank,
-  resolveShopAddressPin,
+  resolveExactGoogleShopPin,
   reverseGeocodeLocation,
   submitOnboarding,
   uploadImage
@@ -59,6 +59,7 @@ export default function OnboardingPage() {
     email: ""
   });
   const [address, setAddress] = useState({
+    floor: "",
     state: "",
     city: "",
     pincode: "",
@@ -91,6 +92,8 @@ export default function OnboardingPage() {
     if (draft.shopLocation) {
       setConfirmedAddressKey(
         JSON.stringify({
+          shopName: draft.form.restaurantName.trim(),
+          floor: String(draft.address.floor || "").trim(),
           state: draft.address.state.trim(),
           city: draft.address.city.trim(),
           pincode: draft.address.pincode.trim(),
@@ -197,8 +200,31 @@ export default function OnboardingPage() {
     };
   }, [hydrating, persistDraft, activeStep, form, address, documents, media, operations, menuDraft, kyc, selectedCategory, shopLocation]);
 
+  const mergeGeoIntoAddress = (geo: {
+    state?: string;
+    city?: string;
+    pincode?: string;
+    area?: string;
+    buildingApartmentName?: string;
+    streetRoadName?: string;
+    formattedAddress?: string;
+  }) => {
+    setAddress((current) => ({
+      ...current,
+      state: current.state.trim() || geo.state || "",
+      city: current.city.trim() || geo.city || "",
+      pincode: current.pincode.trim() || geo.pincode || "",
+      area: current.area.trim() || geo.area || "",
+      colony: current.colony.trim() || geo.buildingApartmentName || "",
+      roadStreet: current.roadStreet.trim() || geo.streetRoadName || "",
+      nearbyPlaces: current.nearbyPlaces.trim() || geo.formattedAddress || ""
+    }));
+  };
+
   const addressFingerprint = () =>
     JSON.stringify({
+      shopName: form.restaurantName.trim(),
+      floor: address.floor.trim(),
       state: address.state.trim(),
       city: address.city.trim(),
       pincode: address.pincode.trim(),
@@ -210,13 +236,19 @@ export default function OnboardingPage() {
 
   const addressLines = () =>
     [
+      form.restaurantName,
+      address.floor ? `Floor ${address.floor}` : "",
       address.roadStreet,
       address.colony,
       address.area,
       [address.city, address.state, address.pincode].filter(Boolean).join(", ")
     ].filter(Boolean);
 
-  const openAddressPinConfirm = async (startingPin?: { latitude: number; longitude: number }) => {
+  const openAddressPinConfirm = async (startingPin?: {
+    latitude: number;
+    longitude: number;
+    formattedAddress?: string;
+  }) => {
     if (!startingPin) {
       const validationError = validateStep(1, form, address, selectedCategory, documents, kyc, operations);
       if (validationError) {
@@ -226,7 +258,11 @@ export default function OnboardingPage() {
     }
 
     if (startingPin) {
-      setPendingPin(startingPin);
+      setPendingPin({
+        latitude: startingPin.latitude,
+        longitude: startingPin.longitude,
+        formattedAddress: startingPin.formattedAddress
+      });
       setPinConfirmVisible(true);
       return true;
     }
@@ -234,24 +270,22 @@ export default function OnboardingPage() {
     setLocatingAddress(true);
     setError("");
     try {
-      const result = await resolveShopAddressPin({
-        streetRoadName: address.roadStreet.trim(),
-        buildingApartmentName: address.colony.trim(),
+      const pin = await resolveExactGoogleShopPin({
+        shopName: form.restaurantName.trim(),
+        restaurantName: form.restaurantName.trim(),
+        roadStreet: address.roadStreet.trim(),
+        colony: address.colony.trim(),
         area: address.area.trim(),
         city: address.city.trim(),
         state: address.state.trim(),
         pincode: address.pincode.trim(),
-        landmark: address.nearbyPlaces
+        nearbyPlaces: address.nearbyPlaces.trim()
       });
-      if (!result.success || !result.data) {
-        setError(result.message || "Check the street, area, city, and pincode.");
-        return false;
-      }
-      setPendingPin(result.data);
+      setPendingPin(pin);
       setPinConfirmVisible(true);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not locate this shop address.");
+      setError(err instanceof Error ? err.message : "Check the shop name, street, area, city, and pincode.");
       return false;
     } finally {
       setLocatingAddress(false);
@@ -266,6 +300,13 @@ export default function OnboardingPage() {
     if (activeStep === 1) {
       setActiveStep((s) => Math.min(s + 1, STEPS.length - 1));
     }
+    void reverseGeocodeLocation(pin.latitude, pin.longitude)
+      .then((geoResult) => {
+        if (geoResult.success && geoResult.data) {
+          mergeGeoIntoAddress(geoResult.data);
+        }
+      })
+      .catch(() => {});
   };
 
   const captureLocation = async () => {
@@ -280,17 +321,8 @@ export default function OnboardingPage() {
 
       try {
         const result = await reverseGeocodeLocation(coords.latitude, coords.longitude);
-        const geo = result.data;
-        if (result.success && geo) {
-          setAddress((current) => ({
-            state: geo.state || current.state,
-            city: geo.city || current.city,
-            pincode: geo.pincode || current.pincode,
-            area: geo.area || current.area,
-            colony: geo.buildingApartmentName || current.colony,
-            roadStreet: geo.streetRoadName || geo.formattedAddress || current.roadStreet,
-            nearbyPlaces: current.nearbyPlaces || geo.formattedAddress
-          }));
+        if (result.success && result.data) {
+          mergeGeoIntoAddress(result.data);
         }
       } catch {
         // Keep the live GPS pin even if address text cannot be read.
@@ -420,6 +452,7 @@ export default function OnboardingPage() {
         restaurantPhone: form.restaurantPhone.trim(),
         email: form.email.trim(),
         address: {
+          floor: address.floor.trim(),
           state: address.state.trim(),
           city: address.city.trim(),
           pincode: address.pincode.trim(),
@@ -503,10 +536,36 @@ export default function OnboardingPage() {
         );
       case 1:
         return (
-          <div className="onb-step">
+          <div className="onb-step onb-address">
+            <p className="onb-hint">
+              Enter the shop as it appears on Google Maps. Continue places that exact Google pin so you can confirm it.
+            </p>
+            <button type="button" className="btn" onClick={captureLocation} disabled={capturingLocation || locatingAddress}>
+              {capturingLocation ? "Reading location…" : "Use current location"}
+            </button>
+            {shopLocation ? <p className="onb-verified"><strong>Shop pin confirmed</strong></p> : null}
+            <label className="field">
+              <span>Shop name *</span>
+              <input
+                value={form.restaurantName}
+                onChange={(e) => setForm({ ...form, restaurantName: e.target.value })}
+                placeholder="As it appears on Google Maps"
+              />
+            </label>
+            <label className="field">
+              <span>Floor</span>
+              <input
+                value={address.floor}
+                onChange={(e) => setAddress({ ...address, floor: e.target.value })}
+                placeholder="Ground / 1st / 2nd"
+              />
+            </label>
+            <p className="onb-hint">Optional. Helps riders find the shop inside a mall or building.</p>
             {(["state", "city", "pincode", "area", "colony", "roadStreet"] as const).map((key) => (
               <label className="field" key={key}>
-                <span>{key === "roadStreet" ? "Road / street *" : `${key.charAt(0).toUpperCase()}${key.slice(1)} *`}</span>
+                <span>
+                  {key === "roadStreet" ? "Road / street *" : `${key.charAt(0).toUpperCase()}${key.slice(1)} *`}
+                </span>
                 <input
                   value={address[key]}
                   onChange={(e) =>
@@ -519,14 +578,9 @@ export default function OnboardingPage() {
               </label>
             ))}
             <label className="field">
-              <span>Nearby places (comma separated)</span>
+              <span>Nearby places (optional)</span>
               <input value={address.nearbyPlaces} onChange={(e) => setAddress({ ...address, nearbyPlaces: e.target.value })} />
             </label>
-            <p className="onb-hint">Use current location to auto-fill the address and pin, or continue after typing the address.</p>
-            <button type="button" className="btn secondary" onClick={captureLocation} disabled={capturingLocation || locatingAddress}>
-              {capturingLocation ? "Reading location…" : "Use current location"}
-            </button>
-            {shopLocation ? <p className="onb-verified"><strong>Shop pin confirmed</strong></p> : null}
           </div>
         );
       case 2:

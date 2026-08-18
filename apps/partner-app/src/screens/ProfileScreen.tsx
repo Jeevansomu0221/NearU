@@ -20,7 +20,7 @@ import api, { uploadMultipart } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { partnerAddressToGeocodePayload, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
+import { resolveExactGoogleShopPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
 
 type ReuploadFlags = {
   fssaiUrl?: boolean;
@@ -553,15 +553,21 @@ export default function ProfileScreen({ navigation }: any) {
 
     try {
       setSaving(true);
-      const result = await resolveAddressPin(partnerAddressToGeocodePayload(address));
-      if (!result.success || !result.data) {
-        Alert.alert("Address not found", result.message || "Check the street, area, city, and pincode.");
-        return;
-      }
-      setPendingPin(result.data);
+      const pin = await resolveExactGoogleShopPin({
+        shopName: profile?.restaurantName,
+        restaurantName: profile?.restaurantName,
+        roadStreet: address.roadStreet,
+        colony: address.colony,
+        area: address.area,
+        city: address.city,
+        state: address.state,
+        pincode: address.pincode,
+        nearbyPlaces: address.landmark
+      });
+      setPendingPin(pin);
       setPinConfirmVisible(true);
     } catch (error: any) {
-      Alert.alert("Address not found", error?.message || "Could not locate this shop address.");
+      Alert.alert("Address not found", error?.message || "Could not locate this shop on Google Maps.");
     } finally {
       setSaving(false);
     }

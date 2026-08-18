@@ -155,7 +155,7 @@ export default function AddressPinConfirmModal({
     <div className="pin-modal" role="dialog" aria-modal="true">
       <div className="pin-modal__card">
         <h2>Confirm shop pin</h2>
-        <p>Place the pin on your shop. Drag the map until it sits on the entrance or building.</p>
+        <p>This pin is the Google Maps listing for your address. Drag it onto the entrance if needed.</p>
         <div className="pin-modal__map">
           {Number.isFinite(latitude) && Number.isFinite(longitude) ? (
             <PannablePinMap latitude={latitude} longitude={longitude} onPinChange={setPin} />
