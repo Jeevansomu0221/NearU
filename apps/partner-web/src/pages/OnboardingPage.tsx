@@ -217,7 +217,7 @@ export default function OnboardingPage() {
   const addressLines = () =>
     [
       [address.shopHouseName, address.floor].filter(Boolean).join(", "),
-      address.roadStreet,
+      /^(rd|road|st|street|lane|ln|cross)\s*\.?\s*\d*$/i.test(address.roadStreet.trim()) ? "" : address.roadStreet,
       address.colony,
       address.area,
       [address.city, address.state, address.pincode].filter(Boolean).join(", ")
@@ -247,11 +247,12 @@ export default function OnboardingPage() {
         shopHouseName: address.shopHouseName.trim(),
         buildingApartmentName: address.shopHouseName.trim(),
         streetRoadName: address.roadStreet.trim(),
+        colony: address.colony.trim(),
         area: address.area.trim(),
         city: address.city.trim(),
         state: address.state.trim(),
         pincode: address.pincode.trim(),
-        landmark: [address.colony, address.nearbyPlaces].filter(Boolean).join(", ")
+        landmark: address.nearbyPlaces
       });
       if (!result.success || !result.data) {
         setError(result.message || "Check the shop/house name, area, city, and pincode.");

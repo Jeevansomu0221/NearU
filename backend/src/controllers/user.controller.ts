@@ -142,6 +142,7 @@ const normalizeAddressPayload = (body: any) => {
     pincode: pincode || "",
     area: normalizedArea,
     areaLocality: normalizedArea,
+    colony: String(colony || "").trim(),
     landmark: String(normalizedLandmark || ""),
     shopName: String(shopName || restaurantName || placeName || "").trim(),
     restaurantName: String(restaurantName || shopName || "").trim(),

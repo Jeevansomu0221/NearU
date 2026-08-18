@@ -259,6 +259,7 @@ export type AddressLookup = {
   restaurantName?: string;
   streetRoadName?: string;
   street?: string;
+  colony?: string;
   area?: string;
   areaLocality?: string;
   landmark?: string;
@@ -270,11 +271,100 @@ export type AddressLookup = {
   country?: string;
 };
 
+const LOCALITY_RADIUS_KM = 1.5;
+const MIN_ACCEPT_SCORE = 80;
+
 const shopIdentityName = (address: AddressLookup) =>
   String(address.shopName || address.restaurantName || "").trim();
 
 const shopBuildingName = (address: AddressLookup) =>
   String(address.shopHouseName || address.buildingApartmentName || "").trim();
+
+const colonyName = (address: AddressLookup) => String(address.colony || "").trim();
+
+const areaName = (address: AddressLookup) => String(address.area || address.areaLocality || "").trim();
+
+const localityHints = (address: AddressLookup) =>
+  [colonyName(address), areaName(address)].filter(Boolean);
+
+const matchHaystack = (match: GeocodedAddress) =>
+  normalizeText(
+    [
+      match.formattedAddress,
+      match.buildingApartmentName,
+      match.streetRoadName,
+      match.area,
+      match.city,
+      match.district,
+      match.state,
+      match.pincode
+    ].join(" ")
+  );
+
+const WEAK_LOCALITY_WORDS = new Set([
+  "colony",
+  "society",
+  "nagar",
+  "road",
+  "street",
+  "area",
+  "phase",
+  "layout",
+  "enclave",
+  "puram",
+  "hills",
+  "city",
+  "town",
+  "village",
+  "jagir"
+]);
+
+const strongTokens = (value: string) =>
+  normalizeText(value)
+    .split(" ")
+    .filter((word) => word.length > 3 && !WEAK_LOCALITY_WORDS.has(word));
+
+const textHasHint = (haystack: string, hint: string) => {
+  const value = normalizeText(hint);
+  if (!value) return false;
+  if (haystack.includes(value)) return true;
+  const tokens = strongTokens(value);
+  if (tokens.length === 0) return false;
+  return tokens.some((word) => haystack.includes(word));
+};
+
+const localityMatched = (match: GeocodedAddress, address: AddressLookup) => {
+  const haystack = matchHaystack(match);
+  return localityHints(address).some((hint) => textHasHint(haystack, hint));
+};
+
+const pincodeMatched = (match: GeocodedAddress, address: AddressLookup) => {
+  const wanted = pincodeDigits(address.pincode);
+  return Boolean(wanted && match.pincode && match.pincode === wanted);
+};
+
+const distanceKm = (
+  left: { latitude: number; longitude: number },
+  right: { latitude: number; longitude: number }
+) => {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(right.latitude - left.latitude);
+  const dLng = toRad(right.longitude - left.longitude);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(left.latitude)) * Math.cos(toRad(right.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const isInRequestedLocality = (
+  match: GeocodedAddress,
+  address: AddressLookup,
+  localityCenter?: { latitude: number; longitude: number } | null
+) => {
+  if (localityMatched(match, address) || pincodeMatched(match, address)) return true;
+  if (localityCenter && distanceKm(match, localityCenter) <= LOCALITY_RADIUS_KM) return true;
+  return false;
+};
 
 export const buildAddressSearchQuery = (address: AddressLookup) =>
   compactQuery([
@@ -282,7 +372,8 @@ export const buildAddressSearchQuery = (address: AddressLookup) =>
     address.houseFlatDoorNo,
     shopBuildingName(address),
     usableStreetName(address.streetRoadName || address.street),
-    address.area || address.areaLocality,
+    colonyName(address),
+    areaName(address),
     address.city || address.cityTownVillage,
     address.district,
     address.state,
@@ -292,34 +383,30 @@ export const buildAddressSearchQuery = (address: AddressLookup) =>
 
 const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   let score = 0;
+  const haystack = matchHaystack(match);
   const wantedPin = pincodeDigits(address.pincode);
-  const haystack = normalizeText(
-    [
-      match.formattedAddress,
-      match.buildingApartmentName,
-      match.area,
-      match.city,
-      match.district,
-      match.state,
-      match.pincode
-    ].join(" ")
-  );
+  const areaOk = localityMatched(match, address);
 
-  const area = normalizeText(address.area || address.areaLocality);
-  const areaTokens = area.split(" ").filter((word) => word.length > 3);
-  const areaMatched = Boolean(area && (haystack.includes(area) || areaTokens.some((word) => haystack.includes(word))));
-
-  if (wantedPin && match.pincode === wantedPin) score += 50;
-  // Indian pincodes often disagree with map data for the same colony.
-  if (wantedPin && match.pincode && match.pincode !== wantedPin) {
-    score += areaMatched ? -10 : -80;
+  if (!areaOk && (!wantedPin || match.pincode !== wantedPin)) {
+    // A building/shop name in another Hyderabad neighborhood must never win.
+    return -1000;
   }
 
-  if (area && haystack.includes(area)) score += 80;
-  areaTokens.forEach((word) => {
-    if (haystack.includes(word)) score += 16;
+  if (wantedPin && match.pincode === wantedPin) score += 50;
+  if (wantedPin && match.pincode && match.pincode !== wantedPin) {
+    score += areaOk ? -10 : -80;
+  }
+
+  localityHints(address).forEach((hint) => {
+    const value = normalizeText(hint);
+    if (value && haystack.includes(value)) score += 90;
+    value
+      .split(" ")
+      .filter((word) => word.length > 3)
+      .forEach((word) => {
+        if (haystack.includes(word)) score += 18;
+      });
   });
-  if (area && !areaMatched) score -= 70;
 
   const street = normalizeText(usableStreetName(address.streetRoadName || address.street));
   if (street && haystack.includes(street)) score += 50;
@@ -334,38 +421,51 @@ const scoreGeocodedMatch = (match: GeocodedAddress, address: AddressLookup) => {
   if (city && (normalizeText(match.city).includes(city) || haystack.includes(city))) score += 15;
 
   const shop = normalizeText(shopIdentityName(address));
-  if (shop && haystack.includes(shop)) score += 120;
+  if (shop && haystack.includes(shop)) score += 80;
   shop
     .split(" ")
     .filter((word) => word.length > 3)
     .forEach((word) => {
-      if (haystack.includes(word)) score += 18;
+      if (haystack.includes(word)) score += 12;
     });
 
   const building = normalizeText(shopBuildingName(address));
-  if (building && haystack.includes(building)) score += 90;
+  if (building && haystack.includes(building)) score += 70;
 
   if (match.source === "google") score += 25;
-  if (match.locationType === "ROOFTOP" || match.locationType === "PLACE") score += 60;
-  if (match.locationType === "RANGE_INTERPOLATED") score += 25;
+  if (match.locationType === "ROOFTOP" || match.locationType === "PLACE") score += 40;
+  if (match.locationType === "RANGE_INTERPOLATED") score += 20;
   if (match.osmClass === "highway" || match.locationType === "trunk" || match.locationType === "primary") {
     score -= 50;
   }
   if (match.locationType === "village" || match.locationType === "suburb" || match.locationType === "neighbourhood") {
-    score += 35;
+    score += 25;
   }
 
   return score;
 };
 
-const pickBestMatch = (matches: GeocodedAddress[], address: AddressLookup) => {
-  if (matches.length === 0) return null;
-  return [...matches].sort((left, right) => scoreGeocodedMatch(right, address) - scoreGeocodedMatch(left, address))[0];
+const pickBestMatch = (
+  matches: GeocodedAddress[],
+  address: AddressLookup,
+  localityCenter?: { latitude: number; longitude: number } | null
+) => {
+  const local = matches.filter((match) => isInRequestedLocality(match, address, localityCenter));
+  const pool = local.length ? local : [];
+  if (pool.length === 0) return null;
+  return [...pool].sort((left, right) => scoreGeocodedMatch(right, address) - scoreGeocodedMatch(left, address))[0];
 };
+
+const pinFromMatch = (match: GeocodedAddress) => ({
+  latitude: match.latitude,
+  longitude: match.longitude,
+  formattedAddress: match.formattedAddress
+});
 
 const buildFallbackQueries = (address: AddressLookup) => {
   const street = usableStreetName(address.streetRoadName || address.street);
-  const area = address.area || address.areaLocality;
+  const area = areaName(address);
+  const colony = colonyName(address);
   const city = address.city || address.cityTownVillage;
   const building = shopBuildingName(address);
   const shop = shopIdentityName(address);
@@ -374,31 +474,84 @@ const buildFallbackQueries = (address: AddressLookup) => {
   return Array.from(
     new Set(
       [
-        compactQuery([shop, building, area, city, address.state, country]),
-        compactQuery([shop, area, city, address.state, country]),
-        compactQuery([building, street, area, city, address.state, country]),
-        compactQuery([street, area, city, address.state, country]),
-        compactQuery([area, city, address.state, country]),
-        compactQuery([area, address.state, country])
+        compactQuery([shop, building, colony, area, city, address.pincode, address.state, country]),
+        compactQuery([building, colony, area, city, address.pincode, country]),
+        compactQuery([colony, area, city, address.pincode, address.state, country]),
+        compactQuery([area, city, address.pincode, address.state, country]),
+        compactQuery([street, colony, area, city, address.state, country])
       ].filter((query) => query.length >= 3)
     )
   );
 };
 
-const geocodeWithGooglePlaces = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
+const geocodeLocalityCenter = async (address: AddressLookup): Promise<GeocodedAddress | null> => {
+  const query = compactQuery([
+    colonyName(address),
+    areaName(address),
+    address.city || address.cityTownVillage,
+    address.state,
+    address.pincode,
+    "India"
+  ]);
+  if (query.length < 3) return null;
+
+  const pickLocal = (parsed: GeocodedAddress[]) =>
+    parsed.find((entry) => localityMatched(entry, address) || pincodeMatched(entry, address)) ||
+    parsed.find((entry) => textHasHint(matchHaystack(entry), areaName(address))) ||
+    null;
+
+  if (hasGoogleMapsKey()) {
+    const pin = pincodeDigits(address.pincode);
+    const componentSets = pin ? ["country:IN|postal_code:" + pin, "country:IN"] : ["country:IN"];
+    for (const components of componentSets) {
+      const payload = await googleGet(GOOGLE_GEOCODE_URL, {
+        address: query,
+        components,
+        region: "in",
+        language: "en"
+      });
+      const parsed = (Array.isArray(payload?.results) ? payload.results : [])
+        .map(parseGoogleAddress)
+        .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+      const best = pickLocal(parsed);
+      if (best) return best;
+    }
+  }
+
+  const nominatim = await geocodeTypedAddress(query);
+  return pickLocal(nominatim);
+};
+
+const enrichPlaceWithDetails = async (place: GeocodedAddress): Promise<GeocodedAddress> => {
+  if (!place.placeId || place.pincode) return place;
+  const payload = await googleGet(GOOGLE_PLACE_DETAILS_URL, {
+    place_id: place.placeId,
+    fields: "name,formatted_address,address_component,geometry,place_id",
+    language: "en"
+  });
+  if (payload?.status !== "OK") return place;
+  const detailed = parseGooglePlace({ ...payload.result, name: payload.result?.name || place.buildingApartmentName });
+  return detailed || place;
+};
+
+const geocodeWithGooglePlaces = async (
+  address: AddressLookup,
+  localityCenter?: { latitude: number; longitude: number } | null
+): Promise<GeocodedAddress[]> => {
   if (!hasGoogleMapsKey()) return [];
   const shop = shopIdentityName(address);
   const building = shopBuildingName(address);
   const street = usableStreetName(address.streetRoadName || address.street);
-  const area = address.area || address.areaLocality;
+  const colony = colonyName(address);
+  const area = areaName(address);
   const city = address.city || address.cityTownVillage;
   const queries = Array.from(
     new Set(
       [
-        compactQuery([shop, building, area, city, address.pincode]),
-        compactQuery([shop, area, city]),
-        compactQuery([building, street, area, city, address.pincode]),
-        compactQuery([building, area, city, address.state])
+        compactQuery([shop, building, colony, area, city, address.pincode]),
+        compactQuery([building, colony, area, city, address.pincode]),
+        compactQuery([shop, colony, area, city]),
+        compactQuery([building, street, colony, area, city])
       ].filter((query) => query.length >= 3)
     )
   );
@@ -406,22 +559,27 @@ const geocodeWithGooglePlaces = async (address: AddressLookup): Promise<Geocoded
 
   const collected: GeocodedAddress[] = [];
   for (const query of queries) {
-    const payload = await googleGet(GOOGLE_PLACE_TEXT_URL, {
+    const params: Record<string, string> = {
       query,
       region: "in",
       language: "en"
-    });
+    };
+    if (localityCenter) {
+      params.location = `${localityCenter.latitude},${localityCenter.longitude}`;
+      params.radius = String(Math.round(LOCALITY_RADIUS_KM * 1000));
+    }
+    const payload = await googleGet(GOOGLE_PLACE_TEXT_URL, params);
     if (payload?.status && payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
       console.warn("Google Places text search failed:", payload.status, payload.error_message || "");
       continue;
     }
-    collected.push(
-      ...(Array.isArray(payload?.results) ? payload.results : [])
-        .map(parseGooglePlace)
-        .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry))
-    );
-    const best = pickBestMatch(collected, address);
-    if (best && scoreGeocodedMatch(best, address) >= 80) {
+    const parsed = (Array.isArray(payload?.results) ? payload.results : [])
+      .map(parseGooglePlace)
+      .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+    const enriched = await Promise.all(parsed.slice(0, 5).map(enrichPlaceWithDetails));
+    collected.push(...enriched);
+    const best = pickBestMatch(collected, address, localityCenter);
+    if (best && scoreGeocodedMatch(best, address) >= MIN_ACCEPT_SCORE) {
       return collected;
     }
   }
@@ -435,16 +593,21 @@ const geocodeWithGoogleStructured = async (address: AddressLookup): Promise<Geoc
     address.houseFlatDoorNo,
     shopBuildingName(address),
     usableStreetName(address.streetRoadName || address.street),
-    address.area || address.areaLocality,
+    colonyName(address),
+    areaName(address),
     address.city || address.cityTownVillage,
     address.state,
     address.pincode
   ]);
   if (!query) return [];
 
+  const components = ["country:IN"];
+  const pin = pincodeDigits(address.pincode);
+  if (pin) components.push(`postal_code:${pin}`);
+
   const payload = await googleGet(GOOGLE_GEOCODE_URL, {
     address: query,
-    components: "country:IN",
+    components: components.join("|"),
     region: "in",
     language: "en"
   });
@@ -459,13 +622,14 @@ const geocodeWithGoogleStructured = async (address: AddressLookup): Promise<Geoc
 };
 
 const geocodeWithNominatimStructured = async (address: AddressLookup): Promise<GeocodedAddress[]> => {
-  const area = address.area || address.areaLocality;
+  const area = areaName(address);
+  const colony = colonyName(address);
   const collected: GeocodedAddress[] = [];
   const queries = Array.from(
     new Set(
       [
-        compactQuery([shopIdentityName(address), shopBuildingName(address), area]),
-        compactQuery([usableStreetName(address.streetRoadName || address.street), area]),
+        compactQuery([shopBuildingName(address), colony, area]),
+        compactQuery([colony, area, address.state, "India"]),
         compactQuery([area, address.state, "India"]),
         compactQuery([area])
       ].filter((query) => query.length >= 3)
@@ -516,57 +680,60 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
     console.warn("GOOGLE_MAPS_API_KEY is not set; apartment lookup will use OpenStreetMap fallback");
   }
 
+  const locality = await geocodeLocalityCenter(address);
+  const localityCenter = locality
+    ? { latitude: locality.latitude, longitude: locality.longitude }
+    : null;
+
   const collected: GeocodedAddress[] = [];
-  collected.push(...(await geocodeWithGooglePlaces(address)));
+  collected.push(...(await geocodeWithGooglePlaces(address, localityCenter)));
   collected.push(...(await geocodeWithGoogleStructured(address)));
-  const googleBest = pickBestMatch(collected, address);
-  if (googleBest && scoreGeocodedMatch(googleBest, address) >= 80) {
+
+  const accept = (match: GeocodedAddress | null) => {
+    if (!match || scoreGeocodedMatch(match, address) < MIN_ACCEPT_SCORE) return null;
+    if (!isInRequestedLocality(match, address, localityCenter)) return null;
+    return match;
+  };
+
+  const googleBest = accept(pickBestMatch(collected, address, localityCenter));
+  if (googleBest) {
     console.info("Address pin source=", googleBest.source, "score=", scoreGeocodedMatch(googleBest, address));
-    return {
-      latitude: googleBest.latitude,
-      longitude: googleBest.longitude,
-      formattedAddress: googleBest.formattedAddress
-    };
+    return pinFromMatch(googleBest);
   }
 
   await wait(400);
   collected.push(...(await geocodeWithNominatimStructured(address)));
-  const nominatimBest = pickBestMatch(collected, address);
-  if (nominatimBest && scoreGeocodedMatch(nominatimBest, address) >= 80) {
+  const nominatimBest = accept(pickBestMatch(collected, address, localityCenter));
+  if (nominatimBest) {
     console.info("Address pin source=", nominatimBest.source, "score=", scoreGeocodedMatch(nominatimBest, address));
-    return {
-      latitude: nominatimBest.latitude,
-      longitude: nominatimBest.longitude,
-      formattedAddress: nominatimBest.formattedAddress
-    };
+    return pinFromMatch(nominatimBest);
   }
 
   for (let index = 0; index < queries.length; index += 1) {
     await wait(400);
     collected.push(...(await geocodeTypedAddress(queries[index])));
-    const bestSoFar = pickBestMatch(collected, address);
-    if (bestSoFar && scoreGeocodedMatch(bestSoFar, address) >= 80) {
+    const bestSoFar = accept(pickBestMatch(collected, address, localityCenter));
+    if (bestSoFar) {
       console.info("Address pin source=", bestSoFar.source, "score=", scoreGeocodedMatch(bestSoFar, address));
-      return {
-        latitude: bestSoFar.latitude,
-        longitude: bestSoFar.longitude,
-        formattedAddress: bestSoFar.formattedAddress
-      };
+      return pinFromMatch(bestSoFar);
     }
   }
 
-  const best = pickBestMatch(collected, address);
-  if (best && scoreGeocodedMatch(best, address) >= 20) {
-    console.info("Address pin source=", best.source, "score=", scoreGeocodedMatch(best, address));
-    return {
-      latitude: best.latitude,
-      longitude: best.longitude,
-      formattedAddress: best.formattedAddress
-    };
+  const localBest = pickBestMatch(collected, address, localityCenter);
+  if (localBest && scoreGeocodedMatch(localBest, address) >= 40) {
+    console.info("Address pin source=", localBest.source, "score=", scoreGeocodedMatch(localBest, address));
+    return pinFromMatch(localBest);
+  }
+
+  // Building/shop name was not found in this colony. Pin the colony/area itself
+  // so the partner can drag onto the exact shop instead of another neighborhood.
+  if (locality) {
+    console.info("Address pin source=locality-fallback", locality.formattedAddress);
+    return pinFromMatch(locality);
   }
 
   throw Object.assign(
-    new Error("We could not find this shop on the map. Check the shop/house name, area, and pincode."),
+    new Error("We could not find this shop on the map. Check the shop/house name, area, colony, and pincode."),
     { statusCode: 400 }
   );
 };

@@ -25,19 +25,17 @@ export const partnerAddressToGeocodePayload = (
   shopHouseName: String(address.shopHouseName || "").trim(),
   streetRoadName: String(address.roadStreet || "").trim(),
   buildingApartmentName: String(address.shopHouseName || "").trim(),
+  colony: String(address.colony || "").trim(),
   area: String(address.area || "").trim(),
   city: String(address.city || "").trim(),
   state: String(address.state || "").trim(),
   pincode: String(address.pincode || "").trim(),
-  landmark: [
-    String(address.colony || "").trim(),
-    Array.isArray(address.nearbyPlaces)
-      ? address.nearbyPlaces.filter(Boolean).join(", ")
-      : String(address.nearbyPlaces || address.landmark || "").trim()
-  ]
-    .filter(Boolean)
-    .join(", ")
+  landmark: Array.isArray(address.nearbyPlaces)
+    ? address.nearbyPlaces.filter(Boolean).join(", ")
+    : String(address.nearbyPlaces || address.landmark || "").trim()
 });
+
+const GENERIC_STREET_RE = /^(rd|road|st|street|lane|ln|cross|nh|highway)\s*\.?\s*\d*$/i;
 
 export const partnerShopAddressLines = (address: {
   shopHouseName?: string;
@@ -51,7 +49,7 @@ export const partnerShopAddressLines = (address: {
 }) =>
   [
     [address.shopHouseName, address.floor].filter(Boolean).join(", "),
-    address.roadStreet,
+    address.roadStreet && !GENERIC_STREET_RE.test(address.roadStreet.trim()) ? address.roadStreet : "",
     address.colony,
     address.area,
     [address.city, address.state, address.pincode].filter(Boolean).join(", ")

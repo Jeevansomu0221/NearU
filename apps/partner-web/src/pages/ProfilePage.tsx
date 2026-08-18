@@ -88,11 +88,12 @@ export default function ProfilePage() {
         shopHouseName: address.shopHouseName.trim(),
         buildingApartmentName: address.shopHouseName.trim(),
         streetRoadName: address.roadStreet.trim(),
+        colony: address.colony.trim(),
         area: address.area.trim(),
         city: address.city.trim(),
         state: address.state.trim(),
         pincode: address.pincode.trim(),
-        landmark: [address.colony, address.nearbyPlaces].filter(Boolean).join(", ")
+        landmark: address.nearbyPlaces
       });
       if (!result.success || !result.data) {
         setMessage(result.message || "Could not locate this shop address.");
@@ -222,7 +223,7 @@ export default function ProfilePage() {
         visible={pinConfirmVisible && Boolean(pendingPin)}
         addressLines={[
           [address.shopHouseName, address.floor].filter(Boolean).join(", "),
-          address.roadStreet,
+          /^(rd|road|st|street|lane|ln|cross)\s*\.?\s*\d*$/i.test(address.roadStreet.trim()) ? "" : address.roadStreet,
           address.colony,
           address.area,
           [address.city, address.state, address.pincode].filter(Boolean).join(", ")

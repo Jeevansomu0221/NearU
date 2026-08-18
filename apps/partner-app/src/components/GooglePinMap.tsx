@@ -12,7 +12,7 @@ type Props = {
 
 const CLOSE_ZOOM = 0.0018;
 
-export default function GooglePinMap({ latitude, longitude, onPinChange, pinColor = "#2F7DE1", onReady }: Props) {
+export default function GooglePinMap({ latitude, longitude, onPinChange, pinColor = "#FF6B35", onReady }: Props) {
   const mapRef = useRef<MapView>(null);
   const [ready, setReady] = useState(false);
 
