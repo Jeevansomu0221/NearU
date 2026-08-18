@@ -17,7 +17,7 @@ export interface ApiResponse<T = any> {
   [key: string]: any;
 }
 
-const DEV_LAN_HOST = "10.3.8.130";
+const DEV_LAN_HOST = "10.162.43.57";
 const ANDROID_EMULATOR_HOST = "10.0.2.2";
 const BLOCKED_DEV_HOSTS = new Set(["192.168.43.1", "192.168.61.1"]);
 const PRODUCTION_API_URL = "https://api.vyaha.com/api";
@@ -45,18 +45,47 @@ const addUnique = (items: string[], value: string) => {
   }
 };
 
+const normalizeApiUrl = (url: string) =>
+  url.endsWith("/api") ? url : `${url.replace(/\/$/, "")}/api`;
+
+const isProductionApiUrl = (url: string) => /(?:^https?:\/\/)?api\.vyaha\.com/i.test(url);
+
+const isLocalApiUrl = (url: string) => {
+  try {
+    const href = url.includes("://") ? url : `http://${url}`;
+    const hostname = new URL(href).hostname;
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === ANDROID_EMULATOR_HOST ||
+      isPrivateIp(hostname)
+    );
+  } catch {
+    return false;
+  }
+};
+
 const resolveApiBaseUrls = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-  if (envUrl) {
-    return [envUrl.endsWith("/api") ? envUrl : `${envUrl.replace(/\/$/, "")}/api`];
-  }
+  const normalizedEnv = envUrl ? normalizeApiUrl(envUrl) : "";
 
   if (!isDev) {
-    return [PRODUCTION_API_URL];
+    return [normalizedEnv || PRODUCTION_API_URL];
   }
 
+  // Opt in from .env.local when the local Google Maps key is IP-blocked.
+  if (
+    process.env.EXPO_PUBLIC_USE_PRODUCTION_API === "1" &&
+    (isProductionApiUrl(normalizedEnv) || !normalizedEnv)
+  ) {
+    return [normalizedEnv || PRODUCTION_API_URL];
+  }
+
+  // Dev stays on the local backend. Ignore production EXPO_PUBLIC_API_URL from EAS / .env.example.
   const urls: string[] = [];
-  addUnique(urls, PRODUCTION_API_URL);
+  if (normalizedEnv && isLocalApiUrl(normalizedEnv) && !isProductionApiUrl(normalizedEnv)) {
+    addUnique(urls, normalizedEnv);
+  }
 
   const scriptURL = NativeModules.SourceCode?.scriptURL;
   if (scriptURL) {
@@ -78,7 +107,6 @@ const resolveApiBaseUrls = () => {
 
   addUnique(urls, `http://${DEV_LAN_HOST}:5000/api`);
   addUnique(urls, "http://127.0.0.1:5000/api");
-  addUnique(urls, PRODUCTION_API_URL);
 
   return urls;
 };
@@ -370,8 +398,12 @@ api.interceptors.response.use(
 );
 
 export const warmApi = async () => {
+  const healthUrl = isDev
+    ? String(api.defaults.baseURL || "").replace(/\/api\/?$/, "/health")
+    : PRODUCTION_HEALTH_URL;
+  if (!healthUrl) return;
   try {
-    await axios.get(PRODUCTION_HEALTH_URL, { timeout: API_TIMEOUT_MS });
+    await axios.get(healthUrl, { timeout: API_TIMEOUT_MS });
   } catch (error) {
     console.warn("Backend warmup failed:", error);
   }

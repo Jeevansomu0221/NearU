@@ -814,16 +814,22 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
     (!localityCenter || distanceKm(buildingBest, localityCenter) <= BUILDING_RADIUS_KM + 0.3);
 
   if (buildingOk && buildingBest) {
-    console.info("Address pin source=building", buildingBest.source, buildingBest.formattedAddress);
+    console.info(
+      "Address pin source=building",
+      buildingBest.source,
+      buildingBest.formattedAddress,
+      buildingBest.latitude,
+      buildingBest.longitude
+    );
     return pinFromMatch(buildingBest);
   }
 
   if (colonyPin) {
-    console.info("Address pin source=colony", colonyPin.formattedAddress);
+    console.info("Address pin source=colony", colonyPin.formattedAddress, colonyPin.latitude, colonyPin.longitude);
     return pinFromMatch(colonyPin);
   }
   if (areaPin) {
-    console.info("Address pin source=area", areaPin.formattedAddress);
+    console.info("Address pin source=area", areaPin.formattedAddress, areaPin.latitude, areaPin.longitude);
     return pinFromMatch(areaPin);
   }
 
