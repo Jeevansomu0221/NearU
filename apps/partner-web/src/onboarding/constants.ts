@@ -1,6 +1,6 @@
 export const ONBOARDING_STEPS = [
   { key: "basic", title: "Restaurant details", subtitle: "Owner and shop contact information." },
-  { key: "address", title: "Restaurant address", subtitle: "Continue places the Google Maps pin for this shop." },
+  { key: "address", title: "Restaurant address", subtitle: "Help customers and riders find you." },
   { key: "category", title: "Business category", subtitle: "Pick the closest match for your shop." },
   { key: "legal", title: "PAN, FSSAI & GST", subtitle: "Verify PAN with Eko; submit FSSAI and GST for admin review." },
   { key: "bank", title: "Bank / payout", subtitle: "Verify payout account or skip for now." },

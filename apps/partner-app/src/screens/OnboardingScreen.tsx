@@ -18,7 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, { uploadMultipart } from "../api/client";
 import { partnerTheme } from "../theme";
-import { androidKeyboardPadding, useKeyboardBottomInset, useScrollToFocusedInput } from "../hooks/useKeyboardBottomInset";
+import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 import { ONBOARDING_STEPS, CATEGORIES, CATEGORY_LABELS } from "./onboarding/constants";
 import LegalDocumentsStep from "./onboarding/LegalDocumentsStep";
 import BankStep from "./onboarding/BankStep";
@@ -28,18 +28,7 @@ import OperationsStep, { type OperationsState } from "./onboarding/OperationsSte
 import AgreementStep, { validateAndSaveAgreement } from "./onboarding/AgreementStep";
 import type { PartnerKycState } from "../api/kyc.api";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { captureShopGps } from "../utils/shopGps";
-import {
-  addressFieldsFromShopPlace,
-  getShopPlaceAddress,
-  resolveExactGoogleShopPin,
-  reverseGeocodeLocation,
-  shopPlaceSearchQuery,
-  suggestShopPlaces,
-  type ResolvedAddressPin,
-  type ReverseGeocodedAddress,
-  type ShopPlaceSuggestion
-} from "../api/geocode.api";
+import { partnerAddressToGeocodePayload, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
 
 const INDIAN_CITIES = [
   "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata",
@@ -148,7 +137,6 @@ type OnboardingDraft = {
     email: string;
   };
   address: {
-    floor: string;
     state: string;
     city: string;
     pincode: string;
@@ -243,6 +231,15 @@ const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
 
 const isPdfUri = (uri?: string) => (uri || "").split("?")[0].toLowerCase().endsWith(".pdf");
 
+const loadLocationModule = async () => {
+  try {
+    return await import("expo-location");
+  } catch (error) {
+    console.warn("expo-location is unavailable in this app build:", error);
+    return null;
+  }
+};
+
 const normalizeDraft = (draft: any): OnboardingDraft | null => {
   if (!draft || typeof draft !== "object") return null;
 
@@ -261,7 +258,6 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
       email: String(safeForm.email || "")
     },
     address: {
-      floor: String(safeAddress.floor || ""),
       state: String(safeAddress.state || ""),
       city: String(safeAddress.city || ""),
       pincode: String(safeAddress.pincode || ""),
@@ -340,7 +336,6 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
 export default function OnboardingScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardBottomInset();
-  const { scrollRef, onScroll, onInputFocus } = useScrollToFocusedInput(36);
   const [activeStep, setActiveStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<UploadingKey>(null);
@@ -354,7 +349,6 @@ export default function OnboardingScreen({ navigation }: any) {
     email: ""
   });
   const [address, setAddress] = useState({
-    floor: "",
     state: "",
     city: "",
     pincode: "",
@@ -401,9 +395,6 @@ export default function OnboardingScreen({ navigation }: any) {
   const [locatingAddress, setLocatingAddress] = useState(false);
   const [pinConfirmVisible, setPinConfirmVisible] = useState(false);
   const [pendingPin, setPendingPin] = useState<ResolvedAddressPin | null>(null);
-  const [selectedGooglePin, setSelectedGooglePin] = useState<(ResolvedAddressPin & { shopName: string }) | null>(null);
-  const [shopSuggestions, setShopSuggestions] = useState<ShopPlaceSuggestion[]>([]);
-  const [suggestingShop, setSuggestingShop] = useState(false);
   const [confirmedAddressKey, setConfirmedAddressKey] = useState("");
   const [hydratingDraft, setHydratingDraft] = useState(true);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -527,8 +518,6 @@ export default function OnboardingScreen({ navigation }: any) {
         if (draft.shopLocation) {
           setConfirmedAddressKey(
             JSON.stringify({
-              shopName: String(draft.form.restaurantName || "").trim(),
-              floor: String(draft.address.floor || "").trim(),
               state: String(draft.address.state || "").trim(),
               city: String(draft.address.city || "").trim(),
               pincode: String(draft.address.pincode || "").trim(),
@@ -597,94 +586,10 @@ export default function OnboardingScreen({ navigation }: any) {
     };
   }, [hydratingDraft]);
 
-  const mergeGeoIntoAddress = (geo: ReverseGeocodedAddress) => {
-    setAddress((current) => ({
-      ...current,
-      state: current.state.trim() || geo.state || "",
-      city: current.city.trim() || geo.city || "",
-      pincode: current.pincode.trim() || geo.pincode || "",
-      area: current.area.trim() || geo.area || "",
-      colony: current.colony.trim() || geo.buildingApartmentName || "",
-      roadStreet: current.roadStreet.trim() || geo.streetRoadName || "",
-      nearbyPlaces: current.nearbyPlaces.trim() || geo.formattedAddress || ""
-    }));
-  };
-
   const filteredCities = useMemo(() => {
     if (!address.city || address.city.length < 2) return [];
     return INDIAN_CITIES.filter((city) => city.toLowerCase().includes(address.city.toLowerCase())).slice(0, 6);
   }, [address.city]);
-
-  useEffect(() => {
-    const shopName = form.restaurantName.trim();
-    if (selectedGooglePin && selectedGooglePin.shopName !== shopName) {
-      setSelectedGooglePin(null);
-    }
-  }, [form.restaurantName, selectedGooglePin]);
-
-  useEffect(() => {
-    const shopName = form.restaurantName.trim();
-    if (activeStep !== 1 || shopName.length < 3) {
-      setShopSuggestions([]);
-      return;
-    }
-    if (selectedGooglePin && selectedGooglePin.shopName === shopName) {
-      setShopSuggestions([]);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      const query = shopPlaceSearchQuery({
-        shopName,
-        colony: address.colony,
-        area: address.area,
-        city: address.city,
-        pincode: address.pincode,
-        state: address.state
-      });
-      setSuggestingShop(true);
-      void suggestShopPlaces(query)
-        .then((result) => {
-          setShopSuggestions(result.success && Array.isArray(result.data) ? result.data.slice(0, 6) : []);
-        })
-        .catch(() => setShopSuggestions([]))
-        .finally(() => setSuggestingShop(false));
-    }, 350);
-
-    return () => clearTimeout(timer);
-  }, [
-    activeStep,
-    form.restaurantName,
-    address.colony,
-    address.area,
-    address.city,
-    address.pincode,
-    address.state,
-    selectedGooglePin
-  ]);
-
-  const applyGoogleShopPlace = async (placeId: string, fallbackName = form.restaurantName) => {
-    const result = await getShopPlaceAddress(placeId);
-    if (!result.success || !result.data) {
-      throw new Error(result.message || "Could not open that Google Maps listing.");
-    }
-    const mapped = addressFieldsFromShopPlace(result.data, fallbackName);
-    const shopName = mapped.shopName || fallbackName.trim();
-    setForm((current) => ({ ...current, restaurantName: shopName }));
-    setAddress((current) => ({
-      ...current,
-      state: mapped.address.state || current.state,
-      city: mapped.address.city || current.city,
-      pincode: mapped.address.pincode || current.pincode,
-      area: mapped.address.area || current.area,
-      colony: current.colony.trim() || mapped.address.colony,
-      roadStreet: current.roadStreet.trim() || mapped.address.roadStreet,
-      nearbyPlaces: current.nearbyPlaces.trim() || mapped.address.nearbyPlaces
-    }));
-    setSelectedGooglePin({ ...mapped.pin, shopName });
-    setShopSuggestions([]);
-    return mapped.pin;
-  };
 
   const uploadImageToCloudinary = async (asset: PickerAsset): Promise<string> => {
     const formData = new FormData();
@@ -794,17 +699,45 @@ export default function OnboardingScreen({ navigation }: any) {
   const captureShopLocation = async () => {
     try {
       setCapturingLocation(true);
-      const gps = await captureShopGps();
+      const Location = await loadLocationModule();
+      if (!Location) {
+        Alert.alert(
+          "App update required",
+          "This Partner app build does not include location support yet. Install the latest build to capture your shop GPS pin."
+        );
+        return;
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location permission needed",
+          "Open the Vyaha Partner app while standing at your shop and allow location access so we can pin its exact spot."
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
       try {
-        const result = await reverseGeocodeLocation(gps.latitude, gps.longitude);
+        const result = await reverseGeocodeLocation(latitude, longitude);
         const geo = result.data;
         if (result.success && geo) {
-          mergeGeoIntoAddress(geo);
+          setAddress((current) => ({
+            state: geo.state || current.state,
+            city: geo.city || current.city,
+            pincode: geo.pincode || current.pincode,
+            area: geo.area || current.area,
+            colony: geo.buildingApartmentName || current.colony,
+            roadStreet: geo.streetRoadName || geo.formattedAddress || current.roadStreet,
+            nearbyPlaces: current.nearbyPlaces || geo.formattedAddress
+          }));
         }
       } catch {
         // Still confirm the live GPS pin even if address text cannot be read.
       }
-      await openAddressPinConfirm({ latitude: gps.latitude, longitude: gps.longitude });
+      await openAddressPinConfirm({ latitude, longitude });
     } catch (error: any) {
       Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
     } finally {
@@ -845,7 +778,6 @@ export default function OnboardingScreen({ navigation }: any) {
     }
 
     if (step === 1) {
-      if (!form.restaurantName.trim()) return "Enter the shop name as it appears on Google Maps.";
       if (!address.state || !address.city || !address.pincode || !address.area || !address.colony || !address.roadStreet) {
         return "Please fill all address fields";
       }
@@ -889,8 +821,6 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const addressFingerprint = () =>
     JSON.stringify({
-      shopName: form.restaurantName.trim(),
-      floor: address.floor.trim(),
       state: address.state.trim(),
       city: address.city.trim(),
       pincode: address.pincode.trim(),
@@ -900,11 +830,7 @@ export default function OnboardingScreen({ navigation }: any) {
       nearbyPlaces: address.nearbyPlaces
     });
 
-  const openAddressPinConfirm = async (startingPin?: {
-    latitude: number;
-    longitude: number;
-    formattedAddress?: string;
-  }) => {
+  const openAddressPinConfirm = async (startingPin?: { latitude: number; longitude: number }) => {
     if (!startingPin) {
       const error = validateStep(1);
       if (error) {
@@ -915,13 +841,10 @@ export default function OnboardingScreen({ navigation }: any) {
 
     if (startingPin) {
       setPendingPin({
-        latitude: startingPin.latitude,
-        longitude: startingPin.longitude,
-        formattedAddress:
-          startingPin.formattedAddress ||
-          [form.restaurantName, address.floor ? `Floor ${address.floor}` : "", address.roadStreet, address.colony, address.area, address.city, address.pincode]
-            .filter(Boolean)
-            .join(", ")
+        ...startingPin,
+        formattedAddress: [address.roadStreet, address.colony, address.area, address.city, address.pincode]
+          .filter(Boolean)
+          .join(", ")
       });
       setPinConfirmVisible(true);
       return true;
@@ -929,36 +852,16 @@ export default function OnboardingScreen({ navigation }: any) {
 
     try {
       setLocatingAddress(true);
-      if (
-        selectedGooglePin &&
-        selectedGooglePin.shopName === form.restaurantName.trim() &&
-        Number.isFinite(selectedGooglePin.latitude)
-      ) {
-        setPendingPin(selectedGooglePin);
-        setPinConfirmVisible(true);
-        return true;
+      const result = await resolveAddressPin(partnerAddressToGeocodePayload(address));
+      if (!result.success || !result.data) {
+        Alert.alert("Address not found", result.message || "Check the street, area, city, and pincode.");
+        return false;
       }
-
-      const pin = await resolveExactGoogleShopPin({
-        shopName: form.restaurantName.trim(),
-        restaurantName: form.restaurantName.trim(),
-        roadStreet: address.roadStreet.trim(),
-        colony: address.colony.trim(),
-        area: address.area.trim(),
-        city: address.city.trim(),
-        state: address.state.trim(),
-        pincode: address.pincode.trim(),
-        nearbyPlaces: address.nearbyPlaces.trim()
-      });
-      setSelectedGooglePin({ ...pin, shopName: form.restaurantName.trim() });
-      setPendingPin(pin);
+      setPendingPin(result.data);
       setPinConfirmVisible(true);
       return true;
     } catch (error: any) {
-      Alert.alert(
-        "Shop not found on Google Maps",
-        error?.message || "Search the shop as it appears on Google Maps, pick the listing, or stand at the entrance and use GPS."
-      );
+      Alert.alert("Address not found", error?.message || "Could not locate this shop address.");
       return false;
     } finally {
       setLocatingAddress(false);
@@ -971,13 +874,6 @@ export default function OnboardingScreen({ navigation }: any) {
     setPinConfirmVisible(false);
     setPendingPin(null);
     setActiveStep((current) => (current === 1 ? Math.min(current + 1, STEPS.length - 1) : current));
-    void reverseGeocodeLocation(pin.latitude, pin.longitude)
-      .then((geoResult) => {
-        if (geoResult.success && geoResult.data) {
-          mergeGeoIntoAddress(geoResult.data);
-        }
-      })
-      .catch(() => {});
   };
 
   const goNext = async () => {
@@ -1077,7 +973,6 @@ export default function OnboardingScreen({ navigation }: any) {
         restaurantPhone: form.restaurantPhone.trim(),
         email: form.email.trim(),
         address: {
-          floor: address.floor.trim(),
           state: address.state.trim(),
           city: address.city.trim(),
           pincode: address.pincode.trim(),
@@ -1227,164 +1122,55 @@ export default function OnboardingScreen({ navigation }: any) {
 
       case 1:
         return (
-          <View style={[styles.card, styles.addressCard]}>
-            <Text style={styles.addressSectionTitle}>Shop address</Text>
-            <Text style={styles.addressSectionHint}>
-              Enter the shop as it appears on Google Maps. Continue places that exact Google pin on the map so you can confirm it.
-            </Text>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Shop address</Text>
+            <Text style={styles.sectionHint}>Give us the exact area so delivery partners can reach you without confusion.</Text>
 
-            <Text style={styles.addressLabel}>Shop map pin</Text>
-            <Text style={styles.addressHelper}>Standing at the entrance? GPS is a backup if Google does not have the listing.</Text>
-            <TouchableOpacity
-              style={[styles.addressLocationButton, capturingLocation && styles.primaryActionButtonDisabled]}
-              onPress={captureShopLocation}
-              disabled={capturingLocation || locatingAddress}
-            >
-              {capturingLocation ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.primaryActionButtonText}>Use current location</Text>
-              )}
-            </TouchableOpacity>
-            {shopLocation ? (
-              <View style={styles.locationBadge}>
-                <Text style={styles.locationBadgeText}>Shop pin confirmed</Text>
-              </View>
-            ) : selectedGooglePin ? (
-              <View style={styles.locationBadge}>
-                <Text style={styles.locationBadgeText}>Google listing ready</Text>
-              </View>
-            ) : null}
+            <Text style={styles.label}>State</Text>
+            <TextInput placeholder="State" placeholderTextColor="#98A2B3" value={address.state} onChangeText={(v) => setAddress({ ...address, state: v })} style={styles.input} />
 
-            <Text style={styles.addressLabel}>Shop name</Text>
-            <TextInput
-              placeholder="As it appears on Google Maps"
-              placeholderTextColor="#98A2B3"
-              value={form.restaurantName}
-              onChangeText={(v) => setForm({ ...form, restaurantName: v })}
-              onFocus={onInputFocus}
-              style={styles.addressInput}
-            />
-            {suggestingShop ? <Text style={styles.addressHelper}>Searching Google Maps…</Text> : null}
-            {shopSuggestions.length > 0 ? (
-              <View style={styles.addressSuggestionCard}>
-                {shopSuggestions.map((suggestion) => (
-                  <TouchableOpacity
-                    key={suggestion.placeId}
-                    style={styles.addressSuggestionRow}
-                    onPress={() => {
-                      void applyGoogleShopPlace(suggestion.placeId, suggestion.mainText || form.restaurantName).catch(
-                        (error: any) => {
-                          Alert.alert("Google listing", error?.message || "Could not open that Maps listing.");
-                        }
-                      );
-                    }}
-                  >
-                    <Text style={styles.suggestionText}>{suggestion.mainText || suggestion.description}</Text>
-                    {suggestion.secondaryText ? (
-                      <Text style={styles.suggestionSecondary}>{suggestion.secondaryText}</Text>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-
-            <Text style={styles.addressLabel}>Floor</Text>
-            <TextInput
-              placeholder="Ground / 1st / 2nd"
-              placeholderTextColor="#98A2B3"
-              value={address.floor}
-              onChangeText={(v) => setAddress({ ...address, floor: v })}
-              onFocus={onInputFocus}
-              style={styles.addressInput}
-            />
-            <Text style={styles.addressHelper}>Optional. Helps riders find the shop inside a mall or building.</Text>
-
-            <Text style={styles.addressLabel}>State</Text>
-            <TextInput
-              placeholder="State"
-              placeholderTextColor="#98A2B3"
-              value={address.state}
-              onChangeText={(v) => setAddress({ ...address, state: v })}
-              onFocus={onInputFocus}
-              style={styles.addressInput}
-            />
-
-            <Text style={styles.addressLabel}>City or town</Text>
-            <TextInput
-              placeholder="City or town"
-              placeholderTextColor="#98A2B3"
-              value={address.city}
-              onChangeText={(v) => setAddress({ ...address, city: v })}
-              onFocus={onInputFocus}
-              style={styles.addressInput}
-            />
+            <Text style={styles.label}>City or town</Text>
+            <TextInput placeholder="City or town" placeholderTextColor="#98A2B3" value={address.city} onChangeText={(v) => setAddress({ ...address, city: v })} style={styles.input} />
             {filteredCities.length > 0 ? (
-              <View style={styles.addressSuggestionCard}>
+              <View style={styles.suggestionCard}>
                 {filteredCities.map((city) => (
-                  <TouchableOpacity key={city} style={styles.addressSuggestionRow} onPress={() => setAddress({ ...address, city })}>
+                  <TouchableOpacity key={city} style={styles.suggestionRow} onPress={() => setAddress({ ...address, city })}>
                     <Text style={styles.suggestionText}>{city}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             ) : null}
 
-            <View style={styles.addressRow}>
-              <View style={styles.addressHalf}>
-                <Text style={styles.addressLabel}>Pincode</Text>
-                <TextInput
-                  placeholder="6 digits"
-                  placeholderTextColor="#98A2B3"
-                  value={address.pincode}
-                  onChangeText={(v) => setAddress({ ...address, pincode: v })}
-                  onFocus={onInputFocus}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  style={styles.addressInput}
-                />
+            <View style={styles.row}>
+              <View style={styles.half}>
+                <Text style={styles.label}>Pincode</Text>
+                <TextInput placeholder="6 digits" placeholderTextColor="#98A2B3" value={address.pincode} onChangeText={(v) => setAddress({ ...address, pincode: v })} keyboardType="number-pad" maxLength={6} style={styles.input} />
               </View>
-              <View style={styles.addressHalfLast}>
-                <Text style={styles.addressLabel}>Area</Text>
-                <TextInput
-                  placeholder="Area / locality"
-                  placeholderTextColor="#98A2B3"
-                  value={address.area}
-                  onChangeText={(v) => setAddress({ ...address, area: v })}
-                  onFocus={onInputFocus}
-                  style={styles.addressInput}
-                />
+              <View style={styles.half}>
+                <Text style={styles.label}>Area</Text>
+                <TextInput placeholder="Area / locality" placeholderTextColor="#98A2B3" value={address.area} onChangeText={(v) => setAddress({ ...address, area: v })} style={styles.input} />
               </View>
             </View>
 
-            <Text style={styles.addressLabel}>Colony or society</Text>
-            <TextInput
-              placeholder="Colony / society"
-              placeholderTextColor="#98A2B3"
-              value={address.colony}
-              onChangeText={(v) => setAddress({ ...address, colony: v })}
-              onFocus={onInputFocus}
-              style={styles.addressInput}
-            />
+            <Text style={styles.label}>Colony or society</Text>
+            <TextInput placeholder="Colony / society" placeholderTextColor="#98A2B3" value={address.colony} onChangeText={(v) => setAddress({ ...address, colony: v })} style={styles.input} />
 
-            <Text style={styles.addressLabel}>Road or street</Text>
-            <TextInput
-              placeholder="Road / street details"
-              placeholderTextColor="#98A2B3"
-              value={address.roadStreet}
-              onChangeText={(v) => setAddress({ ...address, roadStreet: v })}
-              onFocus={onInputFocus}
-              style={styles.addressInput}
-            />
+            <Text style={styles.label}>Road or street</Text>
+            <TextInput placeholder="Road / street details" placeholderTextColor="#98A2B3" value={address.roadStreet} onChangeText={(v) => setAddress({ ...address, roadStreet: v })} style={styles.input} />
 
-            <Text style={styles.addressLabel}>Nearby places</Text>
-            <TextInput
-              placeholder="Metro station, mall, landmark (optional)"
-              placeholderTextColor="#98A2B3"
-              value={address.nearbyPlaces}
-              onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })}
-              onFocus={onInputFocus}
-              style={styles.addressInput}
-            />
+            <Text style={styles.label}>Nearby places</Text>
+            <TextInput placeholder="Metro station, mall, landmark" placeholderTextColor="#98A2B3" value={address.nearbyPlaces} onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })} style={styles.input} />
+
+            <Text style={styles.label}>Shop map pin</Text>
+            <Text style={styles.helperText}>Use current location to auto-fill the address and pin, or continue after typing the address.</Text>
+            <TouchableOpacity style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]} onPress={captureShopLocation} disabled={capturingLocation || locatingAddress}>
+              {capturingLocation ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryActionButtonText}>Use current location</Text>}
+            </TouchableOpacity>
+            {shopLocation ? (
+              <View style={styles.locationBadge}>
+                <Text style={styles.locationBadgeText}>Shop pin confirmed</Text>
+              </View>
+            ) : null}
           </View>
         );
 
@@ -1519,18 +1305,15 @@ export default function OnboardingScreen({ navigation }: any) {
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
       <ScrollView
-        ref={scrollRef}
         style={styles.container}
         contentContainerStyle={{
           paddingTop: 10,
           paddingBottom: insets.bottom + 180 + androidKeyboardPadding(keyboardHeight),
           flexGrow: 1
         }}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         showsVerticalScrollIndicator={false}
       >
         <Modal
@@ -1656,8 +1439,6 @@ export default function OnboardingScreen({ navigation }: any) {
     <AddressPinConfirmModal
       visible={pinConfirmVisible && Boolean(pendingPin)}
       addressLines={[
-        form.restaurantName,
-        address.floor ? `Floor ${address.floor}` : "",
         address.roadStreet,
         address.colony,
         address.area,
@@ -1817,81 +1598,6 @@ const styles = StyleSheet.create({
     borderColor: partnerTheme.colors.border,
     padding: 16
   },
-  addressCard: {
-    padding: 12,
-    borderRadius: 18
-  },
-  addressSectionTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: partnerTheme.colors.primaryDark,
-    marginBottom: 2
-  },
-  addressSectionHint: {
-    marginBottom: 8,
-    fontSize: 12,
-    lineHeight: 16,
-    color: partnerTheme.colors.muted
-  },
-  addressLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: partnerTheme.colors.mutedDark,
-    marginBottom: 4
-  },
-  addressHelper: {
-    marginBottom: 6,
-    fontSize: 11,
-    lineHeight: 15,
-    color: partnerTheme.colors.muted
-  },
-  addressInput: {
-    borderWidth: 1,
-    borderColor: partnerTheme.colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: partnerTheme.colors.text,
-    backgroundColor: partnerTheme.colors.surface,
-    marginBottom: 8
-  },
-  addressRow: {
-    flexDirection: "row"
-  },
-  addressHalf: {
-    flex: 1,
-    marginRight: 8
-  },
-  addressHalfLast: {
-    flex: 1
-  },
-  addressLocationButton: {
-    alignSelf: "stretch",
-    backgroundColor: partnerTheme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-    marginBottom: 8
-  },
-  addressSuggestionCard: {
-    marginTop: -4,
-    marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: partnerTheme.colors.border,
-    overflow: "hidden",
-    backgroundColor: partnerTheme.colors.card
-  },
-  addressSuggestionRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: partnerTheme.colors.borderSoft
-  },
-  mapsSpinner: {
-    marginBottom: 8
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "900",
@@ -1962,11 +1668,6 @@ const styles = StyleSheet.create({
   suggestionText: {
     fontSize: 14,
     color: partnerTheme.colors.primaryDark
-  },
-  suggestionSecondary: {
-    marginTop: 2,
-    fontSize: 12,
-    color: partnerTheme.colors.muted
   },
   row: {
     flexDirection: "row"

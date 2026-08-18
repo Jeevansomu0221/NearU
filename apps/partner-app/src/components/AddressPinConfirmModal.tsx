@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   PanResponder,
@@ -12,7 +11,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import GooglePinMap from "./GooglePinMap";
-import { captureShopGps } from "../utils/shopGps";
 
 type AddressPinConfirmModalProps = {
   visible: boolean;
@@ -63,28 +61,25 @@ function GoogleMapOrFallback({
   const readyRef = React.useRef(false);
 
   useEffect(() => {
-    readyRef.current = false;
     const timer = setTimeout(() => {
       if (!readyRef.current) setMode("fallback");
     }, 8000);
     return () => clearTimeout(timer);
-  }, [latitude, longitude]);
+  }, []);
 
   if (mode === "fallback") {
     return <PannablePinMap latitude={latitude} longitude={longitude} onPinChange={onPinChange} />;
   }
 
   return (
-            <GooglePinMap
-              key={`${latitude.toFixed(6)},${longitude.toFixed(6)}`}
-              latitude={latitude}
-              longitude={longitude}
-              onPinChange={onPinChange}
-              pinColor="#FF6B35"
-              onReady={() => {
-                readyRef.current = true;
-              }}
-            />
+    <GooglePinMap
+      latitude={latitude}
+      longitude={longitude}
+      onPinChange={onPinChange}
+      onReady={() => {
+        readyRef.current = true;
+      }}
+    />
   );
 }
 
@@ -202,55 +197,27 @@ export default function AddressPinConfirmModal({
 }: AddressPinConfirmModalProps) {
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState({ latitude, longitude });
-  const [mapOrigin, setMapOrigin] = useState({ latitude, longitude });
-  const [capturingGps, setCapturingGps] = useState(false);
 
   useEffect(() => {
     setPin({ latitude, longitude });
-    setMapOrigin({ latitude, longitude });
   }, [latitude, longitude]);
-
-  const snapToGps = async () => {
-    try {
-      setCapturingGps(true);
-      const gps = await captureShopGps();
-      const next = { latitude: gps.latitude, longitude: gps.longitude };
-      setPin(next);
-      setMapOrigin(next);
-    } catch (error: any) {
-      Alert.alert("Could not capture location", error?.message || "Stand at the shop entrance and try again.");
-    } finally {
-      setCapturingGps(false);
-    }
-  };
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onEdit}>
       <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
         <Text style={styles.title}>Confirm shop pin</Text>
         <Text style={styles.subtitle}>
-          This pin is the Google Maps listing for your address. Drag it onto the entrance if needed, or tap GPS if you are standing there.
+          Place the pin on your shop. Drag the map until the orange pin sits on the entrance or building.
         </Text>
 
         <View style={styles.mapCard}>
-          {Number.isFinite(mapOrigin.latitude) && Number.isFinite(mapOrigin.longitude) ? (
-            <GoogleMapOrFallback latitude={mapOrigin.latitude} longitude={mapOrigin.longitude} onPinChange={setPin} />
+          {Number.isFinite(latitude) && Number.isFinite(longitude) ? (
+            <GoogleMapOrFallback latitude={latitude} longitude={longitude} onPinChange={setPin} />
           ) : (
             <View style={styles.mapFallback}>
               <ActivityIndicator color="#FF6B35" />
             </View>
           )}
-          <TouchableOpacity
-            style={styles.gpsFab}
-            onPress={snapToGps}
-            disabled={capturingGps || confirming}
-          >
-            {capturingGps ? (
-              <ActivityIndicator color="#FF6B35" />
-            ) : (
-              <Text style={styles.gpsFabText}>GPS</Text>
-            )}
-          </TouchableOpacity>
         </View>
 
         <View style={styles.addressCard}>
@@ -306,29 +273,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#D9E2EC",
     borderWidth: 1,
     borderColor: "#E7DED4"
-  },
-  gpsFab: {
-    position: "absolute",
-    right: 12,
-    bottom: 12,
-    minWidth: 52,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: "#E7DED4",
-    shadowColor: "#1A120B",
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3
-  },
-  gpsFabText: {
-    color: "#FF6B35",
-    fontSize: 13,
-    fontWeight: "800"
   },
   mapViewport: {
     width: "100%",

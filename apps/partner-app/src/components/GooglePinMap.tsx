@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
 
 type Props = {
@@ -10,28 +10,14 @@ type Props = {
   onReady?: () => void;
 };
 
-const CLOSE_ZOOM = 0.00055;
+const CLOSE_ZOOM = 0.0018;
 
-export default function GooglePinMap({
-  latitude,
-  longitude,
-  onPinChange,
-  pinColor = "#FF6B35",
-  onReady
-}: Props) {
+export default function GooglePinMap({ latitude, longitude, onPinChange, pinColor = "#2F7DE1", onReady }: Props) {
   const mapRef = useRef<MapView>(null);
   const [ready, setReady] = useState(false);
-  const userMovedRef = useRef(false);
-  const skipRegionRef = useRef(true);
 
   useEffect(() => {
-    userMovedRef.current = false;
-    skipRegionRef.current = true;
-  }, [latitude, longitude]);
-
-  useEffect(() => {
-    if (!ready || userMovedRef.current || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-    skipRegionRef.current = true;
+    if (!ready || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
     mapRef.current?.animateToRegion(
       {
         latitude,
@@ -47,7 +33,7 @@ export default function GooglePinMap({
     <View style={styles.wrap}>
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
+        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
         initialRegion={{
           latitude,
@@ -59,36 +45,19 @@ export default function GooglePinMap({
           setReady(true);
           onReady?.();
         }}
-        onPanDrag={() => {
-          userMovedRef.current = true;
-          skipRegionRef.current = false;
-        }}
         onRegionChangeComplete={(region) => {
-          if (userMovedRef.current) {
-            onPinChange({ latitude: region.latitude, longitude: region.longitude });
-            return;
-          }
-          if (skipRegionRef.current) {
-            skipRegionRef.current = false;
-            return;
-          }
+          onPinChange({ latitude: region.latitude, longitude: region.longitude });
         }}
-        showsPointsOfInterest
-        showsUserLocation
+        showsUserLocation={false}
         showsMyLocationButton={false}
-        showsBuildings
         showsCompass={false}
         rotateEnabled={false}
         pitchEnabled={false}
         toolbarEnabled={false}
-        moveOnMarkerPress={false}
-        zoomEnabled
-        scrollEnabled
-        liteMode={false}
       />
       <View pointerEvents="none" style={styles.pinWrap}>
-        <View style={[styles.pinHead, { backgroundColor: pinColor, borderColor: "#FFFFFF" }]} />
-        <View style={[styles.pinStem, { borderTopColor: pinColor }]} />
+        <View style={[styles.pinDot, { backgroundColor: pinColor }]} />
+        <View style={[styles.pinStem, { backgroundColor: pinColor }]} />
       </View>
     </View>
   );
@@ -103,28 +72,24 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: "50%",
     top: "50%",
-    marginLeft: -14,
-    marginTop: -36,
+    marginLeft: -12,
+    marginTop: -28,
     alignItems: "center"
   },
-  pinHead: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 4,
+  pinDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.35,
-    shadowRadius: 5,
-    elevation: 6
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4
   },
   pinStem: {
-    width: 0,
-    height: 0,
-    marginTop: -2,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 10,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent"
+    width: 3,
+    height: 10,
+    marginTop: -2
   }
 });
