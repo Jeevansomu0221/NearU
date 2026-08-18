@@ -264,6 +264,8 @@ const sanitizeOnboardingDraft = (draft: any) => {
       email: String(safeForm.email || "")
     },
     address: {
+      shopHouseName: String(safeAddress.shopHouseName || ""),
+      floor: String(safeAddress.floor || ""),
       state: String(safeAddress.state || ""),
       city: String(safeAddress.city || ""),
       pincode: String(safeAddress.pincode || ""),
@@ -456,17 +458,19 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       pincode,
       area,
       colony,
+      shopHouseName,
       roadStreet,
       nearbyPlaces,
-      googleMapsLink
+      googleMapsLink,
+      floor
     } = addressData;
 
     // Validate required fields (googleMapsLink is no longer required: partners
-    // can capture shop location via GPS in the app instead).
-    if (!state || !city || !pincode || !area || !colony || !roadStreet) {
+    // can capture shop location via GPS in the app instead). Road/street is optional.
+    if (!state || !city || !pincode || !area || !colony || !shopHouseName || !floor) {
       return res.status(400).json({
         success: false,
-        message: "Address fields (state, city, pincode, area, colony, roadStreet) are required"
+        message: "Address fields (shop/house name, floor, state, city, pincode, area, colony) are required"
       });
     }
 
@@ -511,13 +515,19 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     if (!resolvedCoordinates) {
       try {
         const geocodedPin = await resolveAddressCoordinates({
+          shopName: restaurantName,
+          restaurantName,
+          shopHouseName,
           streetRoadName: roadStreet,
-          buildingApartmentName: colony,
+          buildingApartmentName: shopHouseName,
           area,
           city,
           state,
           pincode,
-          landmark: Array.isArray(nearbyPlaces) ? nearbyPlaces.filter(Boolean).join(", ") : String(nearbyPlaces || "")
+          landmark: [colony, Array.isArray(nearbyPlaces) ? nearbyPlaces.filter(Boolean).join(", ") : String(nearbyPlaces || "")]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean)
+            .join(", ")
         });
         if (geocodedPin) {
           resolvedCoordinates = [geocodedPin.longitude, geocodedPin.latitude];
@@ -696,12 +706,14 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       shopImageUrl: normalizedShopImageUrl,
       bannerImageUrl: normalizedBannerImageUrl,
       address: {
+        shopHouseName: String(shopHouseName || "").trim(),
+        floor: String(floor || "").trim(),
         state: state.trim(),
         city: city.trim(),
         pincode: pincode.trim(),
         area: area.trim(),
         colony: colony.trim(),
-        roadStreet: roadStreet.trim(),
+        roadStreet: String(roadStreet || "").trim(),
         nearbyPlaces: Array.isArray(nearbyPlaces) ? nearbyPlaces.map(p => p.trim()) : [],
         googleMapsLink: trimmedMapsLink
       },
