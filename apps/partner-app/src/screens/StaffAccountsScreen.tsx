@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -41,12 +43,14 @@ function PasswordField({
   value,
   onChangeText,
   placeholder,
-  dark
+  dark,
+  onFocus
 }: {
   value: string;
   onChangeText: (value: string) => void;
   placeholder: string;
   dark: boolean;
+  onFocus?: () => void;
 }) {
   const [visible, setVisible] = useState(false);
   return (
@@ -60,6 +64,7 @@ function PasswordField({
         autoCorrect={false}
         value={value}
         onChangeText={onChangeText}
+        onFocus={onFocus}
       />
       <TouchableOpacity onPress={() => setVisible((current) => !current)} hitSlop={8}>
         <Text style={styles.showHide}>{visible ? "Hide" : "Show"}</Text>
@@ -190,8 +195,22 @@ export default function StaffAccountsScreen() {
     );
   }
 
+  const scrollRef = useRef<ScrollView>(null);
+
+  const scrollToEnd = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 300);
+  };
+
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+    >
     <ScrollView
+      ref={scrollRef}
       style={[styles.container, isDarkMode && styles.containerDark]}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
@@ -228,6 +247,7 @@ export default function StaffAccountsScreen() {
             onChangeText={(password) => setResetForm((current) => ({ ...current, password }))}
             placeholder="New password"
             dark={isDarkMode}
+            onFocus={scrollToEnd}
           />
           <Text style={[styles.fieldLabel, isDarkMode && styles.muted]}>Confirm password</Text>
           <PasswordField
@@ -235,6 +255,7 @@ export default function StaffAccountsScreen() {
             onChangeText={(confirmPassword) => setResetForm((current) => ({ ...current, confirmPassword }))}
             placeholder="Type it again"
             dark={isDarkMode}
+            onFocus={scrollToEnd}
           />
           <TouchableOpacity onPress={onResetPassword}>
             <Text style={styles.link}>Save new password</Text>
@@ -256,12 +277,14 @@ export default function StaffAccountsScreen() {
             onChangeText={(password) => setForm((current) => ({ ...current, password }))}
             placeholder="Password (8+ characters)"
             dark={isDarkMode}
+            onFocus={scrollToEnd}
           />
           <PasswordField
             value={form.confirmPassword}
             onChangeText={(confirmPassword) => setForm((current) => ({ ...current, confirmPassword }))}
             placeholder="Confirm password"
             dark={isDarkMode}
+            onFocus={scrollToEnd}
           />
           <TouchableOpacity style={styles.primaryButton} onPress={onCreate} disabled={saving}>
             {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Create login</Text>}
@@ -288,13 +311,14 @@ export default function StaffAccountsScreen() {
         )}
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F4F8FF" },
   containerDark: { backgroundColor: "#0B1220" },
-  content: { padding: 16, paddingBottom: 32 },
+  content: { padding: 16, paddingBottom: 120 },
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F4F8FF" },
   loadingText: { marginTop: 10, color: "#5E7897" },
   title: { fontSize: 24, fontWeight: "800", color: "#2A5580" },
