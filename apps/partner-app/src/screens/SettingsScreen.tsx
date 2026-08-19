@@ -17,7 +17,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import api from "../api/client";
 import { logout } from "../api/auth.api";
+import { getStoredPartnerUser, isStaffActor } from "../utils/partnerActor";
 import DeleteAccountModal from "../components/DeleteAccountModal";
+import PartnerAgreementModal from "../components/PartnerAgreementModal";
 import { getMyDeletionRequest } from "../api/accountDeletion.api";
 import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
@@ -52,7 +54,10 @@ export default function SettingsScreen({ navigation, route }: any) {
   const keyboardHeight = useKeyboardBottomInset();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
+  const [staffName, setStaffName] = useState("Staff");
   const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
+  const [agreementModalVisible, setAgreementModalVisible] = useState(false);
   const [profileMeta, setProfileMeta] = useState({
     restaurantName: "Your shop",
     status: "",
@@ -80,6 +85,13 @@ export default function SettingsScreen({ navigation, route }: any) {
   const loadSettings = async () => {
     try {
       setLoading(true);
+      const actor = await getStoredPartnerUser();
+      const staffSession = isStaffActor(actor);
+      setIsStaff(staffSession);
+      setStaffName(actor?.operatorName || actor?.name || actor?.username || "Staff");
+      if (staffSession) {
+        return;
+      }
       const res = await api.get("/partners/profile");
       const payload = res.data as { success: boolean; data?: any };
       if (!payload.success || !payload.data) {
@@ -266,13 +278,16 @@ export default function SettingsScreen({ navigation, route }: any) {
             <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
           </View>
           <View style={styles.heroCopy}>
-            <Text style={styles.heroEyebrow}>Business controls</Text>
-            <Text style={styles.heroTitle}>{profileMeta.restaurantName}</Text>
+            <Text style={styles.heroEyebrow}>{isStaff ? "Staff session" : "Business controls"}</Text>
+            <Text style={styles.heroTitle}>{isStaff ? staffName : profileMeta.restaurantName}</Text>
             <Text style={styles.heroSubtitle}>
-              {profileMeta.status ? `${profileMeta.status} partner` : "Partner settings"} {profileMeta.phone ? `- ${profileMeta.phone}` : ""}
+              {isStaff
+                ? "You can manage live orders. Shop wallet and profile stay with the owner."
+                : `${profileMeta.status ? `${profileMeta.status} partner` : "Partner settings"} ${profileMeta.phone ? `- ${profileMeta.phone}` : ""}`}
             </Text>
           </View>
         </View>
+        {isStaff ? null : (
         <View style={styles.heroStatsRow}>
           <View style={styles.heroStat}>
             <Text style={styles.heroStatValue}>{settings.estimatedPrepTime || "20"} min</Text>
@@ -287,8 +302,11 @@ export default function SettingsScreen({ navigation, route }: any) {
             <Text style={styles.heroStatLabel}>Theme</Text>
           </View>
         </View>
+        )}
       </View>
 
+      {isStaff ? null : (
+      <>
       <View style={[styles.card, isDark && styles.cardDark]}>
         {renderSectionTitle("Order Controls", "Set preparation time used for incoming orders.", "receipt-outline")}
         <Text style={[styles.label, isDark && styles.textDark]}>Estimated prep time (min)</Text>
@@ -359,9 +377,24 @@ export default function SettingsScreen({ navigation, route }: any) {
           </View>
         )}
       </View>
+      </>
+      )}
+
+      {isStaff ? null : (
+      <View style={[styles.card, isDark && styles.cardDark]}>
+        <Text style={[styles.sectionTitle, styles.sectionTitleStandalone, isDark && styles.textDark]}>Staff logins</Text>
+        <TouchableOpacity style={[styles.row, isDark && styles.rowDark]} onPress={() => navigation.navigate("StaffAccounts")}>
+          <Text style={[styles.rowText, isDark && styles.textDark]}>Shared kitchen login and who signed in</Text>
+        </TouchableOpacity>
+      </View>
+      )}
 
       <View style={[styles.card, isDark && styles.cardDark]}>
-        {renderSectionTitle("Appearance", "Personalize how the partner app feels on this device.", "moon-outline")}
+        {isStaff ? (
+          <Text style={[styles.sectionTitle, styles.sectionTitleStandalone, isDark && styles.textDark]}>Appearance</Text>
+        ) : (
+          renderSectionTitle("Appearance", "Personalize how the partner app feels on this device.", "moon-outline")
+        )}
         <View style={styles.switchRow}>
           <View style={styles.switchCopy}>
             <Text style={[styles.label, isDark && styles.textDark]}>Dark mode</Text>
@@ -377,6 +410,7 @@ export default function SettingsScreen({ navigation, route }: any) {
         </View>
       </View>
 
+      {isStaff ? null : (
       <View style={[styles.card, isDark && styles.cardDark]}>
         {renderSectionTitle("Notifications", "Control alerts that help your team respond on time.", "notifications-outline")}
         <View style={[styles.payoutLockBox, isDark && styles.infoBoxDark]}>
@@ -416,11 +450,12 @@ export default function SettingsScreen({ navigation, route }: any) {
           />
         </View>
       </View>
+      )}
 
       <View style={[styles.card, isDark && styles.cardDark]}>
         <Text style={[styles.sectionTitle, styles.sectionTitleStandalone, isDark && styles.textDark]}>Legal</Text>
-        <TouchableOpacity style={[styles.row, isDark && styles.rowDark]} onPress={() => Linking.openURL(TERMS_URL)}>
-          <Text style={[styles.rowText, isDark && styles.textDark]}>Terms & Conditions</Text>
+        <TouchableOpacity style={[styles.row, isDark && styles.rowDark]} onPress={() => setAgreementModalVisible(true)}>
+          <Text style={[styles.rowText, isDark && styles.textDark]}>Agreement</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.row, isDark && styles.rowDark]} onPress={() => Linking.openURL(PARTNER_POLICY_URL)}>
           <Text style={[styles.rowText, isDark && styles.textDark]}>Partner Policy</Text>
@@ -435,9 +470,11 @@ export default function SettingsScreen({ navigation, route }: any) {
         <TouchableOpacity style={[styles.row, isDark && styles.rowDark]} onPress={handleLogout}>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
+        {isStaff ? null : (
         <TouchableOpacity style={[styles.row, isDark && styles.rowDark]} onPress={handleDeleteAccount}>
           <Text style={styles.deleteText}>Delete Account</Text>
         </TouchableOpacity>
+        )}
       </View>
 
     </ScrollView>
@@ -448,6 +485,7 @@ export default function SettingsScreen({ navigation, route }: any) {
       isDark={isDark}
       onSubmitted={() => openAccountDeletionReview(navigation)}
     />
+    <PartnerAgreementModal visible={agreementModalVisible} onClose={() => setAgreementModalVisible(false)} />
     </>
   );
 }

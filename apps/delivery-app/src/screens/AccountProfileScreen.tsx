@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDeliveryProfile, type DeliveryProfile } from "../api/profile.api";
 import { logout } from "../api/auth.api";
 import DeleteAccountModal from "../components/DeleteAccountModal";
+import BasicRiderAgreementModal from "../components/BasicRiderAgreementModal";
 import { getMyDeletionRequest, cacheDeletionRequest } from "../api/accountDeletion.api";
 import { openAccountDeletionReview } from "../utils/accountDeletionNavigation";
 import { buildLegalUrl } from "../constants/legal";
@@ -51,6 +52,7 @@ export default function AccountProfileScreen({ navigation }: any) {
   const [emailOffers, setEmailOffers] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
+  const [agreementModalVisible, setAgreementModalVisible] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -190,7 +192,7 @@ export default function AccountProfileScreen({ navigation }: any) {
         title: "Legal & Information",
         icon: "information-circle-outline",
         items: [
-          { title: "Terms & Conditions", icon: "document-outline", onPress: () => Linking.openURL(TERMS_URL) },
+          { title: "Agreement", icon: "document-outline", onPress: () => setAgreementModalVisible(true) },
           { title: "Privacy Policy", icon: "lock-closed-outline", onPress: () => Linking.openURL(PRIVACY_URL) },
           { title: "Cancellation Policy", icon: "close-circle-outline", onPress: () => showComingSoon("Cancellation Policy") },
           { title: "About App", icon: "apps-outline", onPress: () => showComingSoon("About App") },
@@ -291,6 +293,7 @@ export default function AccountProfileScreen({ navigation }: any) {
         navigation={navigation}
         onClose={() => setDeleteAccountModalVisible(false)}
       />
+      <BasicRiderAgreementModal visible={agreementModalVisible} onClose={() => setAgreementModalVisible(false)} />
     </View>
   );
 }

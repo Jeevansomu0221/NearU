@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { partnerTheme } from "../../theme";
 import { buildLegalUrl } from "../../constants/legal";
 import { acceptPartnerAgreement, type PartnerKycState } from "../../api/kyc.api";
+import PartnerAgreementModal from "../../components/PartnerAgreementModal";
 
 type Props = {
   kyc: PartnerKycState;
@@ -35,6 +36,14 @@ export default function AgreementStep({
   onPartnerAgreementAcceptedChange,
   summary
 }: Props) {
+  const [agreementModalVisible, setAgreementModalVisible] = useState(false);
+
+  const partnerAgreementLabel = useMemo(
+    () =>
+      "I accept the Restaurant Partner agreement (0% for first 45 days after first order, then 10% platform commission)",
+    []
+  );
+
   return (
     <View>
       <Text style={styles.hint}>
@@ -63,11 +72,18 @@ export default function AgreementStep({
       <Check
         checked={partnerAgreementAccepted || Boolean(kyc.partnerAgreementAcceptedAt)}
         onPress={() => onPartnerAgreementAcceptedChange(!partnerAgreementAccepted)}
-        label="I accept the Restaurant Partner agreement"
+        label={partnerAgreementLabel}
       />
-      <Pressable onPress={() => Linking.openURL(buildLegalUrl("privacy"))}>
-        <Text style={styles.link}>Read privacy policy</Text>
+
+      <Pressable onPress={() => setAgreementModalVisible(true)}>
+        <Text style={styles.link}>View partner agreement</Text>
       </Pressable>
+
+      <PartnerAgreementModal
+        visible={agreementModalVisible}
+        onClose={() => setAgreementModalVisible(false)}
+        onAccept={() => onPartnerAgreementAcceptedChange(true)}
+      />
     </View>
   );
 }

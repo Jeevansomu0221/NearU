@@ -33,6 +33,7 @@ import {
   type AadhaarVerifyResult
 } from "../api/kyc.api";
 import ScreenHeader from "../components/ScreenHeader";
+import BasicRiderAgreementModal from "../components/BasicRiderAgreementModal";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -42,7 +43,7 @@ const GREEN = "#16A34A";
 const DRAFT_KEY = "delivery_kyc_registration_draft_v2";
 const STEP_META = [
   { title: "DigiLocker", hint: "Verify Aadhaar via DigiLocker" },
-  { title: "Terms", hint: "Accept partner terms to continue" },
+  { title: "Agreement", hint: "Accept basic rider agreement to continue" },
   { title: "PAN", hint: "Optional — add later in Profile" },
   { title: "Bank", hint: "Optional — needed for payouts" }
 ] as const;
@@ -134,6 +135,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
   const [lockedName, setLockedName] = useState("");
 
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [agreementModalVisible, setAgreementModalVisible] = useState(false);
 
   const [panNumber, setPanNumber] = useState("");
   const [panConsent, setPanConsent] = useState(false);
@@ -443,7 +445,7 @@ export default function KycRegistrationScreen({ navigation }: any) {
 
   const handleSaveBasics = async () => {
     if (!termsAccepted) {
-      Alert.alert("Terms required", "Please accept the terms to continue.");
+      Alert.alert("Agreement required", "Please accept the basic rider agreement to continue.");
       return;
     }
     setBusy(true);
@@ -646,9 +648,16 @@ export default function KycRegistrationScreen({ navigation }: any) {
                 <TextInput style={[styles.input, styles.inputLocked]} value={lockedName || profile?.name || ""} editable={false} />
               </Field>
               <Text style={styles.termsCopy}>
-                Review and accept the delivery partner terms to continue. You can add an emergency contact later from Profile.
+                Review and accept the basic rider agreement to continue. You can add an emergency contact later from Profile.
               </Text>
-              <Check checked={termsAccepted} onPress={() => setTermsAccepted((c) => !c)} label="I accept partner terms" />
+              <Check
+                checked={termsAccepted}
+                onPress={() => setTermsAccepted((c) => !c)}
+                label="I accept the Basic Rider agreement"
+              />
+              <TouchableOpacity style={styles.linkBtn} onPress={() => setAgreementModalVisible(true)}>
+                <Text style={styles.linkBtnText}>View agreement details</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={[styles.primaryBtn, busy && styles.btnDisabled]} onPress={handleSaveBasics} disabled={busy}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Continue</Text>}
               </TouchableOpacity>
@@ -739,6 +748,12 @@ export default function KycRegistrationScreen({ navigation }: any) {
           ) : null}
         </Animated.View>
       </ScrollView>
+
+      <BasicRiderAgreementModal
+        visible={agreementModalVisible}
+        onClose={() => setAgreementModalVisible(false)}
+        onAccept={() => setTermsAccepted(true)}
+      />
 
       <Modal
         visible={Boolean(digilockerWebUrl)}
