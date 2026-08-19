@@ -44,7 +44,7 @@ export const authMiddleware = async (
 
     if (isStaffToken) {
       const staff = await PartnerStaff.findById(decoded.staffId || decoded.id)
-        .select("isActive sessionVersion partnerId displayName username")
+        .select("isActive sessionVersion partnerId displayName username revokedOperators")
         .lean();
 
       if (!staff || staff.isActive === false) {
@@ -58,6 +58,14 @@ export const authMiddleware = async (
         return res.status(401).json({
           success: false,
           message: "Session expired. Please log in again."
+        });
+      }
+
+      const operatorName = decoded.operatorName || decoded.name || "";
+      if (operatorName && Array.isArray(staff.revokedOperators) && staff.revokedOperators.includes(operatorName)) {
+        return res.status(401).json({
+          success: false,
+          message: "Your session has been removed by the restaurant owner. Please log in again."
         });
       }
 

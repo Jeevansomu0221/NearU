@@ -302,15 +302,24 @@ export const signOutPartnerStaff = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, "Partner not found", 404);
     }
 
+    const operatorName = String(req.body?.operatorName || "").trim();
+    if (!operatorName) {
+      return errorResponse(res, "Operator name is required", 400);
+    }
+
     const staff = await PartnerStaff.findOne({ _id: req.params.staffId, partnerId: partner._id });
     if (!staff) {
       return errorResponse(res, "Staff account not found", 404);
     }
 
-    staff.sessionVersion = (staff.sessionVersion || 0) + 1;
+    const revoked: string[] = Array.isArray(staff.revokedOperators) ? staff.revokedOperators : [];
+    if (!revoked.includes(operatorName)) {
+      revoked.push(operatorName);
+      staff.revokedOperators = revoked;
+    }
     await staff.save();
 
-    return successResponse(res, publicStaff(staff), "All staff sessions signed out");
+    return successResponse(res, publicStaff(staff), `${operatorName} has been signed out`);
   } catch (error: any) {
     return errorResponse(res, error.message || "Failed to sign out staff", 500);
   }
@@ -423,6 +432,9 @@ export const partnerStaffLogin = async (req: Request, res: Response) => {
     staff.lastLoginIp = meta.ip;
     staff.lastLoginPlatform = meta.platform;
     staff.lastOperatorName = operatorName;
+    if (Array.isArray(staff.revokedOperators) && staff.revokedOperators.includes(operatorName)) {
+      staff.revokedOperators = staff.revokedOperators.filter((n: string) => n !== operatorName);
+    }
     await staff.save();
 
     const tokens = buildStaffTokens(staff, partner, operatorName);

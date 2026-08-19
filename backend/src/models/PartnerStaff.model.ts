@@ -92,6 +92,10 @@ const PartnerStaffSchema = new Schema(
       default: "",
       trim: true
     },
+    revokedOperators: {
+      type: [String],
+      default: []
+    },
     notificationTokens: {
       type: [NotificationTokenSchema],
       default: []

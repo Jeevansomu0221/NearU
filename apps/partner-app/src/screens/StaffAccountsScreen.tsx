@@ -313,13 +313,14 @@ export default function StaffAccountsScreen() {
                     {formatWhen(item.createdAt)}
                   </Text>
                 </View>
-                {item.success && shared && (
+                {item.success && shared && item.displayName && (
                   <TouchableOpacity
                     hitSlop={8}
                     onPress={() => {
+                      const name = item.displayName || "Staff";
                       Alert.alert(
-                        "Remove session",
-                        `This will sign out everyone using the shared login. Continue?`,
+                        `Remove ${name}`,
+                        `${name} will be signed out and will need to log in again.`,
                         [
                           { text: "Cancel", style: "cancel" },
                           {
@@ -327,7 +328,7 @@ export default function StaffAccountsScreen() {
                             style: "destructive",
                             onPress: async () => {
                               try {
-                                await signOutPartnerStaff(shared._id);
+                                await signOutPartnerStaff(shared._id, name);
                                 await load();
                               } catch (error: any) {
                                 Alert.alert("Error", staffApiError(error, "Could not sign out"));

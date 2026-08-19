@@ -106,8 +106,8 @@ export const updatePartnerStaff = (
 export const disablePartnerStaff = (staffId: string) =>
   api.delete<{ success: boolean; data?: PartnerStaffAccount; message?: string }>(`/partner-staff/${staffId}`);
 
-export const signOutPartnerStaff = (staffId: string) =>
-  api.post<{ success: boolean; data?: PartnerStaffAccount; message?: string }>(`/partner-staff/${staffId}/sign-out`);
+export const signOutPartnerStaff = (staffId: string, operatorName: string) =>
+  api.post<{ success: boolean; data?: PartnerStaffAccount; message?: string }>(`/partner-staff/${staffId}/sign-out`, { operatorName });
 
 export const getPartnerStaffLoginActivity = (params?: { staffId?: string; page?: number; limit?: number }) =>
   api.get<{
