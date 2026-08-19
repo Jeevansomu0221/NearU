@@ -104,6 +104,10 @@ const resolvePartnerForUser = async (user?: AuthRequest["user"]) => {
     if (partnerByToken) return partnerByToken;
   }
 
+  if (user.actorType === "staff" || user.staffId) {
+    return null;
+  }
+
   let partner = mongoose.Types.ObjectId.isValid(user.id)
     ? await Partner.findOne({ userId: user.id })
     : null;
@@ -352,7 +356,20 @@ const formatPartnerForDelivery = (partnerDoc: any) => {
   const addr = partnerObj.address;
   return {
     ...partnerObj,
-    address: `${addr.roadStreet}, ${addr.colony}, ${addr.area}, ${addr.city}, ${addr.state} - ${addr.pincode}`,
+    address: [
+      addr.shopHouseName,
+      addr.floor,
+      addr.roadStreet,
+      addr.colony,
+      addr.area,
+      addr.city,
+      addr.state,
+      addr.pincode ? `- ${addr.pincode}` : ""
+    ]
+      .map((part: unknown) => String(part || "").trim())
+      .filter(Boolean)
+      .join(", ")
+      .replace(", - ", " - "),
     googleMapsLink: addr.googleMapsLink || "",
     location: partnerObj.location || null
   };

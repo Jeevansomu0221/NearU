@@ -6,7 +6,9 @@ export type GeocodedAddress = {
   houseFlatDoorNo: string;
   buildingApartmentName: string;
   streetRoadName: string;
+  colony: string;
   area: string;
+  town: string;
   city: string;
   district: string;
   state: string;
@@ -50,6 +52,17 @@ const firstComponent = (components: GoogleAddressComponent[], types: string[]) =
   return "";
 };
 
+const samePlaceName = (left?: string, right?: string) => {
+  const a = String(left || "").trim().toLowerCase();
+  const b = String(right || "").trim().toLowerCase();
+  return Boolean(a && b && a === b);
+};
+
+const firstUnused = (candidates: Array<string | undefined>, used: Array<string | undefined>) =>
+  candidates
+    .map((value) => String(value || "").trim())
+    .find((value) => value && !used.some((entry) => samePlaceName(entry, value))) || "";
+
 const parseGoogleAddress = (result: any): GeocodedAddress | null => {
   const components: GoogleAddressComponent[] = Array.isArray(result?.address_components)
     ? result.address_components
@@ -69,14 +82,11 @@ const parseGoogleAddress = (result: any): GeocodedAddress | null => {
     placeId: String(result?.place_id || "").trim(),
     houseFlatDoorNo: streetNumber,
     buildingApartmentName: firstComponent(components, ["premise", "subpremise", "establishment"]),
-    streetRoadName: route || firstComponent(components, ["sublocality_level_2", "sublocality"]),
-    area: firstComponent(components, [
-      "sublocality_level_1",
-      "sublocality",
-      "neighborhood",
-      "political"
-    ]),
-    city: firstComponent(components, ["locality", "administrative_area_level_3", "postal_town"]),
+    streetRoadName: route,
+    colony: firstComponent(components, ["neighborhood", "sublocality_level_2"]),
+    area: firstComponent(components, ["sublocality_level_1", "sublocality"]),
+    town: firstComponent(components, ["administrative_area_level_3"]),
+    city: firstComponent(components, ["locality", "postal_town"]),
     district: firstComponent(components, ["administrative_area_level_2"]),
     state: firstComponent(components, ["administrative_area_level_1"]),
     pincode: pincodeDigits,
@@ -85,6 +95,99 @@ const parseGoogleAddress = (result: any): GeocodedAddress | null => {
     longitude,
     locationType: String(result?.geometry?.location_type || "").trim(),
     source: "google"
+  };
+};
+
+const collectGoogleComponents = (results: any[]): GoogleAddressComponent[] => {
+  const seen = new Set<string>();
+  const components: GoogleAddressComponent[] = [];
+  for (const result of results) {
+    for (const component of Array.isArray(result?.address_components) ? result.address_components : []) {
+      const key = `${(component.types || []).join(",")}:${component.long_name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      components.push(component);
+    }
+  }
+  return components;
+};
+
+const parseGoogleReverseResults = (
+  results: any[],
+  latitude: number,
+  longitude: number
+): GeocodedAddress | null => {
+  const usable = Array.isArray(results) ? results.filter(Boolean) : [];
+  if (!usable.length) return null;
+
+  const streetResult =
+    usable.find((result) =>
+      ["street_address", "premise", "subpremise", "route"].some((type) =>
+        Array.isArray(result.types) && result.types.includes(type)
+      )
+    ) || usable[0];
+  const parsed = parseGoogleAddress(streetResult);
+  if (!parsed) return null;
+
+  const components = collectGoogleComponents(usable);
+  const typedComponents = (type: string) => {
+    const match = usable.find((result) => Array.isArray(result.types) && result.types.includes(type));
+    return Array.isArray(match?.address_components) ? match.address_components : [];
+  };
+
+  const colony = firstUnused(
+    [
+      componentValue(typedComponents("neighborhood"), "neighborhood"),
+      componentValue(components, "neighborhood"),
+      componentValue(components, "sublocality_level_2")
+    ],
+    []
+  );
+  const city = firstUnused(
+    [
+      componentValue(typedComponents("locality"), "locality"),
+      componentValue(components, "locality"),
+      componentValue(components, "postal_town")
+    ],
+    [colony]
+  );
+  const area = firstUnused(
+    [
+      componentValue(components, "sublocality_level_1"),
+      componentValue(components, "sublocality"),
+      parsed.area
+    ],
+    [colony, city]
+  );
+  const town = firstUnused(
+    [
+      componentValue(typedComponents("administrative_area_level_3"), "administrative_area_level_3"),
+      componentValue(components, "administrative_area_level_3"),
+      parsed.town
+    ],
+    [colony, area, city]
+  );
+
+  return {
+    ...parsed,
+    streetRoadName: parsed.streetRoadName || componentValue(components, "route"),
+    colony,
+    area,
+    town,
+    city: city || parsed.city,
+    district: firstUnused([parsed.district, componentValue(components, "administrative_area_level_2")], [town, city, area, colony]),
+    formattedAddress: compactQuery([
+      parsed.buildingApartmentName || parsed.houseFlatDoorNo,
+      parsed.streetRoadName,
+      colony,
+      area,
+      town,
+      city,
+      parsed.state,
+      parsed.pincode
+    ]),
+    latitude,
+    longitude
   };
 };
 
@@ -138,8 +241,10 @@ const parseNominatimAddress = (result: any): GeocodedAddress | null => {
     houseFlatDoorNo: String(details.house_number || "").trim(),
     buildingApartmentName: String(details.building || details.amenity || "").trim(),
     streetRoadName: String(details.road || details.residential || details.pedestrian || "").trim(),
-    area: String(details.village || details.suburb || details.neighbourhood || details.quarter || details.town || "").trim(),
-    city: String(details.city || details.town || details.county || "").trim(),
+    colony: String(details.neighbourhood || details.quarter || "").trim(),
+    area: String(details.suburb || details.city_district || "").trim(),
+    town: String(details.town || details.municipality || details.village || "").trim(),
+    city: String(details.city || "").trim(),
     district: String(details.state_district || details.county || "").trim(),
     state: String(details.state || "").trim(),
     pincode: pincodeDigits,
@@ -294,6 +399,24 @@ const colonyName = (address: AddressLookup) => String(address.colony || "").trim
 
 const areaName = (address: AddressLookup) => String(address.area || address.areaLocality || "").trim();
 
+const LANDMARK_HINT_RE = /\b(beside|besides|near|opp\.?|opposite|next to|behind|in front of|landmark)\b/i;
+
+const sanitizeLookupAddress = (address: AddressLookup): AddressLookup => {
+  const colony = colonyName(address);
+  const landmark = String(address.landmark || "").trim();
+  const dropColony =
+    !colony ||
+    LANDMARK_HINT_RE.test(colony) ||
+    (landmark && normalizeText(colony) === normalizeText(landmark)) ||
+    (areaName(address) && normalizeText(colony) === normalizeText(areaName(address)));
+
+  return {
+    ...address,
+    colony: dropColony ? "" : colony,
+    state: String(address.state || "").trim()
+  };
+};
+
 const localityHints = (address: AddressLookup) =>
   [colonyName(address), areaName(address)].filter(Boolean);
 
@@ -332,7 +455,7 @@ const WEAK_LOCALITY_WORDS = new Set([
 const strongTokens = (value: string) =>
   normalizeText(value)
     .split(" ")
-    .filter((word) => word.length > 3 && !WEAK_LOCALITY_WORDS.has(word));
+    .filter((word) => word.length > 2 && !WEAK_LOCALITY_WORDS.has(word));
 
 const textHasHint = (haystack: string, hint: string) => {
   const value = normalizeText(hint);
@@ -575,10 +698,10 @@ const geocodeNamedSettlement = async (
 ): Promise<GeocodedAddress | null> => {
   const hint = String(name || "").trim();
   if (hint.length < 3) return null;
-  const state = String(address.state || "Telangana").trim();
+  const state = String(address.state || "").trim();
 
   if (canUseGoogle()) {
-    const query = compactQuery([hint, state, "India"]);
+    const query = compactQuery([hint, address.city || address.cityTownVillage, address.pincode, state, "India"]);
     const payload = await googleGet(GOOGLE_GEOCODE_URL, {
       address: query,
       components: "country:IN",
@@ -592,7 +715,9 @@ const geocodeNamedSettlement = async (
     if (best) return best;
   }
 
-  const structured = await nominatimSearch({ city: hint, state, country: "India" });
+  const structured = await nominatimSearch({
+    q: compactQuery([hint, address.city || address.cityTownVillage, address.pincode, state, "India"])
+  });
   const structuredBest = pickNamedPlace(structured, hint, address);
   if (structuredBest) return structuredBest;
   await wait(400);
@@ -761,11 +886,46 @@ const geocodeWithNominatimStructured = async (
   return collected;
 };
 
+const geocodeLooseFallback = async (address: AddressLookup): Promise<GeocodedAddress | null> => {
+  const queries = [
+    ...buildFallbackQueries(address),
+    compactQuery([areaName(address), address.city || address.cityTownVillage, address.pincode, address.state, "India"]),
+    compactQuery([address.city || address.cityTownVillage, address.pincode, address.state, "India"]),
+    pincodeDigits(address.pincode)
+  ].filter((query) => query.length >= 3);
+
+  for (const query of Array.from(new Set(queries))) {
+    if (canUseGoogle()) {
+      const payload = await googleGet(GOOGLE_GEOCODE_URL, {
+        address: query,
+        components: "country:IN",
+        region: "in",
+        language: "en"
+      });
+      const parsed = (Array.isArray(payload?.results) ? payload.results : [])
+        .map(parseGoogleAddress)
+        .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
+      const wantedPin = pincodeDigits(address.pincode);
+      const pincodeMatch = parsed.find((entry: GeocodedAddress) => !wantedPin || !entry.pincode || entry.pincode === wantedPin);
+      if (pincodeMatch) return pincodeMatch;
+      if (parsed[0]) return parsed[0];
+    }
+
+    const osm = await nominatimSearch({ q: query });
+    const usable = osm.filter((entry) => !looksLikeRoad(entry));
+    if (usable[0]) return usable[0];
+    await wait(250);
+  }
+
+  return null;
+};
+
 export const resolveAddressCoordinates = async (address: AddressLookup & {
   latitude?: number;
   longitude?: number;
 }) => {
-  if (!areaName(address) && !colonyName(address) && !shopBuildingName(address)) {
+  address = sanitizeLookupAddress(address);
+  if (!areaName(address) && !colonyName(address) && !shopBuildingName(address) && !pincodeDigits(address.pincode)) {
     throw Object.assign(new Error("Enter a complete delivery address"), { statusCode: 400 });
   }
 
@@ -833,8 +993,14 @@ export const resolveAddressCoordinates = async (address: AddressLookup & {
     return pinFromMatch(areaPin);
   }
 
+  const loosePin = await geocodeLooseFallback(address);
+  if (loosePin) {
+    console.info("Address pin source=fallback", loosePin.formattedAddress, loosePin.latitude, loosePin.longitude);
+    return pinFromMatch(loosePin);
+  }
+
   throw Object.assign(
-    new Error("We could not find this shop on the map. Check the area and colony names."),
+    new Error("We could not find this shop on the map. Check the shop name, area, city, and pincode."),
     { statusCode: 400 }
   );
 };
@@ -851,16 +1017,8 @@ export const reverseGeocodeCoordinates = async (
     });
 
     if (payload?.status === "OK") {
-      const parsed = (Array.isArray(payload.results) ? payload.results : [])
-        .map(parseGoogleAddress)
-        .filter((entry: GeocodedAddress | null): entry is GeocodedAddress => Boolean(entry));
-      if (parsed[0]) {
-        return {
-          ...parsed[0],
-          latitude,
-          longitude
-        };
-      }
+      const parsed = parseGoogleReverseResults(payload.results, latitude, longitude);
+      if (parsed) return parsed;
     }
     if (payload?.status) {
       console.warn("Google reverse geocode failed:", payload.status, payload.error_message || "");

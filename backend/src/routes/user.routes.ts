@@ -2,6 +2,7 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { roleMiddleware } from "../middlewares/role.middleware";
+import { rejectPartnerStaff } from "../middlewares/partnerStaff.middleware";
 import { CONSUMER_APP_ROLES } from "../config/roles";
 import {
   getUserProfile,
@@ -37,12 +38,14 @@ const router = Router();
 router.delete(
   "/me",
   authMiddleware,
+  rejectPartnerStaff,
   deleteMyAccount
 );
 
 router.get(
   "/me/deletion-eligibility",
   authMiddleware,
+  rejectPartnerStaff,
   roleMiddleware([ROLES.PARTNER, ROLES.DELIVERY]),
   getMyDeletionEligibility
 );
@@ -50,6 +53,7 @@ router.get(
 router.post(
   "/me/deletion-request",
   authMiddleware,
+  rejectPartnerStaff,
   roleMiddleware([ROLES.PARTNER, ROLES.DELIVERY]),
   requestAccountDeletion
 );
@@ -57,6 +61,7 @@ router.post(
 router.get(
   "/me/deletion-request",
   authMiddleware,
+  rejectPartnerStaff,
   roleMiddleware([ROLES.PARTNER, ROLES.DELIVERY]),
   getMyDeletionRequest
 );
@@ -64,6 +69,7 @@ router.get(
 router.delete(
   "/me/deletion-request",
   authMiddleware,
+  rejectPartnerStaff,
   roleMiddleware([ROLES.PARTNER, ROLES.DELIVERY]),
   cancelMyDeletionRequest
 );

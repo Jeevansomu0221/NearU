@@ -6,6 +6,10 @@ import { parseGoogleMapsLink } from "../utils/mapsParser";
 const DEFAULT_RADIUS_KM = 20;
 const MAX_RADIUS_KM = 20;
 const MAX_SHOPS_FALLBACK = 100;
+const MONGO_OBJECT_ID = /^[a-fA-F0-9]{24}$/;
+
+const isMongoObjectId = (value: unknown) =>
+  typeof value === "string" && MONGO_OBJECT_ID.test(value);
 
 const parseCoordinate = (value: unknown) => {
   const parsed = Number(value);
@@ -226,6 +230,13 @@ export const getPartnerPublicProfile = async (req: Request, res: Response) => {
   try {
     const { partnerId } = req.params;
 
+    if (!isMongoObjectId(partnerId)) {
+      return res.status(404).json({
+        success: false,
+        message: "Restaurant not found"
+      });
+    }
+
     const partner = await Partner.findOne({
       _id: partnerId,
       status: "APPROVED",
@@ -261,6 +272,13 @@ export const getPartnerReviews = async (req: Request, res: Response) => {
     const { partnerId } = req.params;
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
     const page = Math.max(Number(req.query.page) || 1, 1);
+
+    if (!isMongoObjectId(partnerId)) {
+      return res.status(404).json({
+        success: false,
+        message: "Restaurant not found"
+      });
+    }
 
     const partner = await Partner.findOne({
       _id: partnerId,

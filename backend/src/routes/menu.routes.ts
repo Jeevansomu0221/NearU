@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/auth.middleware";
+import { rejectPartnerStaff } from "../middlewares/partnerStaff.middleware";
 import {
   getPartnerMenu,           // Add this back
   getPublicPartnerMenu,     // Keep this
@@ -17,6 +18,7 @@ router.get("/partner/:partnerId", getPublicPartnerMenu);
 
 // PROTECTED ROUTES: All other menu routes require partner authentication
 router.use(authMiddleware);
+router.use(rejectPartnerStaff);
 
 // Menu management routes (partner only)
 router.get("/", getPartnerMenu);
