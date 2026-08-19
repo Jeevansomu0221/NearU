@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { getAccessToken } from "../utils/authStorage";
+import { getStoredPartnerUser, isStaffActor } from "../utils/partnerActor";
 import api from "../api/client";
 import NewOrderBanner from "./NewOrderBanner";
 
@@ -31,6 +32,7 @@ const isAwaitingPartnerAction = (status: string) => status === "CONFIRMED";
 export default function PartnerOrderWatcher({ navigationRef }: Props) {
   const [newOrderAlert, setNewOrderAlert] = useState<PartnerOrder | null>(null);
   const [defaultPrepTimeMinutes, setDefaultPrepTimeMinutes] = useState(DEFAULT_PREP_TIME_MINUTES);
+  const [alertsEnabled, setAlertsEnabled] = useState(true);
   const knownOrderIds = useRef<Set<string>>(new Set());
   const latestAlertId = useRef<string | null>(null);
 
@@ -42,13 +44,22 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.get("/partners/profile");
-        const estimated = Number(res.data?.data?.settings?.estimatedPrepTime);
+        const [res, actor] = await Promise.all([
+          api.get("/partners/profile"),
+          getStoredPartnerUser()
+        ]);
+        const data = res.data?.data;
+        const estimated = Number(data?.settings?.estimatedPrepTime);
         if (!cancelled && Number.isFinite(estimated) && estimated > 0) {
           setDefaultPrepTimeMinutes(Math.round(estimated));
         }
+        if (!cancelled) {
+          const isStaff = isStaffActor(actor);
+          const ownerAlertsOff = !isStaff && data?.notifications?.newOrderAlerts === false;
+          setAlertsEnabled(!ownerAlertsOff);
+        }
       } catch {
-        // Keep default.
+        // Keep defaults.
       }
     })();
     return () => {
@@ -105,10 +116,28 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
     return () => clearInterval(interval);
   }, [loadPendingOrders]);
 
+  const refreshAlertsSetting = useCallback(async () => {
+    try {
+      const [res, actor] = await Promise.all([
+        api.get("/partners/profile"),
+        getStoredPartnerUser()
+      ]);
+      const isStaff = isStaffActor(actor);
+      const ownerAlertsOff = !isStaff && res.data?.data?.notifications?.newOrderAlerts === false;
+      setAlertsEnabled(!ownerAlertsOff);
+    } catch {
+      // Keep current value.
+    }
+  }, []);
+
   useEffect(() => {
-    const unsubscribe = navigationRef?.addListener?.("state", loadPendingOrders);
+    const onStateChange = () => {
+      loadPendingOrders();
+      refreshAlertsSetting();
+    };
+    const unsubscribe = navigationRef?.addListener?.("state", onStateChange);
     return () => unsubscribe?.();
-  }, [loadPendingOrders, navigationRef]);
+  }, [loadPendingOrders, refreshAlertsSetting, navigationRef]);
 
   const dismissAlert = useCallback(() => {
     setNewOrderAlert(null);
@@ -186,7 +215,7 @@ export default function PartnerOrderWatcher({ navigationRef }: Props) {
 
   return (
     <NewOrderBanner
-      visible={Boolean(newOrderAlert)}
+      visible={Boolean(newOrderAlert) && alertsEnabled}
       orderId={newOrderAlert?._id || ""}
       itemCount={itemCount}
       items={summaryItems}
