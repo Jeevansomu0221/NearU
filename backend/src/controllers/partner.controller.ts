@@ -49,7 +49,6 @@ const toObjectId = (id: any): Types.ObjectId | null => {
 
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const aadhaarRegex = /^[0-9]{12}$/;
-const fssaiRegex = /^[0-9]{14}$/;
 const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
@@ -60,8 +59,7 @@ const isGstRegisteredValue = (value: any) => value === true || value === "true" 
 
 const hasCompleteProfileDocuments = (documents: Record<string, any>) =>
   Boolean(
-    firstString(documents?.fssaiNumber) &&
-      firstString(documents?.fssaiUrl) &&
+    firstString(documents?.fssaiUrl) &&
       (documents?.panVerified || documents?.panSkipped) &&
       firstString(documents?.panNumber) &&
       (!isGstRegisteredValue(documents?.gstRegistered) ||
@@ -609,9 +607,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     );
     const normalizedBankDocumentType = "";
 
-    if (!fssaiRegex.test(normalizedDocs.fssaiNumber)) {
-      return res.status(400).json({ success: false, message: "FSSAI number must be 14 digits" });
-    }
     if (!String(normalizedDocs.fssaiUrl || "").trim() || normalizedDocs.fssaiUrl === "eko-fssai-verified") {
       return res.status(400).json({ success: false, message: "Upload your FSSAI certificate before submitting" });
     }
@@ -643,7 +638,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     }
 
     const hasMandatoryDocuments = Boolean(
-      fssaiRegex.test(normalizedDocs.fssaiNumber) &&
       String(normalizedDocs.fssaiUrl || "").trim() &&
       normalizedDocs.fssaiUrl !== "eko-fssai-verified" &&
       (panVerified || panSkipped) &&
