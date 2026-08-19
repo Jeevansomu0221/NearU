@@ -16,7 +16,6 @@ import {
   disablePartnerStaff,
   getPartnerStaffLoginActivity,
   listPartnerStaff,
-  signOutPartnerStaff,
   updatePartnerStaff,
   type PartnerStaffAccount,
   type PartnerStaffLoginActivity
@@ -303,46 +302,13 @@ export default function StaffAccountsScreen() {
         ) : (
           activity.map((item) => (
             <View key={item._id} style={styles.activityRow}>
-              <View style={styles.activityContent}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.staffName, isDarkMode && styles.text]}>
-                    {item.displayName || "Staff"} · {item.success ? item.event.replace("_", " ") : "failed login"}
-                  </Text>
-                  <Text style={[styles.staffMeta, isDarkMode && styles.muted]}>
-                    {item.platform && item.platform !== "unknown" ? `${item.platform} · ` : ""}
-                    {formatWhen(item.createdAt)}
-                  </Text>
-                </View>
-                {item.success && shared && item.displayName && (
-                  <TouchableOpacity
-                    hitSlop={8}
-                    onPress={() => {
-                      const name = item.displayName || "Staff";
-                      Alert.alert(
-                        `Remove ${name}`,
-                        `${name} will be signed out and will need to log in again.`,
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Remove",
-                            style: "destructive",
-                            onPress: async () => {
-                              try {
-                                await signOutPartnerStaff(shared._id, name);
-                                await load();
-                              } catch (error: any) {
-                                Alert.alert("Error", staffApiError(error, "Could not sign out"));
-                              }
-                            }
-                          }
-                        ]
-                      );
-                    }}
-                  >
-                    <Text style={styles.removeText}>Remove</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              <Text style={[styles.staffName, isDarkMode && styles.text]}>
+                {item.displayName || "Staff"} · {item.success ? item.event.replace("_", " ") : "failed login"}
+              </Text>
+              <Text style={[styles.staffMeta, isDarkMode && styles.muted]}>
+                {item.platform && item.platform !== "unknown" ? `${item.platform} · ` : ""}
+                {formatWhen(item.createdAt)}
+              </Text>
             </View>
           ))
         )}
@@ -406,8 +372,6 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#FFFFFF", fontWeight: "800" },
   empty: { color: "#5E7897" },
   activityRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E6EEF9" },
-  activityContent: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  removeText: { color: "#F87171", fontWeight: "800", fontSize: 13, paddingLeft: 12 },
   staffName: { fontSize: 14, fontWeight: "800", color: "#2A5580" },
   staffMeta: { marginTop: 3, fontSize: 12, color: "#5E7897" },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 8, marginBottom: 10 },
