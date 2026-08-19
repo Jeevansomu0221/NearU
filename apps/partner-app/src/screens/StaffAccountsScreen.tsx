@@ -16,6 +16,7 @@ import {
   disablePartnerStaff,
   getPartnerStaffLoginActivity,
   listPartnerStaff,
+  signOutPartnerStaff,
   updatePartnerStaff,
   type PartnerStaffAccount,
   type PartnerStaffLoginActivity
@@ -81,6 +82,7 @@ export default function StaffAccountsScreen() {
   const [activity, setActivity] = useState<PartnerStaffLoginActivity[]>([]);
   const [form, setForm] = useState({ username: "", password: "", confirmPassword: "" });
   const [resetForm, setResetForm] = useState({ password: "", confirmPassword: "" });
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
 
   const load = async () => {
     try {
@@ -161,6 +163,7 @@ export default function StaffAccountsScreen() {
       });
       Alert.alert("Updated", "Anyone using the old password will need to sign in again.");
       setResetForm({ password: "", confirmPassword: "" });
+      setShowPasswordReset(false);
       await load();
     } catch (error: any) {
       Alert.alert("Error", staffApiError(error, "Could not reset password"));
@@ -235,31 +238,33 @@ export default function StaffAccountsScreen() {
             <TouchableOpacity onPress={onToggle}>
               <Text style={styles.link}>{shared.isActive ? "Disable" : "Enable"}</Text>
             </TouchableOpacity>
-            {shared.isActive ? (
-              <TouchableOpacity onPress={onDisable}>
-                <Text style={styles.danger}>Sign everyone out</Text>
-              </TouchableOpacity>
-            ) : null}
+            <TouchableOpacity onPress={() => { setShowPasswordReset((v) => !v); if (!showPasswordReset) scrollToEnd(); }}>
+              <Text style={styles.link}>{showPasswordReset ? "Cancel" : "Change password"}</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={[styles.fieldLabel, isDarkMode && styles.muted]}>New password</Text>
-          <PasswordField
-            value={resetForm.password}
-            onChangeText={(password) => setResetForm((current) => ({ ...current, password }))}
-            placeholder="New password"
-            dark={isDarkMode}
-            onFocus={scrollToEnd}
-          />
-          <Text style={[styles.fieldLabel, isDarkMode && styles.muted]}>Confirm password</Text>
-          <PasswordField
-            value={resetForm.confirmPassword}
-            onChangeText={(confirmPassword) => setResetForm((current) => ({ ...current, confirmPassword }))}
-            placeholder="Type it again"
-            dark={isDarkMode}
-            onFocus={scrollToEnd}
-          />
-          <TouchableOpacity onPress={onResetPassword}>
-            <Text style={styles.link}>Save new password</Text>
-          </TouchableOpacity>
+          {showPasswordReset && (
+            <>
+              <Text style={[styles.fieldLabel, isDarkMode && styles.muted]}>New password</Text>
+              <PasswordField
+                value={resetForm.password}
+                onChangeText={(password) => setResetForm((current) => ({ ...current, password }))}
+                placeholder="New password"
+                dark={isDarkMode}
+                onFocus={scrollToEnd}
+              />
+              <Text style={[styles.fieldLabel, isDarkMode && styles.muted]}>Confirm password</Text>
+              <PasswordField
+                value={resetForm.confirmPassword}
+                onChangeText={(confirmPassword) => setResetForm((current) => ({ ...current, confirmPassword }))}
+                placeholder="Type it again"
+                dark={isDarkMode}
+                onFocus={scrollToEnd}
+              />
+              <TouchableOpacity style={styles.primaryButton} onPress={onResetPassword}>
+                <Text style={styles.primaryButtonText}>Save new password</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       ) : (
         <View style={[styles.card, isDarkMode && styles.cardDark]}>
@@ -299,13 +304,45 @@ export default function StaffAccountsScreen() {
         ) : (
           activity.map((item) => (
             <View key={item._id} style={styles.activityRow}>
-              <Text style={[styles.staffName, isDarkMode && styles.text]}>
-                {item.displayName || "Staff"} · {item.success ? item.event.replace("_", " ") : "failed login"}
-              </Text>
-              <Text style={[styles.staffMeta, isDarkMode && styles.muted]}>
-                {item.platform && item.platform !== "unknown" ? `${item.platform} · ` : ""}
-                {formatWhen(item.createdAt)}
-              </Text>
+              <View style={styles.activityContent}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.staffName, isDarkMode && styles.text]}>
+                    {item.displayName || "Staff"} · {item.success ? item.event.replace("_", " ") : "failed login"}
+                  </Text>
+                  <Text style={[styles.staffMeta, isDarkMode && styles.muted]}>
+                    {item.platform && item.platform !== "unknown" ? `${item.platform} · ` : ""}
+                    {formatWhen(item.createdAt)}
+                  </Text>
+                </View>
+                {item.success && shared && (
+                  <TouchableOpacity
+                    hitSlop={8}
+                    onPress={() => {
+                      Alert.alert(
+                        "Remove session",
+                        `This will sign out everyone using the shared login. Continue?`,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Remove",
+                            style: "destructive",
+                            onPress: async () => {
+                              try {
+                                await signOutPartnerStaff(shared._id);
+                                await load();
+                              } catch (error: any) {
+                                Alert.alert("Error", staffApiError(error, "Could not sign out"));
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={styles.removeText}>Remove</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           ))
         )}
@@ -369,6 +406,8 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#FFFFFF", fontWeight: "800" },
   empty: { color: "#5E7897" },
   activityRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E6EEF9" },
+  activityContent: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  removeText: { color: "#F87171", fontWeight: "800", fontSize: 13, paddingLeft: 12 },
   staffName: { fontSize: 14, fontWeight: "800", color: "#2A5580" },
   staffMeta: { marginTop: 3, fontSize: 12, color: "#5E7897" },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 8, marginBottom: 10 },

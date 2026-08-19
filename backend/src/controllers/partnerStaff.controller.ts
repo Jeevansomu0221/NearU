@@ -295,6 +295,27 @@ export const deletePartnerStaff = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const signOutPartnerStaff = async (req: AuthRequest, res: Response) => {
+  try {
+    const partner = await resolveOwnerPartner(req);
+    if (!partner) {
+      return errorResponse(res, "Partner not found", 404);
+    }
+
+    const staff = await PartnerStaff.findOne({ _id: req.params.staffId, partnerId: partner._id });
+    if (!staff) {
+      return errorResponse(res, "Staff account not found", 404);
+    }
+
+    staff.sessionVersion = (staff.sessionVersion || 0) + 1;
+    await staff.save();
+
+    return successResponse(res, publicStaff(staff), "All staff sessions signed out");
+  } catch (error: any) {
+    return errorResponse(res, error.message || "Failed to sign out staff", 500);
+  }
+};
+
 export const getPartnerStaffLoginActivity = async (req: AuthRequest, res: Response) => {
   try {
     const partner = await resolveOwnerPartner(req);

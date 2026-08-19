@@ -32,6 +32,7 @@ import {
   deletePartnerStaff,
   getPartnerStaffLoginActivity,
   listPartnerStaff,
+  signOutPartnerStaff,
   updatePartnerStaff
 } from "../controllers/partnerStaff.controller";
 import { authMiddleware } from "../middlewares/auth.middleware";
@@ -103,6 +104,7 @@ router.put("/profile", authMiddleware, rejectPartnerStaff, updatePartnerProfile)
 router.get("/staff/login-activity", authMiddleware, rejectPartnerStaff, getPartnerStaffLoginActivity);
 router.get("/staff", authMiddleware, rejectPartnerStaff, listPartnerStaff);
 router.post("/staff", authMiddleware, rejectPartnerStaff, createPartnerStaff);
+router.post("/staff/:staffId/sign-out", authMiddleware, rejectPartnerStaff, signOutPartnerStaff);
 router.put("/staff/:staffId", authMiddleware, rejectPartnerStaff, updatePartnerStaff);
 router.delete("/staff/:staffId", authMiddleware, rejectPartnerStaff, deletePartnerStaff);
 
