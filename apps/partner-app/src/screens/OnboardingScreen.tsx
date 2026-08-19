@@ -363,6 +363,8 @@ export default function OnboardingScreen({ navigation }: any) {
     roadStreet: "",
     nearbyPlaces: ""
   });
+  // Lets users choose between a fast GPS pin (current location) and manual address search.
+  const [addressMode, setAddressMode] = useState<"current" | "manual">("current");
   const [documents, setDocuments] = useState<DocumentState>({
     fssaiNumber: "",
     fssaiUrl: "",
@@ -789,12 +791,16 @@ export default function OnboardingScreen({ navigation }: any) {
 
     if (step === 1) {
       if (!form.restaurantName.trim()) return "Enter the shop name as it appears on Google Maps.";
-      if (!address.shopHouseName.trim()) return "Enter the shop or house name";
-      if (!address.floor.trim()) return "Enter the floor or shop location";
-      if (!address.state || !address.city || !address.pincode || !address.area || !address.colony) {
-        return "Please fill all required address fields";
+      if (addressMode === "manual") {
+        if (!address.shopHouseName.trim()) return "Enter the shop or house name";
+        if (!address.floor.trim()) return "Enter the floor or shop location";
+        if (!address.state || !address.city || !address.pincode || !address.area || !address.colony) {
+          return "Please fill all required address fields";
+        }
+        if (!/^\d{6}$/.test(address.pincode)) return "Pincode must be exactly 6 digits";
+      } else {
+        if (!shopLocation) return "Pin your shop location first (use current location) or enter shop address details.";
       }
-      if (!/^\d{6}$/.test(address.pincode)) return "Pincode must be exactly 6 digits";
     }
 
     if (step === 2 && !selectedCategory) {
@@ -899,6 +905,10 @@ export default function OnboardingScreen({ navigation }: any) {
     if (activeStep === 1) {
       if (shopLocation && confirmedAddressKey === addressFingerprint()) {
         setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
+        return;
+      }
+      if (addressMode === "current" && shopLocation) {
+        await openAddressPinConfirm(shopLocation);
         return;
       }
       await openAddressPinConfirm();
@@ -1139,59 +1149,168 @@ export default function OnboardingScreen({ navigation }: any) {
         return (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Shop address</Text>
-            <Text style={styles.sectionHint}>Add the shop or house name and floor so we can pin the exact building on Google Maps.</Text>
+            <Text style={styles.sectionHint}>Pin your shop building. Use current location (fast) or enter address details.</Text>
 
-            <Text style={styles.label}>Shop / house name</Text>
-            <TextInput placeholder="As shown on Google Maps, e.g. Sai Towers" placeholderTextColor="#98A2B3" value={address.shopHouseName} onChangeText={(v) => setAddress({ ...address, shopHouseName: v })} style={styles.input} />
+            <View style={styles.addressModeRow}>
+              <TouchableOpacity
+                style={[styles.addressModeChip, addressMode === "current" && styles.addressModeChipSelected]}
+                onPress={() => setAddressMode("current")}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="location-outline"
+                  size={18}
+                  color={addressMode === "current" ? partnerTheme.colors.card : partnerTheme.colors.primaryDark}
+                />
+                <Text
+                  style={[styles.addressModeChipText, addressMode === "current" && styles.addressModeChipTextSelected]}
+                >
+                  Use current location
+                </Text>
+              </TouchableOpacity>
 
-            <Text style={styles.label}>Floor / location</Text>
-            <TextInput placeholder="Ground floor, 1st floor, Shop 12" placeholderTextColor="#98A2B3" value={address.floor} onChangeText={(v) => setAddress({ ...address, floor: v })} style={styles.input} />
-
-            <Text style={styles.label}>Road or street (optional)</Text>
-            <TextInput placeholder="Only if you know the road name" placeholderTextColor="#98A2B3" value={address.roadStreet} onChangeText={(v) => setAddress({ ...address, roadStreet: v })} style={styles.input} />
-
-            <Text style={styles.label}>State</Text>
-            <TextInput placeholder="State" placeholderTextColor="#98A2B3" value={address.state} onChangeText={(v) => setAddress({ ...address, state: v })} style={styles.input} />
-
-            <Text style={styles.label}>City or town</Text>
-            <TextInput placeholder="City or town" placeholderTextColor="#98A2B3" value={address.city} onChangeText={(v) => setAddress({ ...address, city: v })} style={styles.input} />
-            {filteredCities.length > 0 ? (
-              <View style={styles.suggestionCard}>
-                {filteredCities.map((city) => (
-                  <TouchableOpacity key={city} style={styles.suggestionRow} onPress={() => setAddress({ ...address, city })}>
-                    <Text style={styles.suggestionText}>{city}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-
-            <View style={styles.row}>
-              <View style={styles.half}>
-                <Text style={styles.label}>Pincode</Text>
-                <TextInput placeholder="6 digits" placeholderTextColor="#98A2B3" value={address.pincode} onChangeText={(v) => setAddress({ ...address, pincode: v })} keyboardType="number-pad" maxLength={6} style={styles.input} />
-              </View>
-              <View style={styles.half}>
-                <Text style={styles.label}>Area</Text>
-                <TextInput placeholder="Area / locality" placeholderTextColor="#98A2B3" value={address.area} onChangeText={(v) => setAddress({ ...address, area: v })} style={styles.input} />
-              </View>
+              <TouchableOpacity
+                style={[styles.addressModeChip, addressMode === "manual" && styles.addressModeChipSelected]}
+                onPress={() => setAddressMode("manual")}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="search-outline"
+                  size={18}
+                  color={addressMode === "manual" ? partnerTheme.colors.card : partnerTheme.colors.primaryDark}
+                />
+                <Text
+                  style={[styles.addressModeChipText, addressMode === "manual" && styles.addressModeChipTextSelected]}
+                >
+                  Enter shop address
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            <Text style={styles.label}>Colony or society</Text>
-            <TextInput placeholder="Colony / society" placeholderTextColor="#98A2B3" value={address.colony} onChangeText={(v) => setAddress({ ...address, colony: v })} style={styles.input} />
+            {addressMode === "current" ? (
+              <>
+                <Text style={styles.helperText}>If you are at the shop, use current location to pin the exact building.</Text>
+                <TouchableOpacity
+                  style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]}
+                  onPress={captureShopLocation}
+                  disabled={capturingLocation || locatingAddress}
+                >
+                  {capturingLocation ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.primaryActionButtonText}>Use current location</Text>
+                  )}
+                </TouchableOpacity>
+                {shopLocation ? (
+                  <View style={styles.locationBadge}>
+                    <Text style={styles.locationBadgeText}>Shop pin confirmed</Text>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <Text style={styles.sectionHint}>Add the shop or house name and floor so we can pin the exact building on Google Maps.</Text>
 
-            <Text style={styles.label}>Nearby places</Text>
-            <TextInput placeholder="Metro station, mall, landmark" placeholderTextColor="#98A2B3" value={address.nearbyPlaces} onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })} style={styles.input} />
+                <Text style={styles.label}>Shop / house name</Text>
+                <TextInput
+                  placeholder="As shown on Google Maps, e.g. Sai Towers"
+                  placeholderTextColor="#98A2B3"
+                  value={address.shopHouseName}
+                  onChangeText={(v) => setAddress({ ...address, shopHouseName: v })}
+                  style={styles.input}
+                />
 
-            <Text style={styles.label}>Shop map pin</Text>
-            <Text style={styles.helperText}>Continue to search Google Maps with your shop/house name, or use current location if you are at the shop.</Text>
-            <TouchableOpacity style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]} onPress={captureShopLocation} disabled={capturingLocation || locatingAddress}>
-              {capturingLocation ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryActionButtonText}>Use current location</Text>}
-            </TouchableOpacity>
-            {shopLocation ? (
-              <View style={styles.locationBadge}>
-                <Text style={styles.locationBadgeText}>Shop pin confirmed</Text>
-              </View>
-            ) : null}
+                <Text style={styles.label}>Floor / location</Text>
+                <TextInput
+                  placeholder="Ground floor, 1st floor, Shop 12"
+                  placeholderTextColor="#98A2B3"
+                  value={address.floor}
+                  onChangeText={(v) => setAddress({ ...address, floor: v })}
+                  style={styles.input}
+                />
+
+                <Text style={styles.label}>Road or street (optional)</Text>
+                <TextInput
+                  placeholder="Only if you know the road name"
+                  placeholderTextColor="#98A2B3"
+                  value={address.roadStreet}
+                  onChangeText={(v) => setAddress({ ...address, roadStreet: v })}
+                  style={styles.input}
+                />
+
+                <Text style={styles.label}>State</Text>
+                <TextInput
+                  placeholder="State"
+                  placeholderTextColor="#98A2B3"
+                  value={address.state}
+                  onChangeText={(v) => setAddress({ ...address, state: v })}
+                  style={styles.input}
+                />
+
+                <Text style={styles.label}>City or town</Text>
+                <TextInput
+                  placeholder="City or town"
+                  placeholderTextColor="#98A2B3"
+                  value={address.city}
+                  onChangeText={(v) => setAddress({ ...address, city: v })}
+                  style={styles.input}
+                />
+                {filteredCities.length > 0 ? (
+                  <View style={styles.suggestionCard}>
+                    {filteredCities.map((city) => (
+                      <TouchableOpacity key={city} style={styles.suggestionRow} onPress={() => setAddress({ ...address, city })}>
+                        <Text style={styles.suggestionText}>{city}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.row}>
+                  <View style={styles.half}>
+                    <Text style={styles.label}>Pincode</Text>
+                    <TextInput
+                      placeholder="6 digits"
+                      placeholderTextColor="#98A2B3"
+                      value={address.pincode}
+                      onChangeText={(v) => setAddress({ ...address, pincode: v })}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      style={styles.input}
+                    />
+                  </View>
+                  <View style={styles.half}>
+                    <Text style={styles.label}>Area</Text>
+                    <TextInput
+                      placeholder="Area / locality"
+                      placeholderTextColor="#98A2B3"
+                      value={address.area}
+                      onChangeText={(v) => setAddress({ ...address, area: v })}
+                      style={styles.input}
+                    />
+                  </View>
+                </View>
+
+                <Text style={styles.label}>Colony or society</Text>
+                <TextInput
+                  placeholder="Colony / society"
+                  placeholderTextColor="#98A2B3"
+                  value={address.colony}
+                  onChangeText={(v) => setAddress({ ...address, colony: v })}
+                  style={styles.input}
+                />
+
+                <Text style={styles.label}>Nearby places</Text>
+                <TextInput
+                  placeholder="Metro station, mall, landmark"
+                  placeholderTextColor="#98A2B3"
+                  value={address.nearbyPlaces}
+                  onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })}
+                  style={styles.input}
+                />
+
+                <Text style={styles.helperText}>Continue to search Google Maps with your shop/house name.</Text>
+              </>
+            )}
           </View>
         );
 
@@ -1687,6 +1806,36 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: "row"
+  },
+  addressModeRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12
+  },
+  addressModeChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: partnerTheme.colors.surface,
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+  },
+  addressModeChipSelected: {
+    backgroundColor: partnerTheme.colors.primary,
+    borderColor: partnerTheme.colors.primary
+  },
+  addressModeChipText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: partnerTheme.colors.primaryDark
+  },
+  addressModeChipTextSelected: {
+    color: partnerTheme.colors.card
   },
   half: {
     flex: 1,
