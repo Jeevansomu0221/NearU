@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  PanResponder,
   Platform,
   StyleSheet,
   Text,
@@ -51,8 +52,40 @@ export default function NewOrderBanner({
 }: Props) {
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(-220)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
   const [prepTimeMinutes, setPrepTimeMinutes] = useState(defaultPrepTimeMinutes);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_evt, gestureState) => {
+        // Only steal the gesture if the user is clearly swiping horizontally.
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 12;
+      },
+      onPanResponderMove: (_evt, gestureState) => {
+        translateX.setValue(gestureState.dx);
+      },
+      onPanResponderRelease: (_evt, gestureState) => {
+        const shouldDismiss = Math.abs(gestureState.dx) > 120 && Math.abs(gestureState.dy) < 120;
+        if (shouldDismiss) {
+          const toValue = gestureState.dx > 0 ? 320 : -320;
+          Animated.timing(translateX, {
+            toValue,
+            duration: 160,
+            useNativeDriver: true
+          }).start(() => {
+            translateX.setValue(0);
+            onDismiss();
+          });
+        } else {
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true
+          }).start();
+        }
+      }
+    })
+  ).current;
 
   useEffect(() => {
     if (visible) {
@@ -114,8 +147,9 @@ export default function NewOrderBanner({
     <Animated.View
       style={[
         styles.wrapper,
-        { paddingTop: insets.top + 8, transform: [{ translateY }] }
+        { paddingTop: insets.top + 8, transform: [{ translateY }, { translateX }] }
       ]}
+      {...panResponder.panHandlers}
     >
       <View style={styles.card}>
         <View style={styles.topRow}>
