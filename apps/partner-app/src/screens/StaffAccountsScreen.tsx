@@ -83,6 +83,13 @@ export default function StaffAccountsScreen() {
   const [form, setForm] = useState({ username: "", password: "", confirmPassword: "" });
   const [resetForm, setResetForm] = useState({ password: "", confirmPassword: "" });
   const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const scrollToEnd = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 300);
+  };
 
   const load = async () => {
     try {
@@ -197,14 +204,6 @@ export default function StaffAccountsScreen() {
       </View>
     );
   }
-
-  const scrollRef = useRef<ScrollView>(null);
-
-  const scrollToEnd = () => {
-    setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 300);
-  };
 
   return (
     <KeyboardAvoidingView
