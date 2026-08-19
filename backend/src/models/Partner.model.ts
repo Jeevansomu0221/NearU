@@ -103,6 +103,11 @@ const PartnerSchema = new Schema(
         default: "",
         trim: true
       },
+      town: {
+        type: String,
+        default: "",
+        trim: true
+      },
       // Google Maps link is optional. Partners can either paste a maps share
       // link (we'll parse lat/lng out of it) or use the in-app "Use my shop
       // location" button which sends coordinates directly.
@@ -292,7 +297,6 @@ const PartnerSchema = new Schema(
       autoAcceptOrders: { type: Boolean, default: false },
       estimatedPrepTime: { type: Number, default: 20, min: 1 },
       deliveryMode: { type: String, enum: ["self", "platform"], default: "platform" },
-      takeawayAvailable: { type: Boolean, default: true },
       packagingNote: { type: String, default: "" },
       selfDeliveryPartners: {
         type: [

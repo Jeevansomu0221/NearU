@@ -26,6 +26,7 @@ import ProfileScreen from "../screens/ProfileScreen";
 import WelcomeApprovedScreen from "../screens/WelcomeApprovedScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import StaffAccountsScreen from "../screens/StaffAccountsScreen";
 import AccountDeletionReviewScreen from "../screens/AccountDeletionReviewScreen";
 import PaymentHistoryScreen from "../screens/PaymentHistoryScreen";
 import ReviewsScreen from "../screens/ReviewsScreen";
@@ -266,6 +267,11 @@ export default function AppNavigator() {
         name="Settings" 
         component={SettingsScreen} 
         options={{ title: "Settings" }}
+      />
+      <Stack.Screen
+        name="StaffAccounts"
+        component={StaffAccountsScreen}
+        options={{ title: "Staff logins" }}
       />
       <Stack.Screen 
         name="PaymentHistory" 

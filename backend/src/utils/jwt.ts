@@ -8,6 +8,9 @@ export interface AccessTokenPayload {
   name: string;
   partnerId?: string | null;
   deliveryPartnerId?: string | null;
+  staffId?: string | null;
+  actorType?: "owner" | "staff";
+  operatorName?: string;
   sessionVersion: number;
   type: "access";
 }
@@ -16,6 +19,9 @@ export interface RefreshTokenPayload {
   id: string;
   role?: string;
   sessionVersion: number;
+  staffId?: string | null;
+  actorType?: "owner" | "staff";
+  operatorName?: string;
   type: "refresh";
 }
 

@@ -62,6 +62,58 @@ export const getMyStatus = () =>
 export const getPartnerWallet = () =>
   api.get<{ success: boolean; data?: PartnerWallet; message?: string }>("/partners/wallet");
 
+export type PartnerStaffAccount = {
+  _id: string;
+  username: string;
+  displayName: string;
+  isActive: boolean;
+  lastLoginAt?: string | null;
+  lastLoginPlatform?: "web" | "app" | "unknown";
+  lastOperatorName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type PartnerStaffLoginActivity = {
+  _id: string;
+  staffId: string;
+  username: string;
+  displayName?: string;
+  event: "login" | "logout" | "failed_login";
+  success: boolean;
+  ip?: string;
+  userAgent?: string;
+  platform?: "web" | "app" | "unknown";
+  message?: string;
+  createdAt: string;
+};
+
+export const listPartnerStaff = () =>
+  api.get<{ success: boolean; data?: PartnerStaffAccount[]; message?: string }>("/partner-staff");
+
+export const createPartnerStaff = (payload: {
+  username: string;
+  password: string;
+  confirmPassword?: string;
+  displayName?: string;
+}) => api.post<{ success: boolean; data?: PartnerStaffAccount; message?: string }>("/partner-staff", payload);
+
+export const updatePartnerStaff = (
+  staffId: string,
+  payload: { isActive?: boolean; password?: string; confirmPassword?: string }
+) => api.put<{ success: boolean; data?: PartnerStaffAccount; message?: string }>(`/partner-staff/${staffId}`, payload);
+
+export const disablePartnerStaff = (staffId: string) =>
+  api.delete<{ success: boolean; data?: PartnerStaffAccount; message?: string }>(`/partner-staff/${staffId}`);
+
+export const getPartnerStaffLoginActivity = (params?: { staffId?: string; page?: number; limit?: number }) =>
+  api.get<{
+    success: boolean;
+    data?: PartnerStaffLoginActivity[];
+    message?: string;
+    pagination?: { page: number; limit: number; total: number; hasMore: boolean };
+  }>("/partner-staff/login-activity", { params });
+
 export type PartnerOrderReview = {
   _id: string;
   orderId: string;

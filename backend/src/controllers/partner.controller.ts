@@ -12,6 +12,7 @@ import MenuItem from "../models/MenuItem.model";
 import { readPartnerKycFromUser } from "./partnerKyc.controller";
 import { resolveAddressCoordinates } from "../services/geocoding.service";
 import { getPublicOrderId } from "../utils/publicOrderId";
+import PartnerStaff from "../models/PartnerStaff.model";
 
 // Define AuthRequest interface
 interface AuthRequest extends Request {
@@ -19,7 +20,11 @@ interface AuthRequest extends Request {
     id: string;
     phone: string;
     role: string;
+    name?: string;
     partnerId?: string;
+    staffId?: string | null;
+    actorType?: "owner" | "staff";
+    operatorName?: string;
   };
 }
 
@@ -168,7 +173,38 @@ const normalizeSelfDeliveryPartners = async (value: unknown) => {
   return normalized;
 };
 
+const isStaffActor = (user?: AuthRequest["user"]) =>
+  Boolean(user?.actorType === "staff" || user?.staffId);
+
+const buildPartnerActor = (user?: AuthRequest["user"]) => {
+  if (isStaffActor(user)) {
+    return {
+      type: "staff" as const,
+      staffId: user?.staffId || user?.id || null,
+      displayName: user?.operatorName || user?.name || "",
+      operatorName: user?.operatorName || user?.name || "",
+      username: ""
+    };
+  }
+  return {
+    type: "owner" as const,
+    staffId: null,
+    displayName: user?.name || "",
+    operatorName: "",
+    username: ""
+  };
+};
+
 const resolvePartnerForAuth = async (authReq: AuthRequest) => {
+  if (authReq.user?.partnerId && toObjectId(authReq.user.partnerId)) {
+    const partnerByToken = await Partner.findById(authReq.user.partnerId);
+    if (partnerByToken) return partnerByToken;
+  }
+
+  if (isStaffActor(authReq.user)) {
+    return null;
+  }
+
   const objectId = toObjectId(authReq.user?.id);
   if (!objectId) return null;
 
@@ -265,6 +301,7 @@ const sanitizeOnboardingDraft = (draft: any) => {
       shopHouseName: String(safeAddress.shopHouseName || ""),
       floor: String(safeAddress.floor || ""),
       state: String(safeAddress.state || ""),
+      town: String(safeAddress.town || ""),
       city: String(safeAddress.city || ""),
       pincode: String(safeAddress.pincode || ""),
       area: String(safeAddress.area || ""),
@@ -313,7 +350,6 @@ const sanitizeOnboardingDraft = (draft: any) => {
         ? safeOperations.weeklyHolidays.map((day: unknown) => String(day || "")).filter(Boolean)
         : [],
       deliveryMode: safeOperations.deliveryMode === "self" ? "self" : "platform",
-      takeawayAvailable: safeOperations.takeawayAvailable !== false,
       packagingNote: String(safeOperations.packagingNote || "")
     },
     menuDraft: sanitizeMenuDraft(draft.menuDraft),
@@ -441,6 +477,10 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     } = req.body;
 
     console.log("📝 Submitting partner profile for phone:", phone);
+  console.log("📝 Onboard docs fssai:", {
+    fssaiNumber: documents?.fssaiNumber,
+    fssaiUrl: documents?.fssaiUrl
+  });
 
     // Validate required address fields
     if (!addressData) {
@@ -453,6 +493,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     const {
       state,
       city,
+      town,
       pincode,
       area,
       colony,
@@ -518,14 +559,12 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
           shopHouseName,
           streetRoadName: roadStreet,
           buildingApartmentName: shopHouseName,
+          colony,
           area,
           city,
           state,
           pincode,
-          landmark: [colony, Array.isArray(nearbyPlaces) ? nearbyPlaces.filter(Boolean).join(", ") : String(nearbyPlaces || "")]
-            .map((value) => String(value || "").trim())
-            .filter(Boolean)
-            .join(", ")
+          landmark: Array.isArray(nearbyPlaces) ? nearbyPlaces.filter(Boolean).join(", ") : String(nearbyPlaces || "")
         });
         if (geocodedPin) {
           resolvedCoordinates = [geocodedPin.longitude, geocodedPin.latitude];
@@ -586,6 +625,8 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     if (fssaiVerified) {
       normalizedDocs.fssaiNumber = firstString(draftKyc?.fssaiNumber, normalizedDocs.fssaiNumber);
       normalizedDocs.fssaiUrl = normalizedDocs.fssaiUrl || "eko-fssai-verified";
+    } else {
+      normalizedDocs.fssaiNumber = "";
     }
     if (gstVerified) {
       normalizedDocs.gstNumber = firstString(draftKyc?.gstNumber, normalizedDocs.gstNumber).toUpperCase();
@@ -680,7 +721,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       ? operations.weeklyHolidays.map((day: unknown) => String(day || "")).filter(Boolean)
       : [];
     const normalizedDeliveryMode = operations?.deliveryMode === "self" ? "self" : "platform";
-    const normalizedTakeaway = operations?.takeawayAvailable !== false;
     const normalizedPackagingNote = firstString(operations?.packagingNote, normalizedDocs.operatingHoursNote);
     const normalizedShopImageUrl = firstString(media?.shopImageUrl);
     const normalizedBannerImageUrl = firstString(media?.bannerImageUrl);
@@ -704,6 +744,7 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
         floor: String(floor || "").trim(),
         state: state.trim(),
         city: city.trim(),
+        town: String(town || "").trim(),
         pincode: pincode.trim(),
         area: area.trim(),
         colony: colony.trim(),
@@ -771,7 +812,6 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
       },
       settings: {
         deliveryMode: normalizedDeliveryMode,
-        takeawayAvailable: normalizedTakeaway,
         packagingNote: normalizedPackagingNote
       },
       status: "PENDING",
@@ -1043,26 +1083,31 @@ export const getMyStatus = async (req: Request, res: Response) => {
     const userId = authReq.user?.id;
     const userPhone = authReq.user?.phone;
     
-    if (!userId || !userPhone) {
+    if (!userId) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized - missing user info"
       });
     }
-    
+
     let partner = null;
-    
+
+    if (authReq.user?.partnerId && toObjectId(authReq.user.partnerId)) {
+      partner = await Partner.findById(authReq.user.partnerId)
+        .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason suspensionType suspendedUntil suspendedAt userId category createdAt documents.submittedAt");
+    }
+
     const objectId = toObjectId(userId);
-    if (objectId) {
+    if (!partner && objectId && !isStaffActor(authReq.user)) {
       partner = await Partner.findOne({ userId: objectId })
         .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason suspensionType suspendedUntil suspendedAt userId category createdAt documents.submittedAt");
     }
-    
-    if (!partner && userPhone) {
+
+    if (!partner && userPhone && !isStaffActor(authReq.user)) {
       partner = await Partner.findOne({ phone: userPhone })
         .select("status hasCompletedSetup menuItemsCount _id restaurantName ownerName phone shopName isOpen rejectionReason suspensionType suspendedUntil suspendedAt userId category createdAt documents.submittedAt");
     }
-    
+
     if (!partner) {
       return res.status(404).json({
         success: false,
@@ -1076,15 +1121,42 @@ export const getMyStatus = async (req: Request, res: Response) => {
         console.error("Failed to notify partner reinstatement:", error);
       });
     }
-    
-    if (objectId && !partner.userId) {
+
+    if (objectId && !partner.userId && !isStaffActor(authReq.user)) {
       partner.userId = objectId;
       await partner.save();
     }
-    
+
+    const partnerData = typeof partner.toObject === "function" ? partner.toObject() : partner;
+    const actor = buildPartnerActor(authReq.user);
+    if (actor.type === "staff" && actor.staffId) {
+      const staff = await PartnerStaff.findById(actor.staffId).select("username").lean();
+      if (staff) {
+        actor.username = staff.username;
+      }
+    }
+
+    let kitchenStaff = null;
+    if (!isStaffActor(authReq.user)) {
+      const shared = await PartnerStaff.findOne({ partnerId: partner._id }).sort({ createdAt: 1 }).lean();
+      if (shared) {
+        kitchenStaff = {
+          username: shared.username,
+          isActive: shared.isActive !== false,
+          lastOperatorName: shared.lastOperatorName || "",
+          lastLoginAt: shared.lastLoginAt || null,
+          lastLoginPlatform: shared.lastLoginPlatform || "unknown"
+        };
+      }
+    }
+
     res.json({
       success: true,
-      data: partner
+      data: {
+        ...partnerData,
+        actor,
+        kitchenStaff
+      }
     });
   } catch (error: any) {
     console.error("Get partner status error:", error);
@@ -1539,10 +1611,30 @@ export const getPartnerProfile = async (req: Request, res: Response) => {
     }
     
     console.log("✅ Found partner profile:", partner._id);
+
+    const partnerData = partner.toObject();
+    if (isStaffActor(authReq.user) && partnerData.documents) {
+      partnerData.documents = {
+        ...partnerData.documents,
+        aadhaarNumber: undefined,
+        panNumber: undefined,
+        gstNumber: undefined,
+        bankAccountNumber: undefined,
+        bankIfsc: undefined,
+        bankAccountHolderName: undefined,
+        aadhaarFrontUrl: undefined,
+        aadhaarBackUrl: undefined,
+        panFrontUrl: undefined,
+        bankProofUrl: undefined
+      };
+    }
     
     return res.json({
       success: true,
-      data: partner.toObject()
+      data: {
+        ...partnerData,
+        actor: buildPartnerActor(authReq.user)
+      }
     });
   } catch (error: any) {
     console.error("❌ Error getting partner profile:", error);

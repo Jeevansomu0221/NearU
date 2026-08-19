@@ -1,8 +1,10 @@
 import { Response } from "express";
 import User from "../models/User.model";
+import PartnerStaff from "../models/PartnerStaff.model";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { successResponse, errorResponse } from "../utils/response";
 import { NotificationApp } from "../services/notification.service";
+import { isPartnerStaffActor } from "../middlewares/partnerStaff.middleware";
 
 const VALID_APPS = new Set<NotificationApp>(["customer", "partner", "delivery"]);
 const VALID_PLATFORMS = new Set(["ios", "android", "web", "unknown"]);
@@ -34,6 +36,50 @@ export const registerNotificationToken = async (req: AuthRequest, res: Response)
 
     if (!app) {
       return errorResponse(res, "Valid app is required", 400);
+    }
+
+    if (isPartnerStaffActor(req.user)) {
+      await PartnerStaff.updateMany(
+        { "notificationTokens.token": token },
+        { $pull: { notificationTokens: { token } } }
+      );
+      await User.updateMany(
+        { "notificationTokens.token": token },
+        { $pull: { notificationTokens: { token } } }
+      );
+
+      const staffId = req.user.staffId || req.user.id;
+      const tokenUpdate: Record<string, unknown> = {
+        "notificationTokens.$.enabled": true,
+        "notificationTokens.$.platform": platform,
+        "notificationTokens.$.lastSeenAt": new Date(),
+        "notificationTokens.$.disabledAt": null
+      };
+      if (deviceId) {
+        tokenUpdate["notificationTokens.$.deviceId"] = deviceId;
+      }
+
+      const updateExisting = await PartnerStaff.updateOne(
+        { _id: staffId, notificationTokens: { $elemMatch: { token, app } } },
+        { $set: tokenUpdate }
+      );
+
+      if (updateExisting.matchedCount === 0) {
+        await PartnerStaff.findByIdAndUpdate(staffId, {
+          $push: {
+            notificationTokens: {
+              token,
+              app: "partner",
+              platform,
+              deviceId,
+              enabled: true,
+              lastSeenAt: new Date()
+            }
+          }
+        });
+      }
+
+      return successResponse(res, { app, platform }, "Notification token registered");
     }
 
     await User.updateMany(
@@ -98,6 +144,13 @@ export const unregisterNotificationToken = async (req: AuthRequest, res: Respons
     if (token) pullFilter.token = token;
     if (app) pullFilter.app = app;
     if (deviceId) pullFilter.deviceId = deviceId;
+
+    if (isPartnerStaffActor(req.user)) {
+      await PartnerStaff.findByIdAndUpdate(req.user.staffId || req.user.id, {
+        $pull: { notificationTokens: pullFilter }
+      });
+      return successResponse(res, null, "Notification token unregistered");
+    }
 
     await User.findByIdAndUpdate(req.user.id, {
       $pull: { notificationTokens: pullFilter },

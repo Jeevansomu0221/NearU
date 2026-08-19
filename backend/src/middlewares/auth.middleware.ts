@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import User from "../models/User.model";
+import PartnerStaff from "../models/PartnerStaff.model";
 import { isRoleDeletedForApp } from "../config/roles";
 import { verifyAccessToken } from "../utils/jwt";
 
@@ -11,6 +12,9 @@ export interface AuthRequest extends Request {
     name: string;
     partnerId?: string | null;
     deliveryPartnerId?: string | null;
+    staffId?: string | null;
+    actorType?: "owner" | "staff";
+    operatorName?: string;
     sessionVersion: number;
   };
 }
@@ -32,10 +36,45 @@ export const authMiddleware = async (
 
     const token = authHeader.split(" ")[1];
     const decoded = verifyAccessToken(token);
+    const isStaffToken = decoded.actorType === "staff" || Boolean(decoded.staffId);
 
     const isDeletionStatusRead =
       req.method === "GET" &&
       (req.path === "/me/deletion-request" || req.originalUrl?.includes("/me/deletion-request"));
+
+    if (isStaffToken) {
+      const staff = await PartnerStaff.findById(decoded.staffId || decoded.id)
+        .select("isActive sessionVersion partnerId displayName username")
+        .lean();
+
+      if (!staff || staff.isActive === false) {
+        return res.status(401).json({
+          success: false,
+          message: "Staff account is inactive"
+        });
+      }
+
+      if ((staff.sessionVersion || 0) !== decoded.sessionVersion) {
+        return res.status(401).json({
+          success: false,
+          message: "Session expired. Please log in again."
+        });
+      }
+
+      req.user = {
+        id: String(staff._id),
+        phone: decoded.phone,
+        role: decoded.role,
+        name: decoded.operatorName || decoded.name || staff.displayName,
+        partnerId: staff.partnerId?.toString() || decoded.partnerId,
+        deliveryPartnerId: null,
+        staffId: String(staff._id),
+        actorType: "staff",
+        operatorName: decoded.operatorName || decoded.name || "",
+        sessionVersion: staff.sessionVersion || 0
+      };
+      return next();
+    }
 
     if (isDeletionStatusRead) {
       req.user = {
@@ -45,6 +84,8 @@ export const authMiddleware = async (
         name: decoded.name,
         partnerId: decoded.partnerId,
         deliveryPartnerId: decoded.deliveryPartnerId,
+        staffId: decoded.staffId || null,
+        actorType: decoded.actorType || "owner",
         sessionVersion: decoded.sessionVersion
       };
       return next();
@@ -80,6 +121,8 @@ export const authMiddleware = async (
       name: decoded.name,
       partnerId: decoded.partnerId,
       deliveryPartnerId: decoded.deliveryPartnerId,
+      staffId: decoded.staffId || null,
+      actorType: decoded.actorType || "owner",
       sessionVersion: decoded.sessionVersion
     };
 

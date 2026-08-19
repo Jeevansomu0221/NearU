@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import User from "../models/User.model";
 import Partner from "../models/Partner.model";
 import DeliveryPartner from "../models/DeliveryPartner.model";
+import PartnerStaff from "../models/PartnerStaff.model";
 import { OTPService } from "../services/otp.service";
 import { verifyFirebasePhoneToken } from "../services/firebaseAuth.service";
 import { successResponse, errorResponse } from "../utils/response";
@@ -11,6 +12,7 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 import { isRoleDeletedForApp, ROLES } from "../config/roles";
 import { reactivateUserAppRole } from "../services/accountDeletion.service";
 import { config } from "../config/env";
+import { buildStaffTokens, getRequestClientMeta, isPartnerStaffActor, recordStaffActivity } from "./partnerStaff.controller";
 
 const phoneRegex = /^[0-9]{10}$/;
 const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD || "";
@@ -81,6 +83,7 @@ const buildTokens = async (user: any, requestedRole?: string) => {
     name: user.name,
     partnerId,
     deliveryPartnerId,
+    actorType: tokenRole === ROLES.PARTNER ? "owner" : undefined,
     sessionVersion
   });
   const refreshToken = generateRefreshToken({
@@ -322,6 +325,26 @@ export const refreshToken = async (req: Request, res: Response) => {
     }
 
     const decoded = verifyRefreshToken(refreshToken);
+
+    if (decoded.actorType === "staff" || decoded.staffId) {
+      const staff = await PartnerStaff.findById(decoded.staffId || decoded.id).select("+passwordHash");
+      if (!staff || staff.isActive === false) {
+        return errorResponse(res, "Staff account is inactive", 401);
+      }
+      if ((staff.sessionVersion || 0) !== decoded.sessionVersion) {
+        return errorResponse(res, "Refresh token expired", 401);
+      }
+      const partner = await Partner.findById(staff.partnerId);
+      if (!partner) {
+        return errorResponse(res, "Restaurant not found", 404);
+      }
+      const tokens = buildStaffTokens(staff, partner, decoded.operatorName || staff.lastOperatorName || "");
+      return successResponse(res, {
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken
+      }, "Token refreshed");
+    }
+
     const user = await User.findById(decoded.id);
 
     if (!user || !user.isActive) {
@@ -404,6 +427,34 @@ export const logout = async (req: AuthRequest, res: Response) => {
     }
 
     const notificationToken = typeof req.body?.notificationToken === "string" ? req.body.notificationToken.trim() : "";
+    const meta = getRequestClientMeta(req);
+
+    if (isPartnerStaffActor(req.user)) {
+      const staff = await PartnerStaff.findById(req.user.staffId || req.user.id);
+      if (staff) {
+        if (!config.allowMultiDeviceSessions) {
+          staff.sessionVersion = (staff.sessionVersion || 0) + 1;
+        }
+        if (notificationToken) {
+          staff.set(
+            "notificationTokens",
+            (staff.notificationTokens || []).filter((entry) => entry.token !== notificationToken)
+          );
+        }
+        await staff.save();
+        await recordStaffActivity({
+          partnerId: staff.partnerId,
+          staffId: staff._id,
+          username: staff.username,
+          displayName: req.user.operatorName || req.user.name || staff.displayName,
+          event: "logout",
+          success: true,
+          ...meta,
+          message: `${req.user.operatorName || req.user.name || "Staff"} signed out`
+        });
+      }
+      return successResponse(res, null, "Logged out successfully");
+    }
 
     await User.findByIdAndUpdate(req.user.id, {
       ...(config.allowMultiDeviceSessions

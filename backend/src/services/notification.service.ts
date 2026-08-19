@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import DeliveryPartner from "../models/DeliveryPartner.model";
 import Order from "../models/Order.model";
 import Partner from "../models/Partner.model";
+import PartnerStaff from "../models/PartnerStaff.model";
 import User from "../models/User.model";
 import { getFirebaseApp } from "./firebaseAuth.service";
 import { getRiderOrderEarnings } from "./payout.service";
@@ -21,6 +22,7 @@ type SendOptions = {
   body: string;
   data?: NotificationData;
   app?: NotificationApp;
+  extraTokens?: string[];
 };
 
 const CUSTOMER_ORDER_COPY: Record<string, { title: string; body: string }> = {
@@ -205,6 +207,8 @@ const formatAddressForNotification = (address: any) => {
   return truncate(
     compactStrings([
       address.flatNo,
+      address.shopHouseName,
+      address.floor,
       address.apartment,
       address.roadStreet,
       address.colony,
@@ -289,6 +293,26 @@ const getEnabledTokensForUsers = async (userIds: string[], app?: NotificationApp
   return Array.from(new Set(tokens));
 };
 
+const getEnabledTokensForPartnerStaff = async (partnerId?: unknown) => {
+  const id = idString(partnerId);
+  if (!id || !mongoose.Types.ObjectId.isValid(id)) return [];
+
+  const staffMembers = await PartnerStaff.find({
+    partnerId: new mongoose.Types.ObjectId(id),
+    isActive: true
+  })
+    .select("notificationTokens")
+    .lean();
+
+  const tokens = staffMembers.flatMap((staff: any) =>
+    (Array.isArray(staff.notificationTokens) ? staff.notificationTokens : [])
+      .filter((entry: any) => entry?.enabled !== false && entry?.token)
+      .map((entry: any) => String(entry.token))
+  );
+
+  return Array.from(new Set(tokens));
+};
+
 const disableInvalidTokens = async (tokens: string[]) => {
   const uniqueTokens = Array.from(new Set(tokens.filter(Boolean)));
   if (!uniqueTokens.length) return;
@@ -303,12 +327,27 @@ const disableInvalidTokens = async (tokens: string[]) => {
     },
     { arrayFilters: [{ "token.token": { $in: uniqueTokens } }] }
   );
+  await PartnerStaff.updateMany(
+    { "notificationTokens.token": { $in: uniqueTokens } },
+    {
+      $set: {
+        "notificationTokens.$[token].enabled": false,
+        "notificationTokens.$[token].disabledAt": new Date()
+      }
+    },
+    { arrayFilters: [{ "token.token": { $in: uniqueTokens } }] }
+  );
 };
 
 export const sendNotificationToUsers = async (userIds: any[], options: SendOptions) => {
   const normalizedUserIds = compactIds(userIds);
   try {
-    const tokens = await getEnabledTokensForUsers(normalizedUserIds, options.app);
+    const tokens = Array.from(
+      new Set([
+        ...(await getEnabledTokensForUsers(normalizedUserIds, options.app)),
+        ...(Array.isArray(options.extraTokens) ? options.extraTokens.filter(Boolean) : [])
+      ])
+    );
     if (!tokens.length) {
       console.warn(
         `[notifications] No enabled ${options.app || "any"} tokens for ${normalizedUserIds.length} user(s); title="${options.title}"`
@@ -381,13 +420,14 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
 export const notifyPartnerNewOrder = async (order: any) => {
   const partner = await Partner.findById(order.partnerId).select("userId restaurantName shopName notifications").lean();
   const partnerUserId = idString((partner as any)?.userId);
-  if (!partnerUserId || (partner as any)?.notifications?.newOrderAlerts === false) return;
+  if ((partner as any)?.notifications?.newOrderAlerts === false) return;
 
   const shopName = (partner as any)?.restaurantName || (partner as any)?.shopName || "your shop";
-  await sendNotificationToUsers([partnerUserId], {
+  await sendNotificationToUsers(partnerUserId ? [partnerUserId] : [], {
     app: "partner",
     title: "New order received",
     body: `Order ${formatPublicOrderId(order._id)} is waiting for acceptance at ${shopName}.`,
+    extraTokens: await getEnabledTokensForPartnerStaff(partner?._id),
     data: {
       type: "NEW_ORDER",
       orderId: idString(order._id),
@@ -599,6 +639,7 @@ export const notifyPartnerDeliveryStatus = async (order: any, status: string) =>
     app: "partner",
     title: titles[status] || "Order update",
     body: `Order ${formatPublicOrderId(order._id)} status changed to ${status}.`,
+    extraTokens: await getEnabledTokensForPartnerStaff((partner as any)?._id || order.partnerId),
     data: {
       type: "ORDER_STATUS",
       orderId: idString(order._id),

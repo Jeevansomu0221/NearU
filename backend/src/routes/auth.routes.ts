@@ -2,6 +2,7 @@ import { Router } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { adminPasswordLogin, getOtpConfig, logout, refreshToken, sendOTP, verifyOTP } from "../controllers/auth.controller";
+import { partnerStaffLogin } from "../controllers/partnerStaff.controller";
 
 const router = Router();
 
@@ -35,6 +36,17 @@ const verifyOtpLimiter = rateLimit({
   }
 });
 
+const staffLoginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many staff login attempts. Please try again later."
+  }
+});
+
 const adminLoginLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 10,
@@ -61,6 +73,7 @@ router.get("/otp-config", getOtpConfig);
 router.post("/send-otp", sendOtpLimiter, sendOTP);
 router.post("/verify-otp", verifyOtpLimiter, verifyOTP);
 router.post("/admin-password-login", adminLoginLimiter, adminPasswordLogin);
+router.post("/partner-staff-login", staffLoginLimiter, partnerStaffLogin);
 router.post("/refresh", refreshTokenLimiter, refreshToken);
 router.post("/logout", authMiddleware, logout);
 
