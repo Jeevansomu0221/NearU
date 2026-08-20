@@ -5,15 +5,12 @@ export const legalEntityName = 'Vyaha Technologies';
 export const gstin = '36DABPC4787C1ZW';
 
 export const registeredOffice = {
-  line1: '302, Balaji Abode, Westend Colony',
-  line2: 'Bandlaguda Jagir',
+  line1: 'Bandlaguda Jagir',
   city: 'Hyderabad',
   state: 'Telangana',
-  pincode: '500091',
-  country: 'India',
 };
 
-export const registeredOfficeFormatted = `${registeredOffice.line1}, ${registeredOffice.line2}, ${registeredOffice.city}, ${registeredOffice.state} ${registeredOffice.pincode}, ${registeredOffice.country}`;
+export const registeredOfficeFormatted = `${registeredOffice.line1}, ${registeredOffice.city}, ${registeredOffice.state}`;
 
 export const operatingCountry = 'India';
 export const serviceAreas = ['Hyderabad'];

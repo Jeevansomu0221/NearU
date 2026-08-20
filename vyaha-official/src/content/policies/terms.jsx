@@ -1007,8 +1007,7 @@ export function TermsContent() {
         <br />
         <strong>Brand:</strong> {businessName}
         <br />
-        <strong>Registered office:</strong> {registeredOffice.line1}, {registeredOffice.line2}, {registeredOffice.city},{' '}
-        {registeredOffice.state} {registeredOffice.pincode}, {registeredOffice.country}
+        <strong>Registered office:</strong> {registeredOffice.line1}, {registeredOffice.city}, {registeredOffice.state}
         <br />
         <strong>GSTIN:</strong> {gstin}
         <br />

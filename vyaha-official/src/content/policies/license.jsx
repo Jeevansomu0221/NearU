@@ -25,7 +25,7 @@ export function LicenseContent() {
         <br />
         <strong>State:</strong> Telangana
         <br />
-        <strong>Registered office:</strong> {registeredOffice.line1}, {registeredOffice.line2}, {registeredOffice.city}, {registeredOffice.state} {registeredOffice.pincode}, {registeredOffice.country}
+        <strong>Registered office:</strong> {registeredOffice.line1}, {registeredOffice.city}, {registeredOffice.state}
       </PolicyNote>
 
       <PolicyH2>Service Area</PolicyH2>
