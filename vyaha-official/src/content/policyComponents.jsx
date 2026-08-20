@@ -7,6 +7,8 @@ import {
   legalEntity,
   legalEntityName,
   operatingCountry,
+  playStoreApps,
+  playStoreBadgeUrl,
   serviceAreasFormatted,
 } from './legalConfig';
 
@@ -17,6 +19,7 @@ export const appBrands = [
     label: 'Vyaha Customer',
     alt: 'Vyaha customer app logo',
     cardClass: 'vyaha-card',
+    playStoreUrl: playStoreApps.customer.url,
   },
   {
     id: 'partner',
@@ -24,6 +27,7 @@ export const appBrands = [
     label: 'Vyaha Partner',
     alt: 'Vyaha restaurant partner app logo',
     cardClass: 'partner-card',
+    playStoreUrl: playStoreApps.partner.url,
   },
   {
     id: 'delivery',
@@ -31,8 +35,22 @@ export const appBrands = [
     label: 'Vyaha Delivery',
     alt: 'Vyaha delivery partner app logo',
     cardClass: 'delivery-card',
+    playStoreUrl: playStoreApps.delivery.url,
   },
 ];
+
+export function PlayStoreBadge({ href, appName, className = '' }) {
+  return (
+    <a
+      href={href}
+      className={`play-store-badge ${className}`.trim()}
+      target="_blank"
+      rel="noreferrer noopener"
+    >
+      <img src={playStoreBadgeUrl} alt={`Get ${appName} on Google Play`} />
+    </a>
+  );
+}
 
 export function MailLink({ email }) {
   return <a href={`mailto:${email}`}>{email}</a>;
@@ -111,12 +129,12 @@ export function AppBrandGrid({ compact = false }) {
         <div key={brand.id} className={`app-brand-tile ${brand.cardClass}`}>
           <img src={brand.logo} alt={brand.alt} />
           <span>{brand.label}</span>
+          <PlayStoreBadge href={brand.playStoreUrl} appName={brand.label} />
         </div>
       ))}
     </div>
   );
 }
-
 export function PolicyHubLinks() {
   return (
     <ul className="policy-link-list">

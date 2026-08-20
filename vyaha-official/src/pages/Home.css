@@ -81,6 +81,10 @@
   transform: translateY(-2px);
 }
 
+.home-store-badge--compact img {
+  height: 40px;
+}
+
 .home-reveal {
   opacity: 0;
   transform: translate3d(0, 36px, 0);
@@ -694,15 +698,23 @@
 
 .home-trio__card a {
   align-items: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
   display: flex;
   font-family: 'Figtree', sans-serif;
   font-size: 0.95rem;
   font-weight: 800;
   justify-content: space-between;
-  padding-top: 1rem;
   text-decoration: none;
+}
+
+.home-trio__actions {
+  align-items: flex-start;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: auto;
+  padding-top: 1rem;
 }
 
 .home-trio__card--partner a span {
@@ -844,6 +856,26 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.85rem;
+}
+
+.home-launch__actions--apps {
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.home-launch__app {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.home-launch__app span {
+  color: var(--muted);
+  font-family: 'Syne', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .home-launch__status {

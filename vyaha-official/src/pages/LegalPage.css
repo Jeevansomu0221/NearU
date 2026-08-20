@@ -327,7 +327,7 @@
   text-align: center;
 }
 
-.app-brand-tile img {
+.app-brand-tile > img {
   height: 96px;
   object-fit: contain;
   width: 96px;
@@ -339,6 +339,30 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.play-store-badge {
+  display: inline-block;
+  line-height: 0;
+  text-decoration: none;
+}
+
+.play-store-badge img {
+  display: block;
+  height: 42px;
+  width: auto;
+}
+
+.cta-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 15px 0 30px;
+}
+
+.cta-row .cta-button {
+  margin: 0;
 }
 
 .app-brand-tile.vyaha-card {

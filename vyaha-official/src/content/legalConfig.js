@@ -21,6 +21,32 @@ export const websiteUrl = 'https://www.vyaha.com';
 export const partnerOnboardingUrl = import.meta.env.DEV
   ? 'http://localhost:5175/business/login?mode=register'
   : '/business/login/?mode=register';
+
+/** Official Android apps on Google Play */
+export const playStoreBadgeUrl =
+  'https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg';
+
+export const playStoreApps = {
+  customer: {
+    id: 'com.vyaha.customer',
+    name: 'Vyaha',
+    label: 'Customer app',
+    url: 'https://play.google.com/store/apps/details?id=com.vyaha.customer',
+  },
+  partner: {
+    id: 'com.vyaha.partner',
+    name: 'Vyaha Partner',
+    label: 'Partner app',
+    url: 'https://play.google.com/store/apps/details?id=com.vyaha.partner',
+  },
+  delivery: {
+    id: 'com.vyaha.delivery',
+    name: 'Vyaha Delivery',
+    label: 'Delivery app',
+    url: 'https://play.google.com/store/apps/details?id=com.vyaha.delivery',
+  },
+};
+
 export const supportEmail = 'support@vyaha.com';
 export const privacyEmail = 'privacy@vyaha.com';
 export const securityEmail = 'security@vyaha.com';

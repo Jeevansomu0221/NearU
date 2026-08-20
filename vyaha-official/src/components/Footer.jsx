@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { vyahaLogos } from '../assets/logos';
-import { partnerOnboardingUrl } from '../content/legalConfig';
+import { partnerOnboardingUrl, playStoreApps, playStoreBadgeUrl } from '../content/legalConfig';
 
 const socialLinks = [
   {
@@ -94,9 +94,45 @@ function Footer() {
               ))}
             </div>
             <div className="footer-app-links" style={{ marginTop: '20px' }}>
-              <Link to="/apps" className="store-badge-small" style={{ display: 'block', marginBottom: '10px' }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Vyaha Play Store release information" style={{ width: '120px' }} />
-              </Link>
+              <a
+                href={playStoreApps.customer.url}
+                className="store-badge-small"
+                style={{ display: 'block', marginBottom: '10px' }}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <img
+                  src={playStoreBadgeUrl}
+                  alt={`Get ${playStoreApps.customer.name} on Google Play`}
+                  style={{ width: '120px' }}
+                />
+              </a>
+              <a
+                href={playStoreApps.partner.url}
+                className="store-badge-small"
+                style={{ display: 'block', marginBottom: '10px' }}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <img
+                  src={playStoreBadgeUrl}
+                  alt={`Get ${playStoreApps.partner.name} on Google Play`}
+                  style={{ width: '120px' }}
+                />
+              </a>
+              <a
+                href={playStoreApps.delivery.url}
+                className="store-badge-small"
+                style={{ display: 'block' }}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <img
+                  src={playStoreBadgeUrl}
+                  alt={`Get ${playStoreApps.delivery.name} on Google Play`}
+                  style={{ width: '120px' }}
+                />
+              </a>
             </div>
           </div>
         </div>

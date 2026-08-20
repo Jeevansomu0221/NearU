@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { vyahaLogos } from '../assets/logos';
-import { partnerOnboardingUrl } from '../content/legalConfig';
+import { partnerOnboardingUrl, playStoreApps, playStoreBadgeUrl } from '../content/legalConfig';
 import './Home.css';
 
-const STORE_BADGE =
-  'https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg';
+function PlayStoreLink({ href, appName, className = 'home-store-badge' }) {
+  return (
+    <a href={href} className={className} target="_blank" rel="noreferrer noopener">
+      <img src={playStoreBadgeUrl} alt={`Get ${appName} on Google Play`} />
+    </a>
+  );
+}
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -171,9 +175,7 @@ function Home() {
             Genuine menu prices. Hyperlocal food delivery to our home.
           </p>
           <div className="home-hero__ctas">
-            <Link to="/apps" className="home-store-badge">
-              <img src={STORE_BADGE} alt="Get Vyaha on Google Play" />
-            </Link>
+            <PlayStoreLink href={playStoreApps.customer.url} appName={playStoreApps.customer.name} />
             <a href={partnerOnboardingUrl} className="home-btn home-btn--ghost">
               Partner with Vyaha
             </a>
@@ -233,9 +235,16 @@ function Home() {
                 <li>We send your money within 2 weeks</li>
                 <li>Support on everything you need</li>
               </ul>
-              <a href={partnerOnboardingUrl}>
-                Partner with Vyaha <span aria-hidden="true">→</span>
-              </a>
+              <div className="home-trio__actions">
+                <PlayStoreLink
+                  href={playStoreApps.partner.url}
+                  appName={playStoreApps.partner.name}
+                  className="home-store-badge home-store-badge--compact"
+                />
+                <a href={partnerOnboardingUrl}>
+                  Partner with Vyaha <span aria-hidden="true">→</span>
+                </a>
+              </div>
             </article>
 
             <article className="home-trio__card home-trio__card--customer">
@@ -247,9 +256,13 @@ function Home() {
                 <li>Explore undiscovered shops and restaurants</li>
                 <li>Try different foods from nearby kitchens</li>
               </ul>
-              <Link to="/apps">
-                Explore Customer App <span aria-hidden="true">→</span>
-              </Link>
+              <div className="home-trio__actions">
+                <PlayStoreLink
+                  href={playStoreApps.customer.url}
+                  appName={playStoreApps.customer.name}
+                  className="home-store-badge home-store-badge--compact"
+                />
+              </div>
             </article>
 
             <article className="home-trio__card home-trio__card--delivery">
@@ -261,9 +274,13 @@ function Home() {
                 <li>Your hard work, your money</li>
                 <li>Easy money withdrawal</li>
               </ul>
-              <Link to="/delivery">
-                Start Delivering <span aria-hidden="true">→</span>
-              </Link>
+              <div className="home-trio__actions">
+                <PlayStoreLink
+                  href={playStoreApps.delivery.url}
+                  appName={playStoreApps.delivery.name}
+                  className="home-store-badge home-store-badge--compact"
+                />
+              </div>
             </article>
           </div>
         </section>
@@ -299,27 +316,34 @@ function Home() {
         <section className="home-launch home-reveal" ref={launchRef}>
           <div className="home-launch__panel">
             <div className="home-launch__copy">
-              <p className="home-eyebrow">Coming to Play Store</p>
-              <h2>Vyaha Customer is preparing for release</h2>
+              <p className="home-eyebrow">On Google Play</p>
+              <h2>Download the Vyaha apps</h2>
               <p>
-                Official store links will land here after review approval. For
-                early access or support, reach the Vyaha team directly.
+                Get the customer, restaurant partner, and delivery apps from the
+                Play Store. Use only links from vyaha.com or official Google Play
+                listings.
               </p>
-              <div className="home-launch__actions">
-                <Link to="/apps" className="home-store-badge">
-                  <img src={STORE_BADGE} alt="Vyaha Play Store release information" />
-                </Link>
-                <a href="mailto:support@vyaha.com" className="home-btn home-btn--solid">
-                  Contact support
-                </a>
+              <div className="home-launch__actions home-launch__actions--apps">
+                <div className="home-launch__app">
+                  <span>Customer</span>
+                  <PlayStoreLink href={playStoreApps.customer.url} appName={playStoreApps.customer.name} />
+                </div>
+                <div className="home-launch__app">
+                  <span>Partner</span>
+                  <PlayStoreLink href={playStoreApps.partner.url} appName={playStoreApps.partner.name} />
+                </div>
+                <div className="home-launch__app">
+                  <span>Delivery</span>
+                  <PlayStoreLink href={playStoreApps.delivery.url} appName={playStoreApps.delivery.name} />
+                </div>
               </div>
             </div>
 
-            <div className="home-launch__status" aria-label="Release status">
+            <div className="home-launch__status" aria-label="App availability">
               <span className="home-launch__pulse" />
-              <p>Release status</p>
-              <strong>Android app under review</strong>
-              <span>Use only links from vyaha.com or official stores.</span>
+              <p>Available now</p>
+              <strong>Android apps on Google Play</strong>
+              <span>Customer, Partner, and Delivery — free to download.</span>
             </div>
           </div>
         </section>
