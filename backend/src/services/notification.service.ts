@@ -101,7 +101,7 @@ const formatReadyByClock = (value: unknown) => {
 
 const getActiveSelfDeliveryUserIds = (partner: any): string[] => {
   const settings = partner?.settings || {};
-  if (settings.deliveryMode !== "self") return [];
+  if (settings.deliveryMode !== "self" && settings.deliveryMode !== "self_free") return [];
 
   return (Array.isArray(settings.selfDeliveryPartners) ? settings.selfDeliveryPartners : [])
     .filter((entry: any) => entry?.isActive !== false && entry?.userId)

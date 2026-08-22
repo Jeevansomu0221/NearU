@@ -78,8 +78,12 @@ export const normalizeDraft = (draft: unknown): OnboardingDraft | null => {
                   .map((day) => String(day || ""))
                   .filter(Boolean)
               : [],
-            deliveryMode: (d.operations as Record<string, unknown>).deliveryMode === "self" ? "self" : "platform",
-            takeawayAvailable: (d.operations as Record<string, unknown>).takeawayAvailable !== false,
+            deliveryMode:
+              (d.operations as Record<string, unknown>).deliveryMode === "self_free"
+                ? "self_free"
+                : (d.operations as Record<string, unknown>).deliveryMode === "self"
+                  ? "self"
+                  : "platform",
             packagingNote: String((d.operations as Record<string, unknown>).packagingNote || "")
           }
         : defaultOperations(),

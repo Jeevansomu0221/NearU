@@ -93,8 +93,13 @@ const PARTNER_TIMEOUT_CANCEL_MESSAGE =
   "Sorry, this order was cancelled because the restaurant did not accept it in time. If you paid online, your refund will be completed within today.";
 const DELIVERY_TIMEOUT_CANCEL_MESSAGE =
   "Sorry, no delivery riders were available in time. Your order was cancelled. If you paid online, your refund will be completed within today.";
+const FREE_SELF_DELIVERY_TIMEOUT_CANCEL_MESSAGE =
+  "Sorry, the restaurant's delivery rider did not accept this free-delivery order in time. Your order was cancelled. If you paid online, your refund will be completed within today.";
 const PARTNER_REJECTED_CANCEL_MESSAGE =
   "Sorry, the restaurant could not accept your order. If you paid online, your refund will be completed within today.";
+
+const isSelfDeliveryMode = (mode: unknown) => mode === "self" || mode === "self_free";
+const isFreeSelfDeliveryMode = (mode: unknown) => mode === "self_free";
 
 const resolvePartnerForUser = async (user?: AuthRequest["user"]) => {
   if (!user) return null;
@@ -189,7 +194,7 @@ const idStrings = (values: any[] = []) => values.map((value) => idString(value))
 
 const getActiveSelfDeliveryUserIds = (partner: any): string[] => {
   const settings = partner?.settings || {};
-  if (settings.deliveryMode !== "self") return [];
+  if (!isSelfDeliveryMode(settings.deliveryMode)) return [];
 
   return (Array.isArray(settings.selfDeliveryPartners) ? settings.selfDeliveryPartners : [])
     .filter((entry: any) => entry?.isActive !== false && entry?.userId)
@@ -221,19 +226,28 @@ const getOnlineSelfDeliveryUserIds = async (partner: any): Promise<string[]> => 
 
 const getSelfDeliveryState = (order: any, now = new Date()) => {
   const selfDelivery = order?.selfDelivery || {};
+  const mode = selfDelivery.mode;
   const reservedFor = idStrings(selfDelivery.reservedFor);
   const rejectedBy = new Set(idStrings(selfDelivery.rejectedBy));
   const expiresAt = selfDelivery.expiresAt ? new Date(selfDelivery.expiresAt) : null;
-  const isSelfMode = selfDelivery.mode === "self" && reservedFor.length > 0;
-  const isExpired = !expiresAt || expiresAt.getTime() <= now.getTime();
+  const isSelfMode = isSelfDeliveryMode(mode) && reservedFor.length > 0;
+  const isFreeSelf = isFreeSelfDeliveryMode(mode);
+  const isExpired = Boolean(expiresAt && expiresAt.getTime() <= now.getTime());
   const allReservedRidersRejected = reservedFor.length > 0 && reservedFor.every((id) => rejectedBy.has(id));
-  const fallbackReleased = Boolean(selfDelivery.fallbackReleasedAt) || isExpired || allReservedRidersRejected;
+  // Free self never opens to platform; paid self falls back after timeout / all rejects.
+  const fallbackReleased = isFreeSelf
+    ? false
+    : Boolean(selfDelivery.fallbackReleasedAt) || isExpired || allReservedRidersRejected;
 
   return {
+    mode,
     reservedFor,
     rejectedBy,
     expiresAt,
     isSelfMode,
+    isFreeSelf,
+    isExpired,
+    allReservedRidersRejected,
     fallbackReleased
   };
 };
@@ -275,15 +289,30 @@ const buildDeliveryAcceptVisibilityFilter = (userId: string, now = new Date()) =
 
   return {
     $or: [
-      { "selfDelivery.mode": { $ne: "self" } },
+      { "selfDelivery.mode": { $nin: ["self", "self_free"] } },
       { "selfDelivery.reservedFor": { $size: 0 } },
-      { "selfDelivery.expiresAt": { $lte: now } },
-      { "selfDelivery.fallbackReleasedAt": { $type: "date", $lte: now } },
+      // Paid self only: expired / fallback opens to platform. Free self stays exclusive until cancel.
+      {
+        $and: [
+          { "selfDelivery.mode": "self" },
+          {
+            $or: [
+              { "selfDelivery.expiresAt": { $lte: now } },
+              { "selfDelivery.fallbackReleasedAt": { $type: "date", $lte: now } }
+            ]
+          }
+        ]
+      },
       {
         $and: [
           { "selfDelivery.reservedFor": userObjectId },
           { "selfDelivery.rejectedBy": { $ne: userObjectId } },
-          { "selfDelivery.expiresAt": { $gt: now } }
+          {
+            $or: [
+              { "selfDelivery.expiresAt": { $gt: now } },
+              { "selfDelivery.expiresAt": { $exists: false } }
+            ]
+          }
         ]
       }
     ]
@@ -291,6 +320,33 @@ const buildDeliveryAcceptVisibilityFilter = (userId: string, now = new Date()) =
 };
 
 const configureSelfDeliveryForReadyOrder = async (order: any, partner: any) => {
+  const partnerMode = partner?.settings?.deliveryMode;
+  const expiresAt = new Date(Date.now() + SELF_DELIVERY_ACCEPT_TIMEOUT_MS);
+
+  if (isFreeSelfDeliveryMode(partnerMode)) {
+    const selfDeliveryUserIds = getActiveSelfDeliveryUserIds(partner);
+    order.selfDelivery = {
+      mode: "self_free",
+      reservedFor: selfDeliveryUserIds.map((id) => new mongoose.Types.ObjectId(id)),
+      rejectedBy: [],
+      // Expire immediately if no riders so cancel cron picks it up.
+      expiresAt: selfDeliveryUserIds.length === 0 ? new Date() : expiresAt,
+      fallbackReleasedAt: undefined
+    };
+    return;
+  }
+
+  if (partnerMode !== "self") {
+    order.selfDelivery = {
+      mode: "platform",
+      reservedFor: [],
+      rejectedBy: [],
+      expiresAt: undefined,
+      fallbackReleasedAt: undefined
+    };
+    return;
+  }
+
   const selfDeliveryUserIds = await getOnlineSelfDeliveryUserIds(partner);
 
   if (selfDeliveryUserIds.length === 0) {
@@ -308,7 +364,7 @@ const configureSelfDeliveryForReadyOrder = async (order: any, partner: any) => {
     mode: "self",
     reservedFor: selfDeliveryUserIds.map((id) => new mongoose.Types.ObjectId(id)),
     rejectedBy: [],
-    expiresAt: new Date(Date.now() + SELF_DELIVERY_ACCEPT_TIMEOUT_MS),
+    expiresAt,
     fallbackReleasedAt: undefined
   };
 };
@@ -738,11 +794,14 @@ const calculateDeliveryPricing = async (partner: any, deliveryLocation: GeoPoint
 
   const deliveryDistanceKm = shopToCustomerDistanceKm;
 
+  const deliveryFee =
+    isFreeSelfDeliveryMode(partner?.settings?.deliveryMode) ? 0 : calculateDeliveryFee(deliveryDistanceKm);
+
   return {
     riderToShopDistanceKm: 0,
     shopToCustomerDistanceKm: roundDistance(shopToCustomerDistanceKm),
     deliveryDistanceKm: roundDistance(deliveryDistanceKm),
-    deliveryFee: calculateDeliveryFee(deliveryDistanceKm)
+    deliveryFee
   };
 };
 
@@ -869,7 +928,22 @@ export const cancelStaleUnacceptedOrders = async () => {
       $and: [
         { status: { $in: OPEN_DELIVERY_JOB_STATUSES } },
         buildUnassignedDeliveryFilter(),
-        buildStaleOpenDeliveryJobFilter(deliveryDeadline)
+        buildStaleOpenDeliveryJobFilter(deliveryDeadline),
+        { "selfDelivery.mode": { $ne: "self_free" } }
+      ]
+    };
+
+    const freeSelfDeliveryTimedOutFilter = {
+      $and: [
+        { status: { $in: OPEN_DELIVERY_JOB_STATUSES } },
+        buildUnassignedDeliveryFilter(),
+        { "selfDelivery.mode": "self_free" },
+        {
+          $or: [
+            { "selfDelivery.expiresAt": { $lte: now } },
+            { "selfDelivery.reservedFor": { $size: 0 } }
+          ]
+        }
       ]
     };
 
@@ -920,6 +994,11 @@ export const cancelStaleUnacceptedOrders = async () => {
     };
 
     const autoCancelJobs = [
+      autoCancelByPaymentStatus(
+        freeSelfDeliveryTimedOutFilter,
+        "Shop self-delivery rider did not accept the free-delivery order in time",
+        FREE_SELF_DELIVERY_TIMEOUT_CANCEL_MESSAGE
+      ),
       autoCancelByPaymentStatus(
         deliveryTimedOutFilter,
         "No delivery partner accepted the order in time",
@@ -3058,21 +3137,44 @@ export const rejectDeliveryJob = async (req: AuthRequest, res: Response) => {
 
       rejectionUpdate.$addToSet["selfDelivery.rejectedBy"] = deliveryUserObjectId;
       if (allSelfRidersRejected) {
-        rejectionUpdate.$set = {
-          "selfDelivery.fallbackReleasedAt": now,
-          "selfDelivery.expiresAt": now
-        };
+        if (selfDelivery.isFreeSelf) {
+          // Free self: cancel instead of opening to platform riders.
+          rejectionUpdate.$set = {
+            "selfDelivery.expiresAt": now,
+            status: "CANCELLED",
+            cancellationReason: "Shop self-delivery riders rejected the free-delivery order",
+            customerCancellationMessage: FREE_SELF_DELIVERY_TIMEOUT_CANCEL_MESSAGE,
+            autoCancelledAt: now
+          };
+          if (order.paymentStatus === "PAID") {
+            rejectionUpdate.$set.paymentStatus = "REFUNDED";
+          } else if (["PENDING", "PAYMENT_PENDING_DELIVERY"].includes(order.paymentStatus)) {
+            rejectionUpdate.$set.paymentStatus = "CANCELLED";
+          }
+        } else {
+          rejectionUpdate.$set = {
+            "selfDelivery.fallbackReleasedAt": now,
+            "selfDelivery.expiresAt": now
+          };
+        }
       }
     }
 
-    await Order.updateOne(
+    const updated = await Order.findOneAndUpdate(
       {
         _id: orderId,
         status: { $in: OPEN_DELIVERY_JOB_STATUSES },
         $or: [{ deliveryPartnerId: { $exists: false } }, { deliveryPartnerId: null }]
       },
-      rejectionUpdate
+      rejectionUpdate,
+      { new: true }
     );
+
+    if (updated?.status === "CANCELLED") {
+      void notifyCustomerOrderStatus(updated, "CANCELLED").catch((error) => {
+        console.error(`Failed to notify customer about cancelled free-self order ${orderId}:`, error);
+      });
+    }
 
     return successResponse(res, { orderId }, "Delivery job rejected");
   } catch (err: any) {

@@ -26,7 +26,18 @@ const parseRadiusKm = (value: unknown) => {
 };
 
 const shopListProjection =
-  "_id restaurantName shopName category address isOpen rating ratingCount shopImageUrl openingTime closingTime location";
+  "_id restaurantName shopName category address isOpen rating ratingCount shopImageUrl openingTime closingTime location settings.deliveryMode";
+
+const toShopListItem = (shop: any, distanceKm?: number) => {
+  const { location: _location, settings, ...rest } = shop;
+  return {
+    ...rest,
+    deliveryMode: settings?.deliveryMode === "self_free" || settings?.deliveryMode === "self"
+      ? settings.deliveryMode
+      : settings?.deliveryMode || "platform",
+    ...(typeof distanceKm === "number" ? { distanceKm } : {})
+  };
+};
 
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 
@@ -103,7 +114,7 @@ const mapShopsWithinRadius = (
 
       const { location: _location, ...shopWithoutLocation } = shop;
       return {
-        ...shopWithoutLocation,
+        ...toShopListItem(shopWithoutLocation),
         distanceKm: roundDistanceKm(distanceKm)
       };
     })
@@ -151,6 +162,7 @@ export const getShopsWithImages = async (req: Request, res: Response) => {
               shopImageUrl: 1,
               openingTime: 1,
               closingTime: 1,
+              deliveryMode: { $ifNull: ["$settings.deliveryMode", "platform"] },
               distanceKm: { $round: [{ $divide: ["$distanceMeters", 1000] }, 1] }
             }
           },
@@ -243,7 +255,7 @@ export const getPartnerPublicProfile = async (req: Request, res: Response) => {
       hasCompletedSetup: true
     })
       .select(
-        "restaurantName shopName category address isOpen rating ratingCount shopImageUrl openingTime closingTime"
+        "restaurantName shopName category address isOpen rating ratingCount shopImageUrl openingTime closingTime settings.deliveryMode"
       )
       .lean();
 
@@ -256,7 +268,7 @@ export const getPartnerPublicProfile = async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      data: partner
+      data: toShopListItem(partner)
     });
   } catch (error: any) {
     console.error("getPartnerPublicProfile error:", error);

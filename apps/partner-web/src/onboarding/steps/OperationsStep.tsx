@@ -55,7 +55,8 @@ export default function OperationsStep({ operations, onChange }: Props) {
       <div className="onb-chips">
         {([
           { key: "platform" as const, label: "Vyaha delivery partners" },
-          { key: "self" as const, label: "Self delivery" }
+          { key: "self" as const, label: "Self delivery" },
+          { key: "self_free" as const, label: "Free self delivery" }
         ]).map((option) => (
           <button
             key={option.key}
@@ -68,22 +69,6 @@ export default function OperationsStep({ operations, onChange }: Props) {
         ))}
       </div>
 
-      <p className="onb-label">Takeaway</p>
-      <div className="onb-chips">
-        {([
-          { key: true, label: "Takeaway available" },
-          { key: false, label: "Delivery only" }
-        ] as const).map((option) => (
-          <button
-            key={String(option.key)}
-            type="button"
-            className={`onb-chip ${operations.takeawayAvailable === option.key ? "onb-chip--active" : ""}`}
-            onClick={() => onChange({ ...operations, takeawayAvailable: option.key })}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
 
       <label className="field">
         <span>Packaging notes (optional)</span>

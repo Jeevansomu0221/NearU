@@ -54,7 +54,7 @@ const OrderSchema = new Schema({
   selfDelivery: {
     mode: {
       type: String,
-      enum: ["self", "platform"],
+      enum: ["self", "self_free", "platform"],
       default: "platform"
     },
     reservedFor: {

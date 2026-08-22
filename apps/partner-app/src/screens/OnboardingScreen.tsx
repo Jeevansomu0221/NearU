@@ -15,7 +15,9 @@ import {
   AppState
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Location from "expo-location";
 import api, { uploadMultipart } from "../api/client";
 import { partnerTheme } from "../theme";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
@@ -26,9 +28,10 @@ import MediaStep, { type MediaState } from "./onboarding/MediaStep";
 import MenuDraftStep, { type MenuDraftItem } from "./onboarding/MenuDraftStep";
 import OperationsStep, { type OperationsState } from "./onboarding/OperationsStep";
 import AgreementStep, { validateAndSaveAgreement } from "./onboarding/AgreementStep";
+import PartnerAgreementModal from "../components/PartnerAgreementModal";
 import type { PartnerKycState } from "../api/kyc.api";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { partnerAddressToGeocodePayload, partnerShopAddressLines, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
+import { partnerAddressToGeocodePayload, partnerShopAddressLines, resolveAddressPin, reverseGeocodeLocation, mergeReverseGeocodedAddress, type ResolvedAddressPin } from "../api/geocode.api";
 
 const INDIAN_CITIES = [
   "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata",
@@ -139,12 +142,13 @@ type OnboardingDraft = {
   address: {
     shopHouseName: string;
     floor: string;
-    state: string;
-    city: string;
-    pincode: string;
-    area: string;
-    colony: string;
     roadStreet: string;
+    colony: string;
+    area: string;
+    town: string;
+    city: string;
+    state: string;
+    pincode: string;
     nearbyPlaces: string;
   };
   documents: DocumentState;
@@ -190,7 +194,6 @@ const defaultOperations = (): OperationsState => ({
   closingTime: "22:00",
   weeklyHolidays: [],
   deliveryMode: "platform",
-  takeawayAvailable: true,
   packagingNote: ""
 });
 
@@ -233,15 +236,6 @@ const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
 
 const isPdfUri = (uri?: string) => (uri || "").split("?")[0].toLowerCase().endsWith(".pdf");
 
-const loadLocationModule = async () => {
-  try {
-    return await import("expo-location");
-  } catch (error) {
-    console.warn("expo-location is unavailable in this app build:", error);
-    return null;
-  }
-};
-
 const normalizeDraft = (draft: any): OnboardingDraft | null => {
   if (!draft || typeof draft !== "object") return null;
 
@@ -262,12 +256,13 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
     address: {
       shopHouseName: String(safeAddress.shopHouseName || ""),
       floor: String(safeAddress.floor || ""),
-      state: String(safeAddress.state || ""),
-      city: String(safeAddress.city || ""),
-      pincode: String(safeAddress.pincode || ""),
-      area: String(safeAddress.area || ""),
-      colony: String(safeAddress.colony || ""),
       roadStreet: String(safeAddress.roadStreet || ""),
+      colony: String(safeAddress.colony || ""),
+      area: String(safeAddress.area || ""),
+      town: String(safeAddress.town || ""),
+      city: String(safeAddress.city || ""),
+      state: String(safeAddress.state || ""),
+      pincode: String(safeAddress.pincode || ""),
       nearbyPlaces: String(safeAddress.nearbyPlaces || "")
     },
     documents: {
@@ -311,8 +306,12 @@ const normalizeDraft = (draft: any): OnboardingDraft | null => {
             weeklyHolidays: Array.isArray(draft.operations.weeklyHolidays)
               ? draft.operations.weeklyHolidays.map((day: unknown) => String(day || "")).filter(Boolean)
               : [],
-            deliveryMode: draft.operations.deliveryMode === "self" ? "self" : "platform",
-            takeawayAvailable: draft.operations.takeawayAvailable !== false,
+            deliveryMode:
+              draft.operations.deliveryMode === "self_free"
+                ? "self_free"
+                : draft.operations.deliveryMode === "self"
+                  ? "self"
+                  : "platform",
             packagingNote: String(draft.operations.packagingNote || "")
           }
         : defaultOperations(),
@@ -355,12 +354,13 @@ export default function OnboardingScreen({ navigation }: any) {
   const [address, setAddress] = useState({
     shopHouseName: "",
     floor: "",
-    state: "",
-    city: "",
-    pincode: "",
-    area: "",
-    colony: "",
     roadStreet: "",
+    colony: "",
+    area: "",
+    town: "",
+    city: "",
+    state: "",
+    pincode: "",
     nearbyPlaces: ""
   });
   // Lets users choose between a fast GPS pin (current location) and manual address search.
@@ -397,6 +397,7 @@ export default function OnboardingScreen({ navigation }: any) {
   const [kyc, setKyc] = useState<PartnerKycState>({});
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [partnerAgreementAccepted, setPartnerAgreementAccepted] = useState(false);
+  const [agreementModalVisible, setAgreementModalVisible] = useState(false);
   const [autoFilledPhone, setAutoFilledPhone] = useState("");
   const [shopLocation, setShopLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [capturingLocation, setCapturingLocation] = useState(false);
@@ -528,12 +529,13 @@ export default function OnboardingScreen({ navigation }: any) {
             JSON.stringify({
               shopHouseName: String(draft.address.shopHouseName || "").trim(),
               floor: String(draft.address.floor || "").trim(),
-              state: String(draft.address.state || "").trim(),
-              city: String(draft.address.city || "").trim(),
-              pincode: String(draft.address.pincode || "").trim(),
-              area: String(draft.address.area || "").trim(),
-              colony: String(draft.address.colony || "").trim(),
               roadStreet: String(draft.address.roadStreet || "").trim(),
+              colony: String(draft.address.colony || "").trim(),
+              area: String(draft.address.area || "").trim(),
+              town: String(draft.address.town || "").trim(),
+              city: String(draft.address.city || "").trim(),
+              state: String(draft.address.state || "").trim(),
+              pincode: String(draft.address.pincode || "").trim(),
               nearbyPlaces: draft.address.nearbyPlaces
             })
           );
@@ -709,15 +711,6 @@ export default function OnboardingScreen({ navigation }: any) {
   const captureShopLocation = async () => {
     try {
       setCapturingLocation(true);
-      const Location = await loadLocationModule();
-      if (!Location) {
-        Alert.alert(
-          "App update required",
-          "This Partner app build does not include location support yet. Install the latest build to capture your shop GPS pin."
-        );
-        return;
-      }
-
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
@@ -734,22 +727,17 @@ export default function OnboardingScreen({ navigation }: any) {
         const result = await reverseGeocodeLocation(latitude, longitude);
         const geo = result.data;
         if (result.success && geo) {
-          setAddress((current) => ({
-            ...current,
-            shopHouseName: current.shopHouseName || geo.buildingApartmentName || "",
-            state: geo.state || current.state,
-            city: geo.city || current.city,
-            pincode: geo.pincode || current.pincode,
-            area: geo.area || current.area,
-            colony: current.colony || geo.area || "",
-            roadStreet: geo.streetRoadName || current.roadStreet,
-            nearbyPlaces: current.nearbyPlaces || geo.formattedAddress
-          }));
+          setAddress((current) => mergeReverseGeocodedAddress(current, geo));
         }
       } catch {
         // Still confirm the live GPS pin even if address text cannot be read.
       }
-      await openAddressPinConfirm({ latitude, longitude });
+      setPendingPin({
+        latitude,
+        longitude,
+        formattedAddress: partnerShopAddressLines(address).join(", ")
+      });
+      setPinConfirmVisible(true);
     } catch (error: any) {
       Alert.alert("Could not capture location", error?.message || "Please try again from inside the shop.");
     } finally {
@@ -794,8 +782,8 @@ export default function OnboardingScreen({ navigation }: any) {
       if (addressMode === "manual") {
         if (!address.shopHouseName.trim()) return "Enter the shop or house name";
         if (!address.floor.trim()) return "Enter the floor or shop location";
-        if (!address.state || !address.city || !address.pincode || !address.area || !address.colony) {
-          return "Please fill all required address fields";
+        if (!address.state.trim() || !address.city.trim() || !address.pincode.trim() || !address.area.trim()) {
+          return "Please fill area, city, state, and pincode";
         }
         if (!/^\d{6}$/.test(address.pincode)) return "Pincode must be exactly 6 digits";
       } else {
@@ -808,7 +796,6 @@ export default function OnboardingScreen({ navigation }: any) {
     }
 
     if (step === 3) {
-      if (!/^\d{14}$/.test(nextDocuments.fssaiNumber.replace(/\D/g, ""))) return "Enter a valid 14-digit FSSAI number";
       if (!String(nextDocuments.fssaiUrl || "").trim()) return "Upload your FSSAI certificate";
       if (!nextKyc.panVerified && !nextKyc.panSkipped) return "Verify PAN via Eko or skip for now";
       if (!nextDocuments.gstRegistered) return "Please select whether you are GST registered";
@@ -842,12 +829,13 @@ export default function OnboardingScreen({ navigation }: any) {
     JSON.stringify({
       shopHouseName: address.shopHouseName.trim(),
       floor: address.floor.trim(),
-      state: address.state.trim(),
-      city: address.city.trim(),
-      pincode: address.pincode.trim(),
-      area: address.area.trim(),
-      colony: address.colony.trim(),
       roadStreet: address.roadStreet.trim(),
+      colony: address.colony.trim(),
+      area: address.area.trim(),
+      town: address.town.trim(),
+      city: address.city.trim(),
+      state: address.state.trim(),
+      pincode: address.pincode.trim(),
       nearbyPlaces: address.nearbyPlaces
     });
 
@@ -880,7 +868,10 @@ export default function OnboardingScreen({ navigation }: any) {
       setPinConfirmVisible(true);
       return true;
     } catch (error: any) {
-      Alert.alert("Address not found", error?.message || "Could not locate this shop address.");
+      Alert.alert(
+        "Address not found",
+        error?.message || error?.error || "Could not locate this shop address. Check the shop name, area, city, and pincode."
+      );
       return false;
     } finally {
       setLocatingAddress(false);
@@ -903,10 +894,6 @@ export default function OnboardingScreen({ navigation }: any) {
     }
 
     if (activeStep === 1) {
-      if (shopLocation && confirmedAddressKey === addressFingerprint()) {
-        setActiveStep((current) => Math.min(current + 1, STEPS.length - 1));
-        return;
-      }
       if (addressMode === "current" && shopLocation) {
         await openAddressPinConfirm(shopLocation);
         return;
@@ -998,12 +985,13 @@ export default function OnboardingScreen({ navigation }: any) {
         address: {
           shopHouseName: address.shopHouseName.trim(),
           floor: address.floor.trim(),
-          state: address.state.trim(),
-          city: address.city.trim(),
-          pincode: address.pincode.trim(),
-          area: address.area.trim(),
-          colony: address.colony.trim(),
           roadStreet: address.roadStreet.trim(),
+          colony: address.colony.trim() || address.area.trim(),
+          area: address.area.trim(),
+          town: address.town.trim(),
+          city: address.city.trim(),
+          state: address.state.trim(),
+          pincode: address.pincode.trim(),
           nearbyPlaces: address.nearbyPlaces
             .split(",")
             .map((place) => place.trim())
@@ -1018,8 +1006,10 @@ export default function OnboardingScreen({ navigation }: any) {
         partnerAgreementAccepted: true,
         documents: {
           ...docsToSubmit,
+          // We only collect FSSAI certificate URL (no 14-digit FSSAI number).
+          // Keep fssaiNumber empty to avoid backend/verification errors.
+          fssaiNumber: "",
           panNumber: (kyc.panNumber || docsToSubmit.panNumber).trim().toUpperCase(),
-          fssaiNumber: docsToSubmit.fssaiNumber.trim(),
           gstRegistered: docsToSubmit.gstRegistered === "yes",
           gstNumber: docsToSubmit.gstRegistered === "yes" ? docsToSubmit.gstNumber.trim().toUpperCase() : "",
           ownerPanUrl: kyc.panVerified ? "eko-pan-verified" : docsToSubmit.panFrontUrl,
@@ -1154,24 +1144,38 @@ export default function OnboardingScreen({ navigation }: any) {
             <View style={styles.addressModeRow}>
               <TouchableOpacity
                 style={[styles.addressModeChip, addressMode === "current" && styles.addressModeChipSelected]}
-                onPress={() => setAddressMode("current")}
+                onPress={() => {
+                  setAddressMode("current");
+                  if (!capturingLocation && !locatingAddress) {
+                    void captureShopLocation();
+                  }
+                }}
+                disabled={capturingLocation || locatingAddress}
                 activeOpacity={0.85}
               >
-                <Ionicons
-                  name="location-outline"
-                  size={18}
-                  color={addressMode === "current" ? partnerTheme.colors.card : partnerTheme.colors.primaryDark}
-                />
+                {capturingLocation && addressMode === "current" ? (
+                  <ActivityIndicator
+                    color={addressMode === "current" ? partnerTheme.colors.card : partnerTheme.colors.primary}
+                    size="small"
+                  />
+                ) : (
+                  <Ionicons
+                    name="location-outline"
+                    size={18}
+                    color={addressMode === "current" ? partnerTheme.colors.card : partnerTheme.colors.primaryDark}
+                  />
+                )}
                 <Text
                   style={[styles.addressModeChipText, addressMode === "current" && styles.addressModeChipTextSelected]}
                 >
-                  Use current location
+                  {capturingLocation && addressMode === "current" ? "Finding you..." : "Use current location"}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.addressModeChip, addressMode === "manual" && styles.addressModeChipSelected]}
                 onPress={() => setAddressMode("manual")}
+                disabled={capturingLocation || locatingAddress}
                 activeOpacity={0.85}
               >
                 <Ionicons
@@ -1189,18 +1193,9 @@ export default function OnboardingScreen({ navigation }: any) {
 
             {addressMode === "current" ? (
               <>
-                <Text style={styles.helperText}>If you are at the shop, use current location to pin the exact building.</Text>
-                <TouchableOpacity
-                  style={[styles.primaryActionButton, capturingLocation && styles.primaryActionButtonDisabled]}
-                  onPress={captureShopLocation}
-                  disabled={capturingLocation || locatingAddress}
-                >
-                  {capturingLocation ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.primaryActionButtonText}>Use current location</Text>
-                  )}
-                </TouchableOpacity>
+                <Text style={styles.helperText}>
+                  Stand at the shop, tap Use current location, then confirm the pin on the map.
+                </Text>
                 {shopLocation ? (
                   <View style={styles.locationBadge}>
                     <Text style={styles.locationBadgeText}>Shop pin confirmed</Text>
@@ -1209,56 +1204,89 @@ export default function OnboardingScreen({ navigation }: any) {
               </>
             ) : (
               <>
-                <Text style={styles.sectionHint}>Add the shop or house name and floor so we can pin the exact building on Google Maps.</Text>
+                <Text style={styles.compactHint}>Pin the shop, then check these fields. Edit anything that looks wrong.</Text>
 
-                <Text style={styles.label}>Shop / house name</Text>
+                <Text style={styles.compactLabel}>Shop name / house</Text>
                 <TextInput
-                  placeholder="As shown on Google Maps, e.g. Sai Towers"
+                  placeholder="Shop or house name"
                   placeholderTextColor="#98A2B3"
                   value={address.shopHouseName}
                   onChangeText={(v) => setAddress({ ...address, shopHouseName: v })}
-                  style={styles.input}
+                  style={styles.compactInput}
                 />
 
-                <Text style={styles.label}>Floor / location</Text>
-                <TextInput
-                  placeholder="Ground floor, 1st floor, Shop 12"
-                  placeholderTextColor="#98A2B3"
-                  value={address.floor}
-                  onChangeText={(v) => setAddress({ ...address, floor: v })}
-                  style={styles.input}
-                />
+                <View style={styles.row}>
+                  <View style={styles.half}>
+                    <Text style={styles.compactLabel}>Floor</Text>
+                    <TextInput
+                      placeholder="Ground / 1st"
+                      placeholderTextColor="#98A2B3"
+                      value={address.floor}
+                      onChangeText={(v) => setAddress({ ...address, floor: v })}
+                      style={styles.compactInput}
+                    />
+                  </View>
+                  <View style={styles.halfLast}>
+                    <Text style={styles.compactLabel}>Street / road</Text>
+                    <TextInput
+                      placeholder="Street name"
+                      placeholderTextColor="#98A2B3"
+                      value={address.roadStreet}
+                      onChangeText={(v) => setAddress({ ...address, roadStreet: v })}
+                      style={styles.compactInput}
+                    />
+                  </View>
+                </View>
 
-                <Text style={styles.label}>Road or street (optional)</Text>
-                <TextInput
-                  placeholder="Only if you know the road name"
-                  placeholderTextColor="#98A2B3"
-                  value={address.roadStreet}
-                  onChangeText={(v) => setAddress({ ...address, roadStreet: v })}
-                  style={styles.input}
-                />
+                <View style={styles.row}>
+                  <View style={styles.half}>
+                    <Text style={styles.compactLabel}>Area / locality</Text>
+                    <TextInput
+                      placeholder="Locality"
+                      placeholderTextColor="#98A2B3"
+                      value={address.area}
+                      onChangeText={(v) => setAddress({ ...address, area: v })}
+                      style={styles.compactInput}
+                    />
+                  </View>
+                  <View style={styles.halfLast}>
+                    <Text style={styles.compactLabel}>Colony</Text>
+                    <TextInput
+                      placeholder="Colony / society"
+                      placeholderTextColor="#98A2B3"
+                      value={address.colony}
+                      onChangeText={(v) => setAddress({ ...address, colony: v })}
+                      style={styles.compactInput}
+                    />
+                  </View>
+                </View>
 
-                <Text style={styles.label}>State</Text>
-                <TextInput
-                  placeholder="State"
-                  placeholderTextColor="#98A2B3"
-                  value={address.state}
-                  onChangeText={(v) => setAddress({ ...address, state: v })}
-                  style={styles.input}
-                />
-
-                <Text style={styles.label}>City or town</Text>
-                <TextInput
-                  placeholder="City or town"
-                  placeholderTextColor="#98A2B3"
-                  value={address.city}
-                  onChangeText={(v) => setAddress({ ...address, city: v })}
-                  style={styles.input}
-                />
+                <View style={styles.row}>
+                  <View style={styles.half}>
+                    <Text style={styles.compactLabel}>Town / municipality</Text>
+                    <TextInput
+                      placeholder="Town"
+                      placeholderTextColor="#98A2B3"
+                      value={address.town}
+                      onChangeText={(v) => setAddress({ ...address, town: v })}
+                      style={styles.compactInput}
+                    />
+                  </View>
+                  <View style={styles.halfLast}>
+                    <Text style={styles.compactLabel}>City</Text>
+                    <TextInput
+                      placeholder="City"
+                      placeholderTextColor="#98A2B3"
+                      value={address.city}
+                      onChangeText={(v) => setAddress({ ...address, city: v })}
+                      style={styles.compactInput}
+                    />
+                  </View>
+                </View>
                 {filteredCities.length > 0 ? (
                   <View style={styles.suggestionCard}>
-                    {filteredCities.map((city) => (
-                      <TouchableOpacity key={city} style={styles.suggestionRow} onPress={() => setAddress({ ...address, city })}>
+                    {filteredCities.map((city, index) => (
+                      <TouchableOpacity key={`${city}-${index}`} style={styles.suggestionRow} onPress={() => setAddress({ ...address, city })}>
                         <Text style={styles.suggestionText}>{city}</Text>
                       </TouchableOpacity>
                     ))}
@@ -1267,48 +1295,28 @@ export default function OnboardingScreen({ navigation }: any) {
 
                 <View style={styles.row}>
                   <View style={styles.half}>
-                    <Text style={styles.label}>Pincode</Text>
+                    <Text style={styles.compactLabel}>State</Text>
+                    <TextInput
+                      placeholder="State"
+                      placeholderTextColor="#98A2B3"
+                      value={address.state}
+                      onChangeText={(v) => setAddress({ ...address, state: v })}
+                      style={styles.compactInput}
+                    />
+                  </View>
+                  <View style={styles.halfLast}>
+                    <Text style={styles.compactLabel}>Pincode</Text>
                     <TextInput
                       placeholder="6 digits"
                       placeholderTextColor="#98A2B3"
                       value={address.pincode}
-                      onChangeText={(v) => setAddress({ ...address, pincode: v })}
+                      onChangeText={(v) => setAddress({ ...address, pincode: v.replace(/\D/g, "").slice(0, 6) })}
                       keyboardType="number-pad"
                       maxLength={6}
-                      style={styles.input}
-                    />
-                  </View>
-                  <View style={styles.half}>
-                    <Text style={styles.label}>Area</Text>
-                    <TextInput
-                      placeholder="Area / locality"
-                      placeholderTextColor="#98A2B3"
-                      value={address.area}
-                      onChangeText={(v) => setAddress({ ...address, area: v })}
-                      style={styles.input}
+                      style={[styles.compactInput, styles.compactInputLast]}
                     />
                   </View>
                 </View>
-
-                <Text style={styles.label}>Colony or society</Text>
-                <TextInput
-                  placeholder="Colony / society"
-                  placeholderTextColor="#98A2B3"
-                  value={address.colony}
-                  onChangeText={(v) => setAddress({ ...address, colony: v })}
-                  style={styles.input}
-                />
-
-                <Text style={styles.label}>Nearby places</Text>
-                <TextInput
-                  placeholder="Metro station, mall, landmark"
-                  placeholderTextColor="#98A2B3"
-                  value={address.nearbyPlaces}
-                  onChangeText={(v) => setAddress({ ...address, nearbyPlaces: v })}
-                  style={styles.input}
-                />
-
-                <Text style={styles.helperText}>Continue to search Google Maps with your shop/house name.</Text>
               </>
             )}
           </View>
@@ -1343,8 +1351,6 @@ export default function OnboardingScreen({ navigation }: any) {
               restaurantName={form.restaurantName}
               panNumber={documents.panNumber}
               onPanNumberChange={(value) => setDocuments((prev) => ({ ...prev, panNumber: value }))}
-              fssaiNumber={documents.fssaiNumber}
-              onFssaiNumberChange={(value) => setDocuments((prev) => ({ ...prev, fssaiNumber: value }))}
               fssaiUrl={documents.fssaiUrl}
               gstRegistered={documents.gstRegistered}
               onGstRegisteredChange={(value) =>
@@ -1410,6 +1416,7 @@ export default function OnboardingScreen({ navigation }: any) {
               partnerAgreementAccepted={partnerAgreementAccepted}
               onTermsAcceptedChange={setTermsAccepted}
               onPartnerAgreementAcceptedChange={setPartnerAgreementAccepted}
+              onViewAgreement={() => setAgreementModalVisible(true)}
               summary={{
                 restaurantName: form.restaurantName,
                 ownerName: kyc.panName || form.ownerName,
@@ -1438,6 +1445,7 @@ export default function OnboardingScreen({ navigation }: any) {
   }
 
   return (
+    <>
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
     <KeyboardAvoidingView
       style={styles.keyboard}
@@ -1570,12 +1578,19 @@ export default function OnboardingScreen({ navigation }: any) {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={styles.primaryButton} onPress={goNext} disabled={submitting || uploadingKey !== null || locatingAddress}>
-              {locatingAddress ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.primaryButtonText}>Continue</Text>}
+              {locatingAddress ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {activeStep === 1 ? "Confirm in maps" : "Continue"}
+                </Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
     <AddressPinConfirmModal
       visible={pinConfirmVisible && Boolean(pendingPin)}
       addressLines={partnerShopAddressLines(address)}
@@ -1583,12 +1598,20 @@ export default function OnboardingScreen({ navigation }: any) {
       longitude={pendingPin?.longitude || 0}
       confirming={locatingAddress}
       onConfirm={handleConfirmShopPin}
+      onAddressResolved={(geo) => {
+        setAddress((current) => mergeReverseGeocodedAddress(current, geo));
+      }}
       onEdit={() => {
         setPinConfirmVisible(false);
         setPendingPin(null);
       }}
     />
-    </SafeAreaView>
+    <PartnerAgreementModal
+      visible={agreementModalVisible}
+      onClose={() => setAgreementModalVisible(false)}
+      onAccept={() => { setPartnerAgreementAccepted(true); setAgreementModalVisible(false); }}
+    />
+    </>
   );
 }
 
@@ -1785,6 +1808,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: partnerTheme.colors.muted
   },
+  compactHint: {
+    marginBottom: 10,
+    fontSize: 12,
+    lineHeight: 16,
+    color: partnerTheme.colors.muted
+  },
+  compactLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: partnerTheme.colors.mutedDark,
+    marginBottom: 4
+  },
+  compactInput: {
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: partnerTheme.colors.text,
+    backgroundColor: partnerTheme.colors.surface,
+    marginBottom: 8
+  },
+  compactInputLast: {
+    marginBottom: 0
+  },
   suggestionCard: {
     marginTop: -4,
     marginBottom: 12,
@@ -1841,22 +1890,8 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10
   },
-  primaryActionButton: {
-    alignSelf: "stretch",
-    backgroundColor: partnerTheme.colors.primary,
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 6,
-    marginBottom: 10
-  },
-  primaryActionButtonDisabled: {
-    backgroundColor: "#9FC8FF"
-  },
-  primaryActionButtonText: {
-    color: partnerTheme.colors.card,
-    fontSize: 15,
-    fontWeight: "800"
+  halfLast: {
+    flex: 1
   },
   locationBadge: {
     alignSelf: "flex-start",
@@ -2053,8 +2088,9 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: partnerTheme.colors.card,
-    fontSize: 14,
-    fontWeight: "800"
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center"
   },
   disabledButton: {
     opacity: 0.5

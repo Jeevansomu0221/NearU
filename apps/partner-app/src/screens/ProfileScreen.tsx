@@ -16,11 +16,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getImagePicker } from "../utils/imagePicker";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import api, { uploadMultipart } from "../api/client";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
-import { partnerAddressToGeocodePayload, partnerShopAddressLines, resolveAddressPin, reverseGeocodeLocation, type ResolvedAddressPin } from "../api/geocode.api";
+import { partnerAddressToGeocodePayload, partnerShopAddressLines, resolveAddressPin, reverseGeocodeLocation, mergeReverseGeocodedAddress, type ResolvedAddressPin } from "../api/geocode.api";
 
 type ReuploadFlags = {
   fssaiUrl?: boolean;
@@ -64,7 +65,7 @@ type Documents = {
 type PartnerSettings = {
   autoAcceptOrders?: boolean;
   estimatedPrepTime?: number;
-  deliveryMode?: "self" | "platform";
+  deliveryMode?: "self" | "self_free" | "platform";
   deliveryRadiusKm?: number;
   minimumOrderAmount?: number;
   upiId?: string;
@@ -188,15 +189,6 @@ const getUploadFilename = (asset: PickerAsset, fallbackName: string) => {
   if (/\.[a-z0-9]+$/i.test(baseName)) return baseName;
   const mimeExtension = asset.mimeType?.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
   return `${baseName}.${mimeExtension}`;
-};
-
-const loadLocationModule = async () => {
-  try {
-    return await import("expo-location");
-  } catch (error) {
-    console.warn("expo-location is unavailable in this app build:", error);
-    return null;
-  }
 };
 
 const formatAddress = (address?: PartnerProfile["address"]) => {
@@ -500,15 +492,6 @@ export default function ProfileScreen({ navigation }: any) {
   const captureShopLocation = async () => {
     try {
       setCapturingLocation(true);
-      const Location = await loadLocationModule();
-      if (!Location) {
-        Alert.alert(
-          "App update required",
-          "This Partner app build does not include location support yet. Install the latest build to capture your shop GPS pin."
-        );
-        return;
-      }
-
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
@@ -1916,6 +1899,9 @@ export default function ProfileScreen({ navigation }: any) {
         longitude={pendingPin?.longitude || 0}
         confirming={saving}
         onConfirm={handleConfirmAddressPin}
+        onAddressResolved={(geo) => {
+          setAddress((current) => mergeReverseGeocodedAddress(current, geo));
+        }}
         onEdit={() => {
           setPinConfirmVisible(false);
           setPendingPin(null);

@@ -53,6 +53,7 @@ export interface Shop {
     openingTime?: string;
     phone?: string;
     distanceKm?: number;
+    deliveryMode?: "platform" | "self" | "self_free";
 }
 export interface MenuItem {
     _id: string;
@@ -151,6 +152,21 @@ export interface PartnerStatusData {
     restaurantName?: string;
     ownerName?: string;
     phone?: string;
+    isOpen?: boolean;
+    actor?: {
+        type: "owner" | "staff";
+        staffId?: string | null;
+        username?: string;
+        displayName?: string;
+        operatorName?: string;
+    };
+    kitchenStaff?: {
+        username: string;
+        isActive: boolean;
+        lastOperatorName?: string;
+        lastLoginAt?: string | null;
+        lastLoginPlatform?: "web" | "app" | "unknown";
+    } | null;
 }
 export type UserRole = "customer" | "partner";
 //# sourceMappingURL=types.d.ts.map

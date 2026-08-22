@@ -23,8 +23,7 @@ export type OperationsState = {
   openingTime: string;
   closingTime: string;
   weeklyHolidays: string[];
-  deliveryMode: "self" | "platform";
-  takeawayAvailable: boolean;
+  deliveryMode: "self" | "self_free" | "platform";
   packagingNote: string;
 };
 
@@ -71,7 +70,6 @@ export const defaultOperations = (): OperationsState => ({
   closingTime: "22:00",
   weeklyHolidays: [],
   deliveryMode: "platform",
-  takeawayAvailable: true,
   packagingNote: ""
 });
 

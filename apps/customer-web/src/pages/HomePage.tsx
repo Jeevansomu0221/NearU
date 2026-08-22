@@ -119,7 +119,10 @@ export default function HomePage() {
             className="card shop-card"
             onClick={() => navigate(`/shop/${shop._id}`, { state: { shop, vegMode } })}
           >
-            <img src={shop.shopImageUrl || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"} alt="" />
+            <div className="shop-card-media">
+              <img src={shop.shopImageUrl || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"} alt="" />
+              {shop.deliveryMode === "self_free" ? <span className="free-delivery-stamp">Free delivery</span> : null}
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8, minWidth: 0 }}>
               <h3 style={{ margin: 0, minWidth: 0 }}>{getShopName(shop)}</h3>
               <button

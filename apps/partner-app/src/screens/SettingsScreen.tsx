@@ -38,15 +38,28 @@ type SelfDeliveryPartner = {
   isActive?: boolean;
 };
 
+type DeliveryMode = "platform" | "self" | "self_free";
+
 type SettingsState = {
   estimatedPrepTime: string;
-  deliveryMode: "platform" | "self";
+  deliveryMode: DeliveryMode;
   selfDeliveryPartners: SelfDeliveryPartner[];
   darkMode: boolean;
   newOrderAlerts: boolean;
   paymentAlerts: boolean;
   promotionalNotifications: boolean;
   language: string;
+};
+
+const normalizeDeliveryMode = (value: unknown): DeliveryMode => {
+  if (value === "self_free" || value === "self") return value;
+  return "platform";
+};
+
+const deliveryModeLabel = (mode: DeliveryMode) => {
+  if (mode === "self_free") return "Free self";
+  if (mode === "self") return "Self";
+  return "Platform";
 };
 
 export default function SettingsScreen({ navigation, route }: any) {
@@ -65,7 +78,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   });
   const [settings, setSettings] = useState<SettingsState>({
     estimatedPrepTime: "20",
-    deliveryMode: "platform" as "platform" | "self",
+    deliveryMode: "platform" as DeliveryMode,
     selfDeliveryPartners: [],
     darkMode: isDarkMode,
     newOrderAlerts: true,
@@ -115,7 +128,7 @@ export default function SettingsScreen({ navigation, route }: any) {
         : [];
       setSettings({
         estimatedPrepTime: String(data.settings?.estimatedPrepTime ?? 20),
-        deliveryMode: data.settings?.deliveryMode === "self" ? "self" : "platform",
+        deliveryMode: normalizeDeliveryMode(data.settings?.deliveryMode),
         selfDeliveryPartners,
         darkMode: isDarkMode,
         newOrderAlerts: data.notifications?.newOrderAlerts !== false,
@@ -172,8 +185,14 @@ export default function SettingsScreen({ navigation, route }: any) {
       Alert.alert("Prep time", "Enter valid estimated prep time in minutes.");
       return;
     }
-    if (settings.deliveryMode === "self" && selfDeliveryPartners.length === 0) {
-      Alert.alert("Self delivery", "Add at least one delivery-app rider phone number before enabling self delivery.");
+    if (
+      (settings.deliveryMode === "self" || settings.deliveryMode === "self_free") &&
+      selfDeliveryPartners.length === 0
+    ) {
+      Alert.alert(
+        settings.deliveryMode === "self_free" ? "Free self delivery" : "Self delivery",
+        "Add at least one delivery-app rider phone number before enabling this delivery mode."
+      );
       return;
     }
 
@@ -294,7 +313,7 @@ export default function SettingsScreen({ navigation, route }: any) {
             <Text style={styles.heroStatLabel}>Prep time</Text>
           </View>
           <View style={styles.heroStat}>
-            <Text style={styles.heroStatValue}>{settings.deliveryMode === "self" ? "Self" : "Platform"}</Text>
+            <Text style={styles.heroStatValue}>{deliveryModeLabel(settings.deliveryMode)}</Text>
             <Text style={styles.heroStatLabel}>Delivery</Text>
           </View>
           <View style={styles.heroStat}>
@@ -320,29 +339,37 @@ export default function SettingsScreen({ navigation, route }: any) {
       </View>
 
       <View style={[styles.card, isDark && styles.cardDark]}>
-        {renderSectionTitle("Delivery Setup", "Choose platform delivery or assign your own riders.", "bicycle-outline")}
+        {renderSectionTitle("Delivery Setup", "Choose platform, self, or free self delivery.", "bicycle-outline")}
         <View style={styles.choiceRow}>
-          {(["platform", "self"] as const).map((mode) => {
-            const selected = settings.deliveryMode === mode;
+          {(
+            [
+              { key: "platform" as const, label: "Platform delivery" },
+              { key: "self" as const, label: "Self delivery" },
+              { key: "self_free" as const, label: "Free self delivery" }
+            ] as const
+          ).map((mode) => {
+            const selected = settings.deliveryMode === mode.key;
             return (
               <TouchableOpacity
-                key={mode}
+                key={mode.key}
                 style={[styles.choicePill, isDark && styles.choicePillDark, selected && styles.choicePillSelected]}
-                onPress={() => setSettings((prev) => ({ ...prev, deliveryMode: mode }))}
+                onPress={() => setSettings((prev) => ({ ...prev, deliveryMode: mode.key }))}
               >
                 <Text style={[styles.choiceText, isDark && styles.mutedTextDark, selected && styles.choiceTextSelected]}>
-                  {mode === "platform" ? "Platform delivery" : "Self delivery"}
+                  {mode.label}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {settings.deliveryMode === "self" && (
+        {(settings.deliveryMode === "self" || settings.deliveryMode === "self_free") && (
           <View style={[styles.selfDeliveryBox, isDark && styles.selfDeliveryBoxDark]}>
             <Text style={[styles.selfDeliveryTitle, isDark && styles.textDark]}>Self delivery riders</Text>
             <Text style={[styles.helperText, isDark && styles.mutedTextDark]}>
-              Add delivery-app phone numbers for this shop. These riders get 5 minutes to accept each READY order before it opens to platform delivery.
+              {settings.deliveryMode === "self_free"
+                ? "Customers pay ₹0 delivery fee. Add delivery-app phone numbers for this shop. These riders get 5 minutes to accept; if they do not, the order is cancelled (no platform fallback)."
+                : "Add delivery-app phone numbers for this shop. These riders get 5 minutes to accept each order before it opens to platform delivery."}
             </Text>
             {settings.selfDeliveryPartners.map((partner, index) => (
               <View key={`${partner.userId || partner.deliveryPartnerId || "new"}-${index}`} style={styles.riderRow}>
@@ -382,9 +409,15 @@ export default function SettingsScreen({ navigation, route }: any) {
 
       {isStaff ? null : (
       <View style={[styles.card, isDark && styles.cardDark]}>
-        <Text style={[styles.sectionTitle, styles.sectionTitleStandalone, isDark && styles.textDark]}>Staff logins</Text>
-        <TouchableOpacity style={[styles.row, isDark && styles.rowDark]} onPress={() => navigation.navigate("StaffAccounts")}>
-          <Text style={[styles.rowText, isDark && styles.textDark]}>Shared kitchen login and who signed in</Text>
+        {renderSectionTitle("Staff logins", "Create shared kitchen logins and track who signed in.", "people-outline")}
+        <TouchableOpacity
+          style={[styles.staffBtn, isDark && styles.staffBtnDark]}
+          onPress={() => navigation.navigate("StaffAccounts")}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="key-outline" size={16} color={isDark ? "#9ECBFF" : "#1D4E89"} />
+          <Text style={[styles.staffBtnText, isDark && styles.staffBtnTextDark]}>Manage staff accounts</Text>
+          <Ionicons name="chevron-forward" size={16} color={isDark ? "#667085" : "#98A2B3"} />
         </TouchableOpacity>
       </View>
       )}
@@ -732,5 +765,18 @@ const styles = StyleSheet.create({
   rowDark: { borderBottomColor: "#263449" },
   rowText: { fontSize: 14, fontWeight: "700", color: "#2A5580" },
   logoutText: { fontSize: 14, fontWeight: "800", color: "#60A5FA" },
-  deleteText: { fontSize: 14, fontWeight: "800", color: "#F87171" }
+  deleteText: { fontSize: 14, fontWeight: "800", color: "#F87171" },
+  staffBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#EBF4FF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 4
+  },
+  staffBtnDark: { backgroundColor: "#1A2D42" },
+  staffBtnText: { flex: 1, fontSize: 14, fontWeight: "700", color: "#1D4E89" },
+  staffBtnTextDark: { color: "#9ECBFF" }
 });

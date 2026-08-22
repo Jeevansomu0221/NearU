@@ -56,6 +56,7 @@ interface Shop {
   openingTime?: string;
   closingTime?: string;
   distanceKm?: number;
+  deliveryMode?: "platform" | "self" | "self_free";
 }
 
 interface Props {
@@ -504,11 +505,18 @@ export default function HomeScreen({ navigation }: Props) {
           })
         }
       >
-        <Image
-          source={{ uri: imageUrl }}
-          style={[styles.shopImage, compact && styles.shopImageCompact]}
-          resizeMode="cover"
-        />
+        <View style={[styles.shopImageWrap, compact && styles.shopImageWrapCompact]}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={[styles.shopImage, compact && styles.shopImageCompact]}
+            resizeMode="cover"
+          />
+          {item.deliveryMode === "self_free" ? (
+            <View style={styles.freeDeliveryStamp} pointerEvents="none">
+              <Text style={styles.freeDeliveryStampText}>FREE DELIVERY</Text>
+            </View>
+          ) : null}
+        </View>
 
         <View style={styles.shopContent}>
           <View style={styles.shopTop}>
@@ -1073,9 +1081,36 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#F3E7DA"
   },
+  shopImageWrap: {
+    width: 64,
+    height: 64,
+    position: "relative"
+  },
+  shopImageWrapCompact: {
+    width: 52,
+    height: 52
+  },
   shopImageCompact: {
     width: 52,
     height: 52
+  },
+  freeDeliveryStamp: {
+    position: "absolute",
+    left: -2,
+    right: -2,
+    bottom: 4,
+    backgroundColor: "#FF6B35",
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+    borderRadius: 4,
+    alignItems: "center"
+  },
+  freeDeliveryStampText: {
+    color: "#FFFFFF",
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+    textAlign: "center"
   },
   shopContent: {
     flex: 1,

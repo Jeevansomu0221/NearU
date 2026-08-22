@@ -296,7 +296,7 @@ const PartnerSchema = new Schema(
     settings: {
       autoAcceptOrders: { type: Boolean, default: false },
       estimatedPrepTime: { type: Number, default: 20, min: 1 },
-      deliveryMode: { type: String, enum: ["self", "platform"], default: "platform" },
+      deliveryMode: { type: String, enum: ["self", "self_free", "platform"], default: "platform" },
       packagingNote: { type: String, default: "" },
       selfDeliveryPartners: {
         type: [

@@ -349,7 +349,12 @@ const sanitizeOnboardingDraft = (draft: any) => {
       weeklyHolidays: Array.isArray(safeOperations.weeklyHolidays)
         ? safeOperations.weeklyHolidays.map((day: unknown) => String(day || "")).filter(Boolean)
         : [],
-      deliveryMode: safeOperations.deliveryMode === "self" ? "self" : "platform",
+      deliveryMode:
+        safeOperations.deliveryMode === "self_free"
+          ? "self_free"
+          : safeOperations.deliveryMode === "self"
+            ? "self"
+            : "platform",
       packagingNote: String(safeOperations.packagingNote || "")
     },
     menuDraft: sanitizeMenuDraft(draft.menuDraft),
@@ -720,7 +725,12 @@ export const submitPartnerProfile = async (req: Request, res: Response) => {
     const normalizedWeeklyHolidays = Array.isArray(operations?.weeklyHolidays)
       ? operations.weeklyHolidays.map((day: unknown) => String(day || "")).filter(Boolean)
       : [];
-    const normalizedDeliveryMode = operations?.deliveryMode === "self" ? "self" : "platform";
+    const normalizedDeliveryMode =
+      operations?.deliveryMode === "self_free"
+        ? "self_free"
+        : operations?.deliveryMode === "self"
+          ? "self"
+          : "platform";
     const normalizedPackagingNote = firstString(operations?.packagingNote, normalizedDocs.operatingHoursNote);
     const normalizedShopImageUrl = firstString(media?.shopImageUrl);
     const normalizedBannerImageUrl = firstString(media?.bannerImageUrl);
@@ -1897,7 +1907,10 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
         const value = Number(settings.estimatedPrepTime);
         if (Number.isFinite(value) && value > 0) merged.estimatedPrepTime = Math.round(value);
       }
-      if (settings.deliveryMode !== undefined && ["self", "platform"].includes(settings.deliveryMode)) {
+      if (
+        settings.deliveryMode !== undefined &&
+        ["self", "self_free", "platform"].includes(settings.deliveryMode)
+      ) {
         merged.deliveryMode = settings.deliveryMode;
       }
       if (settings.selfDeliveryPartners !== undefined) {
@@ -1915,14 +1928,17 @@ export const updatePartnerProfile = async (req: Request, res: Response) => {
         merged.upiId = String(settings.upiId || "").trim();
       }
 
-      if (merged.deliveryMode === "self") {
+      if (merged.deliveryMode === "self" || merged.deliveryMode === "self_free") {
         const activeSelfDeliveryPartners = Array.isArray(merged.selfDeliveryPartners)
           ? merged.selfDeliveryPartners.filter((entry: any) => entry?.isActive !== false)
           : [];
         if (activeSelfDeliveryPartners.length === 0) {
           return res.status(400).json({
             success: false,
-            message: "Add at least one verified delivery-app rider before enabling self delivery"
+            message:
+              merged.deliveryMode === "self_free"
+                ? "Add at least one verified delivery-app rider before enabling free self delivery"
+                : "Add at least one verified delivery-app rider before enabling self delivery"
           });
         }
       }

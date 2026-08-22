@@ -7,8 +7,7 @@ export type OperationsState = {
   openingTime: string;
   closingTime: string;
   weeklyHolidays: string[];
-  deliveryMode: "self" | "platform";
-  takeawayAvailable: boolean;
+  deliveryMode: "self" | "self_free" | "platform";
   packagingNote: string;
 };
 
@@ -68,7 +67,8 @@ export default function OperationsStep({ operations, onChange }: Props) {
       <View style={styles.chipWrap}>
         {([
           { key: "platform", label: "Vyaha delivery partners" },
-          { key: "self", label: "Self delivery" }
+          { key: "self", label: "Self delivery" },
+          { key: "self_free", label: "Free self delivery" }
         ] as const).map((option) => {
           const selected = operations.deliveryMode === option.key;
           return (
@@ -83,24 +83,6 @@ export default function OperationsStep({ operations, onChange }: Props) {
         })}
       </View>
 
-      <Text style={styles.label}>Takeaway</Text>
-      <View style={styles.chipWrap}>
-        {([
-          { key: true, label: "Takeaway available" },
-          { key: false, label: "Delivery only" }
-        ] as const).map((option) => {
-          const selected = operations.takeawayAvailable === option.key;
-          return (
-            <TouchableOpacity
-              key={String(option.key)}
-              style={[styles.chip, selected && styles.chipSelected]}
-              onPress={() => onChange({ ...operations, takeawayAvailable: option.key })}
-            >
-              <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
 
       <Text style={styles.label}>Packaging notes (optional)</Text>
       <TextInput
