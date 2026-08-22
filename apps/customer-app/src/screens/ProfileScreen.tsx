@@ -39,10 +39,10 @@ import { getPublicShopName } from "../utils/display";
 import HighlightedOrderId from "../components/HighlightedOrderId";
 import { formatPublicOrderId } from "../utils/publicOrderId";
 import { unregisterPushNotifications } from "../services/notifications";
-import AddressFormFields from "../components/AddressFormFields";
+import AddressFormFields, { type AddressEntryMode } from "../components/AddressFormFields";
 import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
 import ScreenHeader from "../components/ScreenHeader";
-import { reverseGeocodeLocation, resolveAddressPin } from "../api/geocode.api";
+import { reverseGeocodeLocation, resolveAddressPin, type GeocodedAddress } from "../api/geocode.api";
 import { getCurrentPositionWithTimeout, requestForegroundLocationPermission } from "../utils/location";
 import * as Location from "expo-location";
 
@@ -56,6 +56,7 @@ const formatCurrency = (value?: number) => `Rs ${Number(value || 0).toFixed(0)}`
 const PRIVACY_URL = buildLegalUrl("privacy");
 const TERMS_URL = buildLegalUrl("terms");
 type AddressFormMode = "edit" | "add";
+type PinConfirmIntent = "current_location" | "final_save";
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return "N/A";
@@ -126,7 +127,7 @@ const getStatusTone = (status: string) => {
 const buildAddressLines = (address?: SavedAddress | null, fallbackName?: string) => {
   if (!address) return [];
 
-  return [
+  const raw = [
     address.recipientName || fallbackName,
     [address.houseFlatDoorNo, address.buildingApartmentName].filter(Boolean).join(", ") || address.street,
     address.streetRoadName,
@@ -141,6 +142,14 @@ const buildAddressLines = (address?: SavedAddress | null, fallbackName?: string)
       .join(", ") + (address.pincode ? ` - ${address.pincode}` : ""),
     address.country || "India"
   ].filter(Boolean) as string[];
+
+  const seen = new Set<string>();
+  return raw.filter((line) => {
+    const normalized = line.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
 };
 
 const isGeneratedCustomerName = (value?: string) => {
@@ -200,6 +209,8 @@ export default function ProfileScreen({ navigation, route }: any) {
     longitude: number;
     formattedAddress: string;
   } | null>(null);
+  const [pinConfirmIntent, setPinConfirmIntent] = useState<PinConfirmIntent>("final_save");
+  const [currentLocationPinConfirmed, setCurrentLocationPinConfirmed] = useState(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -209,6 +220,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [buildingApartmentName, setBuildingApartmentName] = useState("");
   const [streetRoadName, setStreetRoadName] = useState("");
   const [street, setStreet] = useState("");
+  const [colony, setColony] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [pincode, setPincode] = useState("");
@@ -219,6 +231,9 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [addressLatitude, setAddressLatitude] = useState<number | undefined>(undefined);
   const [addressLongitude, setAddressLongitude] = useState<number | undefined>(undefined);
   const [locatingCurrentLocation, setLocatingCurrentLocation] = useState(false);
+  const [addressEntryMode, setAddressEntryMode] = useState<AddressEntryMode>("unset");
+  const [locationPreview, setLocationPreview] = useState("");
+  const pinGeocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openedAddAddressRef = useRef(false);
 
   const hydrateAddressForm = (address?: SavedAddress | null, fallbackName = "") => {
@@ -226,8 +241,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     setRecipientName(address?.recipientName || fallbackName);
     setHouseFlatDoorNo(address?.houseFlatDoorNo || "");
     setBuildingApartmentName(address?.buildingApartmentName || "");
-    setStreetRoadName(address?.streetRoadName || address?.street || "");
+    setStreetRoadName(address?.streetRoadName || address?.colony || address?.street || "");
     setStreet(address?.street || "");
+    setColony(address?.colony || "");
     setCity(address?.cityTownVillage || address?.city || "");
     setState(address?.state || "");
     setPincode(address?.pincode || "");
@@ -238,6 +254,8 @@ export default function ProfileScreen({ navigation, route }: any) {
     setAddressLatitude(address?.latitude);
     setAddressLongitude(address?.longitude);
     setEditingAddressId(address?._id);
+    setAddressEntryMode(inferAddressEntryMode(address));
+    setLocationPreview(buildLocationPreview(address));
   };
 
   const getSavedAddressesFromProfile = (userData: UserProfile | null) => {
@@ -254,6 +272,24 @@ export default function ProfileScreen({ navigation, route }: any) {
     Number.isFinite(latitude) &&
     Number.isFinite(longitude) &&
     !(latitude === 0 && longitude === 0);
+
+  const inferAddressEntryMode = (address?: SavedAddress | null): AddressEntryMode => {
+    if (!address) return "unset";
+    if (hasValidAddressPin(address.latitude, address.longitude)) return "current";
+    if (address.streetRoadName?.trim() || address.city?.trim() || address.cityTownVillage?.trim()) return "manual";
+    return "unset";
+  };
+
+  const buildLocationPreview = (address?: SavedAddress | null) => {
+    if (!address) return "";
+    return [
+      address.streetRoadName || address.colony || address.street,
+      address.areaLocality || address.area,
+      address.cityTownVillage || address.city
+    ]
+      .filter(Boolean)
+      .join(", ");
+  };
 
   const hydrateForm = (userData: UserProfile) => {
     const cleanName = isGeneratedCustomerName(userData.name) ? "" : userData.name || "";
@@ -327,6 +363,8 @@ export default function ProfileScreen({ navigation, route }: any) {
     setEditingAddressId(undefined);
     setAddressLabel("Home");
     hydrateAddressForm(null, name);
+    setAddressEntryMode("unset");
+    setLocationPreview("");
     setEditing(true);
   };
 
@@ -354,7 +392,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const screenTitle = forceComplete
-    ? "Basic details"
+    ? "Delivery address"
     : manageAddress === "add"
       ? "Add address"
       : "My Profile";
@@ -410,10 +448,11 @@ export default function ProfileScreen({ navigation, route }: any) {
       .join(", ");
     return {
       label: addressLabel.trim() || "Home",
-      recipientName: recipientName.trim(),
+      recipientName: recipientName.trim() || name.trim(),
       houseFlatDoorNo: houseFlatDoorNo.trim(),
       buildingApartmentName: buildingApartmentName.trim() || undefined,
       streetRoadName: streetRoadName.trim(),
+      colony: colony.trim() || undefined,
       areaLocality: area.trim(),
       street: legacyStreet || street.trim(),
       city: city.trim(),
@@ -427,10 +466,198 @@ export default function ProfileScreen({ navigation, route }: any) {
     };
   };
 
+  const handleSelectAddressEntryMode = (mode: "current" | "manual") => {
+    setAddressEntryMode(mode);
+    if (mode === "manual") {
+      setLocationPreview("");
+    }
+  };
+
+  const handleChangeAddressEntryMode = () => {
+    setAddressEntryMode("unset");
+    setLocationPreview("");
+    setHouseFlatDoorNo("");
+    setColony("");
+    setAddressLatitude(undefined);
+    setAddressLongitude(undefined);
+    setCurrentLocationPinConfirmed(false);
+    setPinConfirmVisible(false);
+    setPendingPin(null);
+    setPendingAddressPayload(null);
+  };
+
+  const openCurrentLocationPinConfirm = (
+    latitude: number,
+    longitude: number,
+    formattedAddress: string,
+    payload: ReturnType<typeof buildAddressPayload>
+  ) => {
+    setPendingAddressPayload(payload as SavedAddress);
+    setPendingPin({ latitude, longitude, formattedAddress });
+    setPinConfirmIntent("current_location");
+    setCurrentLocationPinConfirmed(false);
+    setPinConfirmVisible(true);
+  };
+
+  const applyGeocodedFromGeo = (
+    geo: GeocodedAddress | null | undefined,
+    latitude: number,
+    longitude: number,
+    formattedAddress = ""
+  ) => {
+    const nextColony = geo?.colony?.trim() || "";
+    const nextStreet = geo?.streetRoadName?.trim() || "";
+    const streetOrColony = nextStreet || nextColony;
+    const nextArea = geo?.area?.trim() || "";
+    const nextCity = geo?.city?.trim() || "";
+    const nextState = geo?.state?.trim() || "";
+    const nextPincode = geo?.pincode?.trim() || "";
+    const nextCountry = geo?.country?.trim() || "India";
+    const preview =
+      formattedAddress ||
+      geo?.formattedAddress ||
+      [streetOrColony, nextArea, nextCity].filter(Boolean).join(", ");
+
+    setBuildingApartmentName(geo?.buildingApartmentName || "");
+    setStreetRoadName(streetOrColony);
+    setStreet([geo?.buildingApartmentName, streetOrColony].filter(Boolean).join(", "));
+    setColony(nextColony);
+    setArea(nextArea);
+    setCity(nextCity);
+    setState(nextState);
+    setPincode(nextPincode);
+    setDistrict(geo?.district || "");
+    setCountry(nextCountry);
+    setAddressLatitude(latitude);
+    setAddressLongitude(longitude);
+    setLocationPreview(preview);
+    setPendingPin((prev) =>
+      prev
+        ? { ...prev, latitude, longitude, formattedAddress: preview }
+        : { latitude, longitude, formattedAddress: preview }
+    );
+
+    return {
+      preview,
+      payload: {
+        label: addressLabel.trim() || "Home",
+        recipientName: recipientName.trim() || name.trim(),
+        houseFlatDoorNo: houseFlatDoorNo.trim(),
+        buildingApartmentName: geo?.buildingApartmentName?.trim() || undefined,
+        streetRoadName: streetOrColony,
+        colony: nextColony || undefined,
+        areaLocality: nextArea,
+        street: [geo?.buildingApartmentName, streetOrColony].filter(Boolean).join(", "),
+        city: nextCity,
+        cityTownVillage: nextCity,
+        state: nextState,
+        pincode: nextPincode,
+        area: nextArea,
+        landmark: landmark.trim() || undefined,
+        district: geo?.district?.trim() || undefined,
+        country: nextCountry
+      }
+    };
+  };
+
+  const handleDeliveryPinChange = (pin: { latitude: number; longitude: number }) => {
+    setAddressLatitude(pin.latitude);
+    setAddressLongitude(pin.longitude);
+    setCurrentLocationPinConfirmed(false);
+    setPendingPin((prev) =>
+      prev
+        ? { ...prev, latitude: pin.latitude, longitude: pin.longitude }
+        : { latitude: pin.latitude, longitude: pin.longitude, formattedAddress: locationPreview }
+    );
+
+    if (pinGeocodeTimerRef.current) clearTimeout(pinGeocodeTimerRef.current);
+    pinGeocodeTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await reverseGeocodeLocation(pin.latitude, pin.longitude);
+        if (result.success && result.data) {
+          applyGeocodedFromGeo(result.data, pin.latitude, pin.longitude);
+        }
+      } catch {
+        // Keep the pin even if reverse geocode fails.
+      }
+    }, 450);
+  };
+
+  const reopenLocationPicker = () => {
+    if (!hasValidAddressPin(addressLatitude, addressLongitude)) return;
+    openCurrentLocationPinConfirm(
+      addressLatitude!,
+      addressLongitude!,
+      locationPreview || streetRoadName.trim(),
+      buildAddressPayload()
+    );
+  };
+
+  const persistProfileAndAddress = async (
+    addressPayload: ReturnType<typeof buildAddressPayload>,
+    pin: { latitude: number; longitude: number }
+  ) => {
+    const fullPayload = {
+      ...addressPayload,
+      latitude: pin.latitude,
+      longitude: pin.longitude
+    };
+
+    const [profileResult, addressResult] = await Promise.all([
+      updateUserProfile({
+        name: name.trim() || addressPayload.recipientName.trim(),
+        email: email.trim() || undefined
+      }),
+      addressFormMode === "add"
+        ? addAddress({
+            ...fullPayload,
+            isDefault: true
+          })
+        : updateUserAddress({
+            ...fullPayload,
+            addressId: editingAddressId,
+            isDefault:
+              getSavedAddressesFromProfile(profile).length === 0 ||
+              getSavedAddressesFromProfile(profile).some(
+                (entry) => entry._id === editingAddressId && entry.isDefault
+              )
+          })
+    ]);
+
+    if (!profileResult.success || !addressResult.success) {
+      Alert.alert("Error", profileResult.message || addressResult.message || "Failed to update profile");
+      return false;
+    }
+
+    setPinConfirmVisible(false);
+    setPendingAddressPayload(null);
+    setPendingPin(null);
+    setAddressLatitude(pin.latitude);
+    setAddressLongitude(pin.longitude);
+    setCurrentLocationPinConfirmed(true);
+    await loadProfile();
+    setEditing(false);
+
+    if (forceComplete) {
+      setRegistrationSuccessVisible(true);
+    } else if (returnAfterSave) {
+      if (returnTo) {
+        navigation.navigate(returnTo);
+      } else if (navigation.canGoBack()) {
+        navigation.goBack();
+      }
+    } else {
+      Alert.alert("Profile Saved", "Your delivery address and map pin have been saved.");
+    }
+
+    return true;
+  };
+
   const handleUseCurrentLocation = async () => {
     try {
       const granted = await requestForegroundLocationPermission();
       if (!granted) {
+        setAddressEntryMode("unset");
         Alert.alert("Allow location access", "Turn on location so we can fill your delivery address from where you are.", [
           { text: "Not now", style: "cancel" },
           { text: "Open Settings", onPress: () => Linking.openSettings() }
@@ -438,9 +665,14 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
+      setAddressEntryMode("current");
       setLocatingCurrentLocation(true);
+      if (!pinConfirmVisible) {
+        setHouseFlatDoorNo("");
+      }
       const position = await getCurrentPositionWithTimeout({ accuracy: Location.Accuracy.High }, 12000);
       if (!position?.coords) {
+        setAddressEntryMode("unset");
         Alert.alert("Turn on location", "We could not read your current location. Please try again.");
         return;
       }
@@ -449,58 +681,21 @@ export default function ProfileScreen({ navigation, route }: any) {
       const longitude = position.coords.longitude;
       const result = await reverseGeocodeLocation(latitude, longitude);
       const geo = result.data;
+
       if (!result.success || !geo) {
-        Alert.alert("Address not found", result.message || "We found your pin, but could not read the address. Please fill the fields.");
-        setAddressLatitude(latitude);
-        setAddressLongitude(longitude);
+        Alert.alert(
+          "Address not found",
+          result.message || "We found your pin, but could not read the address. Try entering it manually."
+        );
+        const { preview, payload } = applyGeocodedFromGeo(null, latitude, longitude, "Location captured — add your flat or house number below.");
+        openCurrentLocationPinConfirm(latitude, longitude, preview, payload);
         return;
       }
 
-      const nextHouse = geo.houseFlatDoorNo?.trim() || "Near map pin";
-      const nextStreet = geo.streetRoadName?.trim() || geo.formattedAddress || "";
-      const nextArea = geo.area?.trim() || "";
-      const nextCity = geo.city?.trim() || "";
-      const nextState = geo.state?.trim() || "";
-      const nextPincode = geo.pincode?.trim() || "";
-      const nextCountry = geo.country?.trim() || "India";
-
-      setHouseFlatDoorNo(nextHouse);
-      setBuildingApartmentName(geo.buildingApartmentName || "");
-      setStreetRoadName(nextStreet);
-      setStreet([nextHouse, geo.buildingApartmentName, nextStreet].filter(Boolean).join(", "));
-      setArea(nextArea);
-      setCity(nextCity);
-      setState(nextState);
-      setPincode(nextPincode);
-      setDistrict(geo.district || "");
-      setCountry(nextCountry);
-      setAddressLatitude(latitude);
-      setAddressLongitude(longitude);
-
-      const addressPayload = {
-        label: addressLabel.trim() || "Home",
-        recipientName: recipientName.trim() || name.trim(),
-        houseFlatDoorNo: nextHouse,
-        buildingApartmentName: geo.buildingApartmentName?.trim() || undefined,
-        streetRoadName: nextStreet,
-        areaLocality: nextArea,
-        street: [nextHouse, geo.buildingApartmentName, nextStreet].filter(Boolean).join(", "),
-        city: nextCity,
-        cityTownVillage: nextCity,
-        state: nextState,
-        pincode: nextPincode,
-        area: nextArea,
-        landmark: landmark.trim() || undefined,
-        district: geo.district?.trim() || undefined,
-        country: nextCountry,
-        latitude,
-        longitude
-      };
-
-      setPendingAddressPayload(addressPayload);
-      setPendingPin({ latitude, longitude, formattedAddress: geo.formattedAddress });
-      setPinConfirmVisible(true);
+      const { preview, payload } = applyGeocodedFromGeo(geo, latitude, longitude, geo.formattedAddress || "");
+      openCurrentLocationPinConfirm(latitude, longitude, preview, payload);
     } catch (error: any) {
+      setAddressEntryMode("unset");
       Alert.alert("Could not use current location", error?.message || "Please try again.");
     } finally {
       setLocatingCurrentLocation(false);
@@ -509,12 +704,50 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const handleSaveProfile = async () => {
     try {
-      if (!name.trim()) {
+      if (!forceComplete && !name.trim()) {
         Alert.alert("Error", "Name is required");
         return;
       }
 
-      if (
+      if (addressEntryMode === "unset") {
+        Alert.alert("Error", "Choose current location or enter your address to continue");
+        return;
+      }
+
+      if (addressEntryMode === "current") {
+        if (!houseFlatDoorNo.trim()) {
+          Alert.alert("Error", "Flat or house name is required");
+          return;
+        }
+        if (
+          !streetRoadName.trim() ||
+          !city.trim() ||
+          !state.trim() ||
+          !pincode.trim() ||
+          !area.trim() ||
+          !country.trim()
+        ) {
+          Alert.alert("Error", "We couldn't read your area from GPS — try entering your address manually");
+          return;
+        }
+        if (!currentLocationPinConfirmed || !hasValidAddressPin(addressLatitude, addressLongitude)) {
+          openCurrentLocationPinConfirm(
+            addressLatitude || 0,
+            addressLongitude || 0,
+            locationPreview || streetRoadName.trim(),
+            buildAddressPayload()
+          );
+          return;
+        }
+
+        setSaving(true);
+        const saved = await persistProfileAndAddress(buildAddressPayload(), {
+          latitude: addressLatitude!,
+          longitude: addressLongitude!
+        });
+        if (!saved) return;
+        return;
+      } else if (
         !recipientName.trim() ||
         !houseFlatDoorNo.trim() ||
         !streetRoadName.trim() ||
@@ -524,12 +757,12 @@ export default function ProfileScreen({ navigation, route }: any) {
         !area.trim() ||
         !country.trim()
       ) {
-        Alert.alert("Error", "Please complete your full delivery address");
+        Alert.alert("Error", "Please complete your delivery address");
         return;
       }
 
       if (!/^\d{6}$/.test(pincode.trim())) {
-        Alert.alert("Error", "Pincode must be exactly 6 digits");
+        Alert.alert("Error", "Pincode must be 6 digits");
         return;
       }
 
@@ -543,6 +776,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
       setPendingAddressPayload(addressPayload);
       setPendingPin(pinResult.data);
+      setPinConfirmIntent("final_save");
       setPinConfirmVisible(true);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to locate this address");
@@ -552,58 +786,21 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const handleConfirmAddressPin = async (pin: { latitude: number; longitude: number }) => {
+    if (pinConfirmIntent === "current_location") {
+      setAddressLatitude(pin.latitude);
+      setAddressLongitude(pin.longitude);
+      setCurrentLocationPinConfirmed(true);
+      setPinConfirmVisible(false);
+      setPendingPin(null);
+      setPendingAddressPayload(null);
+      return;
+    }
+
     if (!pendingAddressPayload) return;
 
     try {
       setSaving(true);
-      const addressPayload = {
-        ...pendingAddressPayload,
-        latitude: pin.latitude,
-        longitude: pin.longitude
-      };
-
-      const [profileResult, addressResult] = await Promise.all([
-        updateUserProfile({
-          name: name.trim(),
-          email: email.trim() || undefined
-        }),
-        addressFormMode === "add"
-          ? addAddress({
-          ...addressPayload,
-          isDefault: true
-        })
-          : updateUserAddress({
-          ...addressPayload,
-          addressId: editingAddressId,
-          isDefault: getSavedAddressesFromProfile(profile).length === 0 ||
-            getSavedAddressesFromProfile(profile).some((entry) => entry._id === editingAddressId && entry.isDefault)
-        })
-      ]);
-
-      if (!profileResult.success || !addressResult.success) {
-        Alert.alert("Error", profileResult.message || addressResult.message || "Failed to update profile");
-        return;
-      }
-
-      setPinConfirmVisible(false);
-      setPendingAddressPayload(null);
-      setPendingPin(null);
-      setAddressLatitude(pin.latitude);
-      setAddressLongitude(pin.longitude);
-      await loadProfile();
-      setEditing(false);
-
-      if (forceComplete) {
-        setRegistrationSuccessVisible(true);
-      } else if (returnAfterSave) {
-        if (returnTo) {
-          navigation.navigate(returnTo);
-        } else if (navigation.canGoBack()) {
-          navigation.goBack();
-        }
-      } else {
-        Alert.alert("Profile Saved", "Your delivery address and map pin have been saved.");
-      }
+      await persistProfileAndAddress(pendingAddressPayload, pin);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to update profile");
     } finally {
@@ -614,6 +811,9 @@ export default function ProfileScreen({ navigation, route }: any) {
   const addressFormProps = {
     focusedField,
     onFocusField: setFocusedField,
+    addressEntryMode,
+    onSelectEntryMode: handleSelectAddressEntryMode,
+    onChangeEntryMode: handleChangeAddressEntryMode,
     addressLabel,
     setAddressLabel,
     recipientName,
@@ -639,7 +839,10 @@ export default function ProfileScreen({ navigation, route }: any) {
     country,
     setCountry,
     locatingCurrentLocation,
-    onUseCurrentLocation: handleUseCurrentLocation
+    onUseCurrentLocation: handleUseCurrentLocation,
+    currentLocationCaptured: addressEntryMode === "current" && currentLocationPinConfirmed,
+    locationPreview,
+    onEditLocation: currentLocationPinConfirmed ? reopenLocationPicker : undefined
   };
 
   const handleLogout = () => {
@@ -739,6 +942,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const renderAddressPinConfirmModal = () => (
     <AddressPinConfirmModal
       visible={pinConfirmVisible && Boolean(pendingPin)}
+      mode={pinConfirmIntent === "current_location" ? "picker" : "confirm"}
+      latitude={pendingPin?.latitude || addressLatitude || 0}
+      longitude={pendingPin?.longitude || addressLongitude || 0}
+      formattedAddress={pendingPin?.formattedAddress || locationPreview}
       addressLines={buildAddressLines(
         {
           ...(pendingAddressPayload || {}),
@@ -746,13 +953,22 @@ export default function ProfileScreen({ navigation, route }: any) {
         } as SavedAddress,
         name
       )}
-      latitude={pendingPin?.latitude || 0}
-      longitude={pendingPin?.longitude || 0}
+      houseFlatDoorNo={houseFlatDoorNo}
+      onHouseFlatDoorNoChange={setHouseFlatDoorNo}
+      recipientName={recipientName || name}
+      onRecipientNameChange={setRecipientName}
       confirming={saving}
+      locatingCurrentLocation={locatingCurrentLocation}
+      onUseCurrentLocation={pinConfirmIntent === "current_location" ? handleUseCurrentLocation : undefined}
+      onPinChange={pinConfirmIntent === "current_location" ? handleDeliveryPinChange : undefined}
       onConfirm={handleConfirmAddressPin}
-      onEdit={() => {
+      onClose={() => {
         setPinConfirmVisible(false);
         setPendingPin(null);
+        setPendingAddressPayload(null);
+        if (pinConfirmIntent === "current_location") {
+          setCurrentLocationPinConfirmed(false);
+        }
       }}
     />
   );
@@ -795,7 +1011,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     >
       <View style={styles.modalOverlay}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={{ width: "100%" }}
         >
           <View style={styles.deleteModal}>
@@ -953,9 +1169,10 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   if (forceComplete) {
     return (
+      <View style={styles.container}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={0}
       >
         <ScreenHeader title={screenTitle} showBack={false} />
@@ -967,42 +1184,12 @@ export default function ProfileScreen({ navigation, route }: any) {
           keyboardDismissMode="on-drag"
         >
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Basic details</Text>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Name</Text>
-              <TextInput
-                style={[styles.input, focusedField === "name" && styles.inputFocused]}
-                value={name}
-                onChangeText={setName}
-                placeholder="Enter your name"
-                placeholderTextColor="#98A2B3"
-                onFocus={() => setFocusedField("name")}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
-
-            {renderPhoneField()}
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email Address (optional)</Text>
-              <TextInput
-                style={[styles.input, focusedField === "email" && styles.inputFocused]}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter email address"
-                placeholderTextColor="#98A2B3"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                onFocus={() => setFocusedField("email")}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Delivery Address</Text>
-            <Text style={styles.sectionHint}>We’ll show a map pin next so you can confirm the location.</Text>
+            <Text style={styles.sectionTitle}>Delivery address</Text>
+            <Text style={styles.sectionHint}>
+              {addressEntryMode === "unset"
+                ? "Choose how you want to add your delivery location."
+                : "We’ll confirm the exact map pin before saving."}
+            </Text>
             <AddressFormFields {...addressFormProps} />
           </View>
         </ScrollView>
@@ -1012,19 +1199,21 @@ export default function ProfileScreen({ navigation, route }: any) {
             {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.footerButtonText}>Save details</Text>}
           </TouchableOpacity>
         </View>
-        {renderAddressPinConfirmModal()}
-        {renderRegistrationSuccessModal()}
+      {renderRegistrationSuccessModal()}
         {renderSupportModal()}
         {renderDeleteAccountModal()}
         {renderAccountDeletedModal()}
       </KeyboardAvoidingView>
+      {renderAddressPinConfirmModal()}
+      </View>
     );
   }
 
   return (
+    <View style={styles.container}>
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={0}
     >
       <ScreenHeader title={screenTitle} showBack={!forceComplete} />
@@ -1249,7 +1438,11 @@ export default function ProfileScreen({ navigation, route }: any) {
               </TouchableOpacity>
             ) : null}
           </View>
-          <Text style={styles.sectionHint}>We’ll show a map pin next so you can confirm the location.</Text>
+          <Text style={styles.sectionHint}>
+            {addressEntryMode === "unset"
+              ? "Choose how you want to add your delivery location."
+              : "We’ll confirm the exact map pin before saving."}
+          </Text>
 
           {editing ? (
             <>
@@ -1276,8 +1469,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                     </View>
                     <Text style={styles.addressDefaultText}>{savedAddress.isDefault ? "Default address" : "Saved address"}</Text>
                   </View>
-                  {lines.map((line) => (
-                    <Text key={line} style={styles.addressLine}>
+                  {lines.map((line, lineIndex) => (
+                    <Text key={`${savedAddress._id || index}-line-${lineIndex}`} style={styles.addressLine}>
                       {line}
                     </Text>
                   ))}
@@ -1468,12 +1661,13 @@ export default function ProfileScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
       )}
-      {renderAddressPinConfirmModal()}
       {renderRegistrationSuccessModal()}
       {renderSupportModal()}
       {renderDeleteAccountModal()}
       {renderAccountDeletedModal()}
     </KeyboardAvoidingView>
+    {renderAddressPinConfirmModal()}
+    </View>
   );
 }
 
@@ -1492,21 +1686,6 @@ const styles = StyleSheet.create({
   registrationContent: {
     paddingTop: 10,
     paddingBottom: 160
-  },
-  registrationHeader: {
-    marginHorizontal: 16,
-    marginBottom: 2
-  },
-  registrationTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#241D17"
-  },
-  registrationSubtitle: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#7A6F65"
   },
   loadingContainer: {
     flex: 1,
@@ -2389,10 +2568,15 @@ const styles = StyleSheet.create({
   },
   footerButton: {
     backgroundColor: "#FF6B35",
-    borderRadius: 12,
-    minHeight: 46,
+    borderRadius: 16,
+    minHeight: 52,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    shadowColor: "#FF6B35",
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3
   },
   footerButtonText: {
     color: "#FFFFFF",

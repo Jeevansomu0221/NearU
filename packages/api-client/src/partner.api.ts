@@ -72,6 +72,7 @@ export type ReverseGeocodedAddress = {
   houseFlatDoorNo?: string;
   buildingApartmentName?: string;
   streetRoadName?: string;
+  colony?: string;
   area?: string;
   city?: string;
   district?: string;

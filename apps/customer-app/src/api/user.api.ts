@@ -9,6 +9,7 @@ export interface SavedAddress {
   buildingApartmentName?: string;
   streetRoadName?: string;
   street?: string;
+  colony?: string;
   city?: string;
   cityTownVillage?: string;
   state?: string;
@@ -103,6 +104,7 @@ export const updateUserAddress = (addressData: {
   buildingApartmentName?: string;
   streetRoadName?: string;
   street?: string;
+  colony?: string;
   city?: string;
   cityTownVillage?: string;
   state?: string;

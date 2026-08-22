@@ -29,6 +29,7 @@ export const hasUsableAddress = (address?: SavedAddress | string | null): addres
     address.buildingApartmentName,
     address.streetRoadName,
     address.street,
+    address.colony,
     address.area,
     address.areaLocality,
     address.city,
@@ -54,10 +55,14 @@ export const formatSavedAddress = (address?: SavedAddress | string | null, fallb
   if (!address) return "";
   if (typeof address === "string") return address.trim();
 
+  const street = String(address.streetRoadName || "").trim();
+  const colony = String(address.colony || "").trim();
+
   return [
     address.recipientName || fallbackName,
     [address.houseFlatDoorNo, address.buildingApartmentName].filter(Boolean).join(", ") || address.street,
-    address.streetRoadName,
+    street,
+    colony && !street.toLowerCase().includes(colony.toLowerCase()) ? colony : "",
     address.areaLocality || address.area,
     address.landmark ? `Near ${address.landmark}` : null,
     [address.cityTownVillage || address.city, address.district ? `${address.district} District` : null, address.state]
@@ -78,6 +83,7 @@ export const formatHomeDeliveryAddressLine = (address?: SavedAddress | string | 
   const building = textValue(address.buildingApartmentName);
   const house = textValue(address.houseFlatDoorNo);
   const street = textValue(address.streetRoadName) || textValue(address.street);
+  const colony = textValue(address.colony);
   const area = textValue(address.areaLocality) || textValue(address.area);
   const city = textValue(address.cityTownVillage) || textValue(address.city);
 
@@ -85,6 +91,7 @@ export const formatHomeDeliveryAddressLine = (address?: SavedAddress | string | 
     label,
     [house, building].filter(Boolean).join(", "),
     street,
+    colony && !street.toLowerCase().includes(colony.toLowerCase()) ? colony : "",
     area,
     city
   ].filter(Boolean);

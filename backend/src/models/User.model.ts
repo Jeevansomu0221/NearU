@@ -23,6 +23,10 @@ const AddressSchema = new Schema({
     type: String,
     default: ""
   },
+  colony: {
+    type: String,
+    default: ""
+  },
   street: {
     type: String,
     default: ""
@@ -154,6 +158,10 @@ const UserSchema = new Schema({
       default: ""
     },
     streetRoadName: {
+      type: String,
+      default: ""
+    },
+    colony: {
       type: String,
       default: ""
     },

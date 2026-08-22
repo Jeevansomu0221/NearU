@@ -516,7 +516,7 @@ export default function ProfileScreen({ navigation }: any) {
             ...current,
             shopHouseName: current.shopHouseName || geo.buildingApartmentName || "",
             roadStreet: geo.streetRoadName || current.roadStreet,
-            colony: current.colony || geo.area || "",
+            colony: current.colony || geo.colony || "",
             area: geo.area || current.area,
             city: geo.city || current.city,
             state: geo.state || current.state,

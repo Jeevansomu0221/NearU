@@ -63,6 +63,111 @@ const firstUnused = (candidates: Array<string | undefined>, used: Array<string |
     .map((value) => String(value || "").trim())
     .find((value) => value && !used.some((entry) => samePlaceName(entry, value))) || "";
 
+const foldPlaceName = (value?: string) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const STREET_NOISE_RE = /\b(colony road|colony rd|road|street|rd|st|lane|ln|cross|highway|nh|colony)\b/g;
+
+const stripPlaceNoise = (value?: string) =>
+  foldPlaceName(value).replace(STREET_NOISE_RE, " ").replace(/\s+/g, " ").trim();
+
+const editDistance = (left: string, right: string) => {
+  if (left === right) return 0;
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const matrix: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let i = 0; i < rows; i += 1) matrix[i][0] = i;
+  for (let j = 0; j < cols; j += 1) matrix[0][j] = j;
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+    }
+  }
+  return matrix[left.length][right.length];
+};
+
+const similarPlaceName = (left?: string, right?: string) => {
+  if (samePlaceName(left, right)) return true;
+  const a = foldPlaceName(left);
+  const b = foldPlaceName(right);
+  if (!a || !b) return false;
+  if ((a.includes(b) || b.includes(a)) && Math.min(a.length, b.length) >= 8) return true;
+  const compactA = stripPlaceNoise(left).replace(/\s+/g, "");
+  const compactB = stripPlaceNoise(right).replace(/\s+/g, "");
+  if (!compactA || !compactB) return false;
+  if (compactA === compactB) return true;
+  const maxLen = Math.max(compactA.length, compactB.length);
+  if (maxLen < 6) return false;
+  return editDistance(compactA, compactB) <= Math.max(1, Math.floor(maxLen * 0.22));
+};
+
+const ADMIN_DISTRICT_RE = /\b(ranga\s*redd[yi]?|rangareddy|district)\b/i;
+const METRO_CITY_RE =
+  /\b(hyderabad|secunderabad|chennai|bengaluru|bangalore|mumbai|delhi|pune|kolkata|ahmedabad|visakhapatnam|vijayawada)\b/i;
+
+const looksLikeAdminDistrict = (value?: string) => {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (METRO_CITY_RE.test(text)) return false;
+  return ADMIN_DISTRICT_RE.test(text) || /\bjagir$/i.test(text);
+};
+
+const resultTypes = (result: any): string[] => (Array.isArray(result?.types) ? result.types : []);
+
+const reverseResultScore = (result: any) => {
+  const types = resultTypes(result);
+  const locationType = String(result?.geometry?.location_type || "");
+  if (types.includes("plus_code")) return -100;
+  let score = 0;
+  if (types.includes("street_address")) score += 100;
+  else if (types.includes("premise")) score += 95;
+  else if (types.includes("subpremise")) score += 90;
+  else if (types.includes("neighborhood")) score += 75;
+  else if (types.includes("sublocality_level_2")) score += 70;
+  else if (types.includes("sublocality_level_1") || types.includes("sublocality")) score += 50;
+  else if (types.includes("route")) score += 25;
+  else score += 10;
+  if (locationType === "ROOFTOP") score += 40;
+  if (locationType === "RANGE_INTERPOLATED") score += 15;
+  if (locationType === "GEOMETRIC_CENTER" && types.includes("route")) score -= 10;
+  return score;
+};
+
+const collectLocalityLayers = (results: any[]) => {
+  const layers: string[] = [];
+  const add = (value?: string) => {
+    const text = String(value || "").trim();
+    if (!text || looksLikeAdminDistrict(text)) return;
+    if (layers.some((entry) => samePlaceName(entry, text) || similarPlaceName(entry, text))) return;
+    layers.push(text);
+  };
+  for (const result of results) {
+    const types = resultTypes(result);
+    if (types.includes("plus_code")) continue;
+    const comps: GoogleAddressComponent[] = Array.isArray(result?.address_components)
+      ? result.address_components
+      : [];
+    if (types.includes("neighborhood")) add(componentValue(comps, "neighborhood"));
+    if (types.includes("sublocality_level_2")) {
+      add(componentValue(comps, "sublocality_level_2") || componentValue(comps, "neighborhood"));
+    }
+    add(componentValue(comps, "neighborhood"));
+    add(componentValue(comps, "sublocality_level_2"));
+  }
+  return layers;
+};
+
+const pickCityName = (candidates: Array<string | undefined>, used: string[]) => {
+  const unique = Array.from(
+    new Set(candidates.map((value) => String(value || "").trim()).filter(Boolean))
+  ).filter((value) => !used.some((entry) => samePlaceName(entry, value) || similarPlaceName(entry, value)));
+  return unique.find((value) => METRO_CITY_RE.test(value)) || unique.find((value) => !looksLikeAdminDistrict(value)) || "";
+};
+
 const parseGoogleAddress = (result: any): GeocodedAddress | null => {
   const components: GoogleAddressComponent[] = Array.isArray(result?.address_components)
     ? result.address_components
@@ -112,7 +217,7 @@ const collectGoogleComponents = (results: any[]): GoogleAddressComponent[] => {
   return components;
 };
 
-const parseGoogleReverseResults = (
+export const parseGoogleReverseResults = (
   results: any[],
   latitude: number,
   longitude: number
@@ -120,44 +225,37 @@ const parseGoogleReverseResults = (
   const usable = Array.isArray(results) ? results.filter(Boolean) : [];
   if (!usable.length) return null;
 
-  const streetResult =
-    usable.find((result) =>
-      ["street_address", "premise", "subpremise", "route"].some((type) =>
-        Array.isArray(result.types) && result.types.includes(type)
-      )
-    ) || usable[0];
-  const parsed = parseGoogleAddress(streetResult);
+  const ranked = [...usable].sort((left, right) => reverseResultScore(right) - reverseResultScore(left));
+  const parsed = parseGoogleAddress(ranked[0]);
   if (!parsed) return null;
 
   const components = collectGoogleComponents(usable);
   const typedComponents = (type: string) => {
-    const match = usable.find((result) => Array.isArray(result.types) && result.types.includes(type));
+    const match = usable.find((result) => resultTypes(result).includes(type));
     return Array.isArray(match?.address_components) ? match.address_components : [];
   };
 
-  const colony = firstUnused(
-    [
-      componentValue(typedComponents("neighborhood"), "neighborhood"),
-      componentValue(components, "neighborhood"),
-      componentValue(components, "sublocality_level_2")
-    ],
-    []
-  );
-  const city = firstUnused(
+  const localityLayers = collectLocalityLayers(usable);
+  const colony = localityLayers.join(", ");
+  const usedLayers = [...localityLayers];
+
+  const city = pickCityName(
     [
       componentValue(typedComponents("locality"), "locality"),
       componentValue(components, "locality"),
-      componentValue(components, "postal_town")
+      componentValue(components, "postal_town"),
+      parsed.city
     ],
-    [colony]
+    usedLayers
   );
   const area = firstUnused(
     [
+      componentValue(typedComponents("sublocality_level_1"), "sublocality_level_1"),
       componentValue(components, "sublocality_level_1"),
       componentValue(components, "sublocality"),
       parsed.area
     ],
-    [colony, city]
+    [...usedLayers, city]
   );
   const town = firstUnused(
     [
@@ -165,26 +263,47 @@ const parseGoogleReverseResults = (
       componentValue(components, "administrative_area_level_3"),
       parsed.town
     ],
-    [colony, area, city]
+    [...usedLayers, area, city]
   );
+  const district = firstUnused(
+    [parsed.district, componentValue(components, "administrative_area_level_2")],
+    [...usedLayers, town, city, area]
+  );
+
+  const streetRoadName = [parsed.streetRoadName, componentValue(components, "route")]
+    .map((value) => usableStreetName(value))
+    .find((value) => value && !usedLayers.some((layer) => similarPlaceName(value, layer))) || "";
+
+  const buildingApartmentName = firstComponent(
+    Array.isArray(ranked[0]?.address_components) ? ranked[0].address_components : [],
+    ["premise", "subpremise"]
+  );
+  const building =
+    buildingApartmentName &&
+    !usedLayers.some((layer) => similarPlaceName(buildingApartmentName, layer)) &&
+    !similarPlaceName(buildingApartmentName, streetRoadName)
+      ? buildingApartmentName
+      : "";
 
   return {
     ...parsed,
-    streetRoadName: parsed.streetRoadName || componentValue(components, "route"),
+    houseFlatDoorNo: parsed.houseFlatDoorNo,
+    buildingApartmentName: building,
+    streetRoadName,
     colony,
     area,
     town,
-    city: city || parsed.city,
-    district: firstUnused([parsed.district, componentValue(components, "administrative_area_level_2")], [town, city, area, colony]),
+    city: city || (looksLikeAdminDistrict(parsed.city) ? "" : parsed.city),
+    district,
+    pincode: parsed.pincode || componentValue(components, "postal_code").replace(/\D/g, "").slice(0, 6),
     formattedAddress: compactQuery([
-      parsed.buildingApartmentName || parsed.houseFlatDoorNo,
-      parsed.streetRoadName,
-      colony,
+      building,
+      streetRoadName,
+      ...localityLayers,
       area,
-      town,
       city,
       parsed.state,
-      parsed.pincode
+      parsed.country
     ]),
     latitude,
     longitude
@@ -1046,6 +1165,17 @@ export const reverseGeocodeCoordinates = async (
     if (!parsed) return null;
     return {
       ...parsed,
+      streetRoadName: usableStreetName(parsed.streetRoadName),
+      formattedAddress:
+        compactQuery([
+          parsed.buildingApartmentName,
+          usableStreetName(parsed.streetRoadName),
+          parsed.colony,
+          parsed.area,
+          parsed.city,
+          parsed.state,
+          parsed.country
+        ]) || parsed.formattedAddress,
       latitude,
       longitude
     };
