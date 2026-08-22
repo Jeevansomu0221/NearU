@@ -76,6 +76,49 @@ export declare const deleteMenuItem: (id: string) => Promise<ApiResponse<unknown
 export declare const updateShopStatus: (isOpen: boolean) => Promise<ApiResponse<unknown>>;
 export declare const getPartnerStats: () => Promise<ApiResponse<Record<string, unknown>>>;
 export declare const getPartnerWallet: () => Promise<ApiResponse<PartnerWallet>>;
+export type PartnerStaffAccount = {
+    _id: string;
+    username: string;
+    displayName: string;
+    isActive: boolean;
+    lastLoginAt?: string | null;
+    lastLoginPlatform?: "web" | "app" | "unknown";
+    lastOperatorName?: string;
+    createdAt?: string;
+    updatedAt?: string;
+};
+export type PartnerStaffLoginActivity = {
+    _id: string;
+    staffId: string;
+    username: string;
+    displayName?: string;
+    event: "login" | "logout" | "failed_login";
+    success: boolean;
+    ip?: string;
+    userAgent?: string;
+    platform?: "web" | "app" | "unknown";
+    message?: string;
+    createdAt: string;
+};
+export declare const listPartnerStaff: () => Promise<ApiResponse<PartnerStaffAccount[]>>;
+export declare const createPartnerStaff: (payload: {
+    username: string;
+    password: string;
+    confirmPassword?: string;
+    displayName?: string;
+}) => Promise<ApiResponse<PartnerStaffAccount>>;
+export declare const updatePartnerStaff: (staffId: string, payload: {
+    isActive?: boolean;
+    password?: string;
+    confirmPassword?: string;
+}) => Promise<ApiResponse<PartnerStaffAccount>>;
+export declare const disablePartnerStaff: (staffId: string) => Promise<ApiResponse<PartnerStaffAccount>>;
+export declare const signOutPartnerStaff: (staffId: string, operatorName: string) => Promise<ApiResponse<PartnerStaffAccount>>;
+export declare const getPartnerStaffLoginActivity: (params?: {
+    staffId?: string;
+    page?: number;
+    limit?: number;
+}) => Promise<ApiResponse<PartnerStaffLoginActivity[]>>;
 export declare const getMySubOrders: () => Promise<ApiResponse<unknown>>;
 export declare const acceptSubOrder: (subOrderId: string, price: number) => Promise<ApiResponse<unknown>>;
 export declare const rejectSubOrder: (subOrderId: string) => Promise<ApiResponse<unknown>>;

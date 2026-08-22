@@ -106,6 +106,59 @@ export const getPartnerStats = () => apiGet<Record<string, unknown>>("/partners/
 
 export const getPartnerWallet = () => apiGet<PartnerWallet>("/partners/wallet");
 
+export type PartnerStaffAccount = {
+  _id: string;
+  username: string;
+  displayName: string;
+  isActive: boolean;
+  lastLoginAt?: string | null;
+  lastLoginPlatform?: "web" | "app" | "unknown";
+  lastOperatorName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type PartnerStaffLoginActivity = {
+  _id: string;
+  staffId: string;
+  username: string;
+  displayName?: string;
+  event: "login" | "logout" | "failed_login";
+  success: boolean;
+  ip?: string;
+  userAgent?: string;
+  platform?: "web" | "app" | "unknown";
+  message?: string;
+  createdAt: string;
+};
+
+export const listPartnerStaff = () => apiGet<PartnerStaffAccount[]>("/partner-staff");
+
+export const createPartnerStaff = (payload: {
+  username: string;
+  password: string;
+  confirmPassword?: string;
+  displayName?: string;
+}) => apiPost<PartnerStaffAccount>("/partner-staff", payload);
+
+export const updatePartnerStaff = (
+  staffId: string,
+  payload: { isActive?: boolean; password?: string; confirmPassword?: string }
+) => apiPut<PartnerStaffAccount>(`/partner-staff/${staffId}`, payload);
+
+export const disablePartnerStaff = (staffId: string) =>
+  apiDelete<PartnerStaffAccount>(`/partner-staff/${staffId}`);
+
+export const signOutPartnerStaff = (staffId: string, operatorName: string) =>
+  apiPost<PartnerStaffAccount>(`/partner-staff/${staffId}/sign-out`, { operatorName });
+
+export const getPartnerStaffLoginActivity = (params?: {
+  staffId?: string;
+  page?: number;
+  limit?: number;
+}) =>
+  apiGet<PartnerStaffLoginActivity[]>("/partner-staff/login-activity", { params });
+
 export const getMySubOrders = () => apiGet("/partners/suborders");
 
 export const acceptSubOrder = (subOrderId: string, price: number) =>
