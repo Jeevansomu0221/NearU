@@ -12,6 +12,7 @@ import {
   resolveOrderShopCoordinates
 } from "./deliveryMatching.service";
 import { formatPublicOrderId, formatPublicOrderIdWithLastFour } from "../utils/publicOrderId";
+import { config } from "../config/env";
 
 export type NotificationApp = "customer" | "partner" | "delivery";
 
@@ -76,9 +77,16 @@ const INVALID_TOKEN_CODES = new Set([
 
 const ANDROID_NOTIFICATION_CHANNEL_ID = "vyaha_alerts";
 const ANDROID_NOTIFICATION_COLORS: Record<NotificationApp, string> = {
-  customer: "#FFFFFF",
+  customer: "#e23744",
   delivery: "#0F9D58",
   partner: "#174EA6"
+};
+
+/** Public large-icon URLs so FCM can show each app's color logo in the tray. */
+const ANDROID_NOTIFICATION_IMAGE_URLS: Record<NotificationApp, string> = {
+  customer: `${config.apiBaseUrl.replace(/\/$/, "")}/notification-icons/customer.png`,
+  partner: `${config.apiBaseUrl.replace(/\/$/, "")}/notification-icons/partner.png`,
+  delivery: `${config.apiBaseUrl.replace(/\/$/, "")}/notification-icons/delivery.png`
 };
 
 const idString = (value: any) => {
@@ -202,7 +210,31 @@ const formatMoneyForNotification = (amount: number) =>
 
 const formatAddressForNotification = (address: any) => {
   if (!address) return "";
-  if (typeof address === "string") return truncate(address.trim(), 120);
+  if (typeof address === "string") {
+    const parts: string[] = [];
+    address.split(",").forEach((part: string) => {
+      const value = String(part || "").trim();
+      if (!value) return;
+      const key = value.toLowerCase();
+      if (parts.some((existing) => existing.toLowerCase() === key || existing.toLowerCase().includes(key))) {
+        return;
+      }
+      parts.push(value);
+    });
+    return truncate(parts.join(", "), 120);
+  }
+
+  const streetRoad = String(address.roadStreet || address.streetRoadName || "").trim();
+  const colony = String(address.colony || "").trim();
+  const area = String(address.area || address.areaLocality || "").trim();
+  const uniqueLocality = [colony, area].filter((value, index, list) => {
+    if (!value) return false;
+    const key = value.toLowerCase();
+    if (streetRoad && (streetRoad.toLowerCase() === key || streetRoad.toLowerCase().includes(key))) {
+      return false;
+    }
+    return list.findIndex((entry) => entry.toLowerCase() === key) === index;
+  });
 
   return truncate(
     compactStrings([
@@ -210,9 +242,8 @@ const formatAddressForNotification = (address: any) => {
       address.shopHouseName,
       address.floor,
       address.apartment,
-      address.roadStreet,
-      address.colony,
-      address.area || address.areaLocality,
+      streetRoad,
+      ...uniqueLocality,
       address.city || address.cityTownVillage,
       address.pincode
     ]).join(", "),
@@ -363,11 +394,14 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
     let failed = 0;
 
     for (const tokenBatch of chunk(tokens, 500)) {
+      const app = options.app || "customer";
+      const imageUrl = ANDROID_NOTIFICATION_IMAGE_URLS[app];
       const response = await messaging.sendEachForMulticast({
         tokens: tokenBatch,
         notification: {
           title: options.title,
-          body: options.body
+          body: options.body,
+          imageUrl
         },
         data,
         android: {
@@ -375,7 +409,8 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
           notification: {
             channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
             icon: "vyaha_notification_icon",
-            color: ANDROID_NOTIFICATION_COLORS[options.app || "customer"],
+            color: ANDROID_NOTIFICATION_COLORS[app],
+            imageUrl,
             priority: "high",
             sound: "default"
           }
@@ -383,8 +418,12 @@ export const sendNotificationToUsers = async (userIds: any[], options: SendOptio
         apns: {
           payload: {
             aps: {
-              sound: "default"
+              sound: "default",
+              mutableContent: true
             }
+          },
+          fcmOptions: {
+            imageUrl
           }
         }
       });

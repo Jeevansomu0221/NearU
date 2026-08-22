@@ -95,7 +95,7 @@
         {
           "iconSource": "./assets/notification-icon.png",
           "largeIconSource": "./assets/notification-large-icon.png",
-          "color": "#FFFFFF",
+          "color": "#e23744",
           "channelName": "Vyaha alerts",
           "channelDescription": "Important order and account alerts."
         }

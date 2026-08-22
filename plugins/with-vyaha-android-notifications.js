@@ -93,6 +93,17 @@ const ensureResources = (projectRoot, iconSource, largeIconSource) => {
   if (largeIconPath) {
     copyPngToDrawable(resPath, largeIconPath, LARGE_ICON_RESOURCE);
   }
+
+  // Resource shrinking can drop drawables only referenced from JS strings (Notifee).
+  const rawDir = path.join(resPath, "raw");
+  fs.mkdirSync(rawDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(rawDir, "keep.xml"),
+    `<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/${ICON_RESOURCE},@drawable/${LARGE_ICON_RESOURCE}" />
+`
+  );
 };
 
 const ensureFirebaseJson = (projectRoot) => {

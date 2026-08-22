@@ -5,14 +5,17 @@ notification color. A full-color square PNG therefore renders as a dark square
 inside a colored circle. This script writes:
 
   - notification-icon.png: white silhouette on a transparent square
-  - notification-large-icon.png: full-color logo (used as largeIcon)
+  - notification-large-icon.png: full-color logo (used as largeIcon / FCM image)
+  - backend/public/notification-icons/{app}.png: hosted large icons for FCM
+  - preview mocks under apps/_notification-icon-previews/
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 SMALL_SIZE = 96
@@ -20,6 +23,7 @@ LARGE_SIZE = 256
 # Keep enough margin for circular OEM crops, but zoom wordmark for legibility.
 PAD_RATIO = 0.06
 PREVIEW_DIR = ROOT / "apps/_notification-icon-previews"
+BACKEND_ICON_DIR = ROOT / "backend/public/notification-icons"
 
 APPS = [
     {
@@ -28,10 +32,13 @@ APPS = [
         "large_src": ROOT / "apps/customer-app/assets/icon.png",
         "small_dest": ROOT / "apps/customer-app/assets/notification-icon.png",
         "large_dest": ROOT / "apps/customer-app/assets/notification-large-icon.png",
-        # White notification circle (OEM fills with color; dark shade shows glyph).
-        "preview_color": "#FFFFFF",
-        "preview_glyph": "#1A1A1A",
+        # Brand red circle + white glyph (matches FCM / app.json color).
+        "preview_color": "#e23744",
+        "preview_glyph": "#FFFFFF",
         "y_nudge_ratio": 0.0,
+        "sample_title": "Order confirmed",
+        "sample_body": "Your order is confirmed. The shop will start preparing it soon.",
+        "app_label": "Vyaha",
     },
     {
         "name": "partner",
@@ -43,6 +50,9 @@ APPS = [
         "preview_glyph": "#FFFFFF",
         # Descenders make the wordmark look high; nudge slightly toward optical middle.
         "y_nudge_ratio": 0.02,
+        "sample_title": "New order",
+        "sample_body": "You have a new order waiting for acceptance.",
+        "app_label": "Vyaha Partner",
     },
     {
         "name": "delivery",
@@ -53,6 +63,9 @@ APPS = [
         "preview_color": "#0F9D58",
         "preview_glyph": "#FFFFFF",
         "y_nudge_ratio": 0.035,
+        "sample_title": "New delivery job",
+        "sample_body": "Pickup ready nearby. Accept to start the trip.",
+        "app_label": "Vyaha Delivery",
     },
 ]
 
@@ -139,38 +152,21 @@ def write_small_icon(src: Path, dest: Path, y_nudge_ratio: float = 0.0) -> None:
 def write_large_icon(src: Path, dest: Path, y_nudge_ratio: float = 0.0) -> None:
     im = to_rgba(src)
     pad_ratio = 0.05
-    if corners_look_white(im):
-        mask = extract_mask(im)
-        bbox = mask.point(lambda value: 255 if value > 16 else 0).getbbox()
-        logo = im.crop(bbox) if bbox else im
-        pad = int(LARGE_SIZE * pad_ratio)
-        inner = max(1, LARGE_SIZE - pad * 2)
-        scale = min(inner / logo.width, inner / logo.height)
-        resized = logo.resize(
-            (max(1, round(logo.width * scale)), max(1, round(logo.height * scale))),
-            Image.LANCZOS,
-        )
-        fitted = Image.new("RGBA", (LARGE_SIZE, LARGE_SIZE), (255, 255, 255, 255))
-        x = (LARGE_SIZE - resized.width) // 2
-        y = (LARGE_SIZE - resized.height) // 2 + int(round(LARGE_SIZE * y_nudge_ratio))
-        y = max(0, min(LARGE_SIZE - resized.height, y))
-        fitted.paste(resized, (x, y), resized)
-    else:
-        mask = extract_mask(im)
-        bbox = mask.point(lambda value: 255 if value > 16 else 0).getbbox()
-        logo = im.crop(bbox) if bbox else im
-        pad = int(LARGE_SIZE * pad_ratio)
-        inner = max(1, LARGE_SIZE - pad * 2)
-        scale = min(inner / logo.width, inner / logo.height)
-        resized = logo.resize(
-            (max(1, round(logo.width * scale)), max(1, round(logo.height * scale))),
-            Image.LANCZOS,
-        )
-        fitted = Image.new("RGBA", (LARGE_SIZE, LARGE_SIZE), (255, 255, 255, 255))
-        x = (LARGE_SIZE - resized.width) // 2
-        y = (LARGE_SIZE - resized.height) // 2 + int(round(LARGE_SIZE * y_nudge_ratio))
-        y = max(0, min(LARGE_SIZE - resized.height, y))
-        fitted.paste(resized, (x, y), resized)
+    mask = extract_mask(im)
+    bbox = mask.point(lambda value: 255 if value > 16 else 0).getbbox()
+    logo = im.crop(bbox) if bbox else im
+    pad = int(LARGE_SIZE * pad_ratio)
+    inner = max(1, LARGE_SIZE - pad * 2)
+    scale = min(inner / logo.width, inner / logo.height)
+    resized = logo.resize(
+        (max(1, round(logo.width * scale)), max(1, round(logo.height * scale))),
+        Image.LANCZOS,
+    )
+    fitted = Image.new("RGBA", (LARGE_SIZE, LARGE_SIZE), (255, 255, 255, 255))
+    x = (LARGE_SIZE - resized.width) // 2
+    y = (LARGE_SIZE - resized.height) // 2 + int(round(LARGE_SIZE * y_nudge_ratio))
+    y = max(0, min(LARGE_SIZE - resized.height, y))
+    fitted.paste(resized, (x, y), resized)
     dest.parent.mkdir(parents=True, exist_ok=True)
     fitted.save(dest, "PNG", optimize=True)
 
@@ -180,7 +176,23 @@ def hex_to_rgb(value: str) -> tuple[int, int, int]:
     return int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
 
 
-def write_preview(small_path: Path, app: dict) -> None:
+def rounded_rect(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], radius: int, fill) -> None:
+    draw.rounded_rectangle(box, radius=radius, fill=fill)
+
+
+def try_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
+    candidates = [
+        "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for path in candidates:
+        if Path(path).exists():
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
+
+def write_circle_preview(small_path: Path, app: dict) -> Path:
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
     size = 256
     bg = Image.new("RGBA", (size, size), (20, 20, 20, 255))
@@ -190,11 +202,9 @@ def write_preview(small_path: Path, app: dict) -> None:
     bg.alpha_composite(circle)
 
     small = Image.open(small_path).convert("RGBA")
-    # Recreate glyph in preview color (simulates OEM white-on-color / dark-on-white).
     mask = small.split()[-1]
     glyph = Image.new("RGBA", small.size, hex_to_rgb(app["preview_glyph"]) + (255,))
     glyph.putalpha(mask)
-    # Match the real notification crop: icon fills most of the circle.
     scaled = glyph.resize((size - 20, size - 20), Image.LANCZOS)
     bg.paste(scaled, ((size - scaled.width) // 2, (size - scaled.height) // 2), scaled)
 
@@ -211,6 +221,54 @@ def write_preview(small_path: Path, app: dict) -> None:
 
     bg.save(out, "PNG", optimize=True)
     Image.open(app["large_dest"]).convert("RGBA").save(large_out, "PNG", optimize=True)
+    return out
+
+
+def write_tray_preview(app: dict, circle_preview: Path) -> Path:
+    """Mock Android notification shade row: small tinted icon + color large logo."""
+    width, height = 720, 220
+    card = Image.new("RGBA", (width, height), (245, 245, 245, 255))
+    draw = ImageDraw.Draw(card)
+    rounded_rect(draw, (16, 16, width - 17, height - 17), 28, (255, 255, 255, 255))
+
+    # Small tray icon: brand-colored circle + white wordmark (no black preview bg).
+    icon_size = 72
+    small_circle = Image.new("RGBA", (icon_size, icon_size), (0, 0, 0, 0))
+    ImageDraw.Draw(small_circle).ellipse((0, 0, icon_size - 1, icon_size - 1), fill=hex_to_rgb(app["preview_color"]) + (255,))
+    glyph_src = Image.open(app["small_dest"]).convert("RGBA")
+    mask = glyph_src.split()[-1]
+    glyph = Image.new("RGBA", glyph_src.size, hex_to_rgb(app["preview_glyph"]) + (255,))
+    glyph.putalpha(mask)
+    glyph = glyph.resize((icon_size - 10, icon_size - 10), Image.LANCZOS)
+    small_circle.paste(glyph, (5, 5), glyph)
+    card.paste(small_circle, (40, 48), small_circle)
+
+    title_font = try_font(28, bold=True)
+    body_font = try_font(22, bold=False)
+    meta_font = try_font(18, bold=False)
+
+    text_left = 132
+    draw.text((text_left, 42), app["app_label"], fill=(100, 100, 100, 255), font=meta_font)
+    draw.text((text_left, 72), app["sample_title"], fill=(20, 20, 20, 255), font=title_font)
+    draw.text((text_left, 112), app["sample_body"][:62], fill=(90, 90, 90, 255), font=body_font)
+
+    large = Image.open(app["large_dest"]).convert("RGBA").resize((88, 88), Image.LANCZOS)
+    # Soft rounded crop for large icon.
+    mask = Image.new("L", (88, 88), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, 87, 87), radius=18, fill=255)
+    large.putalpha(mask)
+    card.paste(large, (width - 128, 56), large)
+
+    out = PREVIEW_DIR / f"tray-{app['name']}.png"
+    card.save(out, "PNG", optimize=True)
+    return out
+
+
+def sync_backend_large_icon(app: dict) -> Path:
+    BACKEND_ICON_DIR.mkdir(parents=True, exist_ok=True)
+    dest = BACKEND_ICON_DIR / f"{app['name']}.png"
+    shutil.copyfile(app["large_dest"], dest)
+    return dest
 
 
 def main() -> None:
@@ -218,12 +276,16 @@ def main() -> None:
         nudge = float(app.get("y_nudge_ratio") or 0.0)
         write_small_icon(app["small_src"], app["small_dest"], y_nudge_ratio=nudge)
         write_large_icon(app["large_src"], app["large_dest"], y_nudge_ratio=nudge)
-        write_preview(app["small_dest"], app)
+        circle = write_circle_preview(app["small_dest"], app)
+        tray = write_tray_preview(app, circle)
+        hosted = sync_backend_large_icon(app)
         small = Image.open(app["small_dest"])
         print(
             f"{app['name']}: small {small.size} {small.mode} nudge={nudge} -> {app['small_dest'].relative_to(ROOT)}"
         )
         print(f"{app['name']}: large -> {app['large_dest'].relative_to(ROOT)}")
+        print(f"{app['name']}: hosted -> {hosted.relative_to(ROOT)}")
+        print(f"{app['name']}: tray preview -> {tray.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

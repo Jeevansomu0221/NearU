@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import path from "path";
 import rateLimit from "express-rate-limit";
 import menuRoutes from "./routes/menu.routes";
 import authRoutes from "./routes/auth.routes";
@@ -64,6 +65,15 @@ app.use(helmet({
   crossOriginResourcePolicy: false
 }));
 
+// Public notification large-icons for FCM imageUrl (must be reachable by devices).
+app.use(
+  "/notification-icons",
+  express.static(path.join(__dirname, "../public/notification-icons"), {
+    maxAge: "7d",
+    fallthrough: false
+  })
+);
+
 app.use((req, res, next) => {
   if (req.path === "/api/payment/webhook") {
     return express.raw({ type: "application/json", limit: config.requestBodyLimit })(req, res, next);
@@ -78,6 +88,7 @@ app.use(rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) =>
+    req.path.startsWith("/notification-icons/") ||
     req.path === "/api/auth/send-otp" ||
     req.path === "/api/auth/verify-otp" ||
     req.path === "/api/auth/admin-password-login"
