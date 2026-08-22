@@ -36,7 +36,7 @@ describe("parseGoogleReverseResults", () => {
           address_components: [
             component("Himagiri Nagar", "neighborhood", "political"),
             component("Hydershakote", "sublocality_level_1", "sublocality", "political"),
-            component("Hyderabad", "locality", "political"),
+            component("Bandlaguda Jagir", "locality", "political"),
             component("Telangana", "administrative_area_level_1", "political"),
             component("India", "country", "political")
           ]
@@ -48,21 +48,42 @@ describe("parseGoogleReverseResults", () => {
           address_components: [
             component("West End Colony", "neighborhood", "political"),
             component("Hydershakote", "sublocality_level_1", "sublocality", "political"),
-            component("Hyderabad", "locality", "political"),
+            component("Bandlaguda Jagir", "locality", "political"),
             component("Telangana", "administrative_area_level_1", "political"),
             component("India", "country", "political")
           ]
         },
         {
           types: ["locality", "political"],
-          formatted_address: "Hyderabad, Telangana, India",
+          formatted_address: "Gandamguda, Telangana, India",
           geometry: { location: { lat: latitude, lng: longitude }, location_type: "APPROXIMATE" },
           address_components: [
-            component("Hyderabad", "locality", "political"),
+            component("Gandamguda", "locality", "political"),
             component("Telangana", "administrative_area_level_1", "political"),
             component("India", "country", "political")
           ]
-        }
+        },
+        {
+          types: ["locality", "political"],
+          formatted_address: "Bandlaguda Jagir, Telangana, India",
+          geometry: { location: { lat: latitude, lng: longitude }, location_type: "APPROXIMATE" },
+          address_components: [
+            component("Bandlaguda Jagir", "locality", "political"),
+            component("Telangana", "administrative_area_level_1", "political"),
+            component("India", "country", "political")
+          ]
+        },
+        {
+          types: ["administrative_area_level_3", "political"],
+          formatted_address: "Bandlaguda Jagir, Ranga Reddy, Telangana, India",
+          geometry: { location: { lat: latitude, lng: longitude }, location_type: "APPROXIMATE" },
+          address_components: [
+            component("Bandlaguda Jagir", "administrative_area_level_3", "political"),
+            component("Ranga Reddy", "administrative_area_level_2", "political"),
+            component("Telangana", "administrative_area_level_1", "political"),
+            component("India", "country", "political")
+          ]
+        },
       ],
       latitude,
       longitude
@@ -71,12 +92,14 @@ describe("parseGoogleReverseResults", () => {
     expect(parsed?.streetRoadName).toBe("");
     expect(parsed?.colony).toBe("Himagiri Nagar, West End Colony");
     expect(parsed?.area).toBe("Hydershakote");
+    expect(parsed?.town).toBe("Bandlaguda Jagir");
     expect(parsed?.city).toBe("Hyderabad");
     expect(parsed?.formattedAddress).toBe(
-      "Himagiri Nagar, West End Colony, Hydershakote, Hyderabad, Telangana, India"
+      "Himagiri Nagar, West End Colony, Hydershakote, Bandlaguda Jagir, Hyderabad, Telangana, India"
     );
     expect(parsed?.formattedAddress).not.toMatch(/Himgiry/i);
     expect(parsed?.formattedAddress).not.toMatch(/Rangareddy/i);
+    expect(parsed?.formattedAddress).not.toMatch(/Gandamguda/i);
   });
 
   it("keeps a real street name that is not just a misspelled colony", () => {

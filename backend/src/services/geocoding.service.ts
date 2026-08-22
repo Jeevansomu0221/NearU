@@ -113,7 +113,12 @@ const looksLikeAdminDistrict = (value?: string) => {
   const text = String(value || "").trim();
   if (!text) return false;
   if (METRO_CITY_RE.test(text)) return false;
-  return ADMIN_DISTRICT_RE.test(text) || /\bjagir$/i.test(text);
+  return ADMIN_DISTRICT_RE.test(text);
+};
+
+const looksLikeMunicipality = (value?: string) => {
+  const text = String(value || "").trim();
+  return /\bjagir\b/i.test(text) || /\bmunicipality\b/i.test(text);
 };
 
 const resultTypes = (result: any): string[] => (Array.isArray(result?.types) ? result.types : []);
@@ -161,11 +166,22 @@ const collectLocalityLayers = (results: any[]) => {
   return layers;
 };
 
+const uniquePlaceNames = (candidates: Array<string | undefined>, used: string[]) =>
+  Array.from(new Set(candidates.map((value) => String(value || "").trim()).filter(Boolean))).filter(
+    (value) => !used.some((entry) => samePlaceName(entry, value) || similarPlaceName(entry, value))
+  );
+
 const pickCityName = (candidates: Array<string | undefined>, used: string[]) => {
-  const unique = Array.from(
-    new Set(candidates.map((value) => String(value || "").trim()).filter(Boolean))
-  ).filter((value) => !used.some((entry) => samePlaceName(entry, value) || similarPlaceName(entry, value)));
-  return unique.find((value) => METRO_CITY_RE.test(value)) || unique.find((value) => !looksLikeAdminDistrict(value)) || "";
+  const unique = uniquePlaceNames(candidates, used);
+  const metro = unique.find((value) => METRO_CITY_RE.test(value));
+  if (metro) return metro;
+  if (unique.some((value) => looksLikeMunicipality(value))) return "";
+  return unique.find((value) => !looksLikeAdminDistrict(value)) || "";
+};
+
+const pickTownName = (candidates: Array<string | undefined>, used: string[]) => {
+  const unique = uniquePlaceNames(candidates, used).filter((value) => !looksLikeAdminDistrict(value));
+  return unique.find((value) => looksLikeMunicipality(value)) || unique[0] || "";
 };
 
 const parseGoogleAddress = (result: any): GeocodedAddress | null => {
@@ -239,15 +255,13 @@ export const parseGoogleReverseResults = (
   const colony = localityLayers.join(", ");
   const usedLayers = [...localityLayers];
 
-  const city = pickCityName(
-    [
-      componentValue(typedComponents("locality"), "locality"),
-      componentValue(components, "locality"),
-      componentValue(components, "postal_town"),
-      parsed.city
-    ],
-    usedLayers
-  );
+  const localityNames = [
+    componentValue(typedComponents("locality"), "locality"),
+    componentValue(components, "locality"),
+    componentValue(components, "postal_town"),
+    parsed.city
+  ];
+  let city = pickCityName(localityNames, usedLayers);
   const area = firstUnused(
     [
       componentValue(typedComponents("sublocality_level_1"), "sublocality_level_1"),
@@ -257,14 +271,18 @@ export const parseGoogleReverseResults = (
     ],
     [...usedLayers, city]
   );
-  const town = firstUnused(
+  const town = pickTownName(
     [
+      ...localityNames.filter((value) => looksLikeMunicipality(value)),
       componentValue(typedComponents("administrative_area_level_3"), "administrative_area_level_3"),
       componentValue(components, "administrative_area_level_3"),
       parsed.town
     ],
     [...usedLayers, area, city]
   );
+  if (!city && looksLikeMunicipality(town) && /telangana/i.test(parsed.state)) {
+    city = "Hyderabad";
+  }
   const district = firstUnused(
     [parsed.district, componentValue(components, "administrative_area_level_2")],
     [...usedLayers, town, city, area]
@@ -293,7 +311,7 @@ export const parseGoogleReverseResults = (
     colony,
     area,
     town,
-    city: city || (looksLikeAdminDistrict(parsed.city) ? "" : parsed.city),
+    city: city || (looksLikeAdminDistrict(parsed.city) || looksLikeMunicipality(parsed.city) ? "" : parsed.city),
     district,
     pincode: parsed.pincode || componentValue(components, "postal_code").replace(/\D/g, "").slice(0, 6),
     formattedAddress: compactQuery([
@@ -301,6 +319,7 @@ export const parseGoogleReverseResults = (
       streetRoadName,
       ...localityLayers,
       area,
+      town,
       city,
       parsed.state,
       parsed.country
