@@ -463,7 +463,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
   if (!shop && loading) {
     return (
       <View style={[styles.centerContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color="#FF6B35" />
+        <ActivityIndicator size="large" color="#e23744" />
         <Text style={styles.loadingText}>Loading restaurant details...</Text>
       </View>
     );
@@ -481,7 +481,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#FF6B35" />
+      <StatusBar barStyle="light-content" backgroundColor="#e23744" />
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.topBarButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={18} color="#FFFFFF" />
@@ -504,12 +504,22 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
               onPress={() => setPreviewImage(bannerImage)}
             >
               <Image source={{ uri: bannerImage }} style={styles.bannerImage} resizeMode="cover" />
+              {shop.deliveryMode === "self_free" ? (
+                <View style={styles.freeDeliveryBannerBadge} pointerEvents="none">
+                  <Feather name="truck" size={12} color="#FFFFFF" />
+                  <Text style={styles.freeDeliveryBannerBadgeText}>FREE DELIVERY</Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           </View>
 
           <View style={styles.infoCard}>
             <View style={styles.shopIconBubble}>
-              <MaterialCommunityIcons name={getShopCategoryIcon()} size={22} color="#FFFFFF" />
+              {shop.shopImageUrl ? (
+                <Image source={{ uri: shop.shopImageUrl }} style={styles.shopIconImage} resizeMode="cover" />
+              ) : (
+                <MaterialCommunityIcons name={getShopCategoryIcon()} size={22} color="#FFFFFF" />
+              )}
             </View>
 
             <View style={styles.infoTopRow}>
@@ -517,11 +527,17 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
                 <Text style={styles.shopName} numberOfLines={2}>{getShopName()}</Text>
                 <View style={styles.categoryTimeRow}>
                   <View style={styles.categoryChip}>
-                    <MaterialCommunityIcons name={getShopCategoryIcon()} size={13} color="#C96C2F" />
+                    <MaterialCommunityIcons name={getShopCategoryIcon()} size={13} color="#2f6bff" />
                     <Text style={styles.categoryChipText}>{getShopCategoryLabel()}</Text>
                   </View>
+                  {shop.deliveryMode === "self_free" ? (
+                    <View style={styles.freeDeliveryChip}>
+                      <Feather name="truck" size={12} color="#1c9b55" />
+                      <Text style={styles.freeDeliveryChipText}>Free delivery</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.timeChip}>
-                    <Feather name="clock" size={13} color="#2F7553" />
+                    <Feather name="clock" size={13} color="#1c9b55" />
                     <Text style={styles.timeValue}>
                       {shop.openingTime && shop.closingTime ? `${shop.openingTime} - ${shop.closingTime}` : "08:00 - 22:00"}
                     </Text>
@@ -580,7 +596,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 
         {loading ? (
           <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#FF6B35" />
+            <ActivityIndicator size="large" color="#e23744" />
             <Text style={styles.loadingText}>Loading menu...</Text>
           </View>
         ) : menu.length === 0 ? (
@@ -620,7 +636,7 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.footerLeft}>
           <Animated.View style={[styles.footerCartIcon, { transform: [{ scale: cartScaleAnim }] }]}>
-            <Feather name="shopping-cart" size={16} color="#FF6B35" />
+            <Feather name="shopping-cart" size={16} color="#1c9b55" />
             {itemCount > 0 ? (
               <View style={styles.footerBadge}>
                 <Text style={styles.footerBadgeText}>{itemCount}</Text>
@@ -675,11 +691,11 @@ export default function ShopDetailScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FF6B35"
+    backgroundColor: "#e23744"
   },
   scrollArea: {
     flex: 1,
-    backgroundColor: "#FBF8F4"
+    backgroundColor: "#F8FAFC"
   },
   content: {
     paddingBottom: 120
@@ -695,13 +711,13 @@ const styles = StyleSheet.create({
     color: "#71655C"
   },
   headerBackground: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     paddingBottom: 38,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28
   },
   topBar: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     paddingHorizontal: 14,
     paddingTop: 4,
     paddingBottom: 10,
@@ -741,6 +757,24 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%"
   },
+  freeDeliveryBannerBadge: {
+    position: "absolute",
+    left: 10,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#1c9b55",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999
+  },
+  freeDeliveryBannerBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3
+  },
   infoCard: {
     marginTop: -28,
     marginHorizontal: 14,
@@ -763,11 +797,16 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 29,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 4,
-    borderColor: "#FFFFFF"
+    borderColor: "#FFFFFF",
+    overflow: "hidden"
+  },
+  shopIconImage: {
+    width: "100%",
+    height: "100%"
   },
   infoTopRow: {
     flexDirection: "row",
@@ -793,7 +832,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#FFF1E6"
+    backgroundColor: "#EFF6FF"
   },
   categoryTimeRow: {
     flexDirection: "row",
@@ -806,7 +845,21 @@ const styles = StyleSheet.create({
     marginLeft: 5,
     fontSize: 11,
     fontWeight: "700",
-    color: "#C96C2F"
+    color: "#2f6bff"
+  },
+  freeDeliveryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#E8F8EF"
+  },
+  freeDeliveryChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#1c9b55"
   },
   timeChip: {
     flexDirection: "row",
@@ -814,7 +867,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#F0FAF3"
+    backgroundColor: "#ECFDF3"
   },
   infoMetaBlock: {
     alignItems: "flex-end"
@@ -831,7 +884,7 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#249A4B"
+    color: "#1c9b55"
   },
   statusTextClosed: {
     color: "#C7362E"
@@ -868,7 +921,7 @@ const styles = StyleSheet.create({
     marginLeft: 5,
     fontSize: 12,
     fontWeight: "800",
-    color: "#2F7553"
+    color: "#1c9b55"
   },
   menuHeader: {
     marginTop: 14,
@@ -879,10 +932,10 @@ const styles = StyleSheet.create({
     gap: 12
   },
   menuStickySection: {
-    backgroundColor: "#FBF8F4",
+    backgroundColor: "#F8FAFC",
     paddingBottom: 6,
     borderBottomWidth: 1,
-    borderBottomColor: "#EEE8E0"
+    borderBottomColor: "#E2E8F0"
   },
   menuTitle: {
     fontSize: 19,
@@ -913,8 +966,8 @@ const styles = StyleSheet.create({
     marginRight: 8
   },
   categoryTabActive: {
-    backgroundColor: "#FF6B35",
-    borderColor: "#FF6B35"
+    backgroundColor: "#2f6bff",
+    borderColor: "#2f6bff"
   },
   categoryTabIcon: {
     marginRight: 5
@@ -999,13 +1052,13 @@ const styles = StyleSheet.create({
     marginTop: 1,
     fontSize: 10,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   itemPrice: {
     fontSize: 13,
     lineHeight: 16,
     fontWeight: "900",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   menuFavoriteButton: {
     width: 32,
@@ -1098,31 +1151,31 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#F1C3AA",
-    backgroundColor: "#FFF7F2"
+    borderColor: "#FECACA",
+    backgroundColor: "#FDF2F3"
   },
   addPillText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#D76E35"
+    color: "#e23744"
   },
   inCartBadge: {
     marginTop: "auto",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#FFF1E6"
+    backgroundColor: "#EFF6FF"
   },
   inCartBadgeText: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#C96C2F"
+    color: "#2f6bff"
   },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     borderRadius: 12,
     minWidth: 96,
     height: 36
@@ -1189,7 +1242,7 @@ const styles = StyleSheet.create({
     minWidth: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 2
@@ -1228,13 +1281,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#1c9b55",
     borderRadius: 16,
     height: 44,
     minWidth: 118
   },
   viewCartButtonDisabled: {
-    backgroundColor: "#FFB08F"
+    backgroundColor: "#86D4A8"
   },
   viewCartButtonText: {
     fontSize: 13,
@@ -1273,7 +1326,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 20,
     top: 10,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,

@@ -106,7 +106,7 @@ const normalizeAddressPayload = (body: any) => {
   } = body;
 
   const normalizedStreetRoad = streetRoadName || roadStreet || "";
-  const normalizedBuilding = buildingApartmentName || shopHouseName || colony || "";
+  const normalizedBuilding = buildingApartmentName || shopHouseName || "";
   const normalizedLandmark = landmark ||
     (Array.isArray(nearbyPlaces) ? nearbyPlaces.filter(Boolean).join(", ") : nearbyPlaces) ||
     "";
@@ -116,7 +116,16 @@ const normalizeAddressPayload = (body: any) => {
       .filter(Boolean)
       .join(", ");
   const normalizedArea = area || areaLocality || "";
+  const normalizedColony = String(colony || "").trim();
+  const colonyMatchesStreetOrArea =
+    normalizedColony &&
+    (normalizedColony.toLowerCase() === normalizedStreetRoad.toLowerCase() ||
+      normalizedColony.toLowerCase() === normalizedArea.toLowerCase());
   const normalizedCity = city || cityTownVillage || "";
+  const areaMatchesStreet =
+    normalizedArea &&
+    normalizedStreetRoad &&
+    normalizedArea.toLowerCase() === normalizedStreetRoad.toLowerCase();
   const normalizedLatitude = Number(latitude);
   const normalizedLongitude = Number(longitude);
   const hasValidCoordinates =
@@ -140,9 +149,9 @@ const normalizeAddressPayload = (body: any) => {
     cityTownVillage: normalizedCity,
     state: state || "",
     pincode: pincode || "",
-    area: normalizedArea,
-    areaLocality: normalizedArea,
-    colony: String(colony || "").trim(),
+    area: areaMatchesStreet ? "" : normalizedArea,
+    areaLocality: areaMatchesStreet ? "" : normalizedArea,
+    colony: colonyMatchesStreetOrArea ? "" : normalizedColony,
     landmark: String(normalizedLandmark || ""),
     shopName: String(shopName || restaurantName || placeName || "").trim(),
     restaurantName: String(restaurantName || shopName || "").trim(),

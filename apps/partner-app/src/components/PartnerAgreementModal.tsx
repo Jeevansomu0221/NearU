@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Linking,
   Modal,
   Pressable,
@@ -19,6 +20,8 @@ type Props = {
   onClose: () => void;
   onAccept?: () => void | Promise<void>;
 };
+
+const SHEET_HEIGHT = Math.round(Dimensions.get("window").height * 0.88);
 
 export default function PartnerAgreementModal({ visible, onClose, onAccept }: Props) {
   const insets = useSafeAreaInsets();
@@ -41,11 +44,20 @@ export default function PartnerAgreementModal({ visible, onClose, onAccept }: Pr
   const PRIVACY_URL = buildLegalUrl("privacy");
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      presentationStyle="overFullScreen"
+    >
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <Pressable style={styles.dismissArea} onPress={onClose} accessibilityLabel="Dismiss agreement" />
 
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.sheet, { height: SHEET_HEIGHT, paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <View style={styles.handle} />
+
           <View style={styles.headerRow}>
             <View style={styles.headerCopy}>
               <Text style={styles.title}>Restaurant Partner Agreement</Text>
@@ -61,8 +73,9 @@ export default function PartnerAgreementModal({ visible, onClose, onAccept }: Pr
           <ScrollView
             style={styles.body}
             contentContainerStyle={styles.bodyContent}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator
             keyboardShouldPersistTaps="handled"
+            bounces
           >
             <Text style={styles.sectionTitle}>1. Agreement</Text>
             <Text style={styles.p}>
@@ -98,6 +111,7 @@ export default function PartnerAgreementModal({ visible, onClose, onAccept }: Pr
 
             <Text style={styles.sectionTitle}>5. Orders, refunds & payouts</Text>
             <Text style={styles.p}>
+              Payouts will be sent directly to your registered bank account within 15 days of order completion.
               Refunds and adjustments may affect payout amounts. Payouts are processed after reconciliation and verification of your payout account,
               subject to minimum payout thresholds, pending disputes, and compliance checks.
             </Text>
@@ -114,9 +128,13 @@ export default function PartnerAgreementModal({ visible, onClose, onAccept }: Pr
               and <Text style={styles.link} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>.
             </Text>
 
-            <Text style={styles.note}>
-              If you do not agree, do not use the platform.
+            <Text style={styles.sectionTitle}>8. Customer support</Text>
+            <Text style={styles.p}>
+              For any queries or issues, contact Vyaha Partner Support at{" "}
+              <Text style={styles.link} onPress={() => Linking.openURL("tel:+916300525031")}>+91 6300525031</Text>.
             </Text>
+
+            <Text style={styles.note}>If you do not agree, do not use the platform.</Text>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -147,14 +165,29 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.55)",
     justifyContent: "flex-end"
   },
+  dismissArea: {
+    flex: 1
+  },
   sheet: {
-    maxHeight: "92%",
+    width: "100%",
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    overflow: "hidden",
     paddingHorizontal: 18,
-    paddingTop: 10
+    paddingTop: 8,
+    elevation: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -4 }
+  },
+  handle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D0D5DD",
+    marginBottom: 10
   },
   headerRow: {
     flexDirection: "row",
@@ -197,4 +230,3 @@ const styles = StyleSheet.create({
   primaryBtnDisabled: { opacity: 0.65 },
   primaryBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" }
 });
-

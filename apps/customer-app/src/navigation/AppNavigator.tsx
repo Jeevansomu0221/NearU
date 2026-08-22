@@ -59,6 +59,7 @@ export interface Shop {
   closingTime?: string;
   openingTime?: string;
   phone?: string;
+  deliveryMode?: "platform" | "self" | "self_free";
 }
 
 // Define UserProfile for Payment screen

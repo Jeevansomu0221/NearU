@@ -79,17 +79,17 @@ export default function OrdersScreen({ navigation }: any) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'DELIVERED': return '#4CAF50';
-      case 'CONFIRMED': return '#2196F3';
-      case 'PREPARING': return '#FF9800';
-      case 'READY': return '#9C27B0';
-      case 'ASSIGNED': return '#673AB7';
-      case 'PICKED_UP': return '#3F51B5';
-      case 'REACHED_CUSTOMER': return '#1565C0';
-      case 'CANCELLED': return '#F44336';
-      case 'REJECTED': return '#795548';
-      case 'PENDING': return '#FF9800';
-      default: return '#666';
+      case 'DELIVERED': return '#1c9b55';
+      case 'CONFIRMED': return '#2f6bff';
+      case 'PREPARING': return '#2f6bff';
+      case 'READY': return '#2f6bff';
+      case 'ASSIGNED': return '#2f6bff';
+      case 'PICKED_UP': return '#2f6bff';
+      case 'REACHED_CUSTOMER': return '#2f6bff';
+      case 'CANCELLED': return '#e23744';
+      case 'REJECTED': return '#e23744';
+      case 'PENDING': return '#F59E0B';
+      default: return '#64748B';
     }
   };
 
@@ -121,7 +121,7 @@ export default function OrdersScreen({ navigation }: any) {
             orderId={item._id}
             prefix="Order #"
             style={styles.orderId}
-            highlightStyle={{ color: "#FF6B35", fontWeight: "800" }}
+            highlightStyle={{ color: "#e23744", fontWeight: "800" }}
           />
           <Text style={styles.orderDate}>{formatDate(item.createdAt)}</Text>
         </View>
@@ -168,7 +168,7 @@ export default function OrdersScreen({ navigation }: any) {
       <View style={styles.container}>
         <ScreenHeader title="My Orders" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B35" />
+          <ActivityIndicator size="large" color="#e23744" />
           <Text style={styles.loadingText}>Loading orders...</Text>
         </View>
       </View>
@@ -225,7 +225,7 @@ export default function OrdersScreen({ navigation }: any) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={["#FF6B35"]}
+              colors={["#e23744"]}
             />
           }
           onEndReached={showAllHistory ? loadMoreOrders : undefined}
@@ -233,7 +233,7 @@ export default function OrdersScreen({ navigation }: any) {
           ListFooterComponent={
             loadingMore ? (
               <View style={styles.loadingMoreContainer}>
-                <ActivityIndicator size="small" color="#FF6B35" />
+                <ActivityIndicator size="small" color="#e23744" />
               </View>
             ) : null
           }
@@ -246,7 +246,7 @@ export default function OrdersScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F6F2EC',
+    backgroundColor: '#F8FAFC',
   },
   loadingContainer: {
     flex: 1,
@@ -256,12 +256,12 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#64748B',
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#333',
+    color: '#0F172A',
     marginVertical: 20,
     textAlign: 'center',
   },
@@ -278,21 +278,21 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#666',
+    color: '#0F172A',
     marginBottom: 8,
   },
   emptySubText: {
     fontSize: 14,
-    color: '#999',
+    color: '#64748B',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
   },
   browseButton: {
-    backgroundColor: '#FF6B35',
+    backgroundColor: '#e23744',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 999,
   },
   browseButtonText: {
     color: 'white',
@@ -316,35 +316,39 @@ const styles = StyleSheet.create({
   },
   historyTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: '800',
+    color: '#0F172A',
   },
   historySubtitle: {
     marginTop: 3,
     fontSize: 13,
-    color: '#888',
+    color: '#64748B',
   },
   historyButton: {
-    backgroundColor: '#FFF1E8',
+    backgroundColor: '#FDF2F3',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   historyButtonText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FF6B35',
+    color: '#e23744',
   },
   orderCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#CBD5E1',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 8,
+    elevation: 2,
   },
   orderHeader: {
     flexDirection: 'row',
@@ -354,50 +358,52 @@ const styles = StyleSheet.create({
   },
   orderId: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '800',
+    color: '#0F172A',
   },
   orderDate: {
     fontSize: 13,
-    color: '#888',
+    color: '#64748B',
     marginTop: 2,
   },
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 999,
   },
   statusText: {
     color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '800',
   },
   restaurantName: {
     fontSize: 15,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: '700',
+    color: '#2f6bff',
     marginBottom: 12,
   },
   itemsContainer: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#F8FAFC',
     padding: 12,
-    borderRadius: 6,
+    borderRadius: 12,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   itemsTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: '700',
+    color: '#475569',
     marginBottom: 6,
   },
   itemText: {
     fontSize: 14,
-    color: '#333',
+    color: '#0F172A',
     marginBottom: 4,
   },
   moreItems: {
     fontSize: 13,
-    color: '#888',
+    color: '#64748B',
     fontStyle: 'italic',
     marginTop: 4,
   },
@@ -407,11 +413,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#E2E8F0',
   },
   totalLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#64748B',
   },
   rateHint: {
     marginTop: 4,
@@ -422,6 +428,6 @@ const styles = StyleSheet.create({
   totalAmount: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FF6B35',
+    color: '#e23744',
   },
 });

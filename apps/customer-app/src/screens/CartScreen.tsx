@@ -16,7 +16,7 @@ import { useCart, type CartItem, type CartItemRef } from "../context/CartContext
 import { getUserProfile, updateUserAddress, type SavedAddress, type UserProfile } from "../api/user.api";
 import { resolveAddressPin } from "../api/geocode.api";
 import { quoteOrderPricing, type OrderPricingQuote } from "../api/order.api";
-import { getSelectedAddress as pickSavedAddress, parseAddressCoordinates } from "../utils/address";
+import { getSelectedAddress as pickSavedAddress, parseAddressCoordinates, formatSavedAddress } from "../utils/address";
 import AddressPickerModal from "../components/AddressPickerModal";
 import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
 
@@ -119,24 +119,7 @@ export default function CartScreen({ route, navigation }: any) {
     if (!selectedAddress) {
       return "No address saved. Please add delivery address in Profile.";
     }
-
-    if (typeof selectedAddress === "string") {
-      return selectedAddress;
-    }
-
-    const addr = selectedAddress;
-    return [
-      addr.recipientName,
-      [addr.houseFlatDoorNo, addr.buildingApartmentName].filter(Boolean).join(", ") || addr.street,
-      addr.streetRoadName,
-      addr.areaLocality || addr.area,
-      addr.landmark ? `Near ${addr.landmark}` : null,
-      [addr.cityTownVillage || addr.city, addr.district ? `${addr.district} District` : null, addr.state].filter(Boolean).join(", ") +
-        (addr.pincode ? ` - ${addr.pincode}` : ""),
-      addr.country || "India"
-    ]
-      .filter(Boolean)
-      .join(", ");
+    return formatSavedAddress(selectedAddress) || "No address saved. Please add delivery address in Profile.";
   };
 
   const getDeliveryLocation = () => parseAddressCoordinates(getSelectedAddress());
@@ -395,7 +378,7 @@ export default function CartScreen({ route, navigation }: any) {
   if (loadingProfile) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color="#FF6B35" />
+        <ActivityIndicator size="large" color="#e23744" />
         <Text style={styles.loadingText}>Loading cart...</Text>
       </View>
     );
@@ -589,7 +572,7 @@ export default function CartScreen({ route, navigation }: any) {
                 </Text>
                 {isPricingPending ? (
                   <View style={styles.calculatingRow}>
-                    <ActivityIndicator size="small" color="#FF6B35" />
+                    <ActivityIndicator size="small" color="#e23744" />
                     <Text style={styles.summaryValueMuted}>Calculating...</Text>
                   </View>
                 ) : pricingError ? (
@@ -712,7 +695,7 @@ const styles = StyleSheet.create({
     marginBottom: 20
   },
   browseButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 16
@@ -761,7 +744,7 @@ const styles = StyleSheet.create({
   shopSubtotal: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   itemCard: {
     flexDirection: "row",
@@ -852,7 +835,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   lockedAddressHint: {
     fontSize: 12,
@@ -984,7 +967,7 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   footer: {
     position: "absolute",
@@ -1020,14 +1003,14 @@ const styles = StyleSheet.create({
   checkoutButton: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#1c9b55",
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: "center"
   },
   checkoutButtonDisabled: {
-    backgroundColor: "#FFB08F"
+    backgroundColor: "#86D4A8"
   },
   checkoutButtonText: {
     color: "#FFFFFF",
@@ -1043,7 +1026,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#F4EAE0"
   },
   pinSavedDot: {
-    color: "#2B9C4A",
+    color: "#1c9b55",
     fontSize: 14,
     marginRight: 6
   },

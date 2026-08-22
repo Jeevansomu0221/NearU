@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   checkApiHealth,
   persistAuthSession,
+  partnerStaffLogin,
   sendOtpWithFallback,
   verifyOtpSession,
   type OtpSessionInfo
@@ -11,6 +12,7 @@ import partnerLogo from "../assets/vyaha-partner-text-logo.png";
 import { restorePartnerSession, routeForPartnerStatus } from "../auth/session";
 
 type AuthMode = "signin" | "register";
+type SignInKind = "owner" | "staff";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && error.message) return error.message;
@@ -27,8 +29,14 @@ export default function LoginPage() {
   const initialMode: AuthMode = searchParams.get("mode") === "register" ? "register" : "signin";
   const [booting, setBooting] = useState(true);
   const [mode, setMode] = useState<AuthMode>(initialMode);
+  const [signInKind, setSignInKind] = useState<SignInKind>("owner");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("");
+  const [staffUsername, setStaffUsername] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
+  const [staffOperatorName, setStaffOperatorName] = useState("");
+  const [staffStep, setStaffStep] = useState<"credentials" | "name">("credentials");
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [session, setSession] = useState<OtpSessionInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,6 +45,7 @@ export default function LoginPage() {
 
   const switchMode = (next: AuthMode) => {
     setMode(next);
+    setSignInKind("owner");
     setStep("phone");
     setOtp("");
     setSession(null);
@@ -50,7 +59,7 @@ export default function LoginPage() {
       const restored = await restorePartnerSession();
       if (!active) return;
       if (restored.kind === "authenticated") {
-        navigate(routeForPartnerStatus(restored.partner), { replace: true });
+        navigate(routeForPartnerStatus(restored.partner, restored.actorType), { replace: true });
         return;
       }
       setBooting(false);
@@ -79,7 +88,7 @@ export default function LoginPage() {
         navigate("/onboarding", { replace: true });
         return;
       }
-      navigate(routeForPartnerStatus(restored.partner), { replace: true });
+      navigate(routeForPartnerStatus(restored.partner, restored.actorType), { replace: true });
       return;
     }
     navigate("/onboarding", { replace: true });
@@ -122,6 +131,43 @@ export default function LoginPage() {
       await routeAfterLogin();
     } catch (err) {
       setError(getErrorMessage(err, "Invalid OTP"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (staffStep === "credentials") {
+      if (!staffUsername.trim() || !staffPassword) {
+        setError("Enter the kitchen username and password.");
+        return;
+      }
+      setStaffStep("name");
+      return;
+    }
+    const operatorName = staffOperatorName.trim();
+    if (operatorName.length < 2) {
+      setError("Enter your name so the owner can see who is handling orders.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await partnerStaffLogin(staffUsername.trim(), staffPassword, "web", operatorName);
+      if (!response.success || !response.data?.token || !response.data.user) {
+        throw new Error(response.message || "Staff login failed");
+      }
+      await persistAuthSession(
+        response.data.token,
+        response.data.refreshToken,
+        response.data.user as Record<string, unknown>,
+        response.data.user.phone
+      );
+      await routeAfterLogin();
+    } catch (err) {
+      setStaffStep("credentials");
+      setError(getErrorMessage(err, "Invalid username or password"));
     } finally {
       setLoading(false);
     }
@@ -212,23 +258,63 @@ export default function LoginPage() {
 
           <div className="auth-panel__top">
             <span className="auth-step-badge">
-              {step === "phone" ? (mode === "register" ? "New partner" : "Welcome") : "Verify your number"}
+              {mode === "register"
+                ? "New partner"
+                : signInKind === "staff"
+                  ? "Staff access"
+                  : step === "otp"
+                    ? "Verify your number"
+                    : "Welcome"}
             </span>
             <h2>
-              {step === "phone"
-                ? mode === "register"
-                  ? "Register your restaurant"
-                  : "Sign in to continue"
-                : "Enter your OTP"}
+              {mode === "register"
+                ? "Register your restaurant"
+                : signInKind === "staff"
+                  ? "Staff sign in"
+                  : step === "otp"
+                    ? "Enter your OTP"
+                    : "Sign in to continue"}
             </h2>
             <p>
-              {step === "phone"
-                ? mode === "register"
-                  ? "Enter your mobile number to create a partner account and start onboarding."
-                  : "Use the mobile number linked to your restaurant. We’ll keep you signed in on this device."
-                : `We sent a 6-digit code to +91 ${phone}.`}
+              {mode === "register"
+                ? "Enter your mobile number to create a partner account and start onboarding."
+                : signInKind === "staff"
+                  ? "Use the username and password shared by the restaurant owner to manage orders."
+                  : step === "otp"
+                    ? `We sent a 6-digit code to +91 ${phone}.`
+                    : "Use the mobile number linked to your restaurant. We’ll keep you signed in on this device."}
             </p>
           </div>
+          {mode === "signin" ? (
+            <div className="auth-mode-tabs auth-mode-tabs--nested" role="tablist" aria-label="Sign in method">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={signInKind === "owner"}
+                className={`auth-mode-tab ${signInKind === "owner" ? "is-active" : ""}`}
+                onClick={() => {
+                  setSignInKind("owner");
+                  setError("");
+                }}
+              >
+                Owner OTP
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={signInKind === "staff"}
+                className={`auth-mode-tab ${signInKind === "staff" ? "is-active" : ""}`}
+                onClick={() => {
+                  setSignInKind("staff");
+                  setStep("phone");
+                  setStaffStep("credentials");
+                  setError("");
+                }}
+              >
+                Staff login
+              </button>
+            </div>
+          ) : null}
           {apiReady === "checking" ? <p className="auth-hint">Checking API connection…</p> : null}
           {apiReady === "down" ? (
             <p className="auth-error" role="alert">
@@ -236,7 +322,79 @@ export default function LoginPage() {
               api.vyaha.com is up.
             </p>
           ) : null}
-          {step === "phone" ? (
+          {mode === "signin" && signInKind === "staff" ? (
+            <form className="auth-form" onSubmit={signInStaff}>
+              {staffStep === "name" ? (
+                <div className="field">
+                  <label htmlFor="staff-operator-name">Your name</label>
+                  <input
+                    id="staff-operator-name"
+                    value={staffOperatorName}
+                    onChange={(e) => setStaffOperatorName(e.target.value)}
+                    autoComplete="name"
+                    placeholder="e.g. Abhiram"
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="field">
+                    <label htmlFor="staff-username">Username</label>
+                    <input
+                      id="staff-username"
+                      value={staffUsername}
+                      onChange={(e) => setStaffUsername(e.target.value)}
+                      autoComplete="username"
+                      placeholder="kitchen01"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="staff-password">Password</label>
+                    <div className="password-field">
+                      <input
+                        id="staff-password"
+                        type={showStaffPassword ? "text" : "password"}
+                        value={staffPassword}
+                        onChange={(e) => setStaffPassword(e.target.value)}
+                        autoComplete="current-password"
+                        placeholder="Enter password"
+                      />
+                      <button
+                        type="button"
+                        className="password-field__toggle"
+                        onClick={() => setShowStaffPassword((current) => !current)}
+                      >
+                        {showStaffPassword ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+              {error ? (
+                <p className="auth-error" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              <button className="btn auth-submit" disabled={loading || apiReady === "down"}>
+                {loading ? "Signing in…" : staffStep === "name" ? "Continue" : "Next"}
+              </button>
+              {staffStep === "name" ? (
+                <button
+                  type="button"
+                  className="auth-change-number"
+                  onClick={() => {
+                    setStaffStep("credentials");
+                    setError("");
+                  }}
+                >
+                  Back
+                </button>
+              ) : (
+                <p className="auth-fineprint">Ask the restaurant owner if you do not have the kitchen login yet.</p>
+              )}
+            </form>
+          ) : step === "phone" ? (
             <form className="auth-form" onSubmit={sendOtp}>
               <div className="field">
                 <label htmlFor="partner-phone">Mobile number</label>

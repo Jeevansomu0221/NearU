@@ -17,6 +17,8 @@ import { sendOtpWithFallback } from "../services/otpAuthFlow";
 import { buildLegalUrl } from "../constants/legal";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 import { useResponsiveLayout } from "../hooks/useResponsiveLayout";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import colors from "../theme/colors";
 
 const TERMS_URL = buildLegalUrl("terms");
 const PRIVACY_URL = buildLegalUrl("privacy");
@@ -26,6 +28,7 @@ export default function LoginScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const keyboardHeight = useKeyboardBottomInset();
   const layout = useResponsiveLayout();
+  const insets = useSafeAreaInsets();
 
   const onSend = async () => {
     // Validate phone
@@ -69,7 +72,7 @@ export default function LoginScreen({ navigation }: any) {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContainer,
-          { paddingBottom: 40 + androidKeyboardPadding(keyboardHeight) }
+          { paddingBottom: 40 + androidKeyboardPadding(keyboardHeight), paddingTop: insets.top }
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -87,11 +90,11 @@ export default function LoginScreen({ navigation }: any) {
               ]}
               resizeMode="contain"
             />
-            <Text style={styles.subtitle}>Delivery Partner Login</Text>
+            <Text style={styles.subtitle}>Sign in to start delivering</Text>
           </View>
           
-          <View style={styles.form}>
-            <Text style={styles.label}>Enter your phone number</Text>
+          <View style={styles.formCard}>
+            <Text style={styles.label}>Phone number</Text>
             
             <View style={styles.phoneContainer}>
               <View style={styles.countryCode}>
@@ -109,7 +112,7 @@ export default function LoginScreen({ navigation }: any) {
               />
             </View>
             
-            <Text style={styles.hint}>10-digit mobile number</Text>
+            <Text style={styles.hint}>We'll send a 6-digit OTP</Text>
           </View>
           
           <TouchableOpacity
@@ -142,7 +145,7 @@ export default function LoginScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.canvas,
   },
   scrollContainer: {
     flexGrow: 1,
@@ -151,14 +154,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 24,
     width: '100%',
     maxWidth: 480,
     alignSelf: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 28,
   },
   logo: {
     width: 240,
@@ -166,64 +169,65 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 18,
-    color: '#666',
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.textMuted,
   },
-  form: {
-    marginBottom: 30,
+  formCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(22,163,74,0.1)"
   },
   label: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '700',
     marginBottom: 12,
-    marginLeft: 4,
   },
   phoneContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: colors.canvas,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border,
     overflow: 'hidden',
     marginBottom: 8,
   },
   countryCode: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.primaryMuted,
     borderRightWidth: 1,
-    borderRightColor: '#ddd',
+    borderRightColor: colors.primaryBorder,
   },
   countryCodeText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '700',
+    color: colors.primaryDeep,
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: "700",
     paddingHorizontal: 16,
     paddingVertical: 16,
-    color: '#333',
+    color: colors.text,
+    letterSpacing: 1
   },
   hint: {
     fontSize: 12,
-    color: '#999',
-    marginLeft: 4,
+    color: colors.textMuted,
   },
   button: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
     marginBottom: 20,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   buttonDisabled: {
     backgroundColor: '#A5D6A7',
@@ -231,41 +235,41 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '800',
   },
   infoBox: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: colors.primarySoft,
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#4CAF50',
+    borderColor: colors.primary,
     marginBottom: 20,
   },
   infoTitle: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#2E7D32',
+    color: colors.primaryDeep,
     marginBottom: 6,
   },
   infoText: {
     fontSize: 13,
-    color: '#2E7D32',
+    color: colors.primaryDeep,
     lineHeight: 18,
   },
   footer: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 8,
     paddingHorizontal: 20,
   },
   footerText: {
     fontSize: 12,
-    color: '#999',
+    color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 18,
   },
   footerLink: {
-    color: '#4CAF50',
+    color: colors.primary,
     fontWeight: '700',
   },
 });

@@ -53,6 +53,7 @@ import { getOrderRiderEarnings } from "../utils/riderEarnings";
 import { getImagePicker } from "../utils/imagePicker";
 import { uploadMultipart } from "../api/client";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import colors from "../theme/colors";
 
 interface Props {
   route: any;
@@ -104,9 +105,12 @@ const getCodQrDisplayUri = (session: CodUpiSession | null) => {
 
 const isRazorpayPosterQr = (session: CodUpiSession | null) => session?.provider === "razorpay_qr";
 
+const normalizeJobStatus = (value?: string | null) => String(value || "").trim().toUpperCase();
+
 export default function JobDetailsScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { orderId, job: initialJob } = route.params;
+  const orderId = route.params?.orderId as string | undefined;
+  const initialJob = route.params?.job as DeliveryJob | undefined;
   const [job, setJob] = useState<DeliveryJob | null>(initialJob || null);
   const [loading, setLoading] = useState(!initialJob);
   const [updating, setUpdating] = useState(false);
@@ -334,6 +338,14 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   };
 
   const loadJobDetails = useCallback(async (options?: { silent?: boolean }) => {
+    if (!orderId) {
+      if (!options?.silent) {
+        setLoading(false);
+        handleDetailsLoadFailure("Missing order id");
+      }
+      return;
+    }
+
     try {
       if (!initialJob && !options?.silent) {
         setLoading(true);
@@ -342,6 +354,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       if (response.success && response.data) {
         const merged: DeliveryJob = {
           ...response.data,
+          status: normalizeJobStatus(response.data.status),
           // Keep distances from list/notification navigation when API omits them.
           distanceToRestaurant:
             response.data.distanceToRestaurant ?? initialJob?.distanceToRestaurant,
@@ -982,9 +995,9 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="Job Details" backgroundColor="#f5f5f5" />
+        <ScreenHeader title="Job Details" backgroundColor={colors.canvas} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4CAF50" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading job details...</Text>
         </View>
       </View>
@@ -992,7 +1005,17 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   }
 
   if (!job) {
-    return null;
+    return (
+      <View style={styles.screen}>
+        <ScreenHeader title="Job Details" backgroundColor={colors.canvas} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Could not load this job.</Text>
+          <TouchableOpacity style={styles.actionButton} onPress={() => void loadJobDetails()}>
+            <Text style={styles.actionButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   }
 
   const pickupStops = job.pickupStops?.length
@@ -1002,7 +1025,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         orderId: job._id,
         sequence: 1,
         status: job.status,
-        items: job.items,
+        items: job.items || [],
         itemTotal: job.itemTotal,
         deliveryFee: job.deliveryFee,
         grandTotal: job.grandTotal,
@@ -1011,7 +1034,8 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         deliveryReadyAt: job.deliveryReadyAt
       }];
 
-  const isPickupPhase = OPEN_AVAILABLE_JOB_STATUSES.has(job.status) || job.status === "ASSIGNED";
+  const status = normalizeJobStatus(job.status);
+  const isPickupPhase = OPEN_AVAILABLE_JOB_STATUSES.has(status) || status === "ASSIGNED";
   const activePickupStop = pickupStops.find((stop) => stop.status !== "PICKED_UP" && stop.status !== "DELIVERED") || pickupStops[0];
   const activePickupCoords = resolveLatLng({
     location: activePickupStop?.partnerId?.location,
@@ -1076,11 +1100,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
     : job.customerId?.name || "Customer";
   const stopAddress = isPickupPhase
     ? formatAddress(activePickupStop?.partnerId?.address)
-    : job.deliveryAddress;
+    : formatAddress(job.deliveryAddress);
   const stopPhone = isPickupPhase ? activePickupStop?.partnerId?.phone : job.customerId?.phone;
-  const isNavigatingToStop =
-    job.status === "ASSIGNED" || job.status === "PICKED_UP";
-  const showDeliveryDetails = job.status === "REACHED_CUSTOMER";
+  const isNavigatingToStop = status === "ASSIGNED" || status === "PICKED_UP";
+  const showDeliveryDetails = status === "REACHED_CUSTOMER";
+  const showAvailableJobDetails = OPEN_AVAILABLE_JOB_STATUSES.has(status);
+  const showCompletedJobDetails = !isNavigatingToStop && !showDeliveryDetails && !showAvailableJobDetails;
   const bottomPad = Math.max(insets.bottom, 12);
   const orderDisplayId = job.isBundledDelivery
     ? "Bundled"
@@ -1093,7 +1118,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   const isReadyForPickup = pickupStatusMessage === RIDER_READY_FOR_PICKUP_MESSAGE;
   const showPickupStatusBanner =
     Boolean(pickupStatusMessage) &&
-    (OPEN_AVAILABLE_JOB_STATUSES.has(job.status) || job.status === "ASSIGNED");
+    (OPEN_AVAILABLE_JOB_STATUSES.has(status) || status === "ASSIGNED");
 
   const renderReadyByBanner = (style?: object) =>
     showPickupStatusBanner ? (
@@ -1150,7 +1175,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
       {renderReadyByBanner({ marginBottom: 12 })}
 
-      {job.items.map((item, index) => (
+      {job.items?.map((item, index) => (
         <View key={index} style={styles.itemRow}>
           <Text style={styles.itemName}>
             {(item as any).shopName ? `${(item as any).shopName}: ` : ""}{item.name}
@@ -1211,7 +1236,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   );
 
   const renderSwipeActions = () => {
-    if (OPEN_AVAILABLE_JOB_STATUSES.has(job.status)) {
+    if (OPEN_AVAILABLE_JOB_STATUSES.has(status)) {
       return (
         <TouchableOpacity
           style={styles.actionButton}
@@ -1230,7 +1255,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       );
     }
 
-    if (job.status === "ASSIGNED" && !reachedPickup) {
+    if (status === "ASSIGNED" && !reachedPickup) {
       return (
         <SwipeConfirm
           actionLabel="Reached pickup location"
@@ -1244,7 +1269,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       );
     }
 
-    if (job.status === "ASSIGNED" && reachedPickup) {
+    if (status === "ASSIGNED" && reachedPickup) {
       return (
         <SwipeConfirm
           actionLabel={
@@ -1258,7 +1283,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       );
     }
 
-    if (job.status === "PICKED_UP") {
+    if (status === "PICKED_UP") {
       return (
         <SwipeConfirm
           actionLabel="Reached customer location"
@@ -1270,7 +1295,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
       );
     }
 
-    if (job.status === "REACHED_CUSTOMER") {
+    if (status === "REACHED_CUSTOMER") {
       return (
         <SwipeConfirm
           actionLabel="Mark as order delivered"
@@ -1344,7 +1369,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         </View>
 
         <Text style={styles.deliverCustomerName}>{job.customerId?.name || "Customer"}</Text>
-        <Text style={styles.deliverCustomerAddress}>{job.deliveryAddress}</Text>
+        <Text style={styles.deliverCustomerAddress}>{formatAddress(job.deliveryAddress)}</Text>
 
         <View style={styles.deliverActionRow}>
           {job.customerId?.phone ? (
@@ -1390,12 +1415,12 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
           </Text>
         </View>
 
-        {job.items.map((item, index) => (
+        {job.items?.map((item, index) => (
           <View
             key={index}
             style={[
               styles.deliverItemRow,
-              index === job.items.length - 1 && styles.deliverItemRowLast
+              index === (job.items?.length || 0) - 1 && styles.deliverItemRowLast
             ]}
           >
             <View style={styles.deliverItemLeft}>
@@ -1472,17 +1497,19 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
   );
 
   let jobHeaderTitle = "Job Details";
-  if (job.status === "ASSIGNED") {
+  if (status === "ASSIGNED") {
     jobHeaderTitle = reachedPickup ? "Mark picked up" : "Go to pickup";
-  } else if (job.status === "PICKED_UP") {
+  } else if (status === "PICKED_UP") {
     jobHeaderTitle = "Go to customer";
-  } else if (job.status === "REACHED_CUSTOMER") {
+  } else if (status === "REACHED_CUSTOMER") {
     jobHeaderTitle = "Deliver order";
+  } else if (status === "DELIVERED") {
+    jobHeaderTitle = "Delivery completed";
   }
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title={jobHeaderTitle} backgroundColor="#f5f5f5" />
+      <ScreenHeader title={jobHeaderTitle} backgroundColor={colors.canvas} />
       {isNavigatingToStop ? (
         <View style={styles.navigationBody}>
           <View
@@ -1513,11 +1540,21 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 
       {showDeliveryDetails ? renderDeliveryDetails() : null}
 
-      {OPEN_AVAILABLE_JOB_STATUSES.has(job.status) ? (
+      {showAvailableJobDetails || showCompletedJobDetails ? (
         <ScrollView
           style={styles.container}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]}
         >
+          {showCompletedJobDetails ? (
+            <View style={styles.completedBanner}>
+              <Ionicons name="checkmark-circle" size={18} color="#15803D" />
+              <Text style={styles.completedBannerText}>
+                {status === "DELIVERED"
+                  ? "This delivery has been completed."
+                  : `Job status: ${status.replace(/_/g, " ")}`}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.header}>
             <View style={styles.orderHeader}>
               <View>
@@ -1545,7 +1582,13 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
               <View style={styles.headerRight}>
                 <View style={styles.statusBadge}>
                   <Text style={styles.statusText}>
-                    {job.status === "READY" ? "READY" : "PREPARING"}
+                    {status === "READY"
+                      ? "READY"
+                      : status === "DELIVERED"
+                        ? "DELIVERED"
+                        : status === "PREPARING"
+                          ? "PREPARING"
+                          : status.replace(/_/g, " ")}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -1558,7 +1601,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
             </View>
           </View>
 
-          {renderReadyByBanner({ marginHorizontal: 16, marginBottom: 12 })}
+          {showAvailableJobDetails ? renderReadyByBanner({ marginHorizontal: 16, marginBottom: 12 }) : null}
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -1685,7 +1728,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
         </ScrollView>
       ) : null}
 
-      {(OPEN_AVAILABLE_JOB_STATUSES.has(job.status) || showDeliveryDetails) && (
+      {(showAvailableJobDetails || showDeliveryDetails) && (
         <View style={[styles.bottomActionBar, { paddingBottom: bottomPad }]}>
           {renderSwipeActions()}
         </View>
@@ -2113,7 +2156,7 @@ export default function JobDetailsScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.canvas,
   },
   navigationBody: {
     flex: 1,
@@ -2141,10 +2184,30 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.canvas,
   },
   scrollContent: {
     paddingBottom: 12,
+  },
+  completedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#ECFDF3",
+    borderWidth: 1,
+    borderColor: "#BBF7D0"
+  },
+  completedBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#166534"
   },
   stopSheet: {
     paddingHorizontal: 20,

@@ -15,6 +15,7 @@ import MenuPage from "./pages/MenuPage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import PaymentHistoryPage from "./pages/PaymentHistoryPage";
+import StaffAccountsPage from "./pages/StaffAccountsPage";
 
 export default function App() {
   return (
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/menu" element={<MenuPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/staff" element={<StaffAccountsPage />} />
         <Route path="/wallet" element={<PaymentHistoryPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

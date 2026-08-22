@@ -44,7 +44,7 @@ export function RequireAnyPartnerSession({
   }
 
   if (allowStatuses && session.partner && !allowStatuses.includes(session.partner.status)) {
-    return <Navigate to={routeForPartnerStatus(session.partner)} replace />;
+    return <Navigate to={routeForPartnerStatus(session.partner, session.actorType)} replace />;
   }
 
   return children;

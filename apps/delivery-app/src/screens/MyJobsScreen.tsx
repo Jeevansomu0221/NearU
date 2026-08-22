@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl
+  RefreshControl,
+  StatusBar
 } from "react-native";
 import { getMyDeliveryOrders, DeliveryOrder } from "../api/delivery.api";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "../utils/address";
 import { getRiderPickupStatusMessage } from "../utils/prepTime";
 import HighlightedOrderId from "../components/HighlightedOrderId";
+import colors from "../theme/colors";
 
 export default function MyJobsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
@@ -80,7 +82,7 @@ export default function MyJobsScreen({ navigation, route }: any) {
     switch (status) {
       case "ASSIGNED": return "#2196F3"; // Blue
       case "PICKED_UP": return "#FF9800"; // Orange
-      case "DELIVERED": return "#4CAF50"; // Green
+      case "DELIVERED": return colors.primary;
       default: return "#666";
     }
   };
@@ -95,9 +97,9 @@ export default function MyJobsScreen({ navigation, route }: any) {
   };
 
   const handleJobPress = (job: DeliveryOrder) => {
-    navigation.navigate("JobDetails", { 
+    navigation.getParent()?.navigate("JobDetails", {
       orderId: job._id,
-      job: job
+      job
     });
   };
 
@@ -148,31 +150,37 @@ export default function MyJobsScreen({ navigation, route }: any) {
 
       <View style={styles.restaurantInfo}>
         {pickupStops.map((stop, index) => (
-          <View key={stop.orderId || `${item._id}-${index}`}>
-            <Text style={styles.restaurantName}>
-              🏪 Pickup {pickupStops.length > 1 ? index + 1 : ""} {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
-            </Text>
+          <View key={stop.orderId || `${item._id}-${index}`} style={styles.stopBlock}>
+            <View style={styles.stopTitleRow}>
+              <View style={styles.pickupDot} />
+              <Text style={styles.restaurantName} numberOfLines={1}>
+                {pickupStops.length > 1 ? `Pickup ${index + 1} · ` : ""}
+                {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
+              </Text>
+            </View>
             <Text style={styles.restaurantAddress}>
-              📍 {formatAddress(stop.partnerId?.address, { short: true })}
+              {formatAddress(stop.partnerId?.address, { short: true })}
             </Text>
           </View>
         ))}
       </View>
 
       <View style={styles.deliveryInfo}>
-        <Text style={styles.deliveryLabel}>Deliver to:</Text>
-        <Text style={styles.customerName}>
-          👤 {item.customerId?.name || "Customer"}
-        </Text>
+        <View style={styles.stopTitleRow}>
+          <View style={styles.dropDot} />
+          <Text style={styles.customerName} numberOfLines={1}>
+            {item.customerId?.name || "Customer"}
+          </Text>
+        </View>
         <Text style={styles.deliveryAddress}>
-          🏠 {formatAddress(item.deliveryAddress, { short: true })}
+          {formatAddress(item.deliveryAddress, { short: true })}
         </Text>
       </View>
 
       <View style={styles.footer}>
         <View style={styles.paymentInfo}>
           <Text style={styles.paymentMethod}>
-            {item.paymentMethod === "CASH_ON_DELIVERY" ? "💰 COD" : "💳 Online"}
+            {item.paymentMethod === "CASH_ON_DELIVERY" ? "Cash on delivery" : "Paid online"}
           </Text>
           <Text style={styles.totalAmount}>₹{item.grandTotal || 0}</Text>
         </View>
@@ -192,7 +200,7 @@ export default function MyJobsScreen({ navigation, route }: any) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading your jobs...</Text>
       </View>
     );
@@ -200,10 +208,14 @@ export default function MyJobsScreen({ navigation, route }: any) {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
-        <Text style={styles.title}>My Delivery Jobs</Text>
-        <TouchableOpacity onPress={onRefresh}>
-          <Ionicons name="refresh" size={24} color="#4CAF50" />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View>
+          <Text style={styles.headerEyebrow}>Active deliveries</Text>
+          <Text style={styles.title}>My Jobs</Text>
+        </View>
+        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+          <Ionicons name="refresh" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
       
@@ -215,21 +227,24 @@ export default function MyJobsScreen({ navigation, route }: any) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={["#4CAF50"]}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="bicycle" size={80} color="#CCCCCC" />
+            <View style={styles.emptyHalo}>
+              <Ionicons name="bicycle" size={36} color={colors.primaryDark} />
+            </View>
             <Text style={styles.emptyText}>No active jobs</Text>
             <Text style={styles.emptySubText}>
-              Accept jobs from the "Available Jobs" tab to see them here
+              Accept jobs from the Jobs tab to see them here
             </Text>
             <TouchableOpacity 
               style={styles.findJobsButton}
               onPress={() => navigation.navigate("Jobs")}
             >
-              <Text style={styles.findJobsButtonText}>Find Available Jobs</Text>
+              <Text style={styles.findJobsButtonText}>Find available jobs</Text>
             </TouchableOpacity>
           </View>
         }
@@ -242,50 +257,67 @@ export default function MyJobsScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#f5f5f5' 
+    backgroundColor: colors.canvas
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.canvas,
   },
   loadingText: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textMuted,
     marginTop: 12,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    alignItems: 'flex-end',
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    backgroundColor: colors.primary,
+  },
+  headerEyebrow: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.78)",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#333',
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4
+  },
+  refreshButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)"
   },
   jobCard: {
     backgroundColor: 'white',
     marginHorizontal: 16,
-    marginVertical: 8,
+    marginTop: 14,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(22,163,74,0.08)",
+    shadowColor: "#166534",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
   },
   jobCardHighlighted: {
     borderWidth: 2,
-    borderColor: "#4CAF50",
-    backgroundColor: "#F6FFF8"
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft
   },
   jobHeader: {
     flexDirection: 'row',
@@ -297,10 +329,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#EAF3FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 12,
@@ -309,16 +339,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: '700',
-    color: '#1D4E89',
+    color: colors.primaryDeep,
   },
   orderId: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: '800',
+    color: colors.text,
   },
   timeText: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textMuted,
     marginTop: 4,
   },
   statusBadge: {
@@ -336,44 +366,61 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   restaurantInfo: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: colors.primarySoft,
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    borderRadius: 14,
+    marginBottom: 10,
+    gap: 10
+  },
+  stopBlock: {
+    gap: 2
+  },
+  stopTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  pickupDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary
+  },
+  dropDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.text
   },
   restaurantName: {
+    flex: 1,
     fontSize: 15,
-    fontWeight: '600',
-    color: '#2E7D32',
-    marginBottom: 4,
+    fontWeight: '700',
+    color: colors.primaryDeep,
   },
   restaurantAddress: {
     fontSize: 13,
-    color: '#2E7D32',
+    color: colors.primaryDark,
     opacity: 0.9,
+    marginLeft: 16
   },
   deliveryInfo: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: "#F1F5F9",
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 14,
     marginBottom: 12,
   },
-  deliveryLabel: {
-    fontSize: 12,
-    color: '#1565C0',
-    fontWeight: '600',
-    marginBottom: 6,
-  },
   customerName: {
+    flex: 1,
     fontSize: 15,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
+    fontWeight: '700',
+    color: colors.text,
   },
   deliveryAddress: {
     fontSize: 13,
-    color: '#333',
-    opacity: 0.9,
+    color: colors.textMuted,
+    marginTop: 4,
+    marginLeft: 16
   },
   footer: {
     flexDirection: 'row',
@@ -381,31 +428,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: colors.border,
   },
   paymentInfo: {
     flex: 1,
   },
   paymentMethod: {
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
     marginBottom: 4,
   },
   totalAmount: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: '800',
+    color: colors.primaryDeep,
   },
   actionButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
   },
   actionButtonText: {
     color: 'white',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   emptyContainer: {
     flex: 1,
@@ -413,30 +460,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
   },
+  emptyHalo: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.primaryMuted,
+    alignItems: "center",
+    justifyContent: "center"
+  },
   emptyText: {
-    fontSize: 18,
-    color: '#666',
+    fontSize: 20,
+    color: colors.text,
     marginTop: 16,
     marginBottom: 8,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   emptySubText: {
     fontSize: 14,
-    color: '#999',
+    color: colors.textMuted,
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
   },
   findJobsButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    borderRadius: 16,
   },
   findJobsButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '800',
   },
   listContent: {
     paddingBottom: 20,

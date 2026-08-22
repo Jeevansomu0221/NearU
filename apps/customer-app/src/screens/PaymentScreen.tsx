@@ -1018,7 +1018,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   customerName: {
     fontSize: 15,
@@ -1074,7 +1074,7 @@ const styles = StyleSheet.create({
   restaurantSubtotal: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   itemRow: {
     flexDirection: "row",
@@ -1120,7 +1120,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFCF8"
   },
   tipChipSelected: {
-    borderColor: "#FF6B35",
+    borderColor: "#e23744",
     backgroundColor: "#FFF1EA"
   },
   tipChipText: {
@@ -1129,7 +1129,7 @@ const styles = StyleSheet.create({
     color: "#5E5148"
   },
   tipChipTextSelected: {
-    color: "#FF6B35"
+    color: "#e23744"
   },
   customTipRow: {
     marginTop: 12,
@@ -1144,7 +1144,7 @@ const styles = StyleSheet.create({
   customTipPrefix: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#FF6B35",
+    color: "#e23744",
     marginRight: 8
   },
   customTipInput: {
@@ -1168,7 +1168,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 12,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   methodBody: {
     flex: 1,
@@ -1187,7 +1187,7 @@ const styles = StyleSheet.create({
   changeText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   priceCard: {
     backgroundColor: "#FFF9F4",
@@ -1245,7 +1245,7 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   taxNote: {
     marginTop: 8,
@@ -1308,7 +1308,7 @@ const styles = StyleSheet.create({
   },
   payUsingChevron: {
     fontSize: 18,
-    color: "#FF6B35",
+    color: "#e23744",
     fontWeight: "700"
   },
   footerEstimate: {
@@ -1322,7 +1322,7 @@ const styles = StyleSheet.create({
     color: "#2C2018"
   },
   payButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#1c9b55",
     paddingVertical: 15,
     borderRadius: 18,
     alignItems: "center"
@@ -1447,12 +1447,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: "center",
-    backgroundColor: "#FF6B35"
+    backgroundColor: "#e23744"
   },
   successSecondaryText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   successPrimaryText: {
     fontSize: 13,
@@ -1488,7 +1488,7 @@ const styles = StyleSheet.create({
     width: 46,
     fontSize: 12,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   methodInfo: {
     flex: 1

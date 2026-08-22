@@ -43,7 +43,7 @@ export default function SettingsPage() {
             .map((partner) => ({
               deliveryPartnerId: partner.deliveryPartnerId,
               userId: partner.userId,
-              phone: String(partner.phone || ""),
+              phone: String(partner.phone || "").replace(/\D/g, "").slice(-10),
               name: partner.name || "",
               isActive: partner.isActive !== false
             }))
@@ -58,7 +58,7 @@ export default function SettingsPage() {
   }, []);
 
   const updateRiderPhone = (index: number, value: string) => {
-    const phone = value.replace(/[^\d+]/g, "").slice(0, 16);
+    const phone = value.replace(/\D/g, "").slice(0, 10);
     setSelfDeliveryPartners((prev) =>
       prev.map((partner, partnerIndex) => (partnerIndex === index ? { ...partner, phone } : partner))
     );
@@ -83,6 +83,13 @@ export default function SettingsPage() {
 
     if ((deliveryMode === "self" || deliveryMode === "self_free") && riders.length === 0) {
       setSaveError("Add at least one delivery-app rider phone before enabling self or free self delivery.");
+      return;
+    }
+    if (
+      (deliveryMode === "self" || deliveryMode === "self_free") &&
+      riders.some((partner) => partner.phone.length !== 10)
+    ) {
+      setSaveError("Each delivery rider phone must be a 10-digit mobile number.");
       return;
     }
 
@@ -154,9 +161,17 @@ export default function SettingsPage() {
             {(deliveryMode === "self" || deliveryMode === "self_free") && (
               <div className="field" style={{ marginTop: 12 }}>
                 <label>Self delivery riders</label>
+                {deliveryMode === "self_free" ? (
+                  <p style={{ margin: "4px 0 10px", fontSize: 13, color: "#1c9b55", fontWeight: 700 }}>
+                    Customers see a free delivery mark on your shop.
+                  </p>
+                ) : null}
+                <p style={{ margin: "4px 0 10px", fontSize: 13, opacity: 0.9 }}>
+                  Each phone number must be registered in the Vyaha Delivery app.
+                </p>
                 <p style={{ margin: "4px 0 10px", fontSize: 13, opacity: 0.8 }}>
                   {deliveryMode === "self_free"
-                    ? "Customers pay ₹0 delivery fee. Listed riders get 5 minutes to accept; otherwise the order is cancelled (no platform fallback)."
+                    ? "Customers pay ₹0 delivery fee. Listed riders get 15 minutes to accept; otherwise the order is cancelled (no platform fallback)."
                     : "Listed riders get 5 minutes to accept each order before it opens to platform delivery."}
                 </p>
                 {selfDeliveryPartners.map((partner, index) => (
@@ -164,7 +179,9 @@ export default function SettingsPage() {
                     <input
                       value={partner.phone}
                       onChange={(e) => updateRiderPhone(index, e.target.value)}
-                      placeholder="Delivery rider phone"
+                      placeholder="10-digit mobile number"
+                      inputMode="numeric"
+                      maxLength={10}
                       style={{ flex: 1 }}
                     />
                     <button type="button" className="btn secondary" onClick={() => removeRider(index)}>

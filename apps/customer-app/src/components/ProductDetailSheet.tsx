@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 3,
     borderWidth: 1.5,
-    borderColor: "#249A4B",
+    borderColor: "#1c9b55",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#249A4B"
+    backgroundColor: "#1c9b55"
   },
   nonVegDot: {
     backgroundColor: "#C7362E"
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 11,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   description: {
     marginTop: 10,
@@ -471,8 +471,8 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   choiceCheckboxSelected: {
-    backgroundColor: "#FF6B35",
-    borderColor: "#FF6B35"
+    backgroundColor: "#e23744",
+    borderColor: "#e23744"
   },
   cookingInput: {
     marginTop: 10,
@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: "#201914",
-    backgroundColor: "#FBF8F4"
+    backgroundColor: "#F8FAFC"
   },
   footer: {
     flexDirection: "row",
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderRadius: 14,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#1c9b55",
     alignItems: "center",
     justifyContent: "center"
   },

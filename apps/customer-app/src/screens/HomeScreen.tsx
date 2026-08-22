@@ -125,6 +125,47 @@ const getDeliveryAddressKey = (profile?: UserProfile | null) => {
   return `line:${formatHomeDeliveryAddressLine(selected).toLowerCase()}`;
 };
 
+function FreeDeliveryStamp() {
+  return (
+    <View style={stampStyles.container} pointerEvents="none">
+      <View style={stampStyles.line} />
+      <Text style={stampStyles.textTop}>FREE</Text>
+      <Text style={stampStyles.textBottom}>DELIVERY</Text>
+      <View style={stampStyles.line} />
+    </View>
+  );
+}
+
+const stampStyles = StyleSheet.create({
+  container: {
+    position: "absolute",
+    right: 82,
+    top: "50%",
+    marginTop: -18,
+    zIndex: 5,
+    alignItems: "center"
+  },
+  line: {
+    width: 52,
+    height: 1,
+    backgroundColor: "#059669"
+  },
+  textTop: {
+    color: "#059669",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    marginVertical: 2
+  },
+  textBottom: {
+    color: "#059669",
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    marginBottom: 2
+  }
+});
+
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const layout = useResponsiveLayout();
@@ -355,7 +396,7 @@ export default function HomeScreen({ navigation }: Props) {
             <MaterialCommunityIcons
               name={category.icon as any}
               size={15}
-              color={isActive ? "#FFFFFF" : "#FF6B35"}
+              color={isActive ? "#FFFFFF" : "#e23744"}
             />
             <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>{category.label}</Text>
           </TouchableOpacity>
@@ -369,7 +410,6 @@ export default function HomeScreen({ navigation }: Props) {
       <View style={styles.heroGlow} />
       <View style={styles.heroHill} />
       <View style={styles.heroLeafLeft} />
-      <View style={styles.heroLeafRight} />
       <View style={styles.storeMarker}>
         <View style={styles.storeMarkerDot} />
       </View>
@@ -380,9 +420,12 @@ export default function HomeScreen({ navigation }: Props) {
           <View style={styles.storeWindowSmall} />
         </View>
       </View>
-      <MaterialCommunityIcons name="hamburger" size={42} color="#F19947" style={styles.burgerIcon} />
-      <MaterialCommunityIcons name="noodles" size={38} color="#F29E59" style={styles.bowlIcon} />
-      <MaterialCommunityIcons name="cup-outline" size={34} color="#F1B17A" style={styles.drinkIcon} />
+      <View style={styles.burgerWrap}>
+        <View style={styles.burgerTopBun} />
+        <View style={styles.burgerPatty} />
+        <View style={styles.burgerBottomBun} />
+      </View>
+      <MaterialCommunityIcons name="noodles" size={38} color="#2f6bff" style={styles.bowlIcon} />
     </View>
   );
 
@@ -397,11 +440,11 @@ export default function HomeScreen({ navigation }: Props) {
           >
             <Text style={styles.deliveryEyebrow} maxFontSizeMultiplier={1.25}>Delivering to</Text>
             <View style={styles.deliveryAddressRow}>
-              <Feather name="map-pin" size={12} color="#FF6B35" style={styles.deliveryPinIcon} />
+              <Feather name="map-pin" size={12} color="#e23744" style={styles.deliveryPinIcon} />
               <Text style={styles.deliveryAddressText} numberOfLines={2} maxFontSizeMultiplier={1.15}>
                 {deliveryAddressLine || "Add your delivery address"}
               </Text>
-              <Feather name="chevron-down" size={14} color="#5F534B" style={styles.deliveryChevron} />
+              <Feather name="chevron-down" size={14} style={styles.deliveryChevron} />
             </View>
           </TouchableOpacity>
           <View style={styles.heroStatsRow}>
@@ -427,7 +470,7 @@ export default function HomeScreen({ navigation }: Props) {
               style={[styles.quickActionCard, compact && styles.quickActionCardCompact]}
               onPress={() => navigation.navigate("Profile")}
             >
-              <Feather name="user" size={16} color="#FF6B35" />
+              <Feather name="user" size={16} color="#2f6bff" />
               <Text style={styles.quickActionText} maxFontSizeMultiplier={1.15}>Profile</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -435,7 +478,7 @@ export default function HomeScreen({ navigation }: Props) {
               onPress={() => navigation.navigate("Cart")}
             >
               <View style={styles.quickBadgeWrap}>
-                <Feather name="shopping-bag" size={16} color="#FF6B35" />
+                <Feather name="shopping-bag" size={16} color="#e23744" />
                 {cartItemCount > 0 ? (
                   <View style={styles.quickBadge}>
                     <Text style={styles.quickBadgeText}>{formatBadgeCount(cartItemCount)}</Text>
@@ -449,7 +492,7 @@ export default function HomeScreen({ navigation }: Props) {
               onPress={() => navigation.navigate("Orders")}
             >
               <View style={styles.quickBadgeWrap}>
-                <Feather name="clipboard" size={16} color="#FF6B35" />
+                <Feather name="clipboard" size={16} color="#1c9b55" />
                 {activeOrderCount > 0 ? <View style={styles.quickActiveDot} /> : null}
               </View>
               <Text style={styles.quickActionText} maxFontSizeMultiplier={1.15}>Orders</Text>
@@ -460,13 +503,13 @@ export default function HomeScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.searchBar}>
-        <Feather name="search" size={16} color="#7F756E" />
+        <Feather name="search" size={16} color="#94A3B8" />
         <TextInput
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Search for shops, food"
-          placeholderTextColor="#A0958D"
+          placeholderTextColor="#94A3B8"
         />
         <TouchableOpacity
           style={[styles.vegSearchToggle, vegMode && styles.vegSearchToggleActive]}
@@ -511,11 +554,6 @@ export default function HomeScreen({ navigation }: Props) {
             style={[styles.shopImage, compact && styles.shopImageCompact]}
             resizeMode="cover"
           />
-          {item.deliveryMode === "self_free" ? (
-            <View style={styles.freeDeliveryStamp} pointerEvents="none">
-              <Text style={styles.freeDeliveryStampText}>FREE DELIVERY</Text>
-            </View>
-          ) : null}
         </View>
 
         <View style={styles.shopContent}>
@@ -526,6 +564,8 @@ export default function HomeScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.shopCategory}>{category}</Text>
             </View>
+
+            {item.deliveryMode === "self_free" ? <FreeDeliveryStamp /> : null}
 
             <View style={styles.shopRightMeta}>
               <View style={styles.ratingRow}>
@@ -561,7 +601,7 @@ export default function HomeScreen({ navigation }: Props) {
                 }
               >
                 <Text style={styles.menuButtonText}>Menu</Text>
-                <Feather name="chevron-right" size={14} color="#FF6B35" />
+                <Feather name="chevron-right" size={14} color="#e23744" />
               </TouchableOpacity>
           </View>
         </View>
@@ -578,7 +618,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   const renderAddressRequired = () => (
     <View style={styles.emptyState}>
-      <Feather name="map-pin" size={26} color="#FF6B35" />
+      <Feather name="map-pin" size={26} color="#e23744" />
       <Text style={[styles.emptyTitle, styles.permissionTitle]}>Add a delivery address</Text>
       <Text style={[styles.emptyText, styles.permissionText]}>
         {locationMessage || `Add your delivery address to see shops within ${NEARBY_RADIUS_KM} km.`}
@@ -594,7 +634,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   const renderLoading = () => (
     <View style={styles.loadingState}>
-      <ActivityIndicator size="large" color="#FF6B35" />
+      <ActivityIndicator size="large" color="#e23744" />
       <Text style={styles.loadingText}>Finding shops near your address...</Text>
     </View>
   );
@@ -615,7 +655,7 @@ export default function HomeScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="always"
         keyboardDismissMode="none"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops({ showRefresh: true })} tintColor="#FF6B35" />
+          <RefreshControl refreshing={refreshing} onRefresh={() => loadNearbyShops({ showRefresh: true })} tintColor="#e23744" />
         }
         showsVerticalScrollIndicator={false}
       />
@@ -633,7 +673,7 @@ export default function HomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FBF8F4"
+    backgroundColor: "#F8FAFC"
   },
   shopList: {
     flex: 1
@@ -647,7 +687,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingHorizontal: 12,
     paddingBottom: 8,
-    backgroundColor: "#FBF8F4"
+    backgroundColor: "#F8FAFC"
   },
   heroRow: {
     flexDirection: "row",
@@ -678,7 +718,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     fontWeight: "700",
-    color: "#8A7F76",
+    color: "#64748B",
     marginBottom: 3
   },
   deliveryAddressRow: {
@@ -696,11 +736,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "700",
-    color: "#1F1712"
+    color: "#0F172A"
   },
   deliveryChevron: {
     marginLeft: 2,
-    marginTop: 0
+    marginTop: 0,
+    color: "#475569"
   },
   brandLogo: {
     width: 154,
@@ -736,7 +777,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#F1DED0",
+    borderColor: "#E2E8F0",
     paddingHorizontal: 9,
     paddingVertical: 7,
     justifyContent: "center"
@@ -749,16 +790,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 18,
     fontWeight: "900",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   heroStatValueOpen: {
-    color: "#2B9C4A"
+    color: "#1c9b55"
   },
   heroStatLabel: {
     marginTop: 3,
     fontSize: 10,
     fontWeight: "800",
-    color: "#554B43"
+    color: "#475569"
   },
   heroRight: {
     width: 148,
@@ -784,10 +825,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#EFE8DF",
+    borderColor: "#E2E8F0",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#E9DDD1",
+    shadowColor: "#CBD5E1",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
@@ -802,7 +843,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 8,
     fontWeight: "700",
-    color: "#554B43"
+    color: "#475569"
   },
   quickBadgeWrap: {
     position: "relative"
@@ -814,7 +855,7 @@ const styles = StyleSheet.create({
     minWidth: 13,
     height: 13,
     borderRadius: 7,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 2
@@ -831,14 +872,14 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#2B9C4A",
+    backgroundColor: "#1c9b55",
     borderWidth: 2,
     borderColor: "#FFFFFF"
   },
   heroArt: {
     height: 78,
     borderRadius: 20,
-    backgroundColor: "#FFF5EC",
+    backgroundColor: "#F0F9FF",
     overflow: "hidden",
     position: "relative"
   },
@@ -849,7 +890,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: "#FFE7D2"
+    backgroundColor: "#DBEAFE"
   },
   heroHill: {
     position: "absolute",
@@ -859,7 +900,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
-    backgroundColor: "#FFEBDD"
+    backgroundColor: "#D1FAE5"
   },
   heroLeafLeft: {
     position: "absolute",
@@ -871,21 +912,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 2,
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 2,
-    backgroundColor: "#F8D6BA",
+    backgroundColor: "#6EE7B7",
     transform: [{ rotate: "-25deg" }]
-  },
-  heroLeafRight: {
-    position: "absolute",
-    right: 24,
-    bottom: 12,
-    width: 16,
-    height: 26,
-    borderTopLeftRadius: 2,
-    borderTopRightRadius: 16,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 16,
-    backgroundColor: "#F8D6BA",
-    transform: [{ rotate: "25deg" }]
   },
   storeMarker: {
     position: "absolute",
@@ -894,7 +922,7 @@ const styles = StyleSheet.create({
     width: 14,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#FF9B52",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -902,7 +930,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#FFF6EF"
+    backgroundColor: "#FFFFFF"
   },
   storeWrap: {
     position: "absolute",
@@ -916,7 +944,7 @@ const styles = StyleSheet.create({
     height: 16,
     borderTopLeftRadius: 6,
     borderTopRightRadius: 6,
-    backgroundColor: "#FF994A",
+    backgroundColor: "#e23744",
     alignSelf: "center"
   },
   storeBody: {
@@ -924,7 +952,7 @@ const styles = StyleSheet.create({
     height: 24,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
-    backgroundColor: "#FFF8F2",
+    backgroundColor: "#FFFFFF",
     alignSelf: "center",
     marginTop: -2,
     flexDirection: "row",
@@ -935,28 +963,50 @@ const styles = StyleSheet.create({
     width: 14,
     height: 10,
     borderRadius: 3,
-    backgroundColor: "#FFD4AF"
+    backgroundColor: "#BFDBFE"
   },
   storeWindowSmall: {
     width: 8,
     height: 10,
     borderRadius: 3,
-    backgroundColor: "#FFD4AF"
+    backgroundColor: "#BFDBFE"
   },
-  burgerIcon: {
+  burgerWrap: {
     position: "absolute",
     right: 42,
-    bottom: 10
+    bottom: 12,
+    width: 34,
+    alignItems: "center"
+  },
+  burgerTopBun: {
+    width: 30,
+    height: 9,
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 7,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+    backgroundColor: "#1c9b55"
+  },
+  burgerPatty: {
+    width: 26,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#e23744",
+    marginVertical: 2
+  },
+  burgerBottomBun: {
+    width: 30,
+    height: 7,
+    borderBottomLeftRadius: 7,
+    borderBottomRightRadius: 7,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+    backgroundColor: "#1c9b55"
   },
   bowlIcon: {
     position: "absolute",
     right: 6,
     bottom: 10
-  },
-  drinkIcon: {
-    position: "absolute",
-    right: -2,
-    top: 28
   },
   searchBar: {
     marginTop: 8,
@@ -964,7 +1014,7 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#EEE8E0",
+    borderColor: "#E2E8F0",
     flexDirection: "row",
     alignItems: "center",
     paddingLeft: 14,
@@ -975,7 +1025,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     marginLeft: 10,
     fontSize: 13,
-    color: "#2A211B",
+    color: "#0F172A",
     paddingVertical: 0
   },
   categoryRow: {
@@ -989,19 +1039,19 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#F1DED0",
+    borderColor: "#E2E8F0",
     paddingHorizontal: 11,
     paddingVertical: 7,
     gap: 6
   },
   categoryChipActive: {
-    backgroundColor: "#FF6B35",
-    borderColor: "#FF6B35"
+    backgroundColor: "#e23744",
+    borderColor: "#e23744"
   },
   categoryChipText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#6B5E55"
+    color: "#475569"
   },
   categoryChipTextActive: {
     color: "#FFFFFF"
@@ -1011,9 +1061,9 @@ const styles = StyleSheet.create({
     height: 32,
     flexShrink: 0,
     borderRadius: 16,
-    backgroundColor: "#F5F0EA",
+    backgroundColor: "#F1F5F9",
     borderWidth: 1,
-    borderColor: "#E3D8CC",
+    borderColor: "#E2E8F0",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1021,8 +1071,8 @@ const styles = StyleSheet.create({
     gap: 5
   },
   vegSearchToggleActive: {
-    backgroundColor: "#2B9C4A",
-    borderColor: "#2B9C4A"
+    backgroundColor: "#1c9b55",
+    borderColor: "#1c9b55"
   },
   vegToggleKnob: {
     width: 20,
@@ -1039,7 +1089,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 10,
     fontWeight: "900",
-    color: "#756B63"
+    color: "#64748B"
   },
   vegSearchToggleTextActive: {
     color: "#FFFFFF"
@@ -1049,7 +1099,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     lineHeight: 9,
     fontWeight: "900",
-    color: "#9A8E84"
+    color: "#94A3B8"
   },
   vegSearchToggleStateActive: {
     color: "#E9FFED"
@@ -1060,10 +1110,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#EEE8E0",
+    borderColor: "#E2E8F0",
     padding: 8,
     flexDirection: "row",
-    shadowColor: "#E9DED2",
+    shadowColor: "#CBD5E1",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -1081,7 +1131,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 12,
-    backgroundColor: "#F3E7DA"
+    backgroundColor: "#E2E8F0"
   },
   shopImageWrap: {
     width: 64,
@@ -1096,24 +1146,6 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52
   },
-  freeDeliveryStamp: {
-    position: "absolute",
-    left: -2,
-    right: -2,
-    bottom: 4,
-    backgroundColor: "#FF6B35",
-    paddingVertical: 2,
-    paddingHorizontal: 2,
-    borderRadius: 4,
-    alignItems: "center"
-  },
-  freeDeliveryStampText: {
-    color: "#FFFFFF",
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-    textAlign: "center"
-  },
   shopContent: {
     flex: 1,
     minWidth: 0,
@@ -1122,7 +1154,9 @@ const styles = StyleSheet.create({
   shopTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start"
+    alignItems: "center",
+    position: "relative",
+    minHeight: 44
   },
   shopMainInfo: {
     flex: 1,
@@ -1141,27 +1175,27 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#FFF4EB",
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#F2D7C6",
+    borderColor: "#E2E8F0",
     alignItems: "center",
     justifyContent: "center"
   },
   favoriteButtonActive: {
-    backgroundColor: "#FFF1F3",
-    borderColor: "#FFC8D2"
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FECACA"
   },
   shopName: {
     fontSize: 13,
     lineHeight: 16,
     fontWeight: "900",
-    color: "#201914"
+    color: "#0F172A"
   },
   shopCategory: {
     marginTop: 2,
     fontSize: 10,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#2f6bff"
   },
   menuButton: {
     flexDirection: "row",
@@ -1169,12 +1203,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "#FFF4EB"
+    backgroundColor: "#FDF2F3"
   },
   menuButtonText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#FF6B35",
+    color: "#e23744",
     marginRight: 1
   },
   shopFooterRow: {
@@ -1204,7 +1238,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 13,
     fontWeight: "800",
-    color: "#2B9C4A"
+    color: "#1c9b55"
   },
   statusPill: {
     paddingHorizontal: 9,
@@ -1218,7 +1252,7 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#249A4B"
+    color: "#1c9b55"
   },
   statusTextClosed: {
     color: "#C7362E"
@@ -1226,7 +1260,7 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 9,
     lineHeight: 12,
-    color: "#7A7168"
+    color: "#64748B"
   },
   emptyState: {
     marginHorizontal: 14,
@@ -1235,18 +1269,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#EEE8E0",
+    borderColor: "#E2E8F0",
     alignItems: "center"
   },
   emptyTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#201914",
+    color: "#0F172A",
     marginBottom: 4
   },
   emptyText: {
     fontSize: 11,
-    color: "#7A7168"
+    color: "#64748B"
   },
   permissionTitle: {
     marginTop: 8
@@ -1259,7 +1293,7 @@ const styles = StyleSheet.create({
   permissionButton: {
     marginTop: 12,
     borderRadius: 999,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     paddingHorizontal: 18,
     paddingVertical: 10
   },
@@ -1276,7 +1310,7 @@ const styles = StyleSheet.create({
   permissionRetryText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   loadingState: {
     marginHorizontal: 14,
@@ -1285,13 +1319,13 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#EEE8E0",
+    borderColor: "#E2E8F0",
     alignItems: "center"
   },
   loadingText: {
     marginTop: 10,
     fontSize: 12,
     fontWeight: "700",
-    color: "#7A7168"
+    color: "#64748B"
   }
 });

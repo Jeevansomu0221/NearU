@@ -33,6 +33,12 @@ export interface VerifyOtpResponse {
       phone: string;
       name: string;
       role: string;
+      partnerId?: string;
+      staffId?: string;
+      actorType?: "owner" | "staff";
+      operatorName?: string;
+      username?: string;
+      restaurantName?: string;
     };
   };
 }
@@ -76,6 +82,20 @@ export const persistAuthSession = async (
   if (phone) {
     setStoredPhone(phone);
   }
+};
+
+export const partnerStaffLogin = async (
+  username: string,
+  password: string,
+  platform: "web" | "app" = "web",
+  operatorName?: string
+) => {
+  return api.post<NonNullable<VerifyOtpResponse["data"]>>("/auth/partner-staff-login", {
+    username,
+    password,
+    platform,
+    operatorName
+  });
 };
 
 export const logout = async () => {

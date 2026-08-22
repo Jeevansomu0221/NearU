@@ -24,8 +24,31 @@ export type AddressLike =
   | null
   | undefined;
 
-const compact = (values: Array<string | null | undefined>) =>
-  values.map((value) => value?.trim()).filter(Boolean) as string[];
+const textValue = (value?: string | null) => String(value || "").trim();
+
+const normalizeKey = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+
+const isRedundantPart = (candidate: string, existing: string) => {
+  const next = normalizeKey(candidate);
+  const prev = normalizeKey(existing);
+  if (!next || !prev) return false;
+  if (next === prev) return true;
+  return prev.includes(next);
+};
+
+/** Drop repeated / overlapping address segments (e.g. colony listed twice). */
+const dedupeAddressParts = (parts: Array<string | null | undefined>) => {
+  const result: string[] = [];
+
+  for (const raw of parts) {
+    const value = textValue(raw);
+    if (!value) continue;
+    if (result.some((existing) => isRedundantPart(value, existing))) continue;
+    result.push(value);
+  }
+
+  return result;
+};
 
 export const formatAddress = (address: AddressLike, options: { short?: boolean } = {}) => {
   if (!address) return "Address not available";
@@ -34,29 +57,44 @@ export const formatAddress = (address: AddressLike, options: { short?: boolean }
     const value = address.trim();
     if (!value) return "Address not available";
 
-    const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
-    return options.short ? parts.slice(0, 2).join(", ") || value : value;
+    const parts = dedupeAddressParts(value.split(","));
+    if (parts.length === 0) return "Address not available";
+    return options.short ? parts.slice(0, 2).join(", ") || value : parts.join(", ");
   }
 
+  const houseBuildingLine = dedupeAddressParts([
+    address.shopHouseName,
+    address.floor,
+    address.houseFlatDoorNo,
+    address.buildingApartmentName
+  ]).join(", ");
+
+  const streetRoad = textValue(address.streetRoadName) || textValue(address.roadStreet);
+  const legacyStreet = textValue(address.street);
   const streetLine =
-    compact([
-      address.shopHouseName,
-      address.floor,
-      address.houseFlatDoorNo,
-      address.buildingApartmentName,
-      address.streetRoadName
-    ]).join(", ") ||
-    address.street ||
-    address.roadStreet;
-  const areaLine = address.areaLocality || address.area || address.colony;
-  const cityLine = compact([
+    dedupeAddressParts([houseBuildingLine, streetRoad]).join(", ") ||
+    (legacyStreet &&
+    (!houseBuildingLine || !isRedundantPart(legacyStreet, houseBuildingLine))
+      ? legacyStreet
+      : "");
+
+  const streetKey = normalizeKey(streetLine);
+  const areaLine = [address.colony, address.areaLocality, address.area]
+    .map((value) => textValue(value))
+    .find((candidate) => {
+      if (!candidate) return false;
+      const key = normalizeKey(candidate);
+      return Boolean(key) && key !== streetKey && !streetKey.includes(key);
+    });
+
+  const cityLine = dedupeAddressParts([
     address.cityTownVillage || address.city,
     address.district ? `${address.district} District` : undefined,
     address.state
   ]).join(", ");
-  const postalLine = address.pincode ? `${cityLine} - ${address.pincode}` : cityLine;
+  const postalLine = address.pincode && cityLine ? `${cityLine} - ${address.pincode}` : cityLine || textValue(address.pincode);
 
-  const parts = compact([
+  const parts = dedupeAddressParts([
     address.recipientName,
     streetLine,
     areaLine,

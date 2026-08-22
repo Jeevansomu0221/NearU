@@ -67,6 +67,8 @@ export default function SettingsScreen({ navigation, route }: any) {
   const keyboardHeight = useKeyboardBottomInset();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [savedKey, setSavedKey] = useState<string | null>(null);
   const [isStaff, setIsStaff] = useState(false);
   const [staffName, setStaffName] = useState("Staff");
   const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
@@ -121,7 +123,7 @@ export default function SettingsScreen({ navigation, route }: any) {
         ? data.settings.selfDeliveryPartners.slice(0, 5).map((partner: any) => ({
             deliveryPartnerId: partner.deliveryPartnerId,
             userId: partner.userId,
-            phone: String(partner.phone || ""),
+            phone: String(partner.phone || "").replace(/\D/g, "").slice(-10),
             name: partner.name || "",
             isActive: partner.isActive !== false
           }))
@@ -144,7 +146,8 @@ export default function SettingsScreen({ navigation, route }: any) {
   };
 
   const updateSelfDeliveryPartnerPhone = (index: number, value: string) => {
-    const phone = value.replace(/[^\d+]/g, "").slice(0, 16);
+    const phone = value.replace(/\D/g, "").slice(0, 10);
+    setSavedKey((prev) => (prev === "delivery" ? null : prev));
     setSettings((prev) => ({
       ...prev,
       selfDeliveryPartners: prev.selfDeliveryPartners.map((partner, partnerIndex) =>
@@ -154,6 +157,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   };
 
   const addSelfDeliveryPartner = () => {
+    setSavedKey((prev) => (prev === "delivery" ? null : prev));
     setSettings((prev) => {
       if (prev.selfDeliveryPartners.length >= 5) {
         Alert.alert("Limit reached", "You can add maximum 5 self delivery partners for this shop.");
@@ -168,13 +172,14 @@ export default function SettingsScreen({ navigation, route }: any) {
   };
 
   const removeSelfDeliveryPartner = (index: number) => {
+    setSavedKey((prev) => (prev === "delivery" ? null : prev));
     setSettings((prev) => ({
       ...prev,
       selfDeliveryPartners: prev.selfDeliveryPartners.filter((_, partnerIndex) => partnerIndex !== index)
     }));
   };
 
-  const saveAllSettings = async () => {
+  const saveAllSettings = async (key?: string) => {
     const prepTime = Number(settings.estimatedPrepTime);
     const selfDeliveryPartners = settings.selfDeliveryPartners
       .map((partner) => ({ ...partner, phone: partner.phone.trim() }))
@@ -195,9 +200,19 @@ export default function SettingsScreen({ navigation, route }: any) {
       );
       return;
     }
+    const invalidRiderPhone = selfDeliveryPartners.find((partner) => partner.phone.length !== 10);
+    if (
+      (settings.deliveryMode === "self" || settings.deliveryMode === "self_free") &&
+      invalidRiderPhone
+    ) {
+      Alert.alert("Invalid phone", "Each delivery rider phone must be a 10-digit mobile number.");
+      return;
+    }
 
     try {
       setSaving(true);
+      setSavingKey(key || null);
+      setSavedKey(null);
       await api.put("/partners/profile", {
         settings: {
           estimatedPrepTime: Math.round(prepTime),
@@ -211,11 +226,16 @@ export default function SettingsScreen({ navigation, route }: any) {
         },
         language: settings.language
       });
-      Alert.alert("Saved", "Settings updated successfully");
+      if (key) {
+        setSavedKey(key);
+      } else {
+        Alert.alert("Saved", "Settings updated successfully");
+      }
     } catch (error: any) {
       Alert.alert("Error", error.response?.data?.message || error.message || "Failed to save settings");
     } finally {
       setSaving(false);
+      setSavingKey(null);
     }
   };
 
@@ -257,15 +277,39 @@ export default function SettingsScreen({ navigation, route }: any) {
           <Text style={[styles.sectionSubtitle, settings.darkMode && styles.mutedTextDark]}>{subtitle}</Text>
         </View>
       </View>
-      <TouchableOpacity
-        style={[styles.smallSaveButton, saving && styles.smallSaveButtonDisabled]}
-        onPress={saveAllSettings}
-        disabled={saving}
-      >
-        {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.smallSaveButtonText}>Save</Text>}
-      </TouchableOpacity>
     </View>
   );
+
+  const renderSaveButton = (label = "Save settings", key = "settings") => {
+    const isThisSaving = saving && savingKey === key;
+    const isThisSaved = !saving && savedKey === key;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.sectionSaveButton,
+          isThisSaved && styles.sectionSaveButtonSaved,
+          saving && styles.sectionSaveButtonDisabled
+        ]}
+        onPress={() => void saveAllSettings(key)}
+        disabled={saving || isThisSaved}
+        activeOpacity={0.85}
+      >
+        {isThisSaving ? (
+          <ActivityIndicator color="#FFFFFF" size="small" />
+        ) : (
+          <>
+            <Ionicons
+              name={isThisSaved ? "checkmark-circle" : "checkmark-circle-outline"}
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.sectionSaveButtonText}>{isThisSaved ? "Saved" : label}</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -332,10 +376,14 @@ export default function SettingsScreen({ navigation, route }: any) {
         <TextInput
           style={[styles.input, isDark && styles.inputDark]}
           value={settings.estimatedPrepTime}
-          onChangeText={(value) => setSettings((prev) => ({ ...prev, estimatedPrepTime: value.replace(/\D/g, "") }))}
+          onChangeText={(value) => {
+            setSavedKey((prev) => (prev === "prep" ? null : prev));
+            setSettings((prev) => ({ ...prev, estimatedPrepTime: value.replace(/\D/g, "") }));
+          }}
           keyboardType="number-pad"
           maxLength={3}
         />
+        {renderSaveButton("Save prep time", "prep")}
       </View>
 
       <View style={[styles.card, isDark && styles.cardDark]}>
@@ -353,7 +401,10 @@ export default function SettingsScreen({ navigation, route }: any) {
               <TouchableOpacity
                 key={mode.key}
                 style={[styles.choicePill, isDark && styles.choicePillDark, selected && styles.choicePillSelected]}
-                onPress={() => setSettings((prev) => ({ ...prev, deliveryMode: mode.key }))}
+                onPress={() => {
+                  setSavedKey((prev) => (prev === "delivery" ? null : prev));
+                  setSettings((prev) => ({ ...prev, deliveryMode: mode.key }));
+                }}
               >
                 <Text style={[styles.choiceText, isDark && styles.mutedTextDark, selected && styles.choiceTextSelected]}>
                   {mode.label}
@@ -364,23 +415,44 @@ export default function SettingsScreen({ navigation, route }: any) {
         </View>
 
         {(settings.deliveryMode === "self" || settings.deliveryMode === "self_free") && (
-          <View style={[styles.selfDeliveryBox, isDark && styles.selfDeliveryBoxDark]}>
+          <View
+            style={[
+              styles.selfDeliveryBox,
+              isDark && styles.selfDeliveryBoxDark,
+              settings.deliveryMode === "self_free" && styles.selfDeliveryBoxFree,
+              settings.deliveryMode === "self_free" && isDark && styles.selfDeliveryBoxFreeDark
+            ]}
+          >
+            {settings.deliveryMode === "self_free" ? (
+              <View style={[styles.freeDeliveryBadge, isDark && styles.freeDeliveryBadgeDark]}>
+                <Ionicons name="gift-outline" size={14} color="#1c9b55" />
+                <Text style={styles.freeDeliveryBadgeText}>Customers see free delivery on your shop</Text>
+              </View>
+            ) : null}
             <Text style={[styles.selfDeliveryTitle, isDark && styles.textDark]}>Self delivery riders</Text>
+            <View style={[styles.vyahaDeliveryNote, isDark && styles.vyahaDeliveryNoteDark]}>
+              <Ionicons name="phone-portrait-outline" size={16} color={isDark ? "#9ECBFF" : "#1D4E89"} />
+              <Text style={[styles.vyahaDeliveryNoteText, isDark && styles.mutedTextDark]}>
+                Each phone number must be registered in the Vyaha Delivery app.
+              </Text>
+            </View>
             <Text style={[styles.helperText, isDark && styles.mutedTextDark]}>
               {settings.deliveryMode === "self_free"
-                ? "Customers pay ₹0 delivery fee. Add delivery-app phone numbers for this shop. These riders get 5 minutes to accept; if they do not, the order is cancelled (no platform fallback)."
-                : "Add delivery-app phone numbers for this shop. These riders get 5 minutes to accept each order before it opens to platform delivery."}
+                ? "Customers pay ₹0 delivery fee. Listed riders get 15 minutes to accept; if they do not, the order is cancelled (no platform fallback)."
+                : "Listed riders get 5 minutes to accept each order before it opens to platform delivery."}
             </Text>
             {settings.selfDeliveryPartners.map((partner, index) => (
               <View key={`${partner.userId || partner.deliveryPartnerId || "new"}-${index}`} style={styles.riderRow}>
                 <View style={styles.riderInputWrap}>
+                  <Text style={[styles.riderInputLabel, isDark && styles.mutedTextDark]}>Vyaha Delivery rider</Text>
                   <TextInput
                     style={[styles.riderInput, isDark && styles.inputDark]}
                     value={partner.phone}
                     onChangeText={(value) => updateSelfDeliveryPartnerPhone(index, value)}
                     keyboardType="phone-pad"
-                    placeholder="Delivery rider phone"
+                    placeholder="10-digit mobile number"
                     placeholderTextColor="#98A2B3"
+                    maxLength={10}
                   />
                   {partner.name ? <Text style={styles.riderName}>{partner.name}</Text> : null}
                 </View>
@@ -403,6 +475,12 @@ export default function SettingsScreen({ navigation, route }: any) {
             </TouchableOpacity>
           </View>
         )}
+        <Text style={[styles.saveFlowHint, isDark && styles.mutedTextDark]}>
+          {settings.deliveryMode === "platform"
+            ? "Tap save to apply your delivery choice."
+            : "Tap save when you finish choosing delivery mode and rider numbers."}
+        </Text>
+        {renderSaveButton("Save delivery setup", "delivery")}
       </View>
       </>
       )}
@@ -482,6 +560,7 @@ export default function SettingsScreen({ navigation, route }: any) {
             onValueChange={(value) => setSettings((prev) => ({ ...prev, promotionalNotifications: value }))}
           />
         </View>
+        {renderSaveButton("Save notification settings", "notifications")}
       </View>
       )}
 
@@ -615,6 +694,29 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 12
   },
+  saveFlowHint: {
+    marginTop: 4,
+    marginBottom: 12,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#5E7897"
+  },
+  sectionSaveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#60A5FA",
+    borderRadius: 14,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 12
+  },
+  sectionSaveButtonSaved: {
+    backgroundColor: "#15803D"
+  },
+  sectionSaveButtonDisabled: { backgroundColor: "#9FC8FF" },
+  sectionSaveButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
   sectionTitleWrap: { flex: 1, flexDirection: "row", alignItems: "flex-start", marginRight: 12 },
   sectionIconCircle: {
     width: 34,
@@ -685,9 +787,67 @@ const styles = StyleSheet.create({
     backgroundColor: "#0B1220",
     borderColor: "#263449"
   },
+  selfDeliveryBoxFree: {
+    borderColor: "#9FE3BC",
+    backgroundColor: "#F3FFF8"
+  },
+  selfDeliveryBoxFreeDark: {
+    borderColor: "#1F5A3A",
+    backgroundColor: "#0D1A14"
+  },
+  freeDeliveryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#E8F8EF",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+    gap: 6
+  },
+  freeDeliveryBadgeDark: {
+    backgroundColor: "#143024"
+  },
+  freeDeliveryBadgeText: {
+    color: "#1c9b55",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  vyahaDeliveryNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#EEF6FF",
+    borderWidth: 1,
+    borderColor: "#CFE0F5",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginBottom: 8
+  },
+  vyahaDeliveryNoteDark: {
+    backgroundColor: "#132033",
+    borderColor: "#263449"
+  },
+  vyahaDeliveryNoteText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#355877",
+    fontWeight: "700"
+  },
   selfDeliveryTitle: { fontSize: 13, color: "#2A5580", fontWeight: "800", marginBottom: 4 },
   riderRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
   riderInputWrap: { flex: 1 },
+  riderInputLabel: {
+    fontSize: 11,
+    color: "#5E7897",
+    fontWeight: "800",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.3
+  },
   riderInput: {
     borderWidth: 1,
     borderColor: "#CFE0F5",
@@ -744,18 +904,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#355877"
   },
-  smallSaveButton: {
-    backgroundColor: "#60A5FA",
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 64,
-    minHeight: 32,
-    paddingHorizontal: 14,
-    paddingVertical: 7
-  },
-  smallSaveButtonDisabled: { backgroundColor: "#9FC8FF" },
-  smallSaveButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
   row: {
     minHeight: 52,
     justifyContent: "center",

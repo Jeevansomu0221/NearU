@@ -25,6 +25,11 @@ const isViteDevServer = () => {
   return port === "5173" || port === "5174" || port === "5175";
 };
 
+const isProductionApiUrl = (url: string) => /(?:^https?:\/\/)?api\.vyaha\.com/i.test(url);
+
+const normalizeApiUrl = (url: string) =>
+  url.endsWith("/api") ? url : `${url.replace(/\/$/, "")}/api`;
+
 const resolveApiBaseUrl = (): string => {
   let envUrl: string | undefined;
   try {
@@ -33,15 +38,18 @@ const resolveApiBaseUrl = (): string => {
     envUrl = undefined;
   }
 
-  if (envUrl?.trim()) {
-    const trimmed = envUrl.trim();
-    return trimmed.endsWith("/api") ? trimmed : `${trimmed.replace(/\/$/, "")}/api`;
-  }
+  const normalizedEnv = envUrl?.trim() ? normalizeApiUrl(envUrl.trim()) : "";
 
   if (typeof window !== "undefined") {
     if (isViteDevServer()) {
-      // Route through the Vite dev proxy to avoid CORS and port mismatches.
+      // Local Vite always uses the /api proxy to localhost:5000, even if .env still has production.
+      if (normalizedEnv && !isProductionApiUrl(normalizedEnv)) {
+        return normalizedEnv;
+      }
       return "/api";
+    }
+    if (normalizedEnv) {
+      return normalizedEnv;
     }
     if (isBrowserLocalhost()) {
       return "http://localhost:5000/api";
@@ -49,7 +57,7 @@ const resolveApiBaseUrl = (): string => {
     return PRODUCTION_API_URL;
   }
 
-  return PRODUCTION_API_URL;
+  return normalizedEnv || PRODUCTION_API_URL;
 };
 
 export const API_BASE_URL = resolveApiBaseUrl();
@@ -99,7 +107,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-const AUTH_SKIP_REFRESH_PATHS = ["/auth/refresh", "/auth/send-otp", "/auth/verify-otp", "/auth/logout"];
+const AUTH_SKIP_REFRESH_PATHS = ["/auth/refresh", "/auth/send-otp", "/auth/verify-otp", "/auth/logout", "/auth/partner-staff-login"];
 
 type AuthExpiredListener = () => void;
 const authExpiredListeners = new Set<AuthExpiredListener>();

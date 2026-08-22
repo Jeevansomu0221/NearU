@@ -699,3 +699,43 @@
     width: 100%;
   }
 }
+
+.onb-maps-suggestions {
+  margin: -6px 0 14px;
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.onb-maps-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid #eaecf0;
+  background: #fff;
+  color: #101828;
+  text-align: left;
+  cursor: pointer;
+}
+
+.onb-maps-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.onb-maps-suggestion:hover,
+.onb-maps-suggestion:focus {
+  background: #f8fafc;
+}
+
+.onb-maps-suggestion strong {
+  font-size: 0.92rem;
+}
+
+.onb-maps-suggestion span {
+  color: #667085;
+  font-size: 0.8rem;
+}

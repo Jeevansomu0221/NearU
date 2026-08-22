@@ -22,6 +22,12 @@ export interface VerifyOtpResponse {
             phone: string;
             name: string;
             role: string;
+            partnerId?: string;
+            staffId?: string;
+            actorType?: "owner" | "staff";
+            operatorName?: string;
+            username?: string;
+            restaurantName?: string;
         };
     };
 }
@@ -29,6 +35,22 @@ export declare const sendOtp: (phone: string, role: UserRole) => Promise<SendOtp
 export declare const verifyOtp: (phone: string, otp: string, role: UserRole) => Promise<VerifyOtpResponse>;
 export declare const verifyFirebaseOtp: (phone: string, firebaseIdToken: string, role: UserRole) => Promise<VerifyOtpResponse>;
 export declare const persistAuthSession: (token: string, refreshToken?: string, user?: Record<string, unknown>, phone?: string) => Promise<void>;
+export declare const partnerStaffLogin: (username: string, password: string, platform?: "web" | "app", operatorName?: string) => Promise<import("./types.js").ApiResponse<{
+    token: string;
+    refreshToken: string;
+    user: {
+        id: string;
+        phone: string;
+        name: string;
+        role: string;
+        partnerId?: string;
+        staffId?: string;
+        actorType?: "owner" | "staff";
+        operatorName?: string;
+        username?: string;
+        restaurantName?: string;
+    };
+}>>;
 export declare const logout: () => Promise<void>;
 export declare const deleteAccount: () => Promise<void>;
 //# sourceMappingURL=auth.api.d.ts.map

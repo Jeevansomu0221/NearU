@@ -1,18 +1,24 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { getStoredUser } from "@vyaha/api-client";
 import { usePartnerTheme } from "../contexts/PartnerThemeContext";
 import partnerLogo from "../assets/vyaha-partner-text-logo.png";
 
-const links = [
-  { to: "/", label: "Dashboard", end: true, icon: "◫" },
-  { to: "/orders", label: "Orders", icon: "☰" },
-  { to: "/menu", label: "Menu", icon: "▤" },
-  { to: "/wallet", label: "Wallet", icon: "₹" },
-  { to: "/profile", label: "Profile", icon: "◉" },
-  { to: "/settings", label: "Settings", icon: "⚙" }
+const allLinks = [
+  { to: "/", label: "Dashboard", end: true, icon: "◫", staff: true },
+  { to: "/orders", label: "Orders", icon: "☰", staff: true },
+  { to: "/menu", label: "Menu", icon: "▤", staff: false },
+  { to: "/wallet", label: "Wallet", icon: "₹", staff: false },
+  { to: "/staff", label: "Staff", icon: "⌂", staff: false },
+  { to: "/profile", label: "Profile", icon: "◉", staff: false },
+  { to: "/settings", label: "Settings", icon: "⚙", staff: true }
 ];
 
 export default function PartnerShell({ title }: { title?: string }) {
   const { isDarkMode } = usePartnerTheme();
+  const storedUser = getStoredUser();
+  const isStaff = storedUser?.actorType === "staff";
+  const links = allLinks.filter((link) => (isStaff ? link.staff : true));
+  const staffName = String(getStoredUser()?.operatorName || getStoredUser()?.name || getStoredUser()?.username || "Staff");
 
   return (
     <div className="partner-app" data-theme={isDarkMode ? "dark" : "light"}>
@@ -20,6 +26,7 @@ export default function PartnerShell({ title }: { title?: string }) {
         <div className="partner-header__left">
           <img src={partnerLogo} alt="Vyaha Partner" className="partner-header__logo" />
           {title ? <span className="partner-header__title">{title}</span> : null}
+          {isStaff ? <span className="partner-header__staff">{staffName}</span> : null}
         </div>
         <a className="partner-header__cta" href="https://www.vyaha.com/partner">
           Partner program
@@ -27,7 +34,7 @@ export default function PartnerShell({ title }: { title?: string }) {
       </header>
       <div className="partner-layout">
         <nav className="partner-nav" aria-label="Partner navigation">
-          <p className="partner-nav__label">Workspace</p>
+          <p className="partner-nav__label">{isStaff ? "Orders workspace" : "Workspace"}</p>
           {links.map((link) => (
             <NavLink
               key={link.to}

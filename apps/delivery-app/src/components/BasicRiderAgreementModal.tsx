@@ -1,5 +1,16 @@
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { buildLegalUrl } from "../constants/legal";
@@ -9,6 +20,8 @@ type Props = {
   onClose: () => void;
   onAccept?: () => void | Promise<void>;
 };
+
+const SHEET_HEIGHT = Math.round(Dimensions.get("window").height * 0.88);
 
 export default function BasicRiderAgreementModal({ visible, onClose, onAccept }: Props) {
   const insets = useSafeAreaInsets();
@@ -32,11 +45,20 @@ export default function BasicRiderAgreementModal({ visible, onClose, onAccept }:
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      presentationStyle="overFullScreen"
+    >
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <Pressable style={styles.dismissArea} onPress={onClose} accessibilityLabel="Dismiss agreement" />
 
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.sheet, { height: SHEET_HEIGHT, paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <View style={styles.handle} />
+
           <View style={styles.headerRow}>
             <View style={styles.headerCopy}>
               <Text style={styles.title}>Basic Rider Agreement</Text>
@@ -52,8 +74,9 @@ export default function BasicRiderAgreementModal({ visible, onClose, onAccept }:
           <ScrollView
             style={styles.body}
             contentContainerStyle={styles.bodyContent}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator
             keyboardShouldPersistTaps="handled"
+            bounces
           >
             <Text style={styles.sectionTitle}>1. Agreement</Text>
             <Text style={styles.p}>
@@ -151,14 +174,29 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.55)",
     justifyContent: "flex-end"
   },
+  dismissArea: {
+    flex: 1
+  },
   sheet: {
-    maxHeight: "92%",
+    width: "100%",
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    overflow: "hidden",
     paddingHorizontal: 18,
-    paddingTop: 10
+    paddingTop: 8,
+    elevation: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -4 }
+  },
+  handle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D0D5DD",
+    marginBottom: 10
   },
   headerRow: {
     flexDirection: "row",

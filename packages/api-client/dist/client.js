@@ -15,6 +15,8 @@ const isViteDevServer = () => {
     const port = window.location.port;
     return port === "5173" || port === "5174" || port === "5175";
 };
+const isProductionApiUrl = (url) => /(?:^https?:\/\/)?api\.vyaha\.com/i.test(url);
+const normalizeApiUrl = (url) => url.endsWith("/api") ? url : `${url.replace(/\/$/, "")}/api`;
 const resolveApiBaseUrl = () => {
     let envUrl;
     try {
@@ -23,21 +25,24 @@ const resolveApiBaseUrl = () => {
     catch {
         envUrl = undefined;
     }
-    if (envUrl?.trim()) {
-        const trimmed = envUrl.trim();
-        return trimmed.endsWith("/api") ? trimmed : `${trimmed.replace(/\/$/, "")}/api`;
-    }
+    const normalizedEnv = envUrl?.trim() ? normalizeApiUrl(envUrl.trim()) : "";
     if (typeof window !== "undefined") {
         if (isViteDevServer()) {
-            // Route through the Vite dev proxy to avoid CORS and port mismatches.
+            // Local Vite always uses the /api proxy to localhost:5000, even if .env still has production.
+            if (normalizedEnv && !isProductionApiUrl(normalizedEnv)) {
+                return normalizedEnv;
+            }
             return "/api";
+        }
+        if (normalizedEnv) {
+            return normalizedEnv;
         }
         if (isBrowserLocalhost()) {
             return "http://localhost:5000/api";
         }
         return PRODUCTION_API_URL;
     }
-    return PRODUCTION_API_URL;
+    return normalizedEnv || PRODUCTION_API_URL;
 };
 export const API_BASE_URL = resolveApiBaseUrl();
 export const API_HEALTH_URL = API_BASE_URL === "/api"
@@ -53,12 +58,12 @@ const formatNetworkError = (error) => {
         if (isViteDevServer() || (isBrowserLocalhost() && API_BASE_URL.includes("localhost"))) {
             return "Cannot reach the local API server. Start it with `cd backend && npm run dev` and make sure MongoDB is available.";
         }
-        return "Vyaha API is unreachable right now. Please try again in a moment.";
+        return "Please check your network and try again.";
     }
     if (code === "ECONNABORTED" || message.includes("timeout")) {
-        return "The server is taking longer than usual. Please wait a moment and try again.";
+        return "Please check your network and try again.";
     }
-    return "Network error. Check your internet connection and try again.";
+    return "Please check your network and try again.";
 };
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -77,7 +82,7 @@ api.interceptors.request.use((config) => {
     }
     return config;
 });
-const AUTH_SKIP_REFRESH_PATHS = ["/auth/refresh", "/auth/send-otp", "/auth/verify-otp", "/auth/logout"];
+const AUTH_SKIP_REFRESH_PATHS = ["/auth/refresh", "/auth/send-otp", "/auth/verify-otp", "/auth/logout", "/auth/partner-staff-login"];
 const authExpiredListeners = new Set();
 export const onAuthExpired = (listener) => {
     authExpiredListeners.add(listener);

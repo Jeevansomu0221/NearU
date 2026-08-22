@@ -69,7 +69,11 @@ const resolveApiBaseUrls = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
   const normalizedEnv = envUrl ? normalizeApiUrl(envUrl) : "";
 
-  if (!isDev) {
+  // In some dev setups, `__DEV__` might be missing/undefined. If we are running
+  // from a dev bundle (scriptURL exists), still prefer local backend URLs.
+  const scriptURL = NativeModules.SourceCode?.scriptURL;
+  const isRunningDevBundle = Boolean(scriptURL);
+  if (!isDev && !isRunningDevBundle) {
     return [normalizedEnv || PRODUCTION_API_URL];
   }
 
@@ -87,7 +91,6 @@ const resolveApiBaseUrls = () => {
     addUnique(urls, normalizedEnv);
   }
 
-  const scriptURL = NativeModules.SourceCode?.scriptURL;
   if (scriptURL) {
     try {
       const bundleUrl = new URL(scriptURL);

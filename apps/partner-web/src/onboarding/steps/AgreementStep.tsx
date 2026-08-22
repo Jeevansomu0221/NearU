@@ -60,11 +60,15 @@ export default function AgreementStep({
           checked={partnerAgreementAccepted || Boolean(kyc.partnerAgreementAcceptedAt)}
           onChange={(e) => onPartnerAgreementAcceptedChange(e.target.checked)}
         />
-        I accept the Restaurant Partner agreement
+        I accept the Restaurant Partner agreement (0% commission for first 45 days, then 10%. Payouts sent directly to your bank account within 15 days)
       </label>
       <a href="https://www.vyaha.com/partner-policy" target="_blank" rel="noreferrer" className="onb-link">
         Read partner policy
       </a>
+
+      <p className="onb-hint" style={{ marginTop: 12 }}>
+        For support, call <a href="tel:+916300525031" className="onb-link">+91 6300525031</a>
+      </p>
     </div>
   );
 }

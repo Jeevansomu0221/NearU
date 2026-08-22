@@ -43,7 +43,6 @@ export const validateStep = (
   if (step === 2 && !selectedCategory) return "Please select a business category";
 
   if (step === 3) {
-    if (!/^\d{14}$/.test(documents.fssaiNumber.replace(/\D/g, ""))) return "Enter a valid 14-digit FSSAI number";
     if (!documents.fssaiUrl.trim()) return "Upload your FSSAI certificate";
     if (!kyc.panVerified && !kyc.panSkipped) return "Verify PAN via Eko or skip for now";
     if (!documents.gstRegistered) return "Please select whether you are GST registered";

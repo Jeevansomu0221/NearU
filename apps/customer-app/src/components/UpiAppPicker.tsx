@@ -62,7 +62,7 @@ export default function UpiAppPicker({
 
           {loading ? (
             <View style={styles.loadingState}>
-              <ActivityIndicator color="#FF6B35" />
+              <ActivityIndicator color="#e23744" />
               <Text style={styles.loadingText}>Finding UPI apps on your phone...</Text>
             </View>
           ) : selectableApps.length === 0 ? (
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   closeText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   loadingState: {
     alignItems: "center",
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   appBadgeText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   appName: {
     flex: 1,

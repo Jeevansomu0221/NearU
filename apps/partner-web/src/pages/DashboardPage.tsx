@@ -4,18 +4,23 @@ import {
   getMyStatus,
   getPartnerStats,
   getPartnerWallet,
+  getStoredUser,
   updateShopStatus,
   type PartnerWallet
 } from "@vyaha/api-client";
 import { usePartnerOrderWatcher } from "../hooks/usePartnerOrderWatcher";
 
 export default function DashboardPage() {
+  const isStaff = getStoredUser()?.actorType === "staff";
+  const staffName = String(getStoredUser()?.operatorName || getStoredUser()?.name || getStoredUser()?.username || "Staff");
   const [shopOpen, setShopOpen] = useState(true);
   const [partner, setPartner] = useState<Record<string, unknown> | null>(null);
   const [wallet, setWallet] = useState<PartnerWallet | null>(null);
   const [stats, setStats] = useState({ todayOrders: 0, pendingOrders: 0, todayEarnings: 0 });
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [kitchenOperator, setKitchenOperator] = useState("");
+  const [kitchenOperatorWhen, setKitchenOperatorWhen] = useState("");
 
   usePartnerOrderWatcher(true);
 
@@ -26,10 +31,19 @@ export default function DashboardPage() {
       if (statusRes.data) {
         setPartner(statusRes.data as unknown as Record<string, unknown>);
         setShopOpen((statusRes.data as { isOpen?: boolean }).isOpen !== false);
+        const kitchen = (statusRes.data as { kitchenStaff?: { lastOperatorName?: string; lastLoginAt?: string | null } })
+          .kitchenStaff;
+        setKitchenOperator(kitchen?.lastOperatorName || "");
+        setKitchenOperatorWhen(kitchen?.lastLoginAt || "");
       }
-      const [statsRes, walletRes] = await Promise.all([getPartnerStats(), getPartnerWallet()]);
+      const requests: Array<Promise<unknown>> = [getPartnerStats()];
+      if (!isStaff) requests.push(getPartnerWallet());
+      const [statsRes, walletRes] = await Promise.all(requests) as [
+        Awaited<ReturnType<typeof getPartnerStats>>,
+        Awaited<ReturnType<typeof getPartnerWallet>> | undefined
+      ];
       if (statsRes.data) setStats(statsRes.data as typeof stats);
-      if (walletRes.data) setWallet(walletRes.data);
+      if (walletRes && "data" in walletRes && walletRes.data) setWallet(walletRes.data);
     } finally {
       setLoading(false);
     }
@@ -69,15 +83,36 @@ export default function DashboardPage() {
     <div className="dash">
       <header className="dash-hero">
         <div>
-          <p className="dash-eyebrow">Partner dashboard</p>
+          <p className="dash-eyebrow">{isStaff ? `Staff · ${staffName}` : "Partner dashboard"}</p>
           <h1>{restaurantName}</h1>
-          <p className="dash-subtitle">Monitor orders, earnings, and shop availability in real time.</p>
+          <p className="dash-subtitle">
+            {isStaff
+              ? "Accept orders, mark food ready, and keep the kitchen moving."
+              : "Monitor orders, earnings, and shop availability in real time."}
+          </p>
         </div>
         <div className={`dash-live ${shopOpen ? "is-open" : "is-closed"}`}>
           <span className="dash-live__dot" aria-hidden />
           {shopOpen ? "Live · accepting orders" : "Closed · not accepting orders"}
         </div>
       </header>
+
+      {!isStaff && kitchenOperator ? (
+        <section className="card kitchen-now">
+          <p className="dash-eyebrow">Kitchen now</p>
+          <h2>{kitchenOperator}</h2>
+          <p className="dash-subtitle">
+            {kitchenOperatorWhen
+              ? `Signed in ${new Date(kitchenOperatorWhen).toLocaleString("en-IN", {
+                  day: "2-digit",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}`
+              : "Using the shared kitchen login"}
+          </p>
+        </section>
+      ) : null}
 
       <section className={`dash-status card ${shopOpen ? "is-open" : "is-closed"}`}>
         <div className="dash-status__copy">
@@ -108,6 +143,8 @@ export default function DashboardPage() {
             <strong>{stats.pendingOrders}</strong>
           </div>
         </article>
+        {isStaff ? null : (
+          <>
         <article className="dash-stat card">
           <div className="dash-stat__icon dash-stat__icon--money" aria-hidden>
             ₹
@@ -126,6 +163,8 @@ export default function DashboardPage() {
             <strong>₹{walletBalance}</strong>
           </div>
         </article>
+          </>
+        )}
       </section>
 
       {stats.pendingOrders > 0 ? (
@@ -147,6 +186,8 @@ export default function DashboardPage() {
             <strong>Manage orders</strong>
             <span>Accept, prepare, and track live orders</span>
           </Link>
+          {isStaff ? null : (
+            <>
           <Link className="dash-action card" to="/menu">
             <strong>Edit menu</strong>
             <span>Update items, prices, and availability</span>
@@ -155,10 +196,16 @@ export default function DashboardPage() {
             <strong>Check wallet</strong>
             <span>See payouts and settlement status</span>
           </Link>
+          <Link className="dash-action card" to="/staff">
+            <strong>Kitchen login</strong>
+            <span>One shared username, and see who signed in</span>
+          </Link>
           <Link className="dash-action card" to="/profile">
             <strong>Shop profile</strong>
             <span>Hours, photos, and restaurant details</span>
           </Link>
+            </>
+          )}
         </div>
       </section>
     </div>

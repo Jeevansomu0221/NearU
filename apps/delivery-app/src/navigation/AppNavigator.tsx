@@ -6,6 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAccessToken } from "../utils/authStorage";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import colors from "../theme/colors";
 import type { AccountDeletionRequest } from "../api/accountDeletion.api";
 import { resolveStartupDeletionRequest } from "../api/accountDeletion.api";
 
@@ -48,14 +49,24 @@ function MainTabs() {
     <>
       <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: "#4CAF50",
-        tabBarInactiveTintColor: "#666",
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: "#94A3B8",
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "700",
+          marginTop: 2
+        },
         tabBarStyle: {
-          backgroundColor: "#fff",
-          borderTopColor: "#eee",
-          height: 62 + Math.max(insets.bottom, 8),
+          backgroundColor: "#FFFFFF",
+          borderTopWidth: 0,
+          height: 64 + Math.max(insets.bottom, 8),
           paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8,
+          elevation: 16,
+          shadowColor: "#166534",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 12
         },
         headerShown: false,
       }}
@@ -64,18 +75,18 @@ function MainTabs() {
         name="Jobs"
         component={JobsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "grid" : "grid-outline"} size={22} color={color} />
           ),
-          tabBarLabel: "Available Jobs",
+          tabBarLabel: "Jobs",
         }}
       />
       <Tab.Screen
         name="MyJobs"
         component={MyJobsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bicycle" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "bicycle" : "bicycle-outline"} size={22} color={color} />
           ),
           tabBarLabel: "My Jobs",
         }}
@@ -84,8 +95,8 @@ function MainTabs() {
         name="Earnings"
         component={EarningsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cash" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "wallet" : "wallet-outline"} size={22} color={color} />
           ),
           tabBarLabel: "Earnings",
         }}
@@ -94,8 +105,8 @@ function MainTabs() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color} />
           ),
           tabBarLabel: "Profile",
         }}
@@ -170,7 +181,7 @@ export default function AppNavigator() {
   if (startup.status === "loading") {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingTitle}>Opening delivery app...</Text>
         <Text style={styles.loadingSubtitle}>Checking your session</Text>
       </View>
@@ -241,7 +252,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.canvas,
     paddingHorizontal: 24,
   },
   loadingTitle: {

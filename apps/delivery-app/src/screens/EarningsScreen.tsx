@@ -37,6 +37,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { getOrderRiderEarnings, getOrderTipAmount, parseMoneyInput } from "../utils/riderEarnings";
+import colors from "../theme/colors";
 
 type EarningHistoryItem = {
   id: string;
@@ -478,7 +479,7 @@ export default function EarningsScreen({ navigation }: any) {
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading earnings...</Text>
       </View>
     );
@@ -489,7 +490,7 @@ export default function EarningsScreen({ navigation }: any) {
       <ScrollView
         style={styles.container}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 34 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#4CAF50"]} tintColor="#4CAF50" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       >
         {/* Wallet Hero */}
         <View style={styles.todayCard}>
@@ -521,7 +522,7 @@ export default function EarningsScreen({ navigation }: any) {
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <View style={styles.statIconContainer}>
-            <Ionicons name="cash" size={24} color="#4CAF50" />
+            <Ionicons name="cash" size={24} color={colors.primary} />
           </View>
           <Text style={styles.statValue}>{formatCurrency(totalPaidEarnings)}</Text>
           <Text style={styles.statLabel}>Total Earnings</Text>
@@ -634,7 +635,7 @@ export default function EarningsScreen({ navigation }: any) {
       <View style={styles.withdrawalCard}>
         <View style={styles.cashCardHeader}>
           <View style={styles.withdrawalHeader}>
-            <Ionicons name="card" size={24} color="#4CAF50" />
+            <Ionicons name="card" size={24} color={colors.primary} />
             <Text style={styles.withdrawalTitle}>Withdraw Earnings</Text>
           </View>
           <TouchableOpacity
@@ -644,9 +645,9 @@ export default function EarningsScreen({ navigation }: any) {
             accessibilityLabel="Refresh withdrawal status"
           >
             {walletRefreshing ? (
-              <ActivityIndicator size="small" color="#4CAF50" />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Ionicons name="refresh" size={20} color="#4CAF50" />
+              <Ionicons name="refresh" size={20} color={colors.primary} />
             )}
           </TouchableOpacity>
         </View>
@@ -727,7 +728,7 @@ export default function EarningsScreen({ navigation }: any) {
         {(withdrawalWallet?.payouts?.length || withdrawalWallet?.withdrawalHistory?.length) ? (
           <TouchableOpacity style={styles.viewPayoutHistoryButton} onPress={() => setPayoutHistoryVisible(true)}>
             <Text style={styles.viewPayoutHistoryText}>View payment history</Text>
-            <Ionicons name="chevron-forward" size={16} color="#4CAF50" />
+            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -1019,17 +1020,17 @@ export default function EarningsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   safeAreaScreen: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.canvas,
   },
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.canvas,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.canvas,
   },
   loadingText: {
     fontSize: 16,
@@ -1037,10 +1038,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   todayCard: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     padding: 24,
     margin: 16,
-    borderRadius: 16,
+    borderRadius: 24,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1103,7 +1104,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   periodButtonActive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
   },
   periodButtonText: {
     fontSize: 14,
@@ -1123,7 +1124,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     padding: 20,
-    borderRadius: 12,
+    borderRadius: 20,
     alignItems: 'center',
     elevation: 2,
     shadowColor: '#000',
@@ -1219,7 +1220,7 @@ const styles = StyleSheet.create({
   totalEarningsAmount: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#4CAF50',
+    color: colors.primary,
   },
   recentCard: {
     backgroundColor: '#FFFFFF',
@@ -1246,7 +1247,7 @@ const styles = StyleSheet.create({
   },
   viewAllText: {
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.primary,
     fontWeight: '500',
   },
   recentItem: {
@@ -1338,7 +1339,7 @@ const styles = StyleSheet.create({
   withdrawalAmount: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#4CAF50',
+    color: colors.primary,
     marginBottom: 8,
   },
   cashAmount: {
@@ -1354,9 +1355,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   withdrawButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 14,
     alignItems: 'center',
   },
   depositButton: {
@@ -1626,7 +1627,7 @@ const styles = StyleSheet.create({
   },
   viewPayoutHistoryText: {
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.primary,
     fontWeight: '600',
   },
   historySectionTitle: {

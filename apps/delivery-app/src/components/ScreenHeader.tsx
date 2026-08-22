@@ -3,6 +3,7 @@ import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-nativ
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import colors from "../theme/colors";
 
 type Props = {
   title: string;
@@ -15,7 +16,7 @@ export default function ScreenHeader({
   title,
   showBack = true,
   onBack,
-  backgroundColor = "#F8FAFC"
+  backgroundColor = colors.canvas
 }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
@@ -44,7 +45,7 @@ export default function ScreenHeader({
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <Ionicons name="chevron-back" size={26} color="#101828" />
+            <Ionicons name="chevron-back" size={26} color={colors.text} />
           </TouchableOpacity>
         ) : null}
         <Text style={[styles.title, !showBack && styles.titleSolo]} numberOfLines={1}>
@@ -57,7 +58,7 @@ export default function ScreenHeader({
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: "#F8FAFC"
+    backgroundColor: colors.canvas
   },
   row: {
     flexDirection: "row",
@@ -78,7 +79,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 24,
     fontWeight: "800",
-    color: "#101828"
+    color: colors.text
   },
   titleSolo: {
     paddingHorizontal: 6

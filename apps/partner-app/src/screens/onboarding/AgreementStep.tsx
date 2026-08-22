@@ -1,10 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { partnerTheme } from "../../theme";
 import { buildLegalUrl } from "../../constants/legal";
 import { acceptPartnerAgreement, type PartnerKycState } from "../../api/kyc.api";
-import PartnerAgreementModal from "../../components/PartnerAgreementModal";
 
 type Props = {
   kyc: PartnerKycState;
@@ -13,6 +12,7 @@ type Props = {
   partnerAgreementAccepted: boolean;
   onTermsAcceptedChange: (value: boolean) => void;
   onPartnerAgreementAcceptedChange: (value: boolean) => void;
+  onViewAgreement: () => void;
   summary: {
     restaurantName: string;
     ownerName: string;
@@ -34,13 +34,13 @@ export default function AgreementStep({
   partnerAgreementAccepted,
   onTermsAcceptedChange,
   onPartnerAgreementAcceptedChange,
+  onViewAgreement,
   summary
 }: Props) {
-  const [agreementModalVisible, setAgreementModalVisible] = useState(false);
 
   const partnerAgreementLabel = useMemo(
     () =>
-      "I accept the Restaurant Partner agreement (0% for first 45 days after first order, then 10% platform commission)",
+      "I accept the Restaurant Partner agreement (0% commission for first 45 days, then 10%. Payouts sent directly to your bank account within 15 days)",
     []
   );
 
@@ -75,15 +75,14 @@ export default function AgreementStep({
         label={partnerAgreementLabel}
       />
 
-      <Pressable onPress={() => setAgreementModalVisible(true)}>
+      <Pressable onPress={onViewAgreement}>
         <Text style={styles.link}>View partner agreement</Text>
       </Pressable>
 
-      <PartnerAgreementModal
-        visible={agreementModalVisible}
-        onClose={() => setAgreementModalVisible(false)}
-        onAccept={() => onPartnerAgreementAcceptedChange(true)}
-      />
+      <Pressable onPress={() => Linking.openURL("tel:+916300525031")} style={styles.supportRow}>
+        <Ionicons name="call-outline" size={14} color={partnerTheme.colors.muted} />
+        <Text style={styles.supportText}>Support: +91 6300525031</Text>
+      </Pressable>
     </View>
   );
 }
@@ -128,5 +127,7 @@ const styles = StyleSheet.create({
   timelineItem: { fontSize: 13, color: partnerTheme.colors.text, marginBottom: 6, lineHeight: 18 },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   checkText: { flex: 1, fontSize: 13, color: partnerTheme.colors.text, lineHeight: 18 },
-  link: { color: partnerTheme.colors.primary, fontWeight: "700", marginBottom: 12, marginLeft: 26 }
+  link: { color: partnerTheme.colors.primary, fontWeight: "700", marginBottom: 12, marginLeft: 26 },
+  supportRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  supportText: { fontSize: 12, color: partnerTheme.colors.muted }
 });

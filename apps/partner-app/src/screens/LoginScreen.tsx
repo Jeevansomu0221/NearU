@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api, { warmApi } from "../api/client";
 import { storeAuthData } from "../utils/storage";
+import { loginPartnerStaff } from "../api/auth.api";
 import {
   clearFirebaseOtpSession,
   isFirebaseOtpSessionExpiredError
@@ -31,8 +32,14 @@ const PRIVACY_URL = buildLegalUrl("privacy");
 const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function LoginScreen({ navigation }: any) {
+  const [loginKind, setLoginKind] = useState<"owner" | "staff">("owner");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
+  const [staffUsername, setStaffUsername] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
+  const [staffOperatorName, setStaffOperatorName] = useState("");
+  const [staffStep, setStaffStep] = useState<"credentials" | "name">("credentials");
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -302,6 +309,39 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
+  const handleStaffLogin = async () => {
+    if (staffStep === "credentials") {
+      if (!staffUsername.trim() || !staffPassword) {
+        setFeedback({ type: "error", text: "Enter the kitchen username and password." });
+        return;
+      }
+      setFeedback(null);
+      setStaffStep("name");
+      return;
+    }
+
+    const operatorName = staffOperatorName.trim();
+    if (operatorName.length < 2) {
+      setFeedback({ type: "error", text: "Enter your name so the owner can see who is handling orders." });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setFeedback(null);
+      await loginPartnerStaff(staffUsername.trim(), staffPassword, operatorName);
+      await checkPartnerStatus();
+    } catch (error: any) {
+      setStaffStep("credentials");
+      setFeedback({
+        type: "error",
+        text: error?.response?.data?.message || error?.message || "Invalid username or password"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -340,10 +380,43 @@ export default function LoginScreen({ navigation }: any) {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{step === "phone" ? "Partner login" : "Verify OTP"}</Text>
-          <Text style={styles.cardHint}>
-            {step === "phone" ? "Register now or continue with the phone number linked to your shop." : `We sent an OTP to ${phone}.`}
+          <Text style={styles.cardTitle}>
+            {loginKind === "staff" ? "Staff login" : step === "phone" ? "Partner login" : "Verify OTP"}
           </Text>
+          <Text style={styles.cardHint}>
+            {loginKind === "staff"
+              ? staffStep === "name"
+                ? "What should the owner see as your name while you manage orders?"
+                : "Use the shared username and password from the restaurant owner."
+              : step === "phone"
+                ? "Register now or continue with the phone number linked to your shop."
+                : `We sent an OTP to ${phone}.`}
+          </Text>
+
+          {step === "phone" || loginKind === "staff" ? (
+            <View style={styles.kindRow}>
+              <TouchableOpacity
+                style={[styles.kindPill, loginKind === "owner" && styles.kindPillActive]}
+                onPress={() => {
+                  setLoginKind("owner");
+                  setFeedback(null);
+                }}
+              >
+                <Text style={[styles.kindPillText, loginKind === "owner" && styles.kindPillTextActive]}>Owner OTP</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.kindPill, loginKind === "staff" && styles.kindPillActive]}
+                onPress={() => {
+                  setLoginKind("staff");
+                  setStep("phone");
+                  setStaffStep("credentials");
+                  setFeedback(null);
+                }}
+              >
+                <Text style={[styles.kindPillText, loginKind === "staff" && styles.kindPillTextActive]}>Staff login</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           {feedback ? (
             <View style={[styles.feedbackCard, feedback.type === "success" ? styles.feedbackSuccess : styles.feedbackError]}>
@@ -353,7 +426,73 @@ export default function LoginScreen({ navigation }: any) {
             </View>
           ) : null}
 
-          {step === "phone" ? (
+          {loginKind === "staff" ? (
+            staffStep === "name" ? (
+            <>
+              <Text style={styles.label}>Your name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Abhiram"
+                placeholderTextColor="#98A2B3"
+                autoCapitalize="words"
+                value={staffOperatorName}
+                onChangeText={(value) => {
+                  setStaffOperatorName(value);
+                  if (feedback) setFeedback(null);
+                }}
+              />
+              <TouchableOpacity style={styles.primaryButton} onPress={handleStaffLogin} disabled={loading}>
+                {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Continue</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => {
+                  setStaffStep("credentials");
+                  setFeedback(null);
+                }}
+                disabled={loading}
+              >
+                <Text style={styles.secondaryButtonText}>Back</Text>
+              </TouchableOpacity>
+            </>
+            ) : (
+            <>
+              <Text style={styles.label}>Username</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="kitchen01"
+                placeholderTextColor="#98A2B3"
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={staffUsername}
+                onChangeText={(value) => {
+                  setStaffUsername(value);
+                  if (feedback) setFeedback(null);
+                }}
+              />
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Enter password"
+                  placeholderTextColor="#98A2B3"
+                  secureTextEntry={!showStaffPassword}
+                  value={staffPassword}
+                  onChangeText={(value) => {
+                    setStaffPassword(value);
+                    if (feedback) setFeedback(null);
+                  }}
+                />
+                <TouchableOpacity onPress={() => setShowStaffPassword((current) => !current)} hitSlop={8}>
+                  <Text style={styles.showHide}>{showStaffPassword ? "Hide" : "Show"}</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleStaffLogin} disabled={loading}>
+                {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Next</Text>}
+              </TouchableOpacity>
+            </>
+            )
+          ) : step === "phone" ? (
             <>
               <Text style={styles.label}>Phone number</Text>
               <TextInput
@@ -491,6 +630,32 @@ const styles = StyleSheet.create({
     color: partnerTheme.colors.muted,
     marginBottom: 18
   },
+  kindRow: {
+    flexDirection: "row",
+    backgroundColor: partnerTheme.colors.surface,
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border
+  },
+  kindPill: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 10
+  },
+  kindPillActive: {
+    backgroundColor: "#FFFFFF"
+  },
+  kindPillText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: partnerTheme.colors.muted
+  },
+  kindPillTextActive: {
+    color: partnerTheme.colors.primaryDark
+  },
   label: {
     fontSize: 13,
     fontWeight: "700",
@@ -507,6 +672,27 @@ const styles = StyleSheet.create({
     color: partnerTheme.colors.text,
     backgroundColor: partnerTheme.colors.surface,
     marginBottom: 16
+  },
+  passwordRow: {
+    borderWidth: 1,
+    borderColor: partnerTheme.colors.border,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: partnerTheme.colors.surface,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: partnerTheme.colors.text
+  },
+  showHide: {
+    color: partnerTheme.colors.primary,
+    fontWeight: "800",
+    paddingLeft: 8
   },
   feedbackCard: {
     borderRadius: 16,

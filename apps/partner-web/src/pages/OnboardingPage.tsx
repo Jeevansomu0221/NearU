@@ -300,7 +300,7 @@ export default function OnboardingPage() {
             city: geo.city || current.city,
             pincode: geo.pincode || current.pincode,
             area: geo.area || current.area,
-            colony: current.colony || geo.area || "",
+            colony: current.colony || geo.colony || "",
             roadStreet: geo.streetRoadName || current.roadStreet,
             nearbyPlaces: current.nearbyPlaces || geo.formattedAddress
           }));
@@ -456,7 +456,6 @@ export default function OnboardingPage() {
         documents: {
           ...documents,
           panNumber: (kyc.panNumber || documents.panNumber).trim().toUpperCase(),
-          fssaiNumber: documents.fssaiNumber.trim(),
           gstRegistered: documents.gstRegistered === "yes",
           gstNumber: documents.gstRegistered === "yes" ? documents.gstNumber.trim().toUpperCase() : "",
           ownerPanUrl: kyc.panVerified ? "eko-pan-verified" : documents.panFrontUrl,
@@ -608,8 +607,6 @@ export default function OnboardingPage() {
             restaurantName={form.restaurantName}
             panNumber={documents.panNumber}
             onPanNumberChange={(v) => setDocuments((d) => ({ ...d, panNumber: v }))}
-            fssaiNumber={documents.fssaiNumber}
-            onFssaiNumberChange={(v) => setDocuments((d) => ({ ...d, fssaiNumber: v }))}
             fssaiUrl={documents.fssaiUrl}
             gstRegistered={documents.gstRegistered}
             onGstRegisteredChange={(v) =>

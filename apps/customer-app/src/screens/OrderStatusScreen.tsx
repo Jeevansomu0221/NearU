@@ -451,7 +451,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       <View style={styles.container}>
         {renderStatusHeader()}
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B35" />
+          <ActivityIndicator size="large" color="#e23744" />
           <Text style={styles.loadingText}>Loading order details...</Text>
         </View>
       </View>
@@ -494,7 +494,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
       style={styles.flex}
       contentContainerStyle={{ paddingTop: 14 }}
       bottomPadding={canRateOrder && !hasSubmittedRating ? 220 : 40}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#FF6B35"]} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#e23744"]} />}
       onScroll={onReviewScroll}
       scrollEventThrottle={16}
     >
@@ -531,7 +531,7 @@ export default function OrderStatusScreen({ route, navigation }: any) {
               orderId={order._id}
               prefix="Order #"
               style={styles.orderEyebrow}
-              highlightStyle={{ color: "#FF6B35", fontWeight: "800" }}
+              highlightStyle={{ color: "#e23744", fontWeight: "800" }}
             />
             <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
           </View>
@@ -1086,10 +1086,10 @@ const styles = StyleSheet.create({
     zIndex: 1
   },
   timelineDotComplete: {
-    backgroundColor: "#FF6B35"
+    backgroundColor: "#e23744"
   },
   timelineDotActive: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     borderWidth: 3,
     borderColor: "#FFD8C8"
   },
@@ -1103,7 +1103,7 @@ const styles = StyleSheet.create({
     marginBottom: -4
   },
   timelineLineActive: {
-    backgroundColor: "#FF6B35"
+    backgroundColor: "#e23744"
   },
   timelineLineInactive: {
     backgroundColor: "#E8DDD2"
@@ -1341,7 +1341,7 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   supportCard: {
     marginHorizontal: 16,
@@ -1364,7 +1364,7 @@ const styles = StyleSheet.create({
     marginBottom: 14
   },
   primaryButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderRadius: 16,

@@ -312,11 +312,11 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   button: {
-    backgroundColor: '#FF6B35',
+    backgroundColor: '#e23744',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#FF6B35',
+    shadowColor: '#e23744',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   footerLink: {
-    color: '#FF6B35',
+    color: '#e23744',
     fontWeight: '700',
   },
 });

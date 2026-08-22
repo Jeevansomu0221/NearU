@@ -894,10 +894,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const renderActiveProfile = () => {
     const tone = statusTone[profile?.status || "ACTIVE"];
     return (
-      <View style={[s.screen, { paddingTop: insets.top }]}>
+          <View style={[s.screen, { paddingTop: 0 }]}>
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 36 }} showsVerticalScrollIndicator={false}>
           {/* Profile Header */}
-          <View style={s.profileHeader}>
+          <View style={[s.profileHeader, { paddingTop: insets.top + 16 }]}>
             <View style={s.avatarWrap}>
               {profilePhotoUrl ? (
                 <Image source={{ uri: profilePhotoUrl }} style={s.avatar} />
@@ -1440,11 +1440,11 @@ export default function ProfileScreen({ navigation, route }: any) {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F5F7FA" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F7FA" },
+  screen: { flex: 1, backgroundColor: "#F3F7F4" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F3F7F4" },
 
   // ── Active Dashboard ──
-  profileHeader: { backgroundColor: GREEN_PRIMARY, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28, alignItems: "center" },
+  profileHeader: { backgroundColor: GREEN_PRIMARY, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 36, alignItems: "center" },
   avatarWrap: { width: 80, height: 80, borderRadius: 24, backgroundColor: "#fff", padding: 3, alignItems: "center", justifyContent: "center" },
   avatar: { width: "100%", height: "100%", borderRadius: 21 },
   avatarFallback: { flex: 1, borderRadius: 21, backgroundColor: GREEN_SOFT, alignItems: "center", justifyContent: "center" },

@@ -29,6 +29,14 @@ export const persistAuthSession = async (token, refreshToken, user, phone) => {
         setStoredPhone(phone);
     }
 };
+export const partnerStaffLogin = async (username, password, platform = "web", operatorName) => {
+    return api.post("/auth/partner-staff-login", {
+        username,
+        password,
+        platform,
+        operatorName
+    });
+};
 export const logout = async () => {
     try {
         await api.post("/auth/logout");

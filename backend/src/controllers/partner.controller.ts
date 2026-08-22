@@ -132,6 +132,10 @@ const normalizeSelfDeliveryPartners = async (value: unknown) => {
     if (!phone) {
       throw validationError("Each self delivery partner must have a phone number");
     }
+    const phoneDigits = phone.replace(/\D/g, "").slice(-10);
+    if (phoneDigits.length !== 10) {
+      throw validationError("Each self delivery partner phone must be a 10-digit mobile number");
+    }
 
     const lookupCandidates = phoneLookupCandidates(phone);
     const lookupKey = lookupCandidates[0];

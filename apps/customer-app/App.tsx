@@ -35,7 +35,7 @@ export default function App() {
   if (!fontsLoaded) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#fff" }}>
-        <ActivityIndicator color="#FF6B35" />
+        <ActivityIndicator color="#e23744" />
       </View>
     );
   }

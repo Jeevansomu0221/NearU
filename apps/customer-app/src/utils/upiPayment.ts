@@ -277,7 +277,7 @@ const openStandardUpiCheckout = async (input: UpiIntentPaymentInput): Promise<Up
     description: input.description,
     order_id: input.razorpayOrderId,
     prefill,
-    theme: { color: "#FF6B35" },
+    theme: { color: "#e23744" },
     method: {
       upi: true,
       card: false,

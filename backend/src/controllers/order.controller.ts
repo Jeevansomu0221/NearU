@@ -74,6 +74,7 @@ const sanitizeOrderForDelivery = (orderObj: any) => {
 const RESTAURANT_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
 const DELIVERY_ACCEPT_TIMEOUT_MS = 15 * 60 * 1000;
 const SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 5 * 60 * 1000;
+const FREE_SELF_DELIVERY_ACCEPT_TIMEOUT_MS = 15 * 60 * 1000;
 const DELIVERY_FIRST_KM_FEE = 15;
 const DELIVERY_ADDITIONAL_KM_FEE = 10;
 const MAX_DELIVERY_DISTANCE_KM = 20;
@@ -321,9 +322,9 @@ const buildDeliveryAcceptVisibilityFilter = (userId: string, now = new Date()) =
 
 const configureSelfDeliveryForReadyOrder = async (order: any, partner: any) => {
   const partnerMode = partner?.settings?.deliveryMode;
-  const expiresAt = new Date(Date.now() + SELF_DELIVERY_ACCEPT_TIMEOUT_MS);
 
   if (isFreeSelfDeliveryMode(partnerMode)) {
+    const expiresAt = new Date(Date.now() + FREE_SELF_DELIVERY_ACCEPT_TIMEOUT_MS);
     const selfDeliveryUserIds = getActiveSelfDeliveryUserIds(partner);
     order.selfDelivery = {
       mode: "self_free",
@@ -335,6 +336,8 @@ const configureSelfDeliveryForReadyOrder = async (order: any, partner: any) => {
     };
     return;
   }
+
+  const expiresAt = new Date(Date.now() + SELF_DELIVERY_ACCEPT_TIMEOUT_MS);
 
   if (partnerMode !== "self") {
     order.selfDelivery = {

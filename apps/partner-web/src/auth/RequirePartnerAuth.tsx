@@ -38,11 +38,16 @@ export function RequirePartnerAuth({ children }: { children: ReactNode }) {
   }
 
   if (!session.partner || session.partner.status !== "APPROVED") {
-    return <Navigate to={routeForPartnerStatus(session.partner)} replace />;
+    return <Navigate to={routeForPartnerStatus(session.partner, session.actorType)} replace />;
   }
 
-  if (session.partner.hasCompletedSetup === false && location.pathname === "/") {
+  if (session.partner.hasCompletedSetup === false && location.pathname === "/" && session.actorType !== "staff") {
     return <Navigate to="/welcome" replace />;
+  }
+
+  const ownerOnlyPaths = ["/menu", "/profile", "/wallet", "/staff"];
+  if (session.actorType === "staff" && ownerOnlyPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`))) {
+    return <Navigate to="/" replace />;
   }
 
   return children;

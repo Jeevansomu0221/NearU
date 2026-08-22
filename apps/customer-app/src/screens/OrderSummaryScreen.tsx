@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useCart } from "../context/CartContext";
 import { getUserProfile } from "../api/user.api";
-import { getSelectedAddress as pickSavedAddress } from "../utils/address";
+import { getSelectedAddress as pickSavedAddress, formatSavedAddress } from "../utils/address";
 import AddressPickerModal from "../components/AddressPickerModal";
 
 export default function OrderSummaryScreen({ route, navigation }: any) {
@@ -59,24 +59,7 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
     if (!selected) {
       return "No address saved";
     }
-    
-    if (typeof selected === "string") {
-      return selected;
-    }
-
-    const addr = selected;
-    const parts = [
-      addr.recipientName,
-      [addr.houseFlatDoorNo, addr.buildingApartmentName].filter(Boolean).join(", ") || addr.street || addr.roadStreet,
-      addr.streetRoadName,
-      addr.areaLocality || addr.area,
-      addr.landmark ? `Near ${addr.landmark}` : null,
-      [addr.cityTownVillage || addr.city, addr.district ? `${addr.district} District` : null, addr.state].filter(Boolean).join(", ") +
-        (addr.pincode ? ` - ${addr.pincode}` : ""),
-      addr.country || "India"
-    ].filter(Boolean);
-    
-    return parts.join(', ');
+    return formatSavedAddress(selected) || "No address saved";
   };
 
   const handleProceedToPayment = () => {
@@ -115,7 +98,7 @@ export default function OrderSummaryScreen({ route, navigation }: any) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
+        <ActivityIndicator size="large" color="#e23744" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
@@ -334,11 +317,11 @@ const styles = StyleSheet.create({
   },
   noAddressText: {
     fontSize: 14,
-    color: '#FF6B35',
+    color: '#e23744',
     marginBottom: 12,
   },
   addAddressButton: {
-    backgroundColor: '#FF6B35',
+    backgroundColor: '#e23744',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 6,
@@ -408,7 +391,7 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#FF6B35',
+    color: '#e23744',
   },
   taxNote: {
     fontSize: 12,
@@ -435,7 +418,7 @@ const styles = StyleSheet.create({
   footerTotalValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FF6B35',
+    color: '#e23744',
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -455,13 +438,13 @@ const styles = StyleSheet.create({
   },
   paymentButton: {
     flex: 2,
-    backgroundColor: '#FF6B35',
+    backgroundColor: '#1c9b55',
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
   },
   paymentButtonDisabled: {
-    backgroundColor: '#FFB08F',
+    backgroundColor: '#86D4A8',
   },
   paymentButtonText: {
     color: 'white',

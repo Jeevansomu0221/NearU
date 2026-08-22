@@ -7,17 +7,27 @@ type Props = {
   longitude: number;
   onPinChange: (pin: { latitude: number; longitude: number }) => void;
   pinColor?: string;
+  showCenterPin?: boolean;
   onReady?: () => void;
 };
 
 const CLOSE_ZOOM: Region["latitudeDelta"] = 0.0018;
 
-export default function GooglePinMap({ latitude, longitude, onPinChange, pinColor = "#FF6B35", onReady }: Props) {
+export default function GooglePinMap({
+  latitude,
+  longitude,
+  onPinChange,
+  pinColor = "#e23744",
+  showCenterPin = true,
+  onReady
+}: Props) {
   const mapRef = useRef<MapView>(null);
   const [ready, setReady] = useState(false);
+  const programmaticMoveRef = useRef(false);
 
   useEffect(() => {
     if (!ready || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    programmaticMoveRef.current = true;
     mapRef.current?.animateToRegion(
       {
         latitude,
@@ -27,6 +37,10 @@ export default function GooglePinMap({ latitude, longitude, onPinChange, pinColo
       },
       280
     );
+    const timer = setTimeout(() => {
+      programmaticMoveRef.current = false;
+    }, 320);
+    return () => clearTimeout(timer);
   }, [latitude, longitude, ready]);
 
   return (
@@ -46,6 +60,7 @@ export default function GooglePinMap({ latitude, longitude, onPinChange, pinColo
           onReady?.();
         }}
         onRegionChangeComplete={(region) => {
+          if (programmaticMoveRef.current) return;
           onPinChange({ latitude: region.latitude, longitude: region.longitude });
         }}
         showsUserLocation={false}
@@ -55,10 +70,12 @@ export default function GooglePinMap({ latitude, longitude, onPinChange, pinColo
         pitchEnabled={false}
         toolbarEnabled={false}
       />
-      <View pointerEvents="none" style={styles.pinWrap}>
-        <View style={[styles.pinDot, { backgroundColor: pinColor, borderColor: "#FFFFFF" }]} />
-        <View style={[styles.pinStem, { backgroundColor: pinColor }]} />
-      </View>
+      {showCenterPin ? (
+        <View pointerEvents="none" style={styles.pinWrap}>
+          <View style={[styles.pinDot, { backgroundColor: pinColor, borderColor: "#FFFFFF" }]} />
+          <View style={[styles.pinStem, { backgroundColor: pinColor }]} />
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -25,8 +25,6 @@ type Props = {
   restaurantName: string;
   panNumber: string;
   onPanNumberChange: (value: string) => void;
-  fssaiNumber: string;
-  onFssaiNumberChange: (value: string) => void;
   fssaiUrl: string;
   gstRegistered: "yes" | "no" | "";
   onGstRegisteredChange: (value: "yes" | "no") => void;
@@ -55,65 +53,14 @@ const VerifiedBadge = ({ title, subtitle }: { title: string; subtitle?: string }
   </View>
 );
 
-const InvalidHint = () => (
-  <Text style={styles.invalidHint}>Tap Verify — Eko checks government records and shows whether this is legitimate.</Text>
-);
-
-const PendingReviewHint = ({ label }: { label: string }) => (
-  <Text style={styles.pendingHint}>Submit your {label} — Vyaha will verify it during admin review.</Text>
-);
-
 const isPdfUri = (uri?: string) => (uri || "").split("?")[0].toLowerCase().endsWith(".pdf");
-
-const DocUpload = ({
-  title,
-  subtitle,
-  url,
-  busy,
-  disabled,
-  onPress
-}: {
-  title: string;
-  subtitle: string;
-  url: string;
-  busy: boolean;
-  disabled: boolean;
-  onPress: () => void;
-}) => (
-  <View style={styles.docCard}>
-    <Text style={styles.docTitle}>{title}</Text>
-    <Text style={styles.docSubtitle}>{subtitle}</Text>
-    {url ? (
-      isPdfUri(url) ? (
-        <View style={styles.pdfPreview}>
-          <Text style={styles.pdfTag}>PDF</Text>
-          <Text style={styles.pdfName} numberOfLines={1}>
-            {url.split("/").pop()?.split("?")[0] || "Uploaded document"}
-          </Text>
-        </View>
-      ) : (
-        <Image source={{ uri: url }} style={styles.docPreview} resizeMode="cover" />
-      )
-    ) : null}
-    <TouchableOpacity style={styles.docButton} onPress={onPress} disabled={disabled || busy}>
-      {busy ? (
-        <ActivityIndicator color="#fff" />
-      ) : (
-        <Text style={styles.docButtonText}>{url ? "Replace certificate" : "Upload certificate"}</Text>
-      )}
-    </TouchableOpacity>
-  </View>
-);
 
 export default function LegalDocumentsStep({
   kyc,
   onKycChange,
   ownerName,
-  restaurantName,
   panNumber,
   onPanNumberChange,
-  fssaiNumber,
-  onFssaiNumberChange,
   fssaiUrl,
   gstRegistered,
   onGstRegisteredChange,
@@ -163,9 +110,7 @@ export default function LegalDocumentsStep({
 
   return (
     <View>
-      <Text style={styles.hint}>
-        PAN is verified instantly with Eko. Submit your FSSAI and GST details with certificates — Vyaha verifies them in the admin panel.
-      </Text>
+      <Text style={styles.hint}>Verify PAN with Eko, then upload FSSAI. GST is only if you are registered.</Text>
 
       <Text style={styles.sectionTitle}>PAN</Text>
       <Text style={styles.label}>PAN number</Text>
@@ -179,50 +124,59 @@ export default function LegalDocumentsStep({
         editable={!kyc.panVerified && !kyc.panSkipped}
       />
       {kyc.panVerified ? (
-        <VerifiedBadge title="PAN verified — legitimate" subtitle={kyc.panName ? `Registered name: ${kyc.panName}` : undefined} />
+        <VerifiedBadge title="PAN verified" subtitle={kyc.panName ? `Name: ${kyc.panName}` : undefined} />
       ) : kyc.panSkipped ? (
-        <VerifiedBadge title="PAN skipped" subtitle="You can add and verify PAN later from Profile." />
+        <VerifiedBadge title="PAN skipped" subtitle="You can add it later from Profile." />
       ) : (
         <>
-          <InvalidHint />
           <Check checked={panConsent} onPress={() => setPanConsent((c) => !c)} label="I consent to PAN verification via Eko" />
-          <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyPan} disabled={busy !== ""}>
-            {busy === "pan" ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify PAN</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={handleSkipPan} disabled={busy !== ""}>
-            <Text style={styles.secondaryBtnText}>Skip PAN for now</Text>
-          </TouchableOpacity>
+          <View style={styles.btnRow}>
+            <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyPan} disabled={busy !== ""}>
+              {busy === "pan" ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify PAN</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={handleSkipPan} disabled={busy !== ""}>
+              <Text style={styles.secondaryBtnText}>Skip</Text>
+            </TouchableOpacity>
+          </View>
         </>
       )}
 
-      <Text style={styles.sectionTitle}>FSSAI license</Text>
-      <Text style={styles.label}>FSSAI number</Text>
-      <TextInput
-        placeholder="14-digit FSSAI number"
-        placeholderTextColor="#98A2B3"
-        keyboardType="number-pad"
-        value={fssaiNumber}
-        onChangeText={(v) => onFssaiNumberChange(v.replace(/\D/g, "").slice(0, 14))}
-        style={styles.input}
-      />
+      <Text style={styles.sectionTitle}>FSSAI</Text>
       {kyc.fssaiVerified ? (
         <VerifiedBadge
-          title="FSSAI verified — legitimate"
+          title="FSSAI verified"
           subtitle={[kyc.fssaiBusinessName, kyc.fssaiLicenseStatus].filter(Boolean).join(" · ") || undefined}
         />
       ) : (
-        <PendingReviewHint label="FSSAI license" />
+        <Text style={styles.pendingHint}>
+          Upload your FSSAI license. The name on it must match the restaurant name or PAN name. Vyaha will verify it during review.
+        </Text>
       )}
-      <DocUpload
-        title="FSSAI certificate"
-        subtitle="Upload a clear image or PDF of your FSSAI license"
-        url={fssaiUrl}
-        busy={uploadingKey === "fssaiUrl"}
-        disabled={pickerBusy || Boolean(uploadingKey)}
+      {fssaiUrl ? (
+        <View style={styles.uploadedRow}>
+          {isPdfUri(fssaiUrl) ? (
+            <View style={styles.pdfBadge}><Text style={styles.pdfBadgeText}>PDF</Text></View>
+          ) : (
+            <Image source={{ uri: fssaiUrl }} style={styles.thumbPreview} resizeMode="cover" />
+          )}
+          <Text style={styles.uploadedLabel} numberOfLines={1}>FSSAI uploaded</Text>
+        </View>
+      ) : null}
+      <TouchableOpacity
+        style={fssaiUrl ? styles.outlineBtn : styles.uploadBtn}
         onPress={() => onPickDocument("fssaiUrl")}
-      />
+        disabled={pickerBusy || Boolean(uploadingKey)}
+      >
+        {uploadingKey === "fssaiUrl" ? (
+          <ActivityIndicator color={fssaiUrl ? partnerTheme.colors.primary : "#fff"} />
+        ) : (
+          <Text style={fssaiUrl ? styles.outlineBtnText : styles.uploadBtnText}>
+            {fssaiUrl ? "Replace FSSAI" : "Upload FSSAI"}
+          </Text>
+        )}
+      </TouchableOpacity>
 
-      <Text style={styles.sectionTitle}>GST registration</Text>
+      <Text style={styles.sectionTitle}>GST</Text>
       <View style={styles.chipRow}>
         {(["yes", "no"] as const).map((value) => {
           const selected = gstRegistered === value;
@@ -233,7 +187,7 @@ export default function LegalDocumentsStep({
               onPress={() => onGstRegisteredChange(value)}
             >
               <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                {value === "yes" ? "Yes, GST registered" : "No GST registration"}
+                {value === "yes" ? "GST registered" : "No GST"}
               </Text>
             </TouchableOpacity>
           );
@@ -252,20 +206,35 @@ export default function LegalDocumentsStep({
           />
           {kyc.gstVerified ? (
             <VerifiedBadge
-              title="GSTIN verified — legitimate"
+              title="GSTIN verified"
               subtitle={[kyc.gstLegalName, kyc.gstStatus].filter(Boolean).join(" · ") || undefined}
             />
           ) : (
-            <PendingReviewHint label="GSTIN" />
+            <Text style={styles.pendingHint}>Upload GST certificate for admin review.</Text>
           )}
-          <DocUpload
-            title="GST certificate"
-            subtitle="Upload a clear image or PDF of your GST certificate"
-            url={gstUrl}
-            busy={uploadingKey === "gstUrl"}
-            disabled={pickerBusy || Boolean(uploadingKey)}
+          {gstUrl ? (
+            <View style={styles.uploadedRow}>
+              {isPdfUri(gstUrl) ? (
+                <View style={styles.pdfBadge}><Text style={styles.pdfBadgeText}>PDF</Text></View>
+              ) : (
+                <Image source={{ uri: gstUrl }} style={styles.thumbPreview} resizeMode="cover" />
+              )}
+              <Text style={styles.uploadedLabel} numberOfLines={1}>GST uploaded</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={gstUrl ? styles.outlineBtn : styles.uploadBtn}
             onPress={() => onPickDocument("gstUrl")}
-          />
+            disabled={pickerBusy || Boolean(uploadingKey)}
+          >
+            {uploadingKey === "gstUrl" ? (
+              <ActivityIndicator color={gstUrl ? partnerTheme.colors.primary : "#fff"} />
+            ) : (
+              <Text style={gstUrl ? styles.outlineBtnText : styles.uploadBtnText}>
+                {gstUrl ? "Replace GST" : "Upload GST"}
+              </Text>
+            )}
+          </TouchableOpacity>
         </>
       ) : null}
     </View>
@@ -273,90 +242,105 @@ export default function LegalDocumentsStep({
 }
 
 const styles = StyleSheet.create({
-  hint: { marginBottom: 14, fontSize: 13, lineHeight: 18, color: partnerTheme.colors.muted },
-  sectionTitle: { marginTop: 10, marginBottom: 8, fontSize: 16, fontWeight: "900", color: partnerTheme.colors.primaryDark },
-  label: { fontSize: 13, fontWeight: "700", color: partnerTheme.colors.mutedDark, marginBottom: 8 },
+  hint: { marginBottom: 8, fontSize: 12, lineHeight: 16, color: partnerTheme.colors.muted },
+  sectionTitle: { marginTop: 8, marginBottom: 4, fontSize: 14, fontWeight: "900", color: partnerTheme.colors.primaryDark },
+  label: { fontSize: 12, fontWeight: "700", color: partnerTheme.colors.mutedDark, marginBottom: 4 },
   input: {
     borderWidth: 1,
     borderColor: partnerTheme.colors.border,
-    borderRadius: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-    fontSize: 15,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
     color: partnerTheme.colors.text,
     backgroundColor: partnerTheme.colors.surface,
-    marginBottom: 12
+    marginBottom: 8
   },
   inputLocked: { backgroundColor: "#F1ECE6", color: "#7B6D63" },
-  checkRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  checkText: { flex: 1, fontSize: 13, color: partnerTheme.colors.text, lineHeight: 18 },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  checkText: { flex: 1, fontSize: 12, color: partnerTheme.colors.text, lineHeight: 16 },
+  btnRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
   primaryBtn: {
+    flex: 1.2,
     backgroundColor: partnerTheme.colors.primary,
-    borderRadius: 16,
+    borderRadius: 12,
     alignItems: "center",
-    paddingVertical: 14,
-    marginBottom: 10
+    justifyContent: "center",
+    paddingVertical: 10
   },
-  primaryBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  primaryBtnText: { color: "#fff", fontSize: 13, fontWeight: "800" },
   secondaryBtn: {
-    borderRadius: 16,
+    flex: 0.8,
+    borderRadius: 12,
     alignItems: "center",
-    paddingVertical: 14,
+    justifyContent: "center",
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: partnerTheme.colors.border,
-    marginBottom: 10
+    borderColor: partnerTheme.colors.border
   },
-  secondaryBtnText: { color: partnerTheme.colors.primary, fontSize: 14, fontWeight: "800" },
+  secondaryBtnText: { color: partnerTheme.colors.primary, fontSize: 13, fontWeight: "800" },
   verifiedBadge: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 8,
     backgroundColor: partnerTheme.colors.successSoft,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 8
   },
   verifiedCopy: { flex: 1 },
-  verifiedTitle: { color: "#216E39", fontWeight: "800", fontSize: 14 },
-  verifiedSubtitle: { marginTop: 4, color: "#216E39", fontSize: 12, lineHeight: 17 },
-  invalidHint: { marginBottom: 10, fontSize: 12, lineHeight: 17, color: partnerTheme.colors.muted },
-  pendingHint: { marginBottom: 12, fontSize: 12, lineHeight: 17, color: partnerTheme.colors.mutedDark },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+  verifiedTitle: { color: "#216E39", fontWeight: "800", fontSize: 13 },
+  verifiedSubtitle: { marginTop: 2, color: "#216E39", fontSize: 11, lineHeight: 15 },
+  pendingHint: { marginBottom: 6, fontSize: 11, lineHeight: 15, color: partnerTheme.colors.mutedDark },
+  uploadedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: partnerTheme.colors.successSoft,
+    borderRadius: 10
+  },
+  uploadedLabel: { flex: 1, fontSize: 12, fontWeight: "700", color: "#216E39" },
+  thumbPreview: { width: 32, height: 32, borderRadius: 6 },
+  pdfBadge: {
+    backgroundColor: partnerTheme.colors.primary,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3
+  },
+  pdfBadgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 8 },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: partnerTheme.colors.neutralSoft,
     marginRight: 8,
-    marginBottom: 8
+    marginBottom: 6
   },
   chipSelected: { backgroundColor: partnerTheme.colors.primary },
-  chipText: { fontSize: 13, fontWeight: "700", color: partnerTheme.colors.mutedDark },
+  chipText: { fontSize: 12, fontWeight: "700", color: partnerTheme.colors.mutedDark },
   chipTextSelected: { color: "#fff" },
-  docCard: {
+  uploadBtn: {
+    backgroundColor: partnerTheme.colors.primary,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    marginBottom: 8
+  },
+  uploadBtnText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  outlineBtn: {
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: partnerTheme.colors.border,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 14,
     backgroundColor: partnerTheme.colors.surface
   },
-  docTitle: { fontSize: 14, fontWeight: "800", color: partnerTheme.colors.text },
-  docSubtitle: { marginTop: 4, marginBottom: 10, fontSize: 12, lineHeight: 17, color: partnerTheme.colors.muted },
-  docPreview: { width: "100%", height: 140, borderRadius: 12, marginBottom: 10 },
-  pdfPreview: {
-    borderRadius: 12,
-    backgroundColor: partnerTheme.colors.neutralSoft,
-    padding: 12,
-    marginBottom: 10
-  },
-  pdfTag: { fontSize: 11, fontWeight: "800", color: partnerTheme.colors.primary },
-  pdfName: { marginTop: 4, fontSize: 12, color: partnerTheme.colors.text },
-  docButton: {
-    backgroundColor: partnerTheme.colors.primary,
-    borderRadius: 14,
-    alignItems: "center",
-    paddingVertical: 12
-  },
-  docButtonText: { color: "#fff", fontSize: 13, fontWeight: "800" }
+  outlineBtnText: { color: partnerTheme.colors.primary, fontSize: 13, fontWeight: "800" }
 });

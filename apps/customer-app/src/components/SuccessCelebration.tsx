@@ -3,9 +3,9 @@ import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Animated, Text, useWindowDimensions } from "react-native";
 
 const CONFETTI_COLORS = [
-  "#FF6B35",
+  "#e23744",
   "#FFB08F",
-  "#2B9C4A",
+  "#1c9b55",
   "#7C3AED",
   "#FFEB3B",
   "#E91E63",
@@ -188,12 +188,12 @@ const styles = StyleSheet.create({
     width: 62,
     height: 62,
     borderRadius: 31,
-    backgroundColor: "#2B9C4A",
+    backgroundColor: "#1c9b55",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 6,
     borderColor: "#EAF8EE",
-    shadowColor: "#2B9C4A",
+    shadowColor: "#1c9b55",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,

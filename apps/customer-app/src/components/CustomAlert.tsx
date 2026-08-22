@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  Dimensions,
   Alert,
   BackHandler
 } from "react-native";
@@ -21,6 +20,88 @@ let alertTrigger: ((
   options?: { cancelable?: boolean; onDismiss?: () => void }
 ) => void) | null = null;
 
+const HARSH_TITLES = new Set([
+  "error",
+  "failed",
+  "payment failed",
+  "order failed",
+  "pricing error",
+  "address error",
+  "location save failed"
+]);
+
+const KEEP_AS_IS_PREFIXES = ["delete", "logout", "clear cart", "remove item", "cancel order"];
+
+const sentenceCase = (text: string) => {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
+};
+
+const isConfirmationAlert = (title: string, buttons?: Array<{ style?: string }>) => {
+  const lower = title.toLowerCase();
+  if (buttons && buttons.length > 1) return true;
+  return KEEP_AS_IS_PREFIXES.some((prefix) => lower.startsWith(prefix)) || lower.includes("are you sure");
+};
+
+const isSuccessAlert = (title: string, message: string) => {
+  const combined = `${title} ${message}`.toLowerCase();
+  return (
+    combined.includes("success") ||
+    combined.includes(" saved") ||
+    combined.includes("thank you") ||
+    combined.includes("fresh otp sent") ||
+    combined.includes("order cancelled") ||
+    combined.includes("cart cleared")
+  );
+};
+
+/** Rewrites harsh production alerts into friendly copy like "Oops, name is required". */
+export const normalizeFriendlyAlert = (titleVal: string, msgVal?: string) => {
+  const rawTitle = (titleVal || "").trim();
+  const rawMessage = (msgVal || "").trim();
+  const lowerTitle = rawTitle.toLowerCase();
+
+  if (!rawTitle && rawMessage) {
+    return { title: `Oops, ${sentenceCase(rawMessage)}`, message: "", friendly: true };
+  }
+
+  if (isSuccessAlert(rawTitle, rawMessage)) {
+    return { title: rawTitle, message: rawMessage, friendly: false };
+  }
+
+  if (HARSH_TITLES.has(lowerTitle)) {
+    const body = rawMessage || rawTitle;
+    return { title: `Oops, ${sentenceCase(body)}`, message: "", friendly: true };
+  }
+
+  if (
+    lowerTitle.includes("failed") ||
+    lowerTitle.includes("not found") ||
+    lowerTitle.endsWith(" error") ||
+    lowerTitle === "address required" ||
+    lowerTitle === "cart empty" ||
+    lowerTitle === "review" ||
+    lowerTitle === "ratings" ||
+    lowerTitle === "select a reason" ||
+    lowerTitle === "add a reason" ||
+    lowerTitle === "sign in required"
+  ) {
+    const body = rawMessage || rawTitle;
+    return { title: `Oops, ${sentenceCase(body)}`, message: "", friendly: true };
+  }
+
+  if (!rawMessage && (lowerTitle.includes("required") || lowerTitle.startsWith("please "))) {
+    return { title: `Oops, ${sentenceCase(rawTitle)}`, message: "", friendly: true };
+  }
+
+  if (rawMessage && (lowerTitle === "error" || lowerTitle.includes("issue") || lowerTitle.includes("support"))) {
+    return { title: `Oops, ${sentenceCase(rawMessage)}`, message: "", friendly: true };
+  }
+
+  return { title: rawTitle, message: rawMessage, friendly: false };
+};
+
 // Initialize custom alert override
 export const initCustomAlert = () => {
   Alert.alert = (title, message, buttons, options) => {
@@ -32,7 +113,7 @@ export const initCustomAlert = () => {
   };
 };
 
-type AlertType = "info" | "success" | "error" | "warning" | "confirm" | "destructive";
+type AlertType = "info" | "success" | "warning" | "confirm" | "destructive";
 
 export default function CustomAlert() {
   const [visible, setVisible] = useState(false);
@@ -47,33 +128,33 @@ export default function CustomAlert() {
 
   useEffect(() => {
     alertTrigger = (titleVal, msgVal, btnVal, optsVal) => {
-      const lowerTitle = (titleVal || "").toLowerCase();
-      const lowerMsg = (msgVal || "").toLowerCase();
       const hasDestructive = btnVal?.some((b) => b.style === "destructive") || false;
       const hasMultipleButtons = (btnVal?.length || 0) > 1;
+      const normalized = normalizeFriendlyAlert(titleVal, msgVal);
+      const displayTitle = normalized.title;
+      const displayMessage = normalized.message;
+      const lowerTitle = displayTitle.toLowerCase();
+      const lowerMsg = displayMessage.toLowerCase();
 
       let alertType: AlertType = "info";
-      if (lowerTitle.includes("error") || lowerTitle.includes("failed") || lowerMsg.includes("error") || lowerMsg.includes("failed")) {
-        alertType = "error";
-      } else if (
-        lowerTitle.includes("success") ||
-        lowerTitle.includes("saved") ||
-        lowerTitle.includes("complete") ||
-        lowerTitle.includes("done") ||
-        lowerMsg.includes("success") ||
-        lowerMsg.includes("saved")
-      ) {
+      if (isConfirmationAlert(titleVal, btnVal)) {
+        if (lowerTitle.includes("delete") || lowerTitle.includes("remove") || lowerTitle.includes("logout") || hasDestructive) {
+          alertType = "destructive";
+        } else {
+          alertType = "confirm";
+        }
+      } else if (isSuccessAlert(displayTitle, displayMessage)) {
         alertType = "success";
-      } else if (lowerTitle.includes("delete") || lowerTitle.includes("remove") || lowerTitle.includes("logout") || hasDestructive) {
-        alertType = "destructive";
-      } else if (hasMultipleButtons || lowerTitle.includes("confirm") || lowerTitle.includes("sure")) {
-        alertType = "confirm";
+      } else if (normalized.friendly || lowerTitle.startsWith("oops")) {
+        alertType = "warning";
       } else if (lowerTitle.includes("warning") || lowerMsg.includes("warning")) {
         alertType = "warning";
+      } else if (lowerTitle.includes("allow location") || lowerTitle.includes("turn on location")) {
+        alertType = "info";
       }
 
-      setTitle(titleVal);
-      setMessage(msgVal || "");
+      setTitle(displayTitle);
+      setMessage(displayMessage);
       setType(alertType);
       setOptions(optsVal || {});
 
@@ -137,19 +218,14 @@ export default function CustomAlert() {
 
   // Icon and Color mapping
   let iconName: keyof typeof MaterialCommunityIcons.glyphMap = "information-outline";
-  let iconColor = "#FF6B35";
+  let iconColor = "#e23744";
   let iconBg = "#FFF2EC";
 
   switch (type) {
     case "success":
       iconName = "check-circle-outline";
-      iconColor = "#2B9C4A";
+      iconColor = "#1c9b55";
       iconBg = "#EBF8EE";
-      break;
-    case "error":
-      iconName = "close-circle-outline";
-      iconColor = "#C7362E";
-      iconBg = "#FDEAEA";
       break;
     case "destructive":
       iconName = "delete-outline";
@@ -157,13 +233,13 @@ export default function CustomAlert() {
       iconBg = "#FDEAEA";
       break;
     case "warning":
-      iconName = "alert-outline";
+      iconName = "alert-circle-outline";
       iconColor = "#D98416";
       iconBg = "#FFF5E6";
       break;
     case "confirm":
       iconName = "help-circle-outline";
-      iconColor = "#FF6B35";
+      iconColor = "#e23744";
       iconBg = "#FFF2EC";
       break;
   }
@@ -185,7 +261,7 @@ export default function CustomAlert() {
               const isCancel = btn.style === "cancel" || (btn.text || "").toLowerCase() === "cancel";
               const isDestructive = btn.style === "destructive" || type === "destructive";
 
-              let btnBg = "#FF6B35";
+              let btnBg = "#e23744";
               let textColor = "#FFFFFF";
               let borderColor = "transparent";
               let borderWidth = 0;
@@ -252,8 +328,8 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   title: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 17,
+    fontWeight: "800",
     color: "#2C2018",
     textAlign: "center",
     marginBottom: 8,

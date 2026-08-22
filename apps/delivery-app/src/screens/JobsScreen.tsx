@@ -5,6 +5,7 @@ import {
   FlatList,
   Modal,
   RefreshControl,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -26,11 +27,12 @@ import { getCurrentRiderLocation, subscribeRiderLocation } from "../utils/riderL
 import { setAvailableJobsTabFocused, syncKnownAvailableJobIds } from "../services/availableJobsRegistry";
 import { formatPublicOrderId } from "../utils/publicOrderId";
 import HighlightedOrderId from "../components/HighlightedOrderId";
+import colors from "../theme/colors";
 
 const AVAILABILITY_STORAGE_KEY = "driverAvailability";
-const GREEN_PRIMARY = "#16A34A";
-const GREEN_DARK = "#15803D";
-const GREEN_DEEP = "#166534";
+const GREEN_PRIMARY = colors.primary;
+const GREEN_DARK = colors.primaryDark;
+const GREEN_DEEP = colors.primaryDeep;
 
 interface CalculatedJob extends DeliveryJob {
   distance?: number | null;
@@ -342,7 +344,10 @@ export default function JobsScreen({ navigation }: any) {
 
   const renderHeader = () => (
     <View>
-      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
+      <StatusBar barStyle="light-content" backgroundColor={GREEN_PRIMARY} />
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <View style={styles.headerBlobA} />
+        <View style={styles.headerBlobB} />
         <View style={styles.headerTop}>
           <View style={styles.headerCopy}>
             <Text style={styles.greeting} numberOfLines={1}>
@@ -353,19 +358,28 @@ export default function JobsScreen({ navigation }: any) {
             </Text>
           </View>
           <TouchableOpacity onPress={onRefresh} style={styles.refreshButton} accessibilityLabel="Refresh jobs">
-            <Ionicons name="refresh" size={20} color={GREEN_DEEP} />
+            <Ionicons name="refresh" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
         <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>₹{walletBalance.toLocaleString("en-IN")}</Text>
-            <Text style={styles.statLabel}>Wallet</Text>
+          <View style={styles.statChip}>
+            <View style={styles.statIconBubble}>
+              <Ionicons name="wallet-outline" size={16} color="#FFFFFF" />
+            </View>
+            <View>
+              <Text style={styles.statValue}>₹{walletBalance.toLocaleString("en-IN")}</Text>
+              <Text style={styles.statLabel}>Wallet</Text>
+            </View>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{todaysDeliveries}</Text>
-            <Text style={styles.statLabel}>Deliveries</Text>
+          <View style={styles.statChip}>
+            <View style={styles.statIconBubble}>
+              <Ionicons name="bicycle-outline" size={16} color="#FFFFFF" />
+            </View>
+            <View>
+              <Text style={styles.statValue}>{todaysDeliveries}</Text>
+              <Text style={styles.statLabel}>Today</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -377,8 +391,10 @@ export default function JobsScreen({ navigation }: any) {
         disabled={!availabilityLoaded}
       >
         <View style={styles.availabilityLeft}>
-          <View style={[styles.availabilityDot, availabilityLoaded && isAvailable && styles.availabilityDotOnline]} />
-          <View>
+          <View style={[styles.availabilityPulse, availabilityLoaded && isAvailable && styles.availabilityPulseOnline]}>
+            <View style={[styles.availabilityDot, availabilityLoaded && isAvailable && styles.availabilityDotOnline]} />
+          </View>
+          <View style={{ flex: 1 }}>
             <Text style={[styles.availabilityTitle, (!availabilityLoaded || !isAvailable) && styles.availabilityTitleOffline]}>
               {!availabilityLoaded ? "Checking status" : isAvailable ? "You're online" : "You're offline"}
             </Text>
@@ -391,10 +407,8 @@ export default function JobsScreen({ navigation }: any) {
             </Text>
           </View>
         </View>
-        <View style={[styles.availabilityToggle, availabilityLoaded && isAvailable ? styles.availabilityToggleOnline : styles.availabilityToggleOffline]}>
-          <Text style={[styles.availabilityToggleText, availabilityLoaded && isAvailable && styles.availabilityToggleTextOnline]}>
-            {!availabilityLoaded ? "..." : isAvailable ? "ON" : "OFF"}
-          </Text>
+        <View style={[styles.switchTrack, availabilityLoaded && isAvailable && styles.switchTrackOn]}>
+          <View style={[styles.switchKnob, availabilityLoaded && isAvailable && styles.switchKnobOn]} />
         </View>
       </TouchableOpacity>
 
@@ -460,54 +474,58 @@ export default function JobsScreen({ navigation }: any) {
         onPress={() => navigation.getParent()?.navigate("JobDetails", { orderId: item._id, job: item })}
         activeOpacity={0.9}
       >
-        <Text style={styles.jobPayout}>₹{earnings}</Text>
-        {readyByMessage ? <Text style={styles.jobReadyBy}>{readyByMessage}</Text> : null}
+        <View style={styles.jobTopRow}>
+          <View>
+            <Text style={styles.jobPayoutLabel}>You earn</Text>
+            <Text style={styles.jobPayout}>₹{earnings}</Text>
+          </View>
+          {readyByMessage ? (
+            <View style={styles.readyChip}>
+              <Ionicons name="time-outline" size={14} color="#166534" />
+              <Text style={styles.jobReadyBy}>{readyByMessage}</Text>
+            </View>
+          ) : null}
+        </View>
 
         <View style={styles.routeSection}>
           <View style={styles.routeTimeline}>
             {pickupStops.map((stop, index) => (
               <React.Fragment key={stop.orderId || `${item._id}-pin-${index}`}>
-                <View style={styles.routeIconWrap}>
-                  <Ionicons name="restaurant-outline" size={16} color="#667085" />
+                <View style={[styles.routeIconWrap, styles.routeIconPickup]}>
+                  <Ionicons name="restaurant" size={13} color="#FFFFFF" />
                 </View>
-                {index < pickupStops.length - 1 ? (
-                  <View style={styles.routeDashTrack}>
-                    {Array.from({ length: 4 }).map((_, dashIndex) => (
-                      <View key={`mid-${index}-${dashIndex}`} style={styles.routeDashDot} />
-                    ))}
-                  </View>
-                ) : null}
+                {index < pickupStops.length - 1 ? <View style={styles.routeLine} /> : null}
               </React.Fragment>
             ))}
-            <View style={styles.routeDashTrack}>
-              {Array.from({ length: 5 }).map((_, dashIndex) => (
-                <View key={`drop-${dashIndex}`} style={styles.routeDashDot} />
-              ))}
-            </View>
-            <View style={styles.routeIconWrap}>
-              <Ionicons name="person-outline" size={16} color="#667085" />
+            <View style={styles.routeLine} />
+            <View style={[styles.routeIconWrap, styles.routeIconDrop]}>
+              <Ionicons name="location" size={13} color="#FFFFFF" />
             </View>
           </View>
 
           <View style={styles.routeInfo}>
             {pickupStops.map((stop, index) => (
               <View key={stop.orderId || `${item._id}-${index}`} style={styles.routeInfoBlock}>
-                <Text style={styles.routeTitleLine} numberOfLines={1}>
-                  <Text style={styles.routeName}>
+                <View style={styles.routeTitleRow}>
+                  <Text style={styles.routeName} numberOfLines={1}>
                     {stop.partnerId?.restaurantName || stop.partnerId?.shopName || "Restaurant"}
                   </Text>
-                  <Text style={styles.routeDistance}> ({formatKm(index === 0 ? pickupDistance : null)})</Text>
-                </Text>
+                  <View style={styles.distanceChip}>
+                    <Text style={styles.distanceChipText}>{formatKm(index === 0 ? pickupDistance : null)}</Text>
+                  </View>
+                </View>
                 <Text style={styles.routeAddress} numberOfLines={2}>
                   {formatAddress(stop.partnerId?.address, { short: true })}
                 </Text>
               </View>
             ))}
             <View style={styles.routeInfoBlock}>
-              <Text style={styles.routeTitleLine} numberOfLines={1}>
-                <Text style={styles.routeName}>{item.customerId?.name || "Customer"}</Text>
-                <Text style={styles.routeDistance}> ({formatKm(dropDistance)})</Text>
-              </Text>
+              <View style={styles.routeTitleRow}>
+                <Text style={styles.routeName} numberOfLines={1}>{item.customerId?.name || "Customer"}</Text>
+                <View style={styles.distanceChip}>
+                  <Text style={styles.distanceChipText}>{formatKm(dropDistance)}</Text>
+                </View>
+              </View>
               <Text style={styles.routeAddress} numberOfLines={3}>
                 {formatAddress(item.deliveryAddress)}
               </Text>
@@ -558,8 +576,10 @@ export default function JobsScreen({ navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[GREEN_PRIMARY]} tintColor={GREEN_PRIMARY} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="bicycle-outline" size={48} color="#D0D5DD" />
+            <View style={styles.emptyIconHalo}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="bicycle" size={36} color={GREEN_DARK} />
+              </View>
             </View>
             <Text style={styles.emptyTitle}>No jobs available</Text>
             <Text style={styles.emptyText}>{emptyMessage}</Text>
@@ -587,7 +607,7 @@ export default function JobsScreen({ navigation }: any) {
               <Ionicons
                 name={selectedJobAction?.action === "accept" ? "checkmark-circle" : "close-circle"}
                 size={40}
-                color={selectedJobAction?.action === "reject" ? "#B42318" : "#4CAF50"}
+                color={selectedJobAction?.action === "reject" ? "#B42318" : GREEN_PRIMARY}
               />
             </View>
             <Text style={styles.confirmTitle}>
@@ -653,12 +673,31 @@ export default function JobsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F7FA"
+    backgroundColor: colors.canvas
   },
   header: {
     backgroundColor: GREEN_PRIMARY,
-    paddingHorizontal: 16,
-    paddingBottom: 0
+    paddingHorizontal: 18,
+    paddingBottom: 28,
+    overflow: "hidden"
+  },
+  headerBlobA: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    top: -70,
+    right: -40
+  },
+  headerBlobB: {
+    position: "absolute",
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(22,101,52,0.22)",
+    bottom: -20,
+    left: -24
   },
   headerTop: {
     flexDirection: "row",
@@ -671,73 +710,91 @@ const styles = StyleSheet.create({
     minWidth: 0
   },
   greeting: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    color: "rgba(255,255,255,0.85)",
-    marginBottom: 2
+    color: "rgba(255,255,255,0.82)",
+    marginBottom: 4
   },
   title: {
     color: "#FFFFFF",
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: "800",
-    lineHeight: 32
+    lineHeight: 34,
+    letterSpacing: -0.5
   },
   titleCompact: {
-    fontSize: 22,
-    lineHeight: 28
+    fontSize: 24,
+    lineHeight: 30
   },
   refreshButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.2)"
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)"
   },
   statsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginTop: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 4
+    gap: 10,
+    marginTop: 18
   },
-  statItem: {
+  statChip: {
     flex: 1,
-    alignItems: "center"
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12
+  },
+  statIconBubble: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center"
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "800",
     color: "#FFFFFF"
   },
   statLabel: {
     fontSize: 11,
     fontWeight: "600",
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 2
-  },
-  statDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: "rgba(255,255,255,0.25)"
+    color: "rgba(255,255,255,0.78)",
+    marginTop: 1
   },
   availabilityCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginHorizontal: 16,
-    marginTop: 14,
+    marginTop: -16,
     padding: 16,
-    borderRadius: 18,
-    borderWidth: 1
+    borderRadius: 20,
+    borderWidth: 1,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#166534",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 4
   },
   availabilityCardOnline: {
-    backgroundColor: "#ECFDF3",
-    borderColor: "#ABEFC6"
+    backgroundColor: "#FFFFFF",
+    borderColor: colors.primaryBorder
   },
   availabilityCardOffline: {
-    backgroundColor: "#F2F4F7",
-    borderColor: "#E4E7EC"
+    backgroundColor: "#FFFFFF",
+    borderColor: colors.border
   },
   availabilityLeft: {
     flexDirection: "row",
@@ -745,11 +802,22 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1
   },
+  availabilityPulse: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  availabilityPulseOnline: {
+    backgroundColor: colors.primaryMuted
+  },
   availabilityDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#98A2B3"
+    backgroundColor: "#94A3B8"
   },
   availabilityDotOnline: {
     backgroundColor: GREEN_DARK
@@ -757,34 +825,41 @@ const styles = StyleSheet.create({
   availabilityTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#1D2939"
+    color: colors.text
   },
   availabilityTitleOffline: {
-    color: "#475467"
+    color: colors.textSecondary
   },
   availabilitySub: {
     fontSize: 12,
-    color: "#667085",
+    color: colors.textMuted,
     marginTop: 2
   },
-  availabilityToggle: {
-    padding: 6,
-    borderRadius: 12
+  switchTrack: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#E2E8F0",
+    padding: 3,
+    justifyContent: "center"
   },
-  availabilityToggleOnline: {
-    backgroundColor: GREEN_DARK
+  switchTrackOn: {
+    backgroundColor: GREEN_PRIMARY,
+    alignItems: "flex-end"
   },
-  availabilityToggleOffline: {
-    backgroundColor: "#E4E7EC"
+  switchKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2
   },
-  availabilityToggleText: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#98A2B3",
-    letterSpacing: 1
-  },
-  availabilityToggleTextOnline: {
-    color: "#FFFFFF"
+  switchKnobOn: {
+    alignSelf: "flex-end"
   },
   locationBanner: {
     flexDirection: "row",
@@ -810,19 +885,14 @@ const styles = StyleSheet.create({
   },
   skeletonCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 22,
     padding: 16,
-    marginBottom: 14,
-    shadowColor: "#101828",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2
+    marginBottom: 14
   },
   skeletonBlock: {
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#F2F4F7"
+    backgroundColor: "#E8EEE9"
   },
   skeletonActions: {
     flexDirection: "row",
@@ -836,25 +906,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 14,
-    borderRadius: 18,
-    shadowColor: "#101828",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(22,163,74,0.08)",
+    shadowColor: "#166534",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    elevation: 2
+  },
+  jobTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 14
+  },
+  jobPayoutLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6
   },
   jobPayout: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "800",
-    color: "#101828",
-    marginBottom: 6,
-    letterSpacing: -0.4
+    color: GREEN_DEEP,
+    letterSpacing: -0.6
+  },
+  readyChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: "52%",
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999
   },
   jobReadyBy: {
-    fontSize: 14,
+    flexShrink: 1,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#1D4E89",
-    marginBottom: 12
+    color: GREEN_DEEP
   },
   routeSection: {
     flexDirection: "row",
@@ -863,28 +958,29 @@ const styles = StyleSheet.create({
   },
   routeTimeline: {
     alignItems: "center",
-    width: 22,
+    width: 24,
     paddingTop: 2
   },
   routeIconWrap: {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center"
   },
-  routeDashTrack: {
-    flexGrow: 1,
-    minHeight: 20,
-    marginVertical: 4,
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 3
+  routeIconPickup: {
+    backgroundColor: GREEN_PRIMARY
   },
-  routeDashDot: {
+  routeIconDrop: {
+    backgroundColor: "#0F172A"
+  },
+  routeLine: {
     width: 2,
-    height: 3,
-    borderRadius: 1,
-    backgroundColor: "#D0D5DD"
+    flexGrow: 1,
+    minHeight: 22,
+    marginVertical: 4,
+    backgroundColor: colors.primaryMuted,
+    borderRadius: 1
   },
   routeInfo: {
     flex: 1,
@@ -894,22 +990,31 @@ const styles = StyleSheet.create({
   routeInfoBlock: {
     justifyContent: "center"
   },
-  routeTitleLine: {
-    flexShrink: 1
+  routeTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
   },
   routeName: {
+    flex: 1,
     fontSize: 15,
     fontWeight: "800",
-    color: "#101828"
+    color: colors.text
   },
-  routeDistance: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#667085"
+  distanceChip: {
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8
+  },
+  distanceChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textSecondary
   },
   routeAddress: {
     fontSize: 13,
-    color: "#667085",
+    color: colors.textMuted,
     marginTop: 3,
     lineHeight: 18
   },
@@ -920,24 +1025,24 @@ const styles = StyleSheet.create({
   },
   rejectBtn: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
+    height: 50,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FEE4E2"
+    backgroundColor: colors.dangerSoft
   },
   rejectBtnText: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#D92D20"
+    color: colors.danger
   },
   acceptBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
+    flex: 1.15,
+    height: 50,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#166534"
+    backgroundColor: GREEN_PRIMARY
   },
   acceptBtnBusy: {
     opacity: 0.75
@@ -957,24 +1062,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingBottom: 80
   },
-  emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#F2F4F7",
+  emptyIconHalo: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    backgroundColor: "rgba(22,163,74,0.08)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16
   },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.primaryMuted,
+    alignItems: "center",
+    justifyContent: "center"
+  },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "800",
-    color: "#1D2939",
+    color: colors.text,
     marginBottom: 8
   },
   emptyText: {
     fontSize: 14,
-    color: "#667085",
+    color: colors.textMuted,
     textAlign: "center",
     marginBottom: 24,
     lineHeight: 20
@@ -983,9 +1096,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 14,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    borderRadius: 16,
     backgroundColor: GREEN_PRIMARY
   },
   emptyRefreshText: {
@@ -1012,7 +1125,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#ECFDF3",
+    backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 14
@@ -1023,14 +1136,14 @@ const styles = StyleSheet.create({
   confirmTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#1D2939",
+    color: colors.text,
     textAlign: "center"
   },
   confirmText: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
-    color: "#667085",
+    color: colors.textMuted,
     textAlign: "center"
   },
   confirmMeta: {
@@ -1038,7 +1151,7 @@ const styles = StyleSheet.create({
     width: "100%",
     padding: 14,
     borderRadius: 16,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.canvas,
     gap: 8
   },
   confirmMetaRow: {
@@ -1048,13 +1161,13 @@ const styles = StyleSheet.create({
   },
   confirmMetaLabel: {
     fontSize: 13,
-    color: "#667085",
+    color: colors.textMuted,
     fontWeight: "600"
   },
   confirmMetaValue: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#1D2939"
+    color: colors.text
   },
   confirmActions: {
     flexDirection: "row",
@@ -1067,19 +1180,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: "center",
-    backgroundColor: "#F2F4F7"
+    backgroundColor: "#F1F5F9"
   },
   confirmCancelText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#475467"
+    color: colors.textSecondary
   },
   confirmDone: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: "center",
-    backgroundColor: "#4CAF50"
+    backgroundColor: GREEN_PRIMARY
   },
   confirmDoneDanger: {
     backgroundColor: "#B42318"

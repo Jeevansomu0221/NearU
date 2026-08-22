@@ -1,11 +1,20 @@
 import React from "react";
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
+export type AddressEntryMode = "unset" | "current" | "manual";
 
 type AddressFormFieldsProps = {
   focusedField: string | null;
   onFocusField: (key: string | null) => void;
+  addressEntryMode: AddressEntryMode;
+  onSelectEntryMode: (mode: "current" | "manual") => void;
+  onChangeEntryMode?: () => void;
+  onEditLocation?: () => void;
   locatingCurrentLocation?: boolean;
   onUseCurrentLocation?: () => void;
+  currentLocationCaptured?: boolean;
+  locationPreview?: string;
   addressLabel: string;
   setAddressLabel: (value: string) => void;
   recipientName: string;
@@ -75,22 +84,84 @@ const Field = ({
 };
 
 export default function AddressFormFields(props: AddressFormFieldsProps) {
-  return (
-    <View style={styles.card}>
-      {props.onUseCurrentLocation ? (
-        <TouchableOpacity
-          style={[styles.currentLocationButton, props.locatingCurrentLocation && styles.currentLocationButtonDisabled]}
-          onPress={props.onUseCurrentLocation}
-          disabled={props.locatingCurrentLocation}
-          activeOpacity={0.85}
-        >
+  const renderModePicker = () => (
+    <View style={styles.modePicker}>
+      <TouchableOpacity
+        style={[styles.modeCard, props.locatingCurrentLocation && styles.modeCardDisabled]}
+        onPress={() => {
+          props.onSelectEntryMode("current");
+          props.onUseCurrentLocation?.();
+        }}
+        disabled={props.locatingCurrentLocation}
+        activeOpacity={0.88}
+      >
+        <View style={[styles.modeIconWrap, styles.modeIconCurrent]}>
           {props.locatingCurrentLocation ? (
-            <ActivityIndicator color="#FF6B35" />
+            <ActivityIndicator color="#e23744" size="small" />
           ) : (
-            <Text style={styles.currentLocationText}>Use current location</Text>
+            <MaterialCommunityIcons name="crosshairs-gps" size={22} color="#e23744" />
           )}
+        </View>
+        <Text style={styles.modeCardTitle}>
+          {props.locatingCurrentLocation ? "Finding you…" : "Use current location"}
+        </Text>
+        <Text style={styles.modeCardHint}>Fastest — we pin your GPS spot on the map</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.modeCard}
+        onPress={() => props.onSelectEntryMode("manual")}
+        activeOpacity={0.88}
+      >
+        <View style={[styles.modeIconWrap, styles.modeIconManual]}>
+          <MaterialCommunityIcons name="map-marker-outline" size={22} color="#2B9C4A" />
+        </View>
+        <Text style={styles.modeCardTitle}>Enter address</Text>
+        <Text style={styles.modeCardHint}>Type your full delivery address</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderChangeMethod = () =>
+    props.onChangeEntryMode ? (
+      <TouchableOpacity style={styles.changeMethodButton} onPress={props.onChangeEntryMode} activeOpacity={0.85}>
+        <MaterialCommunityIcons name="swap-horizontal" size={15} color="#e23744" />
+        <Text style={styles.changeMethodText}>Change method</Text>
+      </TouchableOpacity>
+    ) : null;
+
+  const renderCurrentLocationFields = () => (
+    <View style={styles.currentModeBody}>
+      {props.currentLocationCaptured && props.locationPreview ? (
+        <View style={styles.locationBadge}>
+          <MaterialCommunityIcons name="map-marker-check" size={18} color="#216E39" />
+          <View style={styles.locationBadgeCopy}>
+            <Text style={styles.locationBadgeTitle}>Delivery location saved</Text>
+            <Text style={styles.locationBadgeText} numberOfLines={3}>
+              {props.locationPreview}
+            </Text>
+            {props.houseFlatDoorNo ? (
+              <Text style={styles.locationFlatText}>{props.houseFlatDoorNo}</Text>
+            ) : null}
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.currentModeHint}>Confirm your delivery location on the map to continue.</Text>
+      )}
+
+      {props.onEditLocation ? (
+        <TouchableOpacity style={styles.editLocationButton} onPress={props.onEditLocation} activeOpacity={0.85}>
+          <MaterialCommunityIcons name="map-marker-radius" size={16} color="#e23744" />
+          <Text style={styles.editLocationText}>Edit location on map</Text>
         </TouchableOpacity>
       ) : null}
+
+      {renderChangeMethod()}
+    </View>
+  );
+
+  const renderManualFields = () => (
+    <View style={styles.manualModeBody}>
       <View style={styles.row}>
         <Field
           label="Save as"
@@ -221,35 +292,133 @@ export default function AddressFormFields(props: AddressFormFieldsProps) {
         focusedField={props.focusedField}
         onFocusField={props.onFocusField}
       />
+      {renderChangeMethod()}
+    </View>
+  );
+
+  return (
+    <View style={styles.card}>
+      {props.addressEntryMode === "unset"
+        ? renderModePicker()
+        : props.addressEntryMode === "current"
+          ? renderCurrentLocationFields()
+          : renderManualFields()}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#FAF7F3",
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#EDE6DE"
+    marginTop: 2
   },
-  currentLocationButton: {
-    marginBottom: 10,
-    minHeight: 40,
-    borderRadius: 8,
+  modePicker: {
+    gap: 10
+  },
+  modeCard: {
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#FFD2C2",
-    backgroundColor: "#FFF4EE",
+    borderColor: "#ECE3D9",
+    backgroundColor: "#FFFCF8",
+    padding: 14
+  },
+  modeCardDisabled: {
+    opacity: 0.85
+  },
+  modeIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    marginBottom: 10
   },
-  currentLocationButtonDisabled: {
-    opacity: 0.7
+  modeIconCurrent: {
+    backgroundColor: "#FFF1E6"
   },
-  currentLocationText: {
-    color: "#FF6B35",
-    fontSize: 14,
-    fontWeight: "700"
+  modeIconManual: {
+    backgroundColor: "#EAF8EA"
+  },
+  modeCardTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#241D17"
+  },
+  modeCardHint: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#7A6F65"
+  },
+  currentModeBody: {
+    gap: 2
+  },
+  manualModeBody: {
+    gap: 0
+  },
+  locationBadge: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#F0FFF4",
+    borderWidth: 1,
+    borderColor: "#BFE9CA"
+  },
+  locationBadgeCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  locationBadgeTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#216E39",
+    marginBottom: 2
+  },
+  locationBadgeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#344054"
+  },
+  locationFlatText: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#216E39"
+  },
+  editLocationButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 4,
+    paddingVertical: 4
+  },
+  editLocationText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#e23744"
+  },
+  currentModeHint: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#7A6F65"
+  },
+  changeMethodButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 4
+  },
+  changeMethodText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#e23744"
   },
   field: {
     marginBottom: 8
@@ -266,17 +435,17 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: "#E4DBD2",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 14,
     color: "#1A120B",
     backgroundColor: "#FFFFFF",
-    minHeight: 38
+    minHeight: 42
   },
   inputFocused: {
-    borderColor: "#FF6B35",
-    backgroundColor: "#FFFFFF"
+    borderColor: "#e23744",
+    backgroundColor: "#FFF8F4"
   },
   row: {
     flexDirection: "row",

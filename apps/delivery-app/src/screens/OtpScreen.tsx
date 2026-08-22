@@ -25,6 +25,7 @@ import { registerForPushNotifications } from "../services/notifications";
 import { requestRiderLocationPermission } from "../utils/riderLocation";
 import { androidKeyboardPadding, useKeyboardBottomInset } from "../hooks/useKeyboardBottomInset";
 import ScreenHeader from "../components/ScreenHeader";
+import colors from "../theme/colors";
 
 export default function OtpScreen({ route, navigation }: any) {
   const { phone, otpSession: initialOtpSession } = route.params;
@@ -208,7 +209,7 @@ export default function OtpScreen({ route, navigation }: any) {
           }
           navigation.reset({ index: 0, routes: [{ name: "Login" }] });
         }}
-        backgroundColor="#f5f5f5"
+        backgroundColor={colors.canvas}
       />
     <KeyboardAvoidingView
       style={styles.flex}
@@ -244,7 +245,7 @@ export default function OtpScreen({ route, navigation }: any) {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4CAF50" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Verifying OTP...</Text>
         </View>
       ) : (
@@ -272,21 +273,21 @@ export default function OtpScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: "center", padding: 20 },
-  subtitle: { fontSize: 16, color: "#666", marginBottom: 40, textAlign: "center", lineHeight: 24 },
-  phoneText: { fontWeight: "bold", color: "#333" },
-  otpContainer: { marginBottom: 30 },
-  otpInput: { fontSize: 32, textAlign: "center", letterSpacing: 8, backgroundColor: "white", padding: 16, borderRadius: 8, borderWidth: 1, borderColor: "#ddd", color: "#333", fontWeight: "bold" },
-  otpHint: { fontSize: 12, color: "#999", textAlign: "center", marginTop: 8 },
+  subtitle: { fontSize: 16, color: colors.textMuted, marginBottom: 32, textAlign: "center", lineHeight: 24 },
+  phoneText: { fontWeight: "800", color: colors.text },
+  otpContainer: { marginBottom: 24 },
+  otpInput: { fontSize: 32, textAlign: "center", letterSpacing: 10, backgroundColor: colors.surface, padding: 18, borderRadius: 18, borderWidth: 1, borderColor: colors.primaryBorder, color: colors.text, fontWeight: "800" },
+  otpHint: { fontSize: 12, color: colors.textMuted, textAlign: "center", marginTop: 10 },
   loadingContainer: { alignItems: "center", marginTop: 20 },
-  loadingText: { fontSize: 16, color: "#666", marginTop: 12 },
-  button: { backgroundColor: "#4CAF50", paddingVertical: 16, borderRadius: 8, alignItems: "center", marginTop: 10 },
+  loadingText: { fontSize: 16, color: colors.textMuted, marginTop: 12 },
+  button: { backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 16, alignItems: "center", marginTop: 10 },
   buttonDisabled: { backgroundColor: "#A5D6A7", opacity: 0.7 },
-  buttonText: { color: "white", fontSize: 18, fontWeight: "600" },
+  buttonText: { color: "white", fontSize: 17, fontWeight: "800" },
   resendContainer: { alignItems: "center", marginTop: 30, gap: 8 },
-  timerText: { fontSize: 14, color: "#666" },
-  resendText: { fontSize: 16, color: "#999", fontWeight: "500" },
-  resendTextActive: { color: "#4CAF50", fontWeight: "600" }
+  timerText: { fontSize: 14, color: colors.textMuted },
+  resendText: { fontSize: 16, color: "#94A3B8", fontWeight: "600" },
+  resendTextActive: { color: colors.primary, fontWeight: "800" }
 });

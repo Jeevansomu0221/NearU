@@ -40,10 +40,11 @@ import HighlightedOrderId from "../components/HighlightedOrderId";
 import { formatPublicOrderId } from "../utils/publicOrderId";
 import { unregisterPushNotifications } from "../services/notifications";
 import AddressFormFields, { type AddressEntryMode } from "../components/AddressFormFields";
-import AddressPinConfirmModal from "../components/AddressPinConfirmModal";
+import AddressPinConfirmModal, { type AddressPinConfirmDetails } from "../components/AddressPinConfirmModal";
 import ScreenHeader from "../components/ScreenHeader";
 import { reverseGeocodeLocation, resolveAddressPin, type GeocodedAddress } from "../api/geocode.api";
 import { getCurrentPositionWithTimeout, requestForegroundLocationPermission } from "../utils/location";
+import { buildAddressDisplayLines } from "../utils/address";
 import * as Location from "expo-location";
 
 const supportItems = [
@@ -57,6 +58,11 @@ const PRIVACY_URL = buildLegalUrl("privacy");
 const TERMS_URL = buildLegalUrl("terms");
 type AddressFormMode = "edit" | "add";
 type PinConfirmIntent = "current_location" | "final_save";
+
+const movedPinFarEnough = (
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+) => Math.abs(from.latitude - to.latitude) > 0.00012 || Math.abs(from.longitude - to.longitude) > 0.00012;
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return "N/A";
@@ -104,52 +110,24 @@ const getStatusLabel = (status: string) => {
 const getStatusTone = (status: string) => {
   switch (status) {
     case "DELIVERED":
-      return { bg: "#DDF8E5", fg: "#216E39" };
+      return { bg: "#ECFDF3", fg: "#1c9b55" };
     case "CONFIRMED":
     case "ACCEPTED":
-      return { bg: "#DCEBFF", fg: "#175CD3" };
+      return { bg: "#EFF6FF", fg: "#2f6bff" };
     case "PREPARING":
     case "PENDING":
-      return { bg: "#FFF0D5", fg: "#B54708" };
+      return { bg: "#FEF3C7", fg: "#D97706" };
     case "READY":
     case "ASSIGNED":
     case "PICKED_UP":
     case "REACHED_CUSTOMER":
-      return { bg: "#ECE9FE", fg: "#5925DC" };
+      return { bg: "#DBEAFE", fg: "#2f6bff" };
     case "CANCELLED":
     case "REJECTED":
-      return { bg: "#FEE4E2", fg: "#B42318" };
+      return { bg: "#FDF2F3", fg: "#e23744" };
     default:
-      return { bg: "#F2F4F7", fg: "#475467" };
+      return { bg: "#F8FAFC", fg: "#64748B" };
   }
-};
-
-const buildAddressLines = (address?: SavedAddress | null, fallbackName?: string) => {
-  if (!address) return [];
-
-  const raw = [
-    address.recipientName || fallbackName,
-    [address.houseFlatDoorNo, address.buildingApartmentName].filter(Boolean).join(", ") || address.street,
-    address.streetRoadName,
-    address.areaLocality || address.area,
-    address.landmark ? `Near ${address.landmark}` : "",
-    [
-      address.cityTownVillage || address.city,
-      address.district ? `${address.district} District` : "",
-      address.state
-    ]
-      .filter(Boolean)
-      .join(", ") + (address.pincode ? ` - ${address.pincode}` : ""),
-    address.country || "India"
-  ].filter(Boolean) as string[];
-
-  const seen = new Set<string>();
-  return raw.filter((line) => {
-    const normalized = line.trim().toLowerCase();
-    if (!normalized || seen.has(normalized)) return false;
-    seen.add(normalized);
-    return true;
-  });
 };
 
 const isGeneratedCustomerName = (value?: string) => {
@@ -234,6 +212,8 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [addressEntryMode, setAddressEntryMode] = useState<AddressEntryMode>("unset");
   const [locationPreview, setLocationPreview] = useState("");
   const pinGeocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastGeocodedPinRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const pinPickerOpenedAtRef = useRef(0);
   const openedAddAddressRef = useRef(false);
 
   const hydrateAddressForm = (address?: SavedAddress | null, fallbackName = "") => {
@@ -492,6 +472,8 @@ export default function ProfileScreen({ navigation, route }: any) {
     formattedAddress: string,
     payload: ReturnType<typeof buildAddressPayload>
   ) => {
+    pinPickerOpenedAtRef.current = Date.now();
+    lastGeocodedPinRef.current = { latitude, longitude };
     setPendingAddressPayload(payload as SavedAddress);
     setPendingPin({ latitude, longitude, formattedAddress });
     setPinConfirmIntent("current_location");
@@ -507,8 +489,17 @@ export default function ProfileScreen({ navigation, route }: any) {
   ) => {
     const nextColony = geo?.colony?.trim() || "";
     const nextStreet = geo?.streetRoadName?.trim() || "";
-    const streetOrColony = nextStreet || nextColony;
     const nextArea = geo?.area?.trim() || "";
+    // Prefer a real street name; only fall back to colony when no street exists.
+    // Never keep the same text in both streetRoadName and colony/area.
+    const streetOrColony = nextStreet || nextColony;
+    const sameAsStreet = (value: string) =>
+      Boolean(value) && value.toLowerCase() === streetOrColony.toLowerCase();
+    const colonyValue =
+      nextColony && !sameAsStreet(nextColony) && nextColony.toLowerCase() !== nextArea.toLowerCase()
+        ? nextColony
+        : "";
+    const areaValue = nextArea && !sameAsStreet(nextArea) ? nextArea : "";
     const nextCity = geo?.city?.trim() || "";
     const nextState = geo?.state?.trim() || "";
     const nextPincode = geo?.pincode?.trim() || "";
@@ -516,13 +507,17 @@ export default function ProfileScreen({ navigation, route }: any) {
     const preview =
       formattedAddress ||
       geo?.formattedAddress ||
-      [streetOrColony, nextArea, nextCity].filter(Boolean).join(", ");
+      [streetOrColony, areaValue || colonyValue, nextCity].filter(Boolean).join(", ");
 
-    setBuildingApartmentName(geo?.buildingApartmentName || "");
+    setBuildingApartmentName((prev) => prev.trim() || geo?.buildingApartmentName || "");
+    setHouseFlatDoorNo((prev) => {
+      if (prev.trim()) return prev;
+      return [geo?.houseFlatDoorNo, geo?.buildingApartmentName].filter(Boolean).join(" ").trim();
+    });
     setStreetRoadName(streetOrColony);
     setStreet([geo?.buildingApartmentName, streetOrColony].filter(Boolean).join(", "));
-    setColony(nextColony);
-    setArea(nextArea);
+    setColony(colonyValue);
+    setArea(areaValue);
     setCity(nextCity);
     setState(nextState);
     setPincode(nextPincode);
@@ -545,14 +540,14 @@ export default function ProfileScreen({ navigation, route }: any) {
         houseFlatDoorNo: houseFlatDoorNo.trim(),
         buildingApartmentName: geo?.buildingApartmentName?.trim() || undefined,
         streetRoadName: streetOrColony,
-        colony: nextColony || undefined,
-        areaLocality: nextArea,
+        colony: colonyValue || undefined,
+        areaLocality: areaValue,
         street: [geo?.buildingApartmentName, streetOrColony].filter(Boolean).join(", "),
         city: nextCity,
         cityTownVillage: nextCity,
         state: nextState,
         pincode: nextPincode,
-        area: nextArea,
+        area: areaValue,
         landmark: landmark.trim() || undefined,
         district: geo?.district?.trim() || undefined,
         country: nextCountry
@@ -561,6 +556,9 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const handleDeliveryPinChange = (pin: { latitude: number; longitude: number }) => {
+    if (Date.now() - pinPickerOpenedAtRef.current < 800) return;
+    if (lastGeocodedPinRef.current && !movedPinFarEnough(lastGeocodedPinRef.current, pin)) return;
+
     setAddressLatitude(pin.latitude);
     setAddressLongitude(pin.longitude);
     setCurrentLocationPinConfirmed(false);
@@ -575,6 +573,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       try {
         const result = await reverseGeocodeLocation(pin.latitude, pin.longitude);
         if (result.success && result.data) {
+          lastGeocodedPinRef.current = pin;
           applyGeocodedFromGeo(result.data, pin.latitude, pin.longitude);
         }
       } catch {
@@ -785,7 +784,15 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
-  const handleConfirmAddressPin = async (pin: { latitude: number; longitude: number }) => {
+  const handleConfirmAddressPin = async (
+    pin: { latitude: number; longitude: number },
+    details?: AddressPinConfirmDetails
+  ) => {
+    if (details) {
+      setHouseFlatDoorNo(details.houseFlatDoorNo);
+      setRecipientName(details.recipientName);
+    }
+
     if (pinConfirmIntent === "current_location") {
       setAddressLatitude(pin.latitude);
       setAddressLongitude(pin.longitude);
@@ -946,7 +953,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       latitude={pendingPin?.latitude || addressLatitude || 0}
       longitude={pendingPin?.longitude || addressLongitude || 0}
       formattedAddress={pendingPin?.formattedAddress || locationPreview}
-      addressLines={buildAddressLines(
+      addressLines={buildAddressDisplayLines(
         {
           ...(pendingAddressPayload || {}),
           label: String(pendingAddressPayload?.label || addressLabel)
@@ -1150,17 +1157,69 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const savedAddresses = getSavedAddressesFromProfile(profile);
   const defaultAddress = savedAddresses.find((entry) => entry.isDefault) || savedAddresses[0];
-  const addressLines = buildAddressLines(defaultAddress, profile?.name);
+  const addressLines = buildAddressDisplayLines(defaultAddress, profile?.name);
   const memberSince = profile ? formatDate(profile.createdAt) : "N/A";
   const ongoingOrders = orders.filter((order) => !["DELIVERED", "CANCELLED", "REJECTED"].includes(order.status)).slice(0, 3);
   const recentOrders = orders.slice(0, 3);
+
+  const renderSavedAddressCards = () => {
+    if (savedAddresses.length === 0) {
+      if (!editing) {
+        return <Text style={styles.emptyText}>No address saved yet.</Text>;
+      }
+      return null;
+    }
+
+    return savedAddresses.map((savedAddress, index) => {
+      const lines = buildAddressDisplayLines(savedAddress, profile?.name);
+      const isBeingEdited = editing && addressFormMode === "edit" && editingAddressId === savedAddress._id;
+      return (
+        <View
+          key={savedAddress._id || `${savedAddress.label}-${index}`}
+          style={[styles.addressCard, isBeingEdited && styles.addressCardActive]}
+        >
+          <View style={styles.addressBadgeRow}>
+            <View style={styles.addressBadge}>
+              <Text style={styles.addressBadgeText}>{savedAddress.label || "Address"}</Text>
+            </View>
+            <Text style={styles.addressDefaultText}>{savedAddress.isDefault ? "Default address" : "Saved address"}</Text>
+          </View>
+          {lines.map((line, lineIndex) => (
+            <Text key={`${savedAddress._id || index}-line-${lineIndex}`} style={styles.addressLine}>
+              {line}
+            </Text>
+          ))}
+          <Text style={[styles.addressLine, styles.addressPinLine]}>
+            {hasValidAddressPin(savedAddress.latitude, savedAddress.longitude) ? "Exact map pin saved" : "Exact map pin not saved"}
+          </Text>
+          {!editing ? (
+            <View style={styles.addressActions}>
+              {!savedAddress.isDefault && savedAddress._id ? (
+                <TouchableOpacity onPress={() => handleSetDefaultAddress(savedAddress)} disabled={saving}>
+                  <Text style={styles.addressActionText}>Use as default</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity onPress={() => startEditAddress(savedAddress)}>
+                <Text style={styles.addressActionText}>Edit</Text>
+              </TouchableOpacity>
+              {savedAddresses.length > 1 && savedAddress._id ? (
+                <TouchableOpacity onPress={() => handleDeleteAddress(savedAddress)} disabled={saving}>
+                  <Text style={[styles.addressActionText, styles.addressDeleteText]}>Delete</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      );
+    });
+  };
 
   if (loading) {
     return (
       <View style={styles.container}>
         <ScreenHeader title={screenTitle} showBack={!forceComplete} />
         <View style={styles.loadingBody}>
-          <ActivityIndicator size="large" color="#FF6B35" />
+          <ActivityIndicator size="large" color="#e23744" />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </View>
@@ -1234,19 +1293,19 @@ export default function ProfileScreen({ navigation, route }: any) {
           </Text>
 
           <View style={styles.heroContactRow}>
-            <MaterialCommunityIcons name="phone-outline" size={14} color="#C96C2F" />
+            <MaterialCommunityIcons name="phone-outline" size={14} color="#e23744" />
             <Text style={styles.heroSubtext}>
               {digitsOnlyPhone(profile?.phone) ? `+91 ${digitsOnlyPhone(profile?.phone)}` : "Phone not set"}
             </Text>
           </View>
           <View style={styles.heroContactRow}>
-            <MaterialCommunityIcons name="email-outline" size={14} color="#C96C2F" />
+            <MaterialCommunityIcons name="email-outline" size={14} color="#e23744" />
             <Text style={styles.heroSubtext} numberOfLines={1}>
               {profile?.email || "Add email for invoices and offers"}
             </Text>
           </View>
           <View style={styles.memberChip}>
-            <MaterialCommunityIcons name="calendar-check-outline" size={13} color="#C96C2F" />
+            <MaterialCommunityIcons name="calendar-check-outline" size={13} color="#e23744" />
             <Text style={styles.memberSinceText}>Member since {memberSince}</Text>
           </View>
 
@@ -1273,7 +1332,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         <View style={styles.shortcutRow}>
           <TouchableOpacity style={styles.shortcutCard} onPress={() => navigation.navigate("Orders")} activeOpacity={0.88}>
             <View style={[styles.shortcutIconWrap, styles.shortcutIconOrders]}>
-              <MaterialCommunityIcons name="receipt-text-outline" size={20} color="#FF6B35" />
+              <MaterialCommunityIcons name="receipt-text-outline" size={20} color="#e23744" />
             </View>
             <Text style={styles.shortcutTitle}>My Orders</Text>
             <Text style={styles.shortcutDetail}>
@@ -1288,7 +1347,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             activeOpacity={0.88}
           >
             <View style={[styles.shortcutIconWrap, styles.shortcutIconAddress]}>
-              <MaterialCommunityIcons name="map-marker-radius-outline" size={20} color="#2B9C4A" />
+              <MaterialCommunityIcons name="map-marker-radius-outline" size={20} color="#1c9b55" />
             </View>
             <Text style={styles.shortcutTitle}>Addresses</Text>
             <Text style={styles.shortcutDetail}>{addressLines.length > 0 ? "Primary saved" : "Add now"}</Text>
@@ -1436,16 +1495,29 @@ export default function ProfileScreen({ navigation, route }: any) {
               <TouchableOpacity style={styles.inlineLink} onPress={startAddAddress}>
                 <Text style={styles.inlineLinkText}>Add New</Text>
               </TouchableOpacity>
-            ) : null}
+            ) : (
+              <TouchableOpacity style={styles.inlineLink} onPress={resetForm} disabled={saving}>
+                <Text style={styles.inlineLinkText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          <Text style={styles.sectionHint}>
-            {addressEntryMode === "unset"
-              ? "Choose how you want to add your delivery location."
-              : "We’ll confirm the exact map pin before saving."}
-          </Text>
+
+          {!editing && savedAddresses.length > 0 ? (
+            <Text style={styles.sectionHint}>Your saved delivery locations.</Text>
+          ) : null}
+
+          {renderSavedAddressCards()}
 
           {editing ? (
-            <>
+            <View style={savedAddresses.length > 0 ? styles.addAddressFormBlock : undefined}>
+              {addressFormMode === "add" && savedAddresses.length > 0 ? (
+                <Text style={styles.subSectionTitle}>Add new address</Text>
+              ) : null}
+              <Text style={styles.sectionHint}>
+                {addressEntryMode === "unset"
+                  ? "Choose how you want to add your delivery location."
+                  : "We’ll confirm the exact map pin before saving."}
+              </Text>
               <AddressFormFields {...addressFormProps} />
 
               {!forceComplete && (
@@ -1457,47 +1529,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                   )}
                 </TouchableOpacity>
               )}
-            </>
-          ) : savedAddresses.length > 0 ? (
-            savedAddresses.map((savedAddress, index) => {
-              const lines = buildAddressLines(savedAddress, profile?.name);
-              return (
-                <View key={savedAddress._id || `${savedAddress.label}-${index}`} style={styles.addressCard}>
-                  <View style={styles.addressBadgeRow}>
-                    <View style={styles.addressBadge}>
-                      <Text style={styles.addressBadgeText}>{savedAddress.label || "Address"}</Text>
-                    </View>
-                    <Text style={styles.addressDefaultText}>{savedAddress.isDefault ? "Default address" : "Saved address"}</Text>
-                  </View>
-                  {lines.map((line, lineIndex) => (
-                    <Text key={`${savedAddress._id || index}-line-${lineIndex}`} style={styles.addressLine}>
-                      {line}
-                    </Text>
-                  ))}
-                  <Text style={[styles.addressLine, styles.addressPinLine]}>
-                    {hasValidAddressPin(savedAddress.latitude, savedAddress.longitude) ? "Exact map pin saved" : "Exact map pin not saved"}
-                  </Text>
-                  <View style={styles.addressActions}>
-                    {!savedAddress.isDefault && savedAddress._id ? (
-                      <TouchableOpacity onPress={() => handleSetDefaultAddress(savedAddress)} disabled={saving}>
-                        <Text style={styles.addressActionText}>Use as default</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                    <TouchableOpacity onPress={() => startEditAddress(savedAddress)}>
-                      <Text style={styles.addressActionText}>Edit</Text>
-                    </TouchableOpacity>
-                    {savedAddresses.length > 1 && savedAddress._id ? (
-                      <TouchableOpacity onPress={() => handleDeleteAddress(savedAddress)} disabled={saving}>
-                        <Text style={[styles.addressActionText, styles.addressDeleteText]}>Delete</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                </View>
-              );
-            })
-          ) : (
-            <Text style={styles.emptyText}>No address saved yet.</Text>
-          )}
+            </View>
+          ) : null}
         </View>
 
         {!forceComplete && (
@@ -1523,7 +1556,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                               orderId={order._id}
                               prefix="Order #"
                               style={styles.orderId}
-                              highlightStyle={{ color: "#FF6B35", fontWeight: "800" }}
+                              highlightStyle={{ color: "#e23744", fontWeight: "800" }}
                             />
                             <Text style={styles.orderPartner}>
                               {getPublicShopName((order.partnerId as any)?.restaurantName || (order.partnerId as any)?.shopName || "Restaurant")}
@@ -1608,7 +1641,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 >
                   <View style={styles.listRowLeft}>
                     <View style={styles.listRowIcon}>
-                      <MaterialCommunityIcons name={item.icon as any} size={18} color="#FF6B35" />
+                      <MaterialCommunityIcons name={item.icon as any} size={18} color="#e23744" />
                     </View>
                     <View style={styles.listRowTextWrap}>
                       <Text style={styles.listRowTitle}>{item.title}</Text>
@@ -1674,7 +1707,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F2EC"
+    backgroundColor: "#F8FAFC"
   },
   content: {
     paddingTop: 10,
@@ -1691,7 +1724,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F6F2EC"
+    backgroundColor: "#F8FAFC"
   },
   loadingBody: {
     flex: 1,
@@ -1701,16 +1734,21 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 15,
-    color: "#6B5E55"
+    color: "#64748B"
   },
   heroCard: {
     marginHorizontal: 14,
     padding: 16,
     borderRadius: 22,
-    backgroundColor: "#FFF4EA",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#F3D7BF",
-    overflow: "hidden"
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+    shadowColor: "#CBD5E1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 2
   },
   heroCardCompact: {
     marginTop: 6
@@ -1720,8 +1758,8 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: "#FFD9C2",
-    opacity: 0.55,
+    backgroundColor: "#FECACA",
+    opacity: 0.45,
     top: -48,
     right: -28
   },
@@ -1730,15 +1768,15 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: "#FFE7D4",
-    opacity: 0.9,
+    backgroundColor: "#BFDBFE",
+    opacity: 0.55,
     bottom: 48,
     right: 24
   },
   heroEyebrow: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#C96C2F",
+    color: "#e23744",
     letterSpacing: 0.2,
     marginBottom: 2
   },
@@ -1746,7 +1784,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     lineHeight: 30,
     fontWeight: "900",
-    color: "#201914",
+    color: "#0F172A",
     marginBottom: 10
   },
   heroContactRow: {
@@ -1759,7 +1797,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     fontSize: 13,
-    color: "#6B5E55"
+    color: "#64748B"
   },
   memberChip: {
     alignSelf: "flex-start",
@@ -1768,14 +1806,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#F1DED0",
+    borderColor: "#E2E8F0",
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5
   },
   memberSinceText: {
     fontSize: 12,
-    color: "#8B6A54",
+    color: "#64748B",
     marginLeft: 4,
     fontWeight: "700"
   },
@@ -1783,10 +1821,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 14,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F8FAFC",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#F1E1D5",
+    borderColor: "#E2E8F0",
     paddingVertical: 10
   },
   quickStatCard: {
@@ -1797,27 +1835,27 @@ const styles = StyleSheet.create({
   quickStatDivider: {
     width: 1,
     height: 28,
-    backgroundColor: "#F0E0D3"
+    backgroundColor: "#E2E8F0"
   },
   quickStatValue: {
     fontSize: 20,
     fontWeight: "900",
-    color: "#2C2018"
+    color: "#0F172A"
   },
   quickStatValueOrders: {
-    color: "#FF6B35"
+    color: "#e23744"
   },
   quickStatValueLive: {
-    color: "#2B9C4A"
+    color: "#1c9b55"
   },
   quickStatValueFav: {
-    color: "#E11D48"
+    color: "#2f6bff"
   },
   quickStatLabel: {
     marginTop: 2,
     fontSize: 11,
     fontWeight: "700",
-    color: "#8B6A54"
+    color: "#64748B"
   },
   shortcutRow: {
     flexDirection: "row",
@@ -1829,10 +1867,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#ECE3D9",
+    borderColor: "#E2E8F0",
     borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 12
+    paddingHorizontal: 12,
+    shadowColor: "#CBD5E1",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 1
   },
   shortcutIconWrap: {
     width: 38,
@@ -1842,21 +1885,21 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   shortcutIconOrders: {
-    backgroundColor: "#FFF1E6"
+    backgroundColor: "#FDF2F3"
   },
   shortcutIconAddress: {
-    backgroundColor: "#EAF8EA"
+    backgroundColor: "#ECFDF3"
   },
   shortcutTitle: {
     marginTop: 10,
     fontSize: 14,
     fontWeight: "800",
-    color: "#2C2018"
+    color: "#0F172A"
   },
   shortcutDetail: {
     marginTop: 3,
     fontSize: 12,
-    color: "#7A6F65"
+    color: "#64748B"
   },
   section: {
     marginHorizontal: 14,
@@ -1865,7 +1908,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#ECE3D9"
+    borderColor: "#E2E8F0",
+    shadowColor: "#CBD5E1",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 1
   },
   sectionHeader: {
     flexDirection: "row",
@@ -1876,14 +1924,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#241D17"
+    color: "#0F172A"
   },
   sectionHint: {
     marginTop: 2,
     marginBottom: 8,
     fontSize: 12,
     lineHeight: 16,
-    color: "#7A6F65"
+    color: "#64748B"
   },
   inlineActions: {
     flexDirection: "row",
@@ -1897,7 +1945,7 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   primaryAction: {
-    backgroundColor: "#FF6B35"
+    backgroundColor: "#e23744"
   },
   mutedAction: {
     backgroundColor: "#F1F3F5"
@@ -1918,7 +1966,7 @@ const styles = StyleSheet.create({
   inlineLinkText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   fieldGroup: {
     marginBottom: 8
@@ -1926,22 +1974,22 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#7A6F65",
+    color: "#64748B",
     marginBottom: 4
   },
   value: {
     fontSize: 14,
-    color: "#241D17",
+    color: "#0F172A",
     paddingVertical: 6
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E4DBD2",
+    borderColor: "#E2E8F0",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 14,
-    color: "#1A120B",
+    color: "#0F172A",
     backgroundColor: "#FFFFFF",
     minHeight: 38,
     marginBottom: 0
@@ -1950,30 +1998,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E4DBD2",
+    borderColor: "#E2E8F0",
     borderRadius: 8,
     paddingHorizontal: 10,
     minHeight: 38,
-    backgroundColor: "#F7F2EC"
+    backgroundColor: "#F8FAFC"
   },
   phoneReadonlyPrefix: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#7A6F65",
+    color: "#64748B",
     marginRight: 8,
     paddingRight: 8,
     borderRightWidth: 1,
-    borderRightColor: "#E4DBD2"
+    borderRightColor: "#E2E8F0"
   },
   phoneReadonlyValue: {
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
-    color: "#1A120B"
+    color: "#0F172A"
   },
   inputFocused: {
-    borderColor: "#FF6B35",
-    backgroundColor: "#FFF8F4"
+    borderColor: "#e23744",
+    backgroundColor: "#FDF2F3"
   },
   row: {
     flexDirection: "row",
@@ -1983,12 +2031,22 @@ const styles = StyleSheet.create({
     flex: 1
   },
   addressCard: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "#F8FAFC",
     borderRadius: 16,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#F3E4D4",
+    borderColor: "#E2E8F0",
     marginBottom: 10
+  },
+  addressCardActive: {
+    borderColor: "#e23744",
+    backgroundColor: "#FDF2F3"
+  },
+  addAddressFormBlock: {
+    marginTop: 6,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0"
   },
   addressBadgeRow: {
     flexDirection: "row",
@@ -1997,7 +2055,7 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   addressBadge: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999
@@ -2010,7 +2068,7 @@ const styles = StyleSheet.create({
   addressDefaultText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#8B6A54"
+    color: "#64748B"
   },
   addressLine: {
     fontSize: 14,
@@ -2020,12 +2078,12 @@ const styles = StyleSheet.create({
   addressPinLine: {
     marginTop: 4,
     fontWeight: "800",
-    color: "#2B9C4A"
+    color: "#1c9b55"
   },
   pinCard: {
-    backgroundColor: "#F0FFF4",
+    backgroundColor: "#ECFDF3",
     borderWidth: 1,
-    borderColor: "#BFE9CA",
+    borderColor: "#BBF7D0",
     borderRadius: 14,
     padding: 12,
     marginBottom: 12
@@ -2036,16 +2094,16 @@ const styles = StyleSheet.create({
   pinTitle: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#216E39",
+    color: "#1c9b55",
     marginBottom: 4
   },
   pinText: {
     fontSize: 12,
     lineHeight: 17,
-    color: "#3F6B4A"
+    color: "#475569"
   },
   pinButton: {
-    backgroundColor: "#2B9C4A",
+    backgroundColor: "#1c9b55",
     borderRadius: 12,
     minHeight: 44,
     alignItems: "center",
@@ -2063,12 +2121,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "#F0E0D3"
+    borderTopColor: "#E2E8F0"
   },
   addressActionText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   addressDeleteText: {
     color: "#B42318"
@@ -2076,7 +2134,7 @@ const styles = StyleSheet.create({
   fullSaveButton: {
     marginTop: 4,
     borderRadius: 16,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     minHeight: 52,
     alignItems: "center",
     justifyContent: "center"
@@ -2098,14 +2156,14 @@ const styles = StyleSheet.create({
   subSectionTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#241D17",
+    color: "#0F172A",
     marginBottom: 10
   },
   orderCard: {
-    backgroundColor: "#FBF7F1",
+    backgroundColor: "#F8FAFC",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#F1E5D8",
+    borderColor: "#E2E8F0",
     padding: 12,
     marginBottom: 8
   },
@@ -2118,12 +2176,13 @@ const styles = StyleSheet.create({
   orderId: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#241D17"
+    color: "#0F172A"
   },
   orderPartner: {
     fontSize: 13,
-    color: "#7A6F65",
-    marginTop: 4
+    color: "#2f6bff",
+    marginTop: 4,
+    fontWeight: "600"
   },
   orderStatusChip: {
     borderRadius: 999,
@@ -2141,12 +2200,12 @@ const styles = StyleSheet.create({
   },
   orderMeta: {
     fontSize: 12,
-    color: "#7A6F65"
+    color: "#64748B"
   },
   orderTotal: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   orderActionRow: {
     flexDirection: "row",
@@ -2156,7 +2215,7 @@ const styles = StyleSheet.create({
   orderActionLink: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   orderHistoryRow: {
     flexDirection: "row",
@@ -2164,7 +2223,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#F2ECE5"
+    borderTopColor: "#E2E8F0"
   },
   orderHistoryMeta: {
     flex: 1,
@@ -2173,12 +2232,12 @@ const styles = StyleSheet.create({
   orderHistoryTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#241D17"
+    color: "#0F172A"
   },
   orderHistorySubtext: {
     marginTop: 4,
     fontSize: 12,
-    color: "#7A6F65"
+    color: "#64748B"
   },
   orderHistoryActions: {
     alignItems: "flex-end"
@@ -2186,7 +2245,7 @@ const styles = StyleSheet.create({
   orderHistoryAmount: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   orderMiniActions: {
     flexDirection: "row",
@@ -2196,7 +2255,7 @@ const styles = StyleSheet.create({
   orderMiniLink: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   listRow: {
     flexDirection: "row",
@@ -2204,7 +2263,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "#F2ECE5"
+    borderTopColor: "#E2E8F0"
   },
   listRowLeft: {
     flexDirection: "row",
@@ -2220,12 +2279,12 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: "#FFF4EB",
+    backgroundColor: "#FDF2F3",
     alignItems: "center",
     justifyContent: "center"
   },
   accountIconDanger: {
-    backgroundColor: "#FDECEC"
+    backgroundColor: "#FDF2F3"
   },
   listRowTextWrap: {
     marginLeft: 12,
@@ -2234,18 +2293,18 @@ const styles = StyleSheet.create({
   listRowTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#241D17"
+    color: "#0F172A"
   },
   listRowDetail: {
     marginTop: 3,
     fontSize: 12,
-    color: "#7A6F65",
+    color: "#64748B",
     lineHeight: 17
   },
   rowTag: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   favoriteBlock: {
     marginTop: 4,
@@ -2254,16 +2313,16 @@ const styles = StyleSheet.create({
   favoriteTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#241D17",
+    color: "#0F172A",
     marginBottom: 10
   },
   favoriteChip: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "stretch",
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#F0E0D3",
+    borderColor: "#E2E8F0",
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -2273,7 +2332,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 10,
-    backgroundColor: "#FFE8EE",
+    backgroundColor: "#FDF2F3",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -2285,7 +2344,7 @@ const styles = StyleSheet.create({
   favoriteChipMeta: {
     marginTop: 2,
     fontSize: 11,
-    color: "#8B7E74"
+    color: "#64748B"
   },
   favoriteStatusPill: {
     borderRadius: 999,
@@ -2294,39 +2353,39 @@ const styles = StyleSheet.create({
     marginLeft: 8
   },
   favoriteStatusOpen: {
-    backgroundColor: "#EAF8EA"
+    backgroundColor: "#ECFDF3"
   },
   favoriteStatusClosed: {
-    backgroundColor: "#FDECEC"
+    backgroundColor: "#FDF2F3"
   },
   favoriteAvailability: {
     fontSize: 10,
     fontWeight: "800"
   },
   favoriteAvailabilityOpen: {
-    color: "#15803D"
+    color: "#1c9b55"
   },
   favoriteAvailabilityClosed: {
-    color: "#B42318"
+    color: "#e23744"
   },
   favoriteChipText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#241D17"
+    color: "#0F172A"
   },
   favoriteChipCount: {
     marginLeft: 8,
     fontSize: 12,
-    color: "#8B6A54",
+    color: "#64748B",
     fontWeight: "700"
   },
   offerCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFF7EF",
+    backgroundColor: "#EFF6FF",
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#F3E4D4",
+    borderColor: "#BFDBFE",
     padding: 14,
     marginBottom: 10
   },
@@ -2337,12 +2396,12 @@ const styles = StyleSheet.create({
   offerTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#241D17"
+    color: "#0F172A"
   },
   offerDetail: {
     marginTop: 4,
     fontSize: 12,
-    color: "#7A6F65",
+    color: "#64748B",
     lineHeight: 17
   },
   toggleRow: {
@@ -2351,7 +2410,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: "#F2ECE5"
+    borderTopColor: "#E2E8F0"
   },
   toggleTextWrap: {
     flex: 1,
@@ -2360,19 +2419,19 @@ const styles = StyleSheet.create({
   toggleTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#241D17"
+    color: "#0F172A"
   },
   toggleDetail: {
     marginTop: 4,
     fontSize: 12,
-    color: "#7A6F65"
+    color: "#64748B"
   },
   accountActionRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "#F2ECE5"
+    borderTopColor: "#E2E8F0"
   },
   logoutRow: {
     marginTop: 4
@@ -2513,7 +2572,7 @@ const styles = StyleSheet.create({
   supportSendButton: {
     minHeight: 48,
     borderRadius: 16,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -2549,7 +2608,7 @@ const styles = StyleSheet.create({
     width: "100%",
     minHeight: 52,
     borderRadius: 16,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -2562,17 +2621,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: Platform.OS === "ios" ? 24 : 16,
-    backgroundColor: "rgba(246, 242, 236, 0.98)",
+    backgroundColor: "rgba(248, 250, 252, 0.98)",
     borderTopWidth: 1,
-    borderTopColor: "#E7DED3"
+    borderTopColor: "#E2E8F0"
   },
   footerButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     borderRadius: 16,
     minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#FF6B35",
+    shadowColor: "#e23744",
     shadowOpacity: 0.22,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -2698,7 +2757,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: "#2B9C4A",
+    backgroundColor: "#1c9b55",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16
@@ -2721,7 +2780,7 @@ const styles = StyleSheet.create({
     width: "100%",
     minHeight: 54,
     borderRadius: 18,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center"
   },

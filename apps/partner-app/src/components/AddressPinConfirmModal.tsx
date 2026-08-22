@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -11,6 +11,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import GooglePinMap from "./GooglePinMap";
+import {
+  partnerShopAddressLines,
+  reverseGeocodeLocation,
+  type ReverseGeocodedAddress
+} from "../api/geocode.api";
 
 type AddressPinConfirmModalProps = {
   visible: boolean;
@@ -20,7 +25,13 @@ type AddressPinConfirmModalProps = {
   confirming?: boolean;
   onConfirm: (pin: { latitude: number; longitude: number }) => void;
   onEdit: () => void;
+  onAddressResolved?: (geo: ReverseGeocodedAddress, pin: { latitude: number; longitude: number }) => void;
 };
+
+const movedFarEnough = (
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+) => Math.abs(from.latitude - to.latitude) > 0.00012 || Math.abs(from.longitude - to.longitude) > 0.00012;
 
 const TILE_SIZE = 256;
 const MAP_ZOOM = 18;
@@ -193,26 +204,82 @@ export default function AddressPinConfirmModal({
   longitude,
   confirming,
   onConfirm,
-  onEdit
+  onEdit,
+  onAddressResolved
 }: AddressPinConfirmModalProps) {
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState({ latitude, longitude });
+  const [liveLines, setLiveLines] = useState(addressLines);
+  const [refreshingAddress, setRefreshingAddress] = useState(false);
+  const lastGeocodedRef = useRef({ latitude, longitude });
+  const requestIdRef = useRef(0);
+  const openedAtRef = useRef(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!visible) return;
+    openedAtRef.current = Date.now();
     setPin({ latitude, longitude });
-  }, [latitude, longitude]);
+    lastGeocodedRef.current = { latitude, longitude };
+    setLiveLines(addressLines);
+  }, [visible, latitude, longitude]);
+
+  useEffect(() => {
+    if (!refreshingAddress) setLiveLines(addressLines);
+  }, [addressLines, refreshingAddress]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const handlePinChange = (next: { latitude: number; longitude: number }) => {
+    setPin(next);
+    if (Date.now() - openedAtRef.current < 800) return;
+    if (!movedFarEnough(lastGeocodedRef.current, next)) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      lastGeocodedRef.current = next;
+      const requestId = ++requestIdRef.current;
+      setRefreshingAddress(true);
+      try {
+        const result = await reverseGeocodeLocation(next.latitude, next.longitude);
+        if (requestId !== requestIdRef.current) return;
+        const geo = result.data;
+        if (result.success && geo) {
+          const nextLines = partnerShopAddressLines({
+            shopHouseName: geo.buildingApartmentName || geo.houseFlatDoorNo,
+            roadStreet: geo.streetRoadName,
+            colony: geo.colony,
+            area: geo.area,
+            town: geo.town,
+            city: geo.city,
+            state: geo.state,
+            pincode: geo.pincode
+          });
+          setLiveLines(nextLines.length ? nextLines : [geo.formattedAddress].filter(Boolean));
+          onAddressResolved?.(geo, next);
+        }
+      } catch {
+        // Keep the last known address text if reverse geocode fails.
+      } finally {
+        if (requestId === requestIdRef.current) setRefreshingAddress(false);
+      }
+    }, 450);
+  };
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onEdit}>
       <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
         <Text style={styles.title}>Confirm shop pin</Text>
         <Text style={styles.subtitle}>
-          Place the pin on your shop. Drag the map until the orange pin sits on the entrance or building.
+          Place the pin on your shop. Drag the map until the orange pin sits on the entrance or building. The address updates as you move the pin.
         </Text>
 
         <View style={styles.mapCard}>
           {Number.isFinite(latitude) && Number.isFinite(longitude) ? (
-            <GoogleMapOrFallback latitude={latitude} longitude={longitude} onPinChange={setPin} />
+            <GoogleMapOrFallback latitude={latitude} longitude={longitude} onPinChange={handlePinChange} />
           ) : (
             <View style={styles.mapFallback}>
               <ActivityIndicator color="#FF6B35" />
@@ -221,9 +288,12 @@ export default function AddressPinConfirmModal({
         </View>
 
         <View style={styles.addressCard}>
-          <Text style={styles.addressLabel}>Shop address</Text>
-          {addressLines.map((line) => (
-            <Text key={line} style={styles.addressLine}>
+          <View style={styles.addressLabelRow}>
+            <Text style={styles.addressLabel}>Shop address</Text>
+            {refreshingAddress ? <ActivityIndicator color="#FF6B35" size="small" /> : null}
+          </View>
+          {(liveLines.length ? liveLines : addressLines).map((line, index) => (
+            <Text key={`${index}-${line}`} style={styles.addressLine}>
               {line}
             </Text>
           ))}
@@ -339,8 +409,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#EEE6DE"
   },
+  addressLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6
+  },
   addressLabel: {
-    marginBottom: 6,
     fontSize: 11,
     fontWeight: "800",
     color: "#9A8F85",

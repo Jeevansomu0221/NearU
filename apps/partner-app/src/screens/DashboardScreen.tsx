@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../api/client";
 import { getPartnerWallet, type PartnerWallet } from "../api/partner.api";
+import { getStoredPartnerUser, isStaffActor } from "../utils/partnerActor";
 import { usePartnerTheme } from "../context/PartnerThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -37,6 +38,10 @@ export default function DashboardScreen({ navigation }: any) {
     totalEarnings: 0
   });
   const [liveOrderCount, setLiveOrderCount] = useState(0);
+  const [isStaff, setIsStaff] = useState(false);
+  const [staffName, setStaffName] = useState("Staff");
+  const [kitchenOperator, setKitchenOperator] = useState("");
+  const [kitchenOperatorWhen, setKitchenOperatorWhen] = useState("");
 
   useEffect(() => {
     loadDashboardData();
@@ -74,27 +79,27 @@ export default function DashboardScreen({ navigation }: any) {
       if (!options?.silent) {
         setLoading(true);
       }
+      const actor = await getStoredPartnerUser();
+      const staffSession = isStaffActor(actor);
+      setIsStaff(staffSession);
+      setStaffName(actor?.operatorName || actor?.name || actor?.username || "Staff");
       const res = await api.get("/partners/my-status");
       const partnerData = res.data as { success: boolean; data: any };
       if (!partnerData.success || !partnerData.data) {
         throw new Error("Partner profile not found");
       }
       setPartner(partnerData.data);
+      const kitchen = partnerData.data?.kitchenStaff;
+      setKitchenOperator(kitchen?.lastOperatorName || "");
+      setKitchenOperatorWhen(kitchen?.lastLoginAt || "");
       // Don't clobber an in-flight optimistic toggle with a stale refresh.
       if (!togglingShopRef.current) {
         setShopOpen(partnerData.data?.isOpen !== false);
       }
 
       try {
-        const [statsRes, walletRes] = await Promise.all([
-          api.get("/partners/stats"),
-          getPartnerWallet()
-        ]);
+        const statsRes = await api.get("/partners/stats");
         const statsData = statsRes.data as { success: boolean; data: any };
-        const walletData = walletRes.data;
-        if (walletData.success && walletData.data) {
-          setWallet(walletData.data);
-        }
         setStats((current) => ({
           todayOrders: statsData.data?.todayOrders ?? 0,
           totalOrders: statsData.data?.totalOrders ?? 0,
@@ -102,6 +107,13 @@ export default function DashboardScreen({ navigation }: any) {
           todayEarnings: statsData.data?.todayEarnings ?? 0,
           totalEarnings: statsData.data?.totalEarnings ?? 0
         }));
+        if (!staffSession) {
+          const walletRes = await getPartnerWallet();
+          const walletData = walletRes.data;
+          if (walletData.success && walletData.data) {
+            setWallet(walletData.data);
+          }
+        }
       } catch (statsError) {
         console.log("Stats endpoint not available yet, using defaults");
       }
@@ -166,7 +178,9 @@ export default function DashboardScreen({ navigation }: any) {
       >
         <View style={styles.headerContainer}>
           <View style={styles.headerLeft}>
-            <Text style={[styles.welcomeText, isDarkMode && styles.mutedTextDark]}>Welcome back,</Text>
+            <Text style={[styles.welcomeText, isDarkMode && styles.mutedTextDark]}>
+              {isStaff ? `Staff · ${staffName}` : "Welcome back,"}
+            </Text>
             <Text style={[styles.shopNameText, isDarkMode && styles.textDark]} numberOfLines={1}>
               {partner.restaurantName || partner.shopName || "Your Shop"}
             </Text>
@@ -181,6 +195,23 @@ export default function DashboardScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
         </View>
+
+        {!isStaff && kitchenOperator ? (
+          <View style={[styles.kitchenBanner, isDarkMode && styles.cardDark]}>
+            <Text style={[styles.kitchenBannerLabel, isDarkMode && styles.mutedTextDark]}>Kitchen now</Text>
+            <Text style={[styles.kitchenBannerName, isDarkMode && styles.textDark]}>{kitchenOperator}</Text>
+            {kitchenOperatorWhen ? (
+              <Text style={[styles.kitchenBannerWhen, isDarkMode && styles.mutedTextDark]}>
+                Signed in {new Date(kitchenOperatorWhen).toLocaleString("en-IN", {
+                  day: "2-digit",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         <TouchableOpacity
           activeOpacity={0.92}
@@ -230,6 +261,7 @@ export default function DashboardScreen({ navigation }: any) {
           />
         </TouchableOpacity>
 
+        {isStaff ? null : (
         <View style={[styles.metricsCard, isDarkMode && styles.cardDark]}>
           <View style={styles.metricsHeader}>
             <View style={styles.metricAmountBlock}>
@@ -271,6 +303,25 @@ export default function DashboardScreen({ navigation }: any) {
             </View>
           </View>
         </View>
+        )}
+
+        {isStaff ? (
+          <View style={[styles.metricsCard, isDarkMode && styles.cardDark]}>
+            <View style={styles.metricsSubGrid}>
+              <View style={styles.subStatItem}>
+                <Text style={[styles.subStatLabel, isDarkMode && styles.mutedTextDark]}>Orders Today</Text>
+                <Text style={[styles.subStatValue, isDarkMode && styles.textDark]}>{stats.todayOrders}</Text>
+              </View>
+              <View style={[styles.verticalDivider, isDarkMode && styles.dividerDark]} />
+              <View style={styles.subStatItem}>
+                <Text style={[styles.subStatLabel, isDarkMode && styles.mutedTextDark]}>Pending Orders</Text>
+                <Text style={[styles.subStatValue, isDarkMode && styles.textDark, stats.pendingOrders > 0 ? styles.subStatPendingHighlight : null]}>
+                  {stats.pendingOrders}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Quick actions</Text>
@@ -292,6 +343,7 @@ export default function DashboardScreen({ navigation }: any) {
               </Text>
             </TouchableOpacity>
 
+            {isStaff ? null : (
             <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Menu")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#FFF6ED" }]}>
                 <Ionicons name="restaurant" size={20} color="#FB923C" />
@@ -299,8 +351,10 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={[styles.gridCardTitle, isDarkMode && styles.textDark]}>Menu</Text>
               <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Items & pricing</Text>
             </TouchableOpacity>
+            )}
           </View>
 
+          {isStaff ? null : (
           <View style={[styles.gridContainer, { marginTop: 10 }]}>
             <TouchableOpacity style={[styles.gridCard, isDarkMode && styles.cardDark]} onPress={() => navigation.navigate("Profile")} activeOpacity={0.7}>
               <View style={[styles.gridIconCircle, { backgroundColor: "#ECFDF5" }]}>
@@ -318,6 +372,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={[styles.gridCardDesc, isDarkMode && styles.mutedTextDark]}>Customer order feedback</Text>
             </TouchableOpacity>
           </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -337,6 +392,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={[styles.snapshotValue, isDarkMode && styles.textDark]}>{stats.totalOrders}</Text>
             </View>
 
+            {isStaff ? null : (
             <View style={styles.snapshotRow}>
               <View style={styles.snapshotRowLeft}>
                 <Ionicons name="cash-outline" size={18} color="#5E7897" style={styles.rowIcon} />
@@ -344,6 +400,7 @@ export default function DashboardScreen({ navigation }: any) {
               </View>
               <Text style={[styles.snapshotValue, isDarkMode && styles.textDark]}>Rs {stats.totalEarnings}</Text>
             </View>
+            )}
 
             <View style={[styles.snapshotRow, { borderBottomWidth: 0 }]}>
               <View style={styles.snapshotRowLeft}>
@@ -401,6 +458,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
+  },
+  kitchenBanner: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D9E6F7",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  kitchenBannerLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5E7897"
+  },
+  kitchenBannerName: {
+    marginTop: 2,
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#2A5580"
+  },
+  kitchenBannerWhen: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#5E7897"
   },
   headerLeft: {
     flex: 1,

@@ -118,7 +118,7 @@ export default function AddressPickerModal({ visible, profile, onClose, onSelect
 
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
             {loading && addresses.length === 0 ? (
-              <ActivityIndicator size="small" color="#FF6B35" style={styles.cardSpinner} />
+              <ActivityIndicator size="small" color="#e23744" style={styles.cardSpinner} />
             ) : addresses.length === 0 ? (
               <Text style={styles.emptyText}>No saved addresses yet. Add one to continue checkout.</Text>
             ) : (
@@ -138,7 +138,7 @@ export default function AddressPickerModal({ visible, profile, onClose, onSelect
                       {isSelected ? <Text style={styles.selectedBadge}>Selected</Text> : null}
                     </View>
                     <Text style={styles.cardBody}>{formatSavedAddress(address, liveProfile?.name)}</Text>
-                    {busy ? <ActivityIndicator size="small" color="#FF6B35" style={styles.cardSpinner} /> : null}
+                    {busy ? <ActivityIndicator size="small" color="#e23744" style={styles.cardSpinner} /> : null}
                   </TouchableOpacity>
                 );
               })
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   closeText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   list: {
     flexGrow: 0,
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFCF9"
   },
   cardSelected: {
-    borderColor: "#FF6B35",
+    borderColor: "#e23744",
     backgroundColor: "#FFF4EE"
   },
   cardTop: {
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
   selectedBadge: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#FF6B35"
+    color: "#e23744"
   },
   cardBody: {
     fontSize: 13,
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   },
   addButton: {
     marginTop: 8,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center"

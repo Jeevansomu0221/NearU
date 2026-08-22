@@ -179,7 +179,7 @@ export default function SupportChatScreen({ route }: any) {
       <View style={styles.container}>
         <ScreenHeader title={screenTitle} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B35" />
+          <ActivityIndicator size="large" color="#e23744" />
           <Text style={styles.loadingText}>Loading conversation...</Text>
         </View>
       </View>
@@ -222,7 +222,7 @@ export default function SupportChatScreen({ route }: any) {
             contentContainerStyle={styles.chatList}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#FF6B35"]} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#e23744"]} />}
           />
 
           <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -269,7 +269,7 @@ export default function SupportChatScreen({ route }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F2EC"
+    backgroundColor: "#F8FAFC"
   },
   flex: {
     flex: 1
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: "#FF6B35",
+    backgroundColor: "#e23744",
     alignItems: "center",
     justifyContent: "center"
   },

@@ -15,6 +15,11 @@ interface VerifyOtpPayload {
     name: string;
     role: string;
     partnerId?: string;
+    staffId?: string;
+    actorType?: "owner" | "staff";
+    operatorName?: string;
+    username?: string;
+    restaurantName?: string;
   };
 }
 
@@ -125,6 +130,33 @@ export const testBackendConnection = async () => {
 export const getCurrentUser = async () => {
   const userStr = await AsyncStorage.getItem("user");
   return userStr ? JSON.parse(userStr) : null;
+};
+
+export const isStaffSession = async () => {
+  const user = await getCurrentUser();
+  return user?.actorType === "staff";
+};
+
+export const loginPartnerStaff = async (username: string, password: string, operatorName: string) => {
+  const response = await api.post<{
+    success: boolean;
+    message?: string;
+    data?: VerifyOtpPayload;
+  }>("/auth/partner-staff-login", {
+    username,
+    password,
+    operatorName,
+    platform: "app"
+  });
+  const payload = response.data?.data;
+  if (!response.data?.success || !payload?.token || !payload.user) {
+    throw new Error(response.data?.message || "Invalid username or password");
+  }
+  await persistVerifiedSession(payload);
+  registerForPushNotifications().catch((error) => {
+    console.log("Failed to register push notifications:", error);
+  });
+  return payload;
 };
 
 export const logout = async () => {

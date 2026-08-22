@@ -19,7 +19,7 @@ export default function ScreenHeader({
   showBack = true,
   backIcon = "chevron-left",
   onBack,
-  backgroundColor = "#F6F2EC"
+  backgroundColor = "#F8FAFC"
 }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
@@ -65,7 +65,7 @@ export default function ScreenHeader({
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: "#F6F2EC"
+    backgroundColor: "#F8FAFC"
   },
   row: {
     flexDirection: "row",
@@ -83,12 +83,12 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    minWidth: 0,
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "800",
-    color: "#2C2018"
+    color: "#2C2018",
+    marginLeft: 4
   },
   titleSolo: {
-    paddingHorizontal: 6
+    marginLeft: 10
   }
 });

@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#16A34A",
     alignItems: "center",
     justifyContent: "center"
   },
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 10,
     alignItems: "center",
-    backgroundColor: "#4CAF50"
+    backgroundColor: "#16A34A"
   },
   acceptButtonText: {
     color: "#FFFFFF",

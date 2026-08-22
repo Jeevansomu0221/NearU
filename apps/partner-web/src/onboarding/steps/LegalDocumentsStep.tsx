@@ -12,8 +12,6 @@ type Props = {
   restaurantName: string;
   panNumber: string;
   onPanNumberChange: (value: string) => void;
-  fssaiNumber: string;
-  onFssaiNumberChange: (value: string) => void;
   fssaiUrl: string;
   gstRegistered: "yes" | "no" | "";
   onGstRegisteredChange: (value: "yes" | "no") => void;
@@ -86,8 +84,6 @@ export default function LegalDocumentsStep({
   restaurantName,
   panNumber,
   onPanNumberChange,
-  fssaiNumber,
-  onFssaiNumberChange,
   fssaiUrl,
   gstRegistered,
   onGstRegisteredChange,
@@ -173,26 +169,19 @@ export default function LegalDocumentsStep({
         </>
       )}
 
-      <h4>FSSAI license</h4>
-      <label className="field">
-        <span>FSSAI number</span>
-        <input
-          value={fssaiNumber}
-          onChange={(e) => onFssaiNumberChange(e.target.value.replace(/\D/g, "").slice(0, 14))}
-          placeholder="14-digit FSSAI number"
-          inputMode="numeric"
-        />
-      </label>
+      <h4>FSSAI</h4>
       {kyc.fssaiVerified ? (
         <VerifiedBadge
           title="FSSAI verified — legitimate"
           subtitle={[kyc.fssaiBusinessName, kyc.fssaiLicenseStatus].filter(Boolean).join(" · ") || undefined}
         />
       ) : (
-        <p className="onb-hint">Submit your FSSAI license — Vyaha will verify it during admin review.</p>
+        <p className="onb-hint">
+          Upload your FSSAI license. The name on it must match the restaurant name or PAN name. Vyaha will verify it during review.
+        </p>
       )}
       <DocUpload
-        label="FSSAI certificate (image or PDF)"
+        label="Upload FSSAI"
         docKey="fssaiUrl"
         url={fssaiUrl}
         uploadingKey={uploadingKey}
