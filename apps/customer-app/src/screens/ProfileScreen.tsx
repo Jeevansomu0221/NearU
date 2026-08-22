@@ -570,7 +570,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         addressFormMode === "add"
           ? addAddress({
           ...addressPayload,
-          isDefault: getSavedAddressesFromProfile(profile).length === 0
+          isDefault: true
         })
           : updateUserAddress({
           ...addressPayload,

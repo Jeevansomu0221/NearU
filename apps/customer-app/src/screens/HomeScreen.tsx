@@ -397,11 +397,11 @@ export default function HomeScreen({ navigation }: Props) {
           >
             <Text style={styles.deliveryEyebrow} maxFontSizeMultiplier={1.25}>Delivering to</Text>
             <View style={styles.deliveryAddressRow}>
-              <Feather name="map-pin" size={14} color="#FF6B35" style={styles.deliveryPinIcon} />
-              <Text style={styles.deliveryAddressText} numberOfLines={compact ? 2 : 1} maxFontSizeMultiplier={1.2}>
+              <Feather name="map-pin" size={12} color="#FF6B35" style={styles.deliveryPinIcon} />
+              <Text style={styles.deliveryAddressText} numberOfLines={2} maxFontSizeMultiplier={1.15}>
                 {deliveryAddressLine || "Add your delivery address"}
               </Text>
-              <Feather name="chevron-down" size={16} color="#5F534B" style={styles.deliveryChevron} />
+              <Feather name="chevron-down" size={14} color="#5F534B" style={styles.deliveryChevron} />
             </View>
           </TouchableOpacity>
           <View style={styles.heroStatsRow}>
@@ -683,22 +683,24 @@ const styles = StyleSheet.create({
   },
   deliveryAddressRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     maxWidth: "100%"
   },
   deliveryPinIcon: {
-    marginRight: 5
+    marginRight: 4,
+    marginTop: 1
   },
   deliveryAddressText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
     color: "#1F1712"
   },
   deliveryChevron: {
-    marginLeft: 4
+    marginLeft: 2,
+    marginTop: 0
   },
   brandLogo: {
     width: 154,

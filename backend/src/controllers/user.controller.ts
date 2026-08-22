@@ -530,7 +530,7 @@ export const addUserAddress = async (req: AuthRequest, res: Response) => {
     const addresses = (userDoc as any).addresses || [];
     const address = normalizeAddressPayload({
       ...req.body,
-      isDefault: req.body.isDefault || addresses.length === 0
+      isDefault: true
     });
     if (address.latitude == null || address.longitude == null) {
       const geocodedPin = await resolveAddressCoordinates(address);
